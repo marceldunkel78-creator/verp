@@ -7,6 +7,8 @@ import {
   HomeIcon,
   UsersIcon,
   TruckIcon,
+  ShoppingBagIcon,
+  CogIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 
@@ -19,11 +21,15 @@ const Layout = () => {
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Benutzerverwaltung', href: '/users', icon: UsersIcon, adminOnly: true },
     { name: 'Lieferanten', href: '/suppliers', icon: TruckIcon },
+    { name: 'Handelswaren', href: '/trading', icon: ShoppingBagIcon },
+    { name: 'Einstellungen', href: '/settings/exchange-rates', icon: CogIcon, settingsOnly: true },
   ];
 
-  const filteredNavigation = navigation.filter(
-    (item) => !item.adminOnly || user?.is_staff
-  );
+  const filteredNavigation = navigation.filter((item) => {
+    if (item.adminOnly && !user?.is_staff) return false;
+    if (item.settingsOnly && !(user?.can_read_settings || user?.is_superuser)) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-100">

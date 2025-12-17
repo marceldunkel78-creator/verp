@@ -12,8 +12,12 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'phone', 'position', 'department',
-            'can_access_accounting', 'can_access_hr', 'can_access_suppliers',
-            'can_access_customers', 'can_access_manufacturing', 'can_access_service',
+            'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
+            'can_read_customers', 'can_read_manufacturing', 'can_read_service',
+            'can_read_settings',
+            'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
+            'can_write_customers', 'can_write_manufacturing', 'can_write_service',
+            'can_write_settings',
             'is_active', 'is_staff', 'date_joined', 'last_login'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login']
@@ -29,8 +33,12 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = [
             'username', 'email', 'password', 'password_confirm',
             'first_name', 'last_name', 'phone', 'position', 'department',
-            'can_access_accounting', 'can_access_hr', 'can_access_suppliers',
-            'can_access_customers', 'can_access_manufacturing', 'can_access_service',
+            'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
+            'can_read_customers', 'can_read_manufacturing', 'can_read_service',
+            'can_read_settings',
+            'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
+            'can_write_customers', 'can_write_manufacturing', 'can_write_service',
+            'can_write_settings',
         ]
     
     def validate(self, attrs):
@@ -51,8 +59,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'email', 'first_name', 'last_name', 'phone', 'position', 'department',
-            'can_access_accounting', 'can_access_hr', 'can_access_suppliers',
-            'can_access_customers', 'can_access_manufacturing', 'can_access_service',
+            'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
+            'can_read_customers', 'can_read_manufacturing', 'can_read_service',
+            'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
+            'can_write_customers', 'can_write_manufacturing', 'can_write_service',
             'is_active'
         ]
 

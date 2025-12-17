@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/outline';
 
 const Suppliers = () => {
+  const { user } = useAuth();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
+  
+  // Prüfe ob der Benutzer Schreibrechte hat
+  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_suppliers;
   const [formData, setFormData] = useState({
     company_name: '',
     address: '',
@@ -25,9 +30,12 @@ const Suppliers = () => {
   const fetchSuppliers = async () => {
     try {
       const response = await api.get('/suppliers/suppliers/');
-      setSuppliers(response.data);
+      // Handle paginated response
+      const data = response.data.results || response.data;
+      setSuppliers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Fehler beim Laden der Lieferanten:', error);
+      setSuppliers([]);
     } finally {
       setLoading(false);
     }
@@ -84,7 +92,7 @@ const Suppliers = () => {
       phone: supplier.phone,
       notes: supplier.notes,
       is_active: supplier.is_active,
-      contacts: [],
+      contacts: supplier.contacts || [],
     });
     setShowModal(true);
   };
@@ -129,17 +137,26 @@ const Suppliers = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Lieferanten</h1>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          Neuer Lieferant
-        </button>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Lieferanten</h1>
+          {!canWrite && (
+            <p className="text-sm text-gray-500 mt-1">
+              Sie haben nur Leserechte für dieses Modul
+            </p>
+          )}
+        </div>
+        {canWrite && (
+          <button
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Neuer Lieferant
+          </button>
+        )}
       </div>
 
       <div className="bg-white shadow overflow-hidden rounded-lg">
@@ -196,21 +213,28 @@ const Suppliers = () => {
                   <Link
                     to={`/suppliers/${supplier.id}`}
                     className="text-blue-600 hover:text-blue-900 mr-4"
+                    title="Details anzeigen"
                   >
                     <EyeIcon className="h-5 w-5 inline" />
                   </Link>
-                  <button
-                    onClick={() => openEditModal(supplier)}
-                    className="text-blue-600 hover:text-blue-900 mr-4"
-                  >
-                    <PencilIcon className="h-5 w-5 inline" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(supplier.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <TrashIcon className="h-5 w-5 inline" />
-                  </button>
+                  {canWrite && (
+                    <>
+                      <button
+                        onClick={() => openEditModal(supplier)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                        title="Bearbeiten"
+                      >
+                        <PencilIcon className="h-5 w-5 inline" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(supplier.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Löschen"
+                      >
+                        <TrashIcon className="h-5 w-5 inline" />
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}

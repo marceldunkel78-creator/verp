@@ -13,10 +13,16 @@ class UserAdmin(BaseUserAdmin):
         ('Zusätzliche Informationen', {
             'fields': ('phone', 'position', 'department')
         }),
-        ('Modulberechtigungen', {
+        ('Modulberechtigungen - Lesen', {
             'fields': (
-                'can_access_accounting', 'can_access_hr', 'can_access_suppliers',
-                'can_access_customers', 'can_access_manufacturing', 'can_access_service'
+                'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
+                'can_read_customers', 'can_read_manufacturing', 'can_read_service'
+            )
+        }),
+        ('Modulberechtigungen - Schreiben', {
+            'fields': (
+                'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
+                'can_write_customers', 'can_write_manufacturing', 'can_write_service'
             )
         }),
     )

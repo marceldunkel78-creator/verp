@@ -1,0 +1,26 @@
+
+Backend abhängigkeiten:
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate
+pip install -r requirements.txt
+
+migrationen: 
+cd backend
+python manage.py makemigrations
+python manage.py migrate
+
+
+Superuser erstellen bei activated venv
+python manage.py createsuperuser
+
+
+server starten :
+
+# Backend (Terminal 1)
+cd backend
+python manage.py runserver
+
+# Frontend (Terminal 2)
+cd frontend
+npm start

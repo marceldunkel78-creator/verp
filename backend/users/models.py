@@ -12,13 +12,23 @@ class User(AbstractUser):
     position = models.CharField(max_length=100, blank=True, verbose_name='Position')
     department = models.CharField(max_length=100, blank=True, verbose_name='Abteilung')
     
-    # Zusätzliche Berechtigungen für Module
-    can_access_accounting = models.BooleanField(default=False, verbose_name='Zugang Buchhaltung')
-    can_access_hr = models.BooleanField(default=False, verbose_name='Zugang HR')
-    can_access_suppliers = models.BooleanField(default=False, verbose_name='Zugang Lieferanten')
-    can_access_customers = models.BooleanField(default=False, verbose_name='Zugang Kunden')
-    can_access_manufacturing = models.BooleanField(default=False, verbose_name='Zugang Produktion')
-    can_access_service = models.BooleanField(default=False, verbose_name='Zugang Service')
+    # Berechtigungen für Module - Lesen
+    can_read_accounting = models.BooleanField(default=False, verbose_name='Buchhaltung - Lesen')
+    can_read_hr = models.BooleanField(default=False, verbose_name='HR - Lesen')
+    can_read_suppliers = models.BooleanField(default=False, verbose_name='Lieferanten - Lesen')
+    can_read_customers = models.BooleanField(default=False, verbose_name='Kunden - Lesen')
+    can_read_manufacturing = models.BooleanField(default=False, verbose_name='Produktion - Lesen')
+    can_read_service = models.BooleanField(default=False, verbose_name='Service - Lesen')
+    can_read_settings = models.BooleanField(default=False, verbose_name='Einstellungen - Lesen')
+    
+    # Berechtigungen für Module - Schreiben
+    can_write_accounting = models.BooleanField(default=False, verbose_name='Buchhaltung - Schreiben')
+    can_write_hr = models.BooleanField(default=False, verbose_name='HR - Schreiben')
+    can_write_suppliers = models.BooleanField(default=False, verbose_name='Lieferanten - Schreiben')
+    can_write_customers = models.BooleanField(default=False, verbose_name='Kunden - Schreiben')
+    can_write_manufacturing = models.BooleanField(default=False, verbose_name='Produktion - Schreiben')
+    can_write_service = models.BooleanField(default=False, verbose_name='Service - Schreiben')
+    can_write_settings = models.BooleanField(default=False, verbose_name='Einstellungen - Schreiben')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

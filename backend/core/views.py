@@ -32,33 +32,37 @@ def dashboard_stats(request):
         modules = [
             {'id': 'users', 'name': 'Benutzerverwaltung', 'icon': 'users', 'color': 'blue'},
             {'id': 'suppliers', 'name': 'Lieferanten', 'icon': 'truck', 'color': 'green'},
-            {'id': 'customers', 'name': 'Kundendaten', 'icon': 'user-group', 'color': 'purple'},
+            {'id': 'customers', 'name': 'Kunden', 'icon': 'user-group', 'color': 'purple'},
             {'id': 'accounting', 'name': 'Buchhaltung', 'icon': 'calculator', 'color': 'yellow'},
             {'id': 'financial', 'name': 'Financial Reporting', 'icon': 'chart-bar', 'color': 'indigo'},
             {'id': 'hr', 'name': 'HR', 'icon': 'briefcase', 'color': 'pink'},
-            {'id': 'dealers', 'name': 'Händlerdaten', 'icon': 'building-storefront', 'color': 'cyan'},
-            {'id': 'trading', 'name': 'Vertriebswaren', 'icon': 'shopping-cart', 'color': 'orange'},
+            {'id': 'dealers', 'name': 'Händler', 'icon': 'building-storefront', 'color': 'cyan'},
+            {'id': 'trading', 'name': 'Handelswaren', 'icon': 'shopping-cart', 'color': 'orange'},
             {'id': 'products', 'name': 'Eigenprodukte', 'icon': 'cube', 'color': 'red'},
             {'id': 'manufacturing', 'name': 'Manufacturing', 'icon': 'cog', 'color': 'gray'},
             {'id': 'service', 'name': 'Service/Support', 'icon': 'wrench', 'color': 'teal'},
             {'id': 'marketing', 'name': 'Marketing', 'icon': 'megaphone', 'color': 'rose'},
             {'id': 'email', 'name': 'Email', 'icon': 'envelope', 'color': 'sky'},
             {'id': 'projects', 'name': 'Projekt/Auftragsabwicklung', 'icon': 'clipboard-list', 'color': 'violet'},
+            {'id': 'materials', 'name': 'Materialwirtschaft', 'icon': 'cube-transparent', 'color': 'amber'},
+            {'id': 'settings', 'name': 'Einstellungen', 'icon': 'cog-6-tooth', 'color': 'slate'},
         ]
     else:
         # Füge Module basierend auf Berechtigungen hinzu
-        if user.can_access_suppliers:
+        if user.can_read_suppliers or user.can_write_suppliers:
             modules.append({'id': 'suppliers', 'name': 'Lieferanten', 'icon': 'truck', 'color': 'green'})
-        if user.can_access_customers:
-            modules.append({'id': 'customers', 'name': 'Kundendaten', 'icon': 'user-group', 'color': 'purple'})
-        if user.can_access_accounting:
+        if user.can_read_customers or user.can_write_customers:
+            modules.append({'id': 'customers', 'name': 'Kunden', 'icon': 'user-group', 'color': 'purple'})
+        if user.can_read_accounting or user.can_write_accounting:
             modules.append({'id': 'accounting', 'name': 'Buchhaltung', 'icon': 'calculator', 'color': 'yellow'})
-        if user.can_access_hr:
+        if user.can_read_hr or user.can_write_hr:
             modules.append({'id': 'hr', 'name': 'HR', 'icon': 'briefcase', 'color': 'pink'})
-        if user.can_access_manufacturing:
+        if user.can_read_manufacturing or user.can_write_manufacturing:
             modules.append({'id': 'manufacturing', 'name': 'Manufacturing', 'icon': 'cog', 'color': 'gray'})
-        if user.can_access_service:
+        if user.can_read_service or user.can_write_service:
             modules.append({'id': 'service', 'name': 'Service/Support', 'icon': 'wrench', 'color': 'teal'})
+        if user.can_read_settings or user.can_write_settings:
+            modules.append({'id': 'settings', 'name': 'Einstellungen', 'icon': 'cog-6-tooth', 'color': 'slate'})
     
     return Response({
         'stats': stats,
@@ -96,16 +100,16 @@ def module_list(request):
             'description': 'Verwaltung von Lieferanten und Kontakten',
             'icon': 'truck',
             'color': 'green',
-            'available': user.is_staff or user.is_superuser or user.can_access_suppliers,
+            'available': user.is_staff or user.is_superuser or user.can_read_suppliers or user.can_write_suppliers,
             'implemented': True
         },
         {
             'id': 'customers',
-            'name': 'Kundendaten',
-            'description': 'Verwaltung von Kundendaten',
+            'name': 'Kunden',
+            'description': 'Verwaltung von Kunden',
             'icon': 'user-group',
             'color': 'purple',
-            'available': user.is_staff or user.is_superuser or user.can_access_customers,
+            'available': user.is_staff or user.is_superuser or user.can_read_customers or user.can_write_customers,
             'implemented': False
         },
         {
@@ -114,7 +118,7 @@ def module_list(request):
             'description': 'Buchhaltung und Finanzverwaltung',
             'icon': 'calculator',
             'color': 'yellow',
-            'available': user.is_staff or user.is_superuser or user.can_access_accounting,
+            'available': user.is_staff or user.is_superuser or user.can_read_accounting or user.can_write_accounting,
             'implemented': False
         },
         {
@@ -132,12 +136,12 @@ def module_list(request):
             'description': 'Personalverwaltung',
             'icon': 'briefcase',
             'color': 'pink',
-            'available': user.is_staff or user.is_superuser or user.can_access_hr,
+            'available': user.is_staff or user.is_superuser or user.can_read_hr or user.can_write_hr,
             'implemented': False
         },
         {
             'id': 'dealers',
-            'name': 'Händlerdaten',
+            'name': 'Händler',
             'description': 'Verwaltung von Händlern und Partnern',
             'icon': 'building-storefront',
             'color': 'cyan',
@@ -146,8 +150,8 @@ def module_list(request):
         },
         {
             'id': 'trading',
-            'name': 'Vertriebswaren',
-            'description': 'Verwaltung von Vertriebswaren',
+            'name': 'Handelswaren',
+            'description': 'Verwaltung von Handelswaren',
             'icon': 'shopping-cart',
             'color': 'orange',
             'available': user.is_staff or user.is_superuser,
@@ -168,7 +172,7 @@ def module_list(request):
             'description': 'Produktionsverwaltung',
             'icon': 'cog',
             'color': 'gray',
-            'available': user.is_staff or user.is_superuser or user.can_access_manufacturing,
+            'available': user.is_staff or user.is_superuser or user.can_read_manufacturing or user.can_write_manufacturing,
             'implemented': False
         },
         {
@@ -177,7 +181,7 @@ def module_list(request):
             'description': 'Service und Kundensupport',
             'icon': 'wrench',
             'color': 'teal',
-            'available': user.is_staff or user.is_superuser or user.can_access_service,
+            'available': user.is_staff or user.is_superuser or user.can_read_service or user.can_write_service,
             'implemented': False
         },
         {
@@ -204,6 +208,15 @@ def module_list(request):
             'description': 'Projekt- und Auftragsverwaltung',
             'icon': 'clipboard-list',
             'color': 'violet',
+            'available': user.is_staff or user.is_superuser,
+            'implemented': False
+        },
+        {
+            'id': 'materials',
+            'name': 'Materialwirtschaft',
+            'description': 'Materialverwaltung und Lagerbestand',
+            'icon': 'cube-transparent',
+            'color': 'amber',
             'available': user.is_staff or user.is_superuser,
             'implemented': False
         },

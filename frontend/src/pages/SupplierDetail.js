@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -8,11 +8,7 @@ const SupplierDetail = () => {
   const [supplier, setSupplier] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchSupplier();
-  }, [id]);
-
-  const fetchSupplier = async () => {
+  const fetchSupplier = useCallback(async () => {
     try {
       const response = await api.get(`/suppliers/suppliers/${id}/`);
       setSupplier(response.data);
@@ -21,7 +17,11 @@ const SupplierDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchSupplier();
+  }, [fetchSupplier]);
 
   if (loading) {
     return (

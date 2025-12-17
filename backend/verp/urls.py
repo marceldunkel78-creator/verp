@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/users/', include('users.urls')),
     path('api/suppliers/', include('suppliers.urls')),
     path('api/core/', include('core.urls')),
+    path('api/settings/', include('verp_settings.urls')),
 ]
 
 if settings.DEBUG:

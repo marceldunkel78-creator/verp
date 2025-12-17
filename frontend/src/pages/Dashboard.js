@@ -17,6 +17,7 @@ const colorClasses = {
   rose: 'bg-rose-500 hover:bg-rose-600',
   sky: 'bg-sky-500 hover:bg-sky-600',
   violet: 'bg-violet-500 hover:bg-violet-600',
+  amber: 'bg-amber-500 hover:bg-amber-600',
 };
 
 const Dashboard = () => {
@@ -50,7 +51,8 @@ const Dashboard = () => {
     const routes = {
       users: '/users',
       suppliers: '/suppliers',
-      trading: '/suppliers',
+      trading: '/trading',
+      settings: '/settings/exchange-rates',
     };
     return routes[moduleId] || '#';
   };

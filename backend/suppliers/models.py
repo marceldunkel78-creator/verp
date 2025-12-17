@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from decimal import Decimal
 
 User = get_user_model()
 
@@ -72,44 +73,149 @@ class SupplierContact(models.Model):
         return f"{self.supplier.company_name} - {self.get_contact_type_display()}: {self.contact_person}"
 
 
-class ProductCategory(models.Model):
-    """
-    Produktkategorien für bessere Organisation
-    """
-    name = models.CharField(max_length=100, unique=True, verbose_name='Name')
-    description = models.TextField(blank=True, verbose_name='Beschreibung')
-    
-    class Meta:
-        verbose_name = 'Produktkategorie'
-        verbose_name_plural = 'Produktkategorien'
-        ordering = ['name']
-    
-    def __str__(self):
-        return self.name
-
-
 class TradingProduct(models.Model):
     """
-    Vertriebswaren die mit Lieferanten verknüpft werden können
+    Handelswaren die von Lieferanten bezogen werden
     """
+    
+    # Kategorie Choices
+    CATEGORY_CHOICES = [
+        ('SOFTWARE', 'Software'),
+        ('MIKROSKOPE', 'Mikroskope'),
+        ('BELEUCHTUNG', 'Beleuchtung'),
+        ('KAMERAS', 'Kameras'),
+        ('CONFOCALS', 'Confocals'),
+        ('PERIPHERALS', 'Peripherals'),
+    ]
+    
+    # Grundinformationen
     name = models.CharField(max_length=200, verbose_name='Produktname')
-    article_number = models.CharField(max_length=100, unique=True, verbose_name='Artikelnummer')
-    category = models.ForeignKey(
-        ProductCategory,
-        on_delete=models.SET_NULL,
-        null=True,
+    visitron_part_number = models.CharField(
+        max_length=100, 
+        unique=True, 
+        verbose_name='Visitron Partnummer'
+    )
+    supplier_part_number = models.CharField(
+        max_length=100, 
         blank=True,
-        related_name='products',
+        verbose_name='Händler-Partnummer'
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        blank=True,
+        null=True,
         verbose_name='Kategorie'
     )
     description = models.TextField(blank=True, verbose_name='Beschreibung')
     
-    # Lieferantenverknüpfung
-    suppliers = models.ManyToManyField(
+    # Lieferant
+    supplier = models.ForeignKey(
         Supplier,
-        through='SupplierProduct',
+        on_delete=models.CASCADE,
         related_name='trading_products',
-        verbose_name='Lieferanten'
+        verbose_name='Lieferant'
+    )
+    
+    # Preisinformationen
+    list_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Lieferanten-Listenpreis'
+    )
+    list_price_currency = models.CharField(
+        max_length=3, 
+        default='EUR', 
+        verbose_name='Listenpreis Währung',
+        help_text='EUR, USD, CHF, etc.'
+    )
+    
+    # Wechselkurs für Listenpreis nach EUR
+    exchange_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=Decimal('1.0'),
+        verbose_name='Wechselkurs zu EUR',
+        help_text='Wechselkurs von Listenpreis-Währung zu EUR'
+    )
+    
+    # Visitron-Listenpreis Berechnung
+    markup_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='Aufschlag %',
+        help_text='Aufschlag auf Einkaufspreis für Visitron-Listenpreis'
+    )
+    
+    # Standardwährung für Kosten und interne Preise
+    costs_currency = models.CharField(
+        max_length=3,
+        default='EUR',
+        verbose_name='Kostenw ährung',
+        help_text='Währung für Versand-, Import-, Handling- und Lagerkosten'
+    )
+    
+    # Preisgültigkeit
+    price_valid_from = models.DateField(verbose_name='Preis gültig von')
+    price_valid_until = models.DateField(
+        null=True, 
+        blank=True, 
+        verbose_name='Preis gültig bis'
+    )
+    
+    # Rabatt
+    discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='Rabatt (%)',
+        help_text='Rabatt in Prozent'
+    )
+    
+    # Zusätzliche Kosten
+    shipping_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Versandkosten'
+    )
+    shipping_cost_is_percent = models.BooleanField(
+        default=False,
+        verbose_name='Versandkosten in %'
+    )
+    
+    import_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Importkosten'
+    )
+    import_cost_is_percent = models.BooleanField(
+        default=False,
+        verbose_name='Importkosten in %'
+    )
+    
+    handling_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Handlingkosten'
+    )
+    handling_cost_is_percent = models.BooleanField(
+        default=False,
+        verbose_name='Handlingkosten in %'
+    )
+    
+    storage_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Lagerkosten'
+    )
+    storage_cost_is_percent = models.BooleanField(
+        default=False,
+        verbose_name='Lagerkosten in %'
     )
     
     # Weitere Produktinformationen
@@ -126,12 +232,51 @@ class TradingProduct(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = 'Vertriebsware'
-        verbose_name_plural = 'Vertriebswaren'
-        ordering = ['name']
+        verbose_name = 'Handelsware'
+        verbose_name_plural = 'Handelswaren'
+        ordering = ['visitron_part_number']
     
     def __str__(self):
-        return f"{self.article_number} - {self.name}"
+        return f"{self.visitron_part_number} - {self.name}"
+    
+    def calculate_purchase_price(self):
+        """
+        Berechnet den Einkaufspreis mit allen Kosten und Rabatten
+        Verwendet exchange_rate Feld des Modells für die Umrechnung
+        """
+        from decimal import Decimal
+        
+        # Basispreis nach Rabatt
+        base_price = self.list_price * (Decimal('1') - self.discount_percent / Decimal('100'))
+        
+        # Zusätzliche Kosten berechnen
+        shipping = self.shipping_cost if not self.shipping_cost_is_percent else base_price * (self.shipping_cost / Decimal('100'))
+        import_c = self.import_cost if not self.import_cost_is_percent else base_price * (self.import_cost / Decimal('100'))
+        handling = self.handling_cost if not self.handling_cost_is_percent else base_price * (self.handling_cost / Decimal('100'))
+        storage = self.storage_cost if not self.storage_cost_is_percent else base_price * (self.storage_cost / Decimal('100'))
+        
+        # Gesamtpreis (Einkaufspreis)
+        total = base_price + shipping + import_c + handling + storage
+        
+        # Wechselkurs anwenden
+        return total * self.exchange_rate
+    
+    def calculate_visitron_list_price(self):
+        """
+        Berechnet den Visitron-Listenpreis basierend auf Einkaufspreis + Aufschlag
+        Wird auf volle Euros gerundet
+        """
+        from decimal import Decimal, ROUND_UP
+        
+        # Einkaufspreis berechnen
+        purchase_price = self.calculate_purchase_price()
+        
+        # Aufschlag anwenden
+        markup_factor = Decimal('1') + (self.markup_percent / Decimal('100'))
+        visitron_price = purchase_price * markup_factor
+        
+        # Auf volle Euros aufrunden
+        return visitron_price.quantize(Decimal('1'), rounding=ROUND_UP)
 
 
 class SupplierProduct(models.Model):

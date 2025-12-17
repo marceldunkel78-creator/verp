@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Supplier, SupplierContact, TradingProduct, 
-    SupplierProduct, ProductCategory
+    SupplierProduct
 )
 
 
@@ -86,38 +86,3 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
                 SupplierContact.objects.create(supplier=instance, **contact_data)
         
         return instance
-
-
-class ProductCategorySerializer(serializers.ModelSerializer):
-    """Serializer für Produktkategorien"""
-    
-    class Meta:
-        model = ProductCategory
-        fields = ['id', 'name', 'description']
-        read_only_fields = ['id']
-
-
-class TradingProductSerializer(serializers.ModelSerializer):
-    """Serializer für Vertriebswaren"""
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    supplier_count = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = TradingProduct
-        fields = [
-            'id', 'name', 'article_number', 'category', 'category_name',
-            'description', 'unit', 'minimum_stock', 'supplier_count',
-            'is_active', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-    
-    def get_supplier_count(self, obj):
-        return obj.suppliers.count()
-
-
-class TradingProductDetailSerializer(TradingProductSerializer):
-    """Detaillierter Serializer für Vertriebswaren mit Lieferanten"""
-    supplier_products = SupplierProductSerializer(many=True, read_only=True)
-    
-    class Meta(TradingProductSerializer.Meta):
-        fields = TradingProductSerializer.Meta.fields + ['supplier_products']
