@@ -1,60 +1,50 @@
 from rest_framework import serializers
-from .models import TradingProduct, Supplier
+from .models import MaterialSupply, Supplier
 
 
-class TradingProductListSerializer(serializers.ModelSerializer):
+class MaterialSupplyListSerializer(serializers.ModelSerializer):
     """
-    Serializer für die Auflistung von Handelswaren
+    Serializer für die Auflistung von Material & Supplies
     """
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
     product_group_name = serializers.CharField(source='product_group.name', read_only=True)
     price_list_name = serializers.CharField(source='price_list.name', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     purchase_price_eur = serializers.SerializerMethodField()
-    visitron_list_price = serializers.SerializerMethodField()
     
     class Meta:
-        model = TradingProduct
+        model = MaterialSupply
         fields = [
             'id', 'visitron_part_number', 'supplier_part_number', 'name',
             'supplier', 'supplier_name', 'product_group', 'product_group_name',
             'price_list', 'price_list_name', 'category', 'category_display',
             'list_price', 'list_price_currency', 'exchange_rate', 'discount_percent',
-            'price_valid_from', 'price_valid_until', 'margin_percent',
-            'purchase_price_eur', 'visitron_list_price', 'is_active', 'created_at'
+            'price_valid_from', 'price_valid_until',
+            'purchase_price_eur', 'is_active', 'created_at'
         ]
     
     def get_purchase_price_eur(self, obj):
-        """Berechnet den Einkaufspreis in EUR (ohne Wechselkurs)"""
+        """Berechnet den Einkaufspreis in EUR"""
         return float(round(obj.calculate_purchase_price(), 2))
-    
-    def get_visitron_list_price(self, obj):
-        """Berechnet den Visitron-Listenpreis (auf volle Euros gerundet)"""
-        return float(obj.calculate_visitron_list_price())
 
 
-class TradingProductDetailSerializer(serializers.ModelSerializer):
+class MaterialSupplyDetailSerializer(serializers.ModelSerializer):
     """
-    Detaillierter Serializer für Handelswaren
+    Serializer für die Detailansicht von Material & Supplies
     """
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     purchase_price_eur = serializers.SerializerMethodField()
-    visitron_list_price = serializers.SerializerMethodField()
     price_breakdown = serializers.SerializerMethodField()
     
     class Meta:
-        model = TradingProduct
+        model = MaterialSupply
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
     
     def get_purchase_price_eur(self, obj):
         """Berechnet den Einkaufspreis"""
         return float(round(obj.calculate_purchase_price(), 2))
-    
-    def get_visitron_list_price(self, obj):
-        """Berechnet den Visitron-Listenpreis (auf volle Euros gerundet)"""
-        return float(obj.calculate_visitron_list_price())
     
     def get_price_breakdown(self, obj):
         """Detaillierte Preisaufschlüsselung"""
@@ -78,23 +68,21 @@ class TradingProductDetailSerializer(serializers.ModelSerializer):
             'handling_cost': round(float(handling), 2),
             'storage_cost': round(float(storage), 2),
             'purchase_price': round(float(obj.calculate_purchase_price()), 2),
-            'margin_percent': float(obj.margin_percent),
-            'visitron_list_price': float(obj.calculate_visitron_list_price()),
             'costs_currency': obj.costs_currency,
         }
 
 
-class TradingProductCreateUpdateSerializer(serializers.ModelSerializer):
+class MaterialSupplyCreateUpdateSerializer(serializers.ModelSerializer):
     """
-    Serializer für Erstellen und Aktualisieren von Handelswaren
+    Serializer für Erstellen und Aktualisieren von Material & Supplies
     """
     class Meta:
-        model = TradingProduct
+        model = MaterialSupply
         fields = [
             'name', 'visitron_part_number', 'supplier_part_number',
             'supplier', 'product_group', 'price_list', 'category', 'description', 'unit',
             'list_price', 'list_price_currency', 'exchange_rate', 'price_valid_from', 'price_valid_until',
-            'discount_percent', 'margin_percent',
+            'discount_percent',
             'shipping_cost', 'shipping_cost_is_percent',
             'import_cost', 'import_cost_is_percent',
             'handling_cost', 'handling_cost_is_percent',
@@ -104,19 +92,14 @@ class TradingProductCreateUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ['visitron_part_number']
     
     def validate(self, data):
-        """Validierung der Daten"""
-        # Prüfe ob price_valid_until nach price_valid_from liegt
-        if data.get('price_valid_until') and data.get('price_valid_from'):
-            if data['price_valid_until'] < data['price_valid_from']:
-                raise serializers.ValidationError({
-                    'price_valid_until': 'Das Enddatum muss nach dem Startdatum liegen.'
-                })
+        # Entferne leere visitron_part_number wenn vorhanden
+        if 'visitron_part_number' in data and not data['visitron_part_number']:
+            data.pop('visitron_part_number', None)
         
-        # Prüfe ob Rabatt zwischen 0 und 100 liegt
-        if data.get('discount_percent'):
-            if data['discount_percent'] < 0 or data['discount_percent'] > 100:
+        # Visitron-Partnummer wird automatisch generiert, sollte nicht manuell gesetzt werden
+        if 'visitron_part_number' in self.initial_data and self.initial_data['visitron_part_number']:
+            if not self.instance:  # Nur bei CREATE
                 raise serializers.ValidationError({
-                    'discount_percent': 'Der Rabatt muss zwischen 0 und 100% liegen.'
+                    'visitron_part_number': 'Wird automatisch generiert und kann nicht manuell gesetzt werden'
                 })
-        
         return data

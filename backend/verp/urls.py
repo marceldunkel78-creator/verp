@@ -20,6 +20,7 @@ urlpatterns = [
     # App URLs
     path('api/users/', include('users.urls')),
     path('api/suppliers/', include('suppliers.urls')),
+    path('api/customers/', include('customers.urls')),
     path('api/core/', include('core.urls')),
     path('api/settings/', include('verp_settings.urls')),
 ]

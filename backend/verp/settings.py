@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     # VERP apps
     'users',
     'suppliers',
+    'customers',
     'core',
     'verp_settings',
 ]

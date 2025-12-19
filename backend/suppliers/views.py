@@ -7,16 +7,22 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .models import (
     Supplier, SupplierContact, TradingProduct,
-    SupplierProduct
+    SupplierProduct, ProductGroup, PriceList, MaterialSupply
 )
 from .serializers import (
     SupplierSerializer, SupplierCreateUpdateSerializer,
-    SupplierContactSerializer, SupplierProductSerializer
+    SupplierContactSerializer, SupplierProductSerializer,
+    ProductGroupSerializer, PriceListSerializer
 )
 from .trading_serializers import (
     TradingProductListSerializer,
     TradingProductDetailSerializer,
     TradingProductCreateUpdateSerializer
+)
+from .ms_serializers import (
+    MaterialSupplyListSerializer,
+    MaterialSupplyDetailSerializer,
+    MaterialSupplyCreateUpdateSerializer
 )
 from .permissions import SupplierPermission
 
@@ -133,3 +139,51 @@ class SupplierProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['supplier', 'product', 'is_preferred_supplier']
+
+
+class ProductGroupViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Warengruppen
+    """
+    queryset = ProductGroup.objects.select_related('supplier').all()
+    serializer_class = ProductGroupSerializer
+    permission_classes = [IsAuthenticated, SupplierPermission]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['supplier', 'is_active']
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'supplier__company_name', 'discount_percent', 'created_at']
+    ordering = ['supplier', 'name']
+
+
+class PriceListViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Preislisten
+    """
+    queryset = PriceList.objects.select_related('supplier').all()
+    serializer_class = PriceListSerializer
+    permission_classes = [IsAuthenticated, SupplierPermission]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['supplier', 'is_active']
+    search_fields = ['name']
+    ordering_fields = ['name', 'supplier__company_name', 'valid_from', 'valid_until', 'created_at']
+    ordering = ['supplier', '-valid_from']
+
+
+class MaterialSupplyViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Material & Supplies (Roh-, Hilfs- und Betriebsstoffe)
+    """
+    queryset = MaterialSupply.objects.select_related('supplier').all()
+    permission_classes = [IsAuthenticated, SupplierPermission]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['supplier', 'category', 'is_active', 'list_price_currency']
+    search_fields = ['name', 'visitron_part_number', 'supplier_part_number', 'description']
+    ordering_fields = ['visitron_part_number', 'name', 'category', 'supplier__company_name', 'price_valid_from', 'price_valid_until', 'created_at']
+    ordering = ['visitron_part_number']
+    
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return MaterialSupplyDetailSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return MaterialSupplyCreateUpdateSerializer
+        return MaterialSupplyListSerializer

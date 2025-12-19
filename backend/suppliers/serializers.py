@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Supplier, SupplierContact, TradingProduct, 
-    SupplierProduct
+    SupplierProduct, ProductGroup, PriceList
 )
 
 
@@ -13,9 +13,56 @@ class SupplierContactSerializer(serializers.ModelSerializer):
         model = SupplierContact
         fields = [
             'id', 'contact_type', 'contact_type_display', 'contact_person',
-            'contact_function', 'address', 'email', 'phone', 'notes', 'created_at'
+            'contact_function', 'street', 'house_number', 'address_supplement',
+            'postal_code', 'city', 'state', 'country', 'address',
+            'email', 'phone', 'notes', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+    
+    def validate(self, data):
+        """Validiere mit der clean() Methode des Models"""
+        # Nur validieren wenn wir bereits eine Instanz haben
+        # Bei neuen Kontakten wird die Validierung in SupplierCreateUpdateSerializer durchgeführt
+        if self.instance:
+            instance = SupplierContact(**data)
+            instance.pk = self.instance.pk
+            instance.supplier = self.instance.supplier
+            instance.clean()
+        return data
+
+
+class ProductGroupSerializer(serializers.ModelSerializer):
+    """Serializer für Warengruppen"""
+    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
+    
+    class Meta:
+        model = ProductGroup
+        fields = [
+            'id', 'supplier', 'supplier_name', 'name', 'discount_percent',
+            'description', 'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PriceListSerializer(serializers.ModelSerializer):
+    """Serializer für Preislisten"""
+    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
+    
+    class Meta:
+        model = PriceList
+        fields = [
+            'id', 'supplier', 'supplier_name', 'name', 'valid_from', 'valid_until',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def validate(self, data):
+        """Validierung mit clean() Methode des Models"""
+        instance = PriceList(**data)
+        if self.instance:
+            instance.pk = self.instance.pk
+        instance.clean()
+        return data
 
 
 class SupplierProductSerializer(serializers.ModelSerializer):
@@ -37,17 +84,21 @@ class SupplierProductSerializer(serializers.ModelSerializer):
 class SupplierSerializer(serializers.ModelSerializer):
     """Serializer für Lieferanten mit verschachtelten Kontakten"""
     contacts = SupplierContactSerializer(many=True, read_only=True)
+    product_groups = ProductGroupSerializer(many=True, read_only=True)
+    price_lists = PriceListSerializer(many=True, read_only=True)
     supplier_products = SupplierProductSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     
     class Meta:
         model = Supplier
         fields = [
-            'id', 'company_name', 'address', 'email', 'phone',
-            'contacts', 'supplier_products', 'notes', 'is_active',
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'id', 'supplier_number', 'company_name', 'street', 'house_number',
+            'address_supplement', 'postal_code', 'city', 'state', 'country',
+            'address', 'email', 'phone', 'website', 'contacts', 'product_groups', 'price_lists',
+            'supplier_products', 'notes', 'is_active', 'created_by', 'created_by_name',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'supplier_number', 'created_by', 'created_at', 'updated_at']
 
 
 class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
@@ -57,20 +108,29 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
         fields = [
-            'company_name', 'address', 'email', 'phone',
-            'contacts', 'notes', 'is_active'
+            'company_name', 'street', 'house_number', 'address_supplement',
+            'postal_code', 'city', 'state', 'country', 'address',
+            'email', 'phone', 'website', 'contacts', 'notes', 'is_active'
         ]
     
     def create(self, validated_data):
+        from django.core.exceptions import ValidationError
         contacts_data = validated_data.pop('contacts', [])
         supplier = Supplier.objects.create(**validated_data)
         
         for contact_data in contacts_data:
-            SupplierContact.objects.create(supplier=supplier, **contact_data)
+            contact = SupplierContact(supplier=supplier, **contact_data)
+            try:
+                contact.clean()  # Validierung durchführen
+            except ValidationError as e:
+                supplier.delete()  # Rollback bei Fehler
+                raise serializers.ValidationError(e.message_dict)
+            contact.save()
         
         return supplier
     
     def update(self, instance, validated_data):
+        from django.core.exceptions import ValidationError
         contacts_data = validated_data.pop('contacts', None)
         
         # Update Supplier Felder
@@ -83,6 +143,11 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
             # Lösche alte Kontakte und erstelle neue
             instance.contacts.all().delete()
             for contact_data in contacts_data:
-                SupplierContact.objects.create(supplier=instance, **contact_data)
+                contact = SupplierContact(supplier=instance, **contact_data)
+                try:
+                    contact.clean()  # Validierung durchführen
+                except ValidationError as e:
+                    raise serializers.ValidationError(e.message_dict)
+                contact.save()
         
         return instance
