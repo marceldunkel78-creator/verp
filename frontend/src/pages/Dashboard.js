@@ -47,15 +47,78 @@ const Dashboard = () => {
     );
   }
 
-  const getModuleRoute = (moduleId) => {
-    const routes = {
-      users: '/users',
-      suppliers: '/suppliers',
-      trading: '/trading',
-      settings: '/settings/exchange-rates',
-    };
-    return routes[moduleId] || '#';
-  };
+  const implementedModules = [
+    {
+      id: 'procurement',
+      name: 'Beschaffung',
+      route: '/procurement',
+      color: 'blue',
+      icon: '📦'
+    },
+    {
+      id: 'suppliers',
+      name: 'Lieferanten',
+      route: '/procurement/suppliers',
+      color: 'green',
+      icon: '🏢'
+    },
+    {
+      id: 'trading',
+      name: 'Handelsware',
+      route: '/procurement/trading-goods',
+      color: 'orange',
+      icon: '📦'
+    },
+    {
+      id: 'assets',
+      name: 'Anlagegüter',
+      route: '/procurement/assets',
+      color: 'cyan',
+      icon: '🏭'
+    },
+    {
+      id: 'materials',
+      name: 'Material & Supplies',
+      route: '/procurement/materials-supplies',
+      color: 'green',
+      icon: '🧪'
+    },
+    {
+      id: 'settings',
+      name: 'Einstellungen',
+      route: '/settings',
+      color: 'purple',
+      icon: '⚙️'
+    },
+    {
+      id: 'users',
+      name: 'Benutzer',
+      route: '/settings/users',
+      color: 'indigo',
+      icon: '👥'
+    },
+    {
+      id: 'exchange-rates',
+      name: 'Wechselkurse',
+      route: '/settings/currency-exchange-rates',
+      color: 'yellow',
+      icon: '💱'
+    },
+    {
+      id: 'company',
+      name: 'Firmendaten',
+      route: '/settings/company-info',
+      color: 'blue',
+      icon: '🏛️'
+    },
+    {
+      id: 'customers',
+      name: 'Kunden',
+      route: '/sales/customers',
+      color: 'indigo',
+      icon: '👤'
+    }
+  ];
 
   return (
     <div>
@@ -161,38 +224,22 @@ const Dashboard = () => {
 
       {/* Module Grid */}
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Module</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Access</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {dashboardData?.modules?.map((module) => {
-            const route = getModuleRoute(module.id);
-            const isImplemented = ['users', 'suppliers', 'trading'].includes(module.id);
+          {implementedModules.map((module) => {
             const colorClass = colorClasses[module.color] || colorClasses.gray;
 
-            if (isImplemented) {
-              return (
-                <Link
-                  key={module.id}
-                  to={route}
-                  className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
-                >
-                  <div className="text-center">
-                    <div className="text-lg font-semibold">{module.name}</div>
-                  </div>
-                </Link>
-              );
-            }
-
             return (
-              <div
+              <Link
                 key={module.id}
-                className="bg-gray-300 text-gray-600 p-6 rounded-lg shadow-lg cursor-not-allowed relative"
-                title="Noch nicht implementiert"
+                to={module.route}
+                className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
               >
                 <div className="text-center">
+                  <div className="text-3xl mb-2">{module.icon}</div>
                   <div className="text-lg font-semibold">{module.name}</div>
-                  <div className="text-xs mt-2">Bald verfügbar</div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

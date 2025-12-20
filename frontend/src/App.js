@@ -8,8 +8,34 @@ import Users from './pages/Users';
 import Suppliers from './pages/Suppliers';
 import SupplierDetail from './pages/SupplierDetail';
 import TradingProducts from './pages/TradingProducts';
+import Assets from './pages/Assets';
+import MaterialSupplies from './pages/MaterialSupplies';
+import Orders from './pages/Orders';
+import OrderForm from './pages/OrderForm';
+import OrderDetail from './pages/OrderDetail';
+import Customers from './pages/Customers';
+import Quotations from './pages/Quotations';
+import QuotationForm from './pages/QuotationForm';
+import QuotationDetail from './pages/QuotationDetail';
 import ExchangeRates from './pages/ExchangeRates';
+import CompanyInfo from './pages/modules/CompanyInfo';
+import PaymentDeliverySettings from './pages/PaymentDeliverySettings';
 import Layout from './components/Layout';
+
+// Import Main Modules
+import Finance from './pages/modules/Finance';
+import Procurement from './pages/modules/Procurement';
+import Settings from './pages/modules/Settings';
+import SalesOrderManagement from './pages/modules/SalesOrderManagement';
+import {
+  InventoryManagement,
+  HumanResources,
+  Manufacturing,
+  VisiView,
+  Service,
+  BusinessIntelligence,
+  DocumentManagement
+} from './pages/modules';
 
 function App() {
   return (
@@ -20,11 +46,54 @@ function App() {
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="users" element={<Users />} />
-            <Route path="suppliers" element={<Suppliers />} />
-            <Route path="suppliers/:id" element={<SupplierDetail />} />
-            <Route path="trading" element={<TradingProducts />} />
-            <Route path="settings/exchange-rates" element={<ExchangeRates />} />
+            
+            {/* Main Modules */}
+            <Route path="finance" element={<Finance />} />
+            <Route path="procurement" element={<Procurement />} />
+            <Route path="inventory" element={<InventoryManagement />} />
+            <Route path="sales" element={<SalesOrderManagement />} />
+            <Route path="hr" element={<HumanResources />} />
+            <Route path="manufacturing" element={<Manufacturing />} />
+            <Route path="visiview" element={<VisiView />} />
+            <Route path="service" element={<Service />} />
+            <Route path="bi" element={<BusinessIntelligence />} />
+            <Route path="documents" element={<DocumentManagement />} />
+            <Route path="settings" element={<Settings />} />
+            
+            {/* Procurement Submodules */}
+            <Route path="procurement/suppliers" element={<Suppliers />} />
+            <Route path="procurement/suppliers/:id" element={<SupplierDetail />} />
+            <Route path="procurement/trading-goods" element={<TradingProducts />} />
+            <Route path="procurement/assets" element={<Assets />} />
+            <Route path="procurement/materials-supplies" element={<MaterialSupplies />} />
+            <Route path="procurement/orders" element={<Orders />} />
+            <Route path="procurement/orders/new" element={<OrderForm />} />
+            <Route path="procurement/orders/:id" element={<OrderDetail />} />
+            <Route path="procurement/orders/:id/edit" element={<OrderForm />} />
+            
+            {/* Sales/Order Management Submodules */}
+            <Route path="sales/customers" element={<Customers />} />
+            <Route path="sales/projects" element={<Navigate to="/sales" replace />} />
+            <Route path="sales/quotations" element={<Quotations />} />
+            <Route path="sales/quotations/new" element={<QuotationForm />} />
+            <Route path="sales/quotations/:id" element={<QuotationDetail />} />
+            <Route path="sales/quotations/:id/edit" element={<QuotationForm />} />
+            <Route path="sales/order-processing" element={<Navigate to="/sales" replace />} />
+            <Route path="sales/marketing" element={<Navigate to="/sales" replace />} />
+            <Route path="sales/systems" element={<Navigate to="/sales" replace />} />
+            
+            {/* Settings Submodules */}
+            <Route path="settings/users" element={<Users />} />
+            <Route path="settings/currency-exchange-rates" element={<ExchangeRates />} />
+            <Route path="settings/company-info" element={<CompanyInfo />} />
+            <Route path="settings/payment-delivery" element={<PaymentDeliverySettings />} />
+            
+            {/* Legacy redirects for backward compatibility */}
+            <Route path="users" element={<Navigate to="/settings/users" replace />} />
+            <Route path="suppliers" element={<Navigate to="/procurement/suppliers" replace />} />
+            <Route path="suppliers/:id" element={<Navigate to="/procurement/suppliers/:id" replace />} />
+            <Route path="trading" element={<Navigate to="/procurement/trading-goods" replace />} />
+            <Route path="settings/exchange-rates" element={<Navigate to="/settings/currency-exchange-rates" replace />} />
           </Route>
         </Routes>
       </Router>

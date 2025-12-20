@@ -10,10 +10,14 @@ const SupplierDetail = () => {
 
   const fetchSupplier = useCallback(async () => {
     try {
+      console.log('Fetching supplier with ID:', id);
       const response = await api.get(`/suppliers/suppliers/${id}/`);
+      console.log('Supplier data received:', response.data);
       setSupplier(response.data);
     } catch (error) {
       console.error('Fehler beim Laden des Lieferanten:', error);
+      console.error('Error details:', error.response?.data);
+      console.error('Status code:', error.response?.status);
     } finally {
       setLoading(false);
     }
@@ -47,6 +51,7 @@ const SupplierDetail = () => {
       service: 'Service',
       sales: 'Vertrieb',
       orders: 'Bestellungen',
+      order_processing: 'Auftragsabwicklung',
     };
     return labels[type] || type;
   };
@@ -109,11 +114,28 @@ const SupplierDetail = () => {
                     <dd className="mt-1 text-sm text-gray-900">{supplier.phone}</dd>
                   </div>
                 )}
-                {supplier.address && (
+                {(supplier.street || supplier.city || supplier.address) && (
                   <div className="sm:col-span-2">
                     <dt className="text-sm font-medium text-gray-500">Adresse</dt>
-                    <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">
-                      {supplier.address}
+                    <dd className="mt-1 text-sm text-gray-900">
+                      {supplier.street && (
+                        <div>{supplier.street} {supplier.house_number}</div>
+                      )}
+                      {supplier.address_supplement && (
+                        <div>{supplier.address_supplement}</div>
+                      )}
+                      {supplier.postal_code && supplier.city && (
+                        <div>{supplier.postal_code} {supplier.city}</div>
+                      )}
+                      {supplier.state && (
+                        <div>{supplier.state}</div>
+                      )}
+                      {supplier.country && supplier.country !== 'DE' && (
+                        <div>{supplier.country}</div>
+                      )}
+                      {supplier.address && !supplier.street && (
+                        <div className="whitespace-pre-line">{supplier.address}</div>
+                      )}
                     </dd>
                   </div>
                 )}
@@ -122,6 +144,46 @@ const SupplierDetail = () => {
                     <dt className="text-sm font-medium text-gray-500">Notizen</dt>
                     <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">
                       {supplier.notes}
+                    </dd>
+                  </div>
+                )}
+                {supplier.customer_number && (
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Unsere Kundennummer</dt>
+                    <dd className="mt-1 text-sm text-gray-900 font-mono">
+                      {supplier.customer_number}
+                    </dd>
+                  </div>
+                )}
+                {supplier.payment_term_detail && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-sm font-medium text-gray-500">Zahlungsbedingung</dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      <span className="font-medium">{supplier.payment_term_detail.name}</span>
+                      <br />
+                      <span className="text-gray-600">{supplier.payment_term_detail.formatted_terms}</span>
+                    </dd>
+                  </div>
+                )}
+                {supplier.delivery_term_detail && (
+                  <div>
+                    <dt className="text-sm font-medium text-gray-500">Lieferbedingung (Incoterm)</dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      {supplier.delivery_term_detail.incoterm_display}
+                      {supplier.delivery_term_detail.description && (
+                        <div className="text-xs text-gray-600 mt-1">{supplier.delivery_term_detail.description}</div>
+                      )}
+                    </dd>
+                  </div>
+                )}
+                {supplier.delivery_instruction_detail && (
+                  <div className="sm:col-span-2">
+                    <dt className="text-sm font-medium text-gray-500">Lieferanweisung</dt>
+                    <dd className="mt-1 text-sm text-gray-900">
+                      <div className="font-medium mb-1">{supplier.delivery_instruction_detail.name}</div>
+                      <div className="text-xs text-gray-600 whitespace-pre-line bg-gray-50 p-2 rounded">
+                        {supplier.delivery_instruction_detail.instruction_text}
+                      </div>
                     </dd>
                   </div>
                 )}
@@ -197,14 +259,88 @@ const SupplierDetail = () => {
                       {contact.phone && (
                         <p className="text-sm text-gray-700">{contact.phone}</p>
                       )}
-                      {contact.address && (
-                        <p className="text-sm text-gray-700 mt-2 whitespace-pre-line">
-                          {contact.address}
-                        </p>
+                      {(contact.street || contact.city || contact.address) && (
+                        <div className="text-sm text-gray-700 mt-2">
+                          {contact.street && (
+                            <div>{contact.street} {contact.house_number}</div>
+                          )}
+                          {contact.address_supplement && (
+                            <div>{contact.address_supplement}</div>
+                          )}
+                          {contact.postal_code && contact.city && (
+                            <div>{contact.postal_code} {contact.city}</div>
+                          )}
+                          {contact.state && (
+                            <div>{contact.state}</div>
+                          )}
+                          {contact.country && contact.country !== 'DE' && (
+                            <div>{contact.country}</div>
+                          )}
+                          {contact.address && !contact.street && (
+                            <div className="whitespace-pre-line">{contact.address}</div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Warengruppen */}
+        {supplier.product_groups && supplier.product_groups.length > 0 && (
+          <div className="lg:col-span-3">
+            <div className="bg-white shadow overflow-hidden rounded-lg">
+              <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">Warengruppen</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Rabatt
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Beschreibung
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {supplier.product_groups.map((group) => (
+                      <tr key={group.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {group.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {group.discount_percent}%
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {group.description || '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              group.is_active
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {group.is_active ? 'Aktiv' : 'Inaktiv'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

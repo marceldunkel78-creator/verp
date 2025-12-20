@@ -1,0 +1,483 @@
+from django.db import models
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+
+User = get_user_model()
+
+
+# Temporär für alte Migration - kann nach erfolgreicher Migration entfernt werden
+def quotation_document_upload_path(instance, filename):
+    """Generate upload path with quotation number prefix"""
+    if instance.quotation_number:
+        return f'quotations/{instance.quotation_number}_{filename}'
+    return f'quotations/{filename}'
+
+
+class Quotation(models.Model):
+    """
+    Angebote für Kunden mit Waren und Assets
+    """
+    STATUS_CHOICES = [
+        ('DRAFT', 'In Arbeit'),
+        ('ACTIVE', 'Aktiv'),
+        ('EXPIRED', 'Abgelaufen'),
+        ('ORDERED', 'Bestellt'),
+    ]
+    
+    LANGUAGE_CHOICES = [
+        ('DE', 'Deutsch'),
+        ('EN', 'English'),
+    ]
+    
+    # Grundinformationen
+    quotation_number = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='Angebotsnummer',
+        help_text='Automatisch generiert'
+    )
+    
+    customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.PROTECT,
+        related_name='quotations',
+        verbose_name='Kunde'
+    )
+    
+    # Optional: Projekt und System (nur verwaltungstechnisch)
+    project_reference = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Projekt-Referenz',
+        help_text='Interne Projekt-Zuordnung (erscheint nicht im Angebot)'
+    )
+    
+    system_reference = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='System-Referenz',
+        help_text='Interne System-Zuordnung (erscheint nicht im Angebot)'
+    )
+    
+    # Angebots-Details
+    reference = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Angebotsreferenz',
+        help_text='Erscheint im Angebot'
+    )
+    
+    date = models.DateField(
+        auto_now_add=True,
+        verbose_name='Angebotsdatum'
+    )
+    
+    valid_until = models.DateField(
+        verbose_name='Gültig bis'
+    )
+    
+    delivery_time_weeks = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Lieferzeit (Wochen)'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='DRAFT',
+        verbose_name='Status'
+    )
+    
+    language = models.CharField(
+        max_length=2,
+        choices=LANGUAGE_CHOICES,
+        default='DE',
+        verbose_name='Sprache'
+    )
+    
+    # Konditionen (wie bei Orders)
+    payment_term = models.ForeignKey(
+        'verp_settings.PaymentTerm',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotations',
+        verbose_name='Zahlungsbedingung'
+    )
+    
+    delivery_term = models.ForeignKey(
+        'verp_settings.DeliveryTerm',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotations',
+        verbose_name='Lieferbedingung (Incoterm)'
+    )
+    
+    # AGB-Hinweis
+    show_terms_conditions = models.BooleanField(
+        default=True,
+        verbose_name='AGB-Hinweis anzeigen'
+    )
+    
+    # Empfängeradresse (editierbar, nicht zwingend Kundenadresse)
+    recipient_company = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Empfänger Firma'
+    )
+    recipient_name = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Empfänger Name'
+    )
+    recipient_street = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Straße'
+    )
+    recipient_postal_code = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='PLZ'
+    )
+    recipient_city = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Ort'
+    )
+    recipient_country = models.CharField(
+        max_length=2,
+        blank=True,
+        default='DE',
+        verbose_name='Land'
+    )
+    
+    # Systempreis für Angebot
+    system_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Systempreis',
+        help_text='Systempreis für Positionen die auf Systempreis gesetzt sind'
+    )
+    
+    # Lieferkosten
+    delivery_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Lieferkosten',
+        help_text='Lieferkosten werden zur Nettosumme addiert vor MwSt-Berechnung'
+    )
+    
+    # Globale MwSt-Einstellung
+    tax_enabled = models.BooleanField(
+        default=True,
+        verbose_name='MwSt aktiviert',
+        help_text='MwSt auf alle Positionen anwenden'
+    )
+    
+    tax_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=19,
+        verbose_name='MwSt-Satz (%)',
+        help_text='Globaler MwSt-Satz für das Angebot'
+    )
+    
+    # Notizen (intern)
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Interne Notizen'
+    )
+    
+    # Metadaten
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='quotations_created',
+        verbose_name='Erstellt von'
+    )
+    
+    commission_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotations_commission',
+        verbose_name='Provisionsempfänger',
+        help_text='Mitarbeiter der die Provision erhält'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Angebot'
+        verbose_name_plural = 'Angebote'
+        ordering = ['-date', '-quotation_number']
+    
+    def __str__(self):
+        return f"{self.quotation_number} - {self.customer}"
+    
+    def save(self, *args, **kwargs):
+        if not self.quotation_number:
+            self.quotation_number = self._generate_quotation_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_quotation_number():
+        """Generiert die nächste Angebotsnummer im Format Q-YEAR-XXXX"""
+        import datetime
+        year = datetime.datetime.now().year
+        
+        # Finde die höchste Nummer für dieses Jahr
+        prefix = f'Q-{year}-'
+        existing_numbers = Quotation.objects.filter(
+            quotation_number__startswith=prefix
+        ).values_list('quotation_number', flat=True)
+        
+        if not existing_numbers:
+            return f'{prefix}0001'
+        
+        # Extrahiere Nummern und finde Maximum
+        numeric_numbers = []
+        for num in existing_numbers:
+            try:
+                numeric_part = int(num.split('-')[2])
+                numeric_numbers.append(numeric_part)
+            except (ValueError, IndexError):
+                continue
+        
+        if not numeric_numbers:
+            return f'{prefix}0001'
+        
+        next_number = max(numeric_numbers) + 1
+        return f'{prefix}{next_number:04d}'
+
+
+class QuotationItem(models.Model):
+    """
+    Positionen eines Angebots (können TradingProducts oder Assets sein)
+    Unterstützt Warensammlungen und Systempreise
+    """
+    DESCRIPTION_TYPE_CHOICES = [
+        ('SHORT', 'Kurzbeschreibung'),
+        ('LONG', 'Langbeschreibung'),
+    ]
+    
+    quotation = models.ForeignKey(
+        Quotation,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='Angebot'
+    )
+    
+    # Warensammlungen-Support
+    group_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name='Gruppen-ID',
+        help_text='Für Warensammlungen - alle Items mit gleicher group_id gehören zusammen'
+    )
+    
+    group_name = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Gruppenname',
+        help_text='Name der Warensammlung (nur für Gruppen-Header)'
+    )
+    
+    is_group_header = models.BooleanField(
+        default=False,
+        verbose_name='Ist Gruppen-Header',
+        help_text='True wenn dies die Haupt-Position einer Warensammlung ist'
+    )
+    
+    # Generic Foreign Key für TradingProduct oder Asset (optional für Gruppen-Header)
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+        limit_choices_to=models.Q(app_label='suppliers', model='tradingproduct') | 
+                        models.Q(app_label='suppliers', model='asset'),
+        null=True,
+        blank=True
+    )
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    item = GenericForeignKey('content_type', 'object_id')
+    
+    # Position und Beschreibungstyp
+    position = models.PositiveIntegerField(
+        default=1,
+        verbose_name='Position'
+    )
+    
+    description_type = models.CharField(
+        max_length=10,
+        choices=DESCRIPTION_TYPE_CHOICES,
+        default='SHORT',
+        verbose_name='Beschreibungstyp'
+    )
+    
+    # Angebotsdaten
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=1,
+        verbose_name='Menge'
+    )
+    
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Einzelpreis (Verkauf)'
+    )
+    
+    # Einkaufspreis für Marge-Berechnung
+    purchase_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Einkaufspreis',
+        help_text='Für Marge-Berechnung'
+    )
+    
+    # Verkaufspreis (wird automatisch aus Listpreisen berechnet, kann manuell überschrieben werden)
+    sale_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Verkaufspreis',
+        help_text='Wird bei Gruppen aus Summe der Listenpreise berechnet, kann manuell angepasst werden'
+    )
+    
+    # Verwendet diese Position den Systempreis vom Angebot?
+    uses_system_price = models.BooleanField(
+        default=False,
+        verbose_name='Verwendet Systempreis',
+        help_text='Wenn True, wird der Systempreis des Angebots verwendet statt dem Verkaufspreis'
+    )
+    
+    discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='Rabatt (%)'
+    )
+    
+    tax_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=19,
+        verbose_name='MwSt. (%)'
+    )
+    
+    # Optional: Zusätzliche Position-Notizen
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Positions-Notizen'
+    )
+    
+    class Meta:
+        verbose_name = 'Angebotsposition'
+        verbose_name_plural = 'Angebotspositionen'
+        ordering = ['quotation', 'position']
+    
+    def __str__(self):
+        if self.is_group_header and self.group_name:
+            return f"{self.quotation.quotation_number} - Pos. {self.position} - Gruppe: {self.group_name}"
+        return f"{self.quotation.quotation_number} - Pos. {self.position}"
+    
+    @property
+    def subtotal(self):
+        """Zwischensumme ohne MwSt"""
+        from decimal import Decimal
+        
+        # Wenn diese Position den Systempreis verwendet
+        if self.uses_system_price and self.quotation.system_price:
+            return self.quotation.system_price
+        
+        # Für Gruppen-Header mit manuellem Verkaufspreis
+        if self.is_group_header and self.sale_price:
+            return self.sale_price
+        
+        # Für normale Positionen: Menge * Preis mit Rabatt
+        price_after_discount = self.unit_price * (Decimal('1') - self.discount_percent / Decimal('100'))
+        return self.quantity * price_after_discount
+    
+    @property
+    def tax_amount(self):
+        """MwSt-Betrag - verwendet globalen Tax Rate vom Angebot"""
+        from decimal import Decimal
+        if not self.quotation.tax_enabled:
+            return Decimal('0')
+        return self.subtotal * (self.quotation.tax_rate / Decimal('100'))
+    
+    @property
+    def total(self):
+        """Gesamtsumme inkl. MwSt"""
+        return self.subtotal + self.tax_amount
+    
+    @property
+    def total_purchase_cost(self):
+        """Gesamte Einkaufskosten"""
+        from decimal import Decimal
+        return self.quantity * self.purchase_price
+    
+    @property
+    def margin_absolute(self):
+        """Marge in Euro"""
+        return self.subtotal - self.total_purchase_cost
+    
+    @property
+    def margin_percent(self):
+        """Marge in Prozent"""
+        from decimal import Decimal
+        if self.total_purchase_cost == 0:
+            return Decimal('0')
+        return (self.margin_absolute / self.total_purchase_cost) * Decimal('100')
+    
+    def get_group_total_purchase_cost(self):
+        """Summe der Einkaufskosten für eine Gruppe"""
+        from decimal import Decimal
+        if not self.group_id:
+            return self.total_purchase_cost
+        
+        # Summe aller Items in der Gruppe (inklusive dieser)
+        group_items = QuotationItem.objects.filter(
+            quotation=self.quotation,
+            group_id=self.group_id
+        )
+        total = Decimal('0')
+        for item in group_items:
+            total += item.total_purchase_cost
+        return total
+    
+    def get_group_margin(self):
+        """Marge für eine Gruppe (Verkaufspreis - Summe Einkaufspreise)"""
+        from decimal import Decimal
+        if not self.is_group_header or not self.sale_price:
+            return {'absolute': Decimal('0'), 'percent': Decimal('0'), 'total_cost': Decimal('0')}
+        
+        total_cost = self.get_group_total_purchase_cost()
+        margin_abs = self.sale_price - total_cost
+        
+        if total_cost == 0:
+            margin_pct = Decimal('0')
+        else:
+            margin_pct = (margin_abs / total_cost) * Decimal('100')
+        
+        return {
+            'absolute': margin_abs,
+            'percent': margin_pct,
+            'total_cost': total_cost
+        }

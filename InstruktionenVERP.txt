@@ -15,6 +15,29 @@ Superuser erstellen bei activated venv
 python manage.py createsuperuser
 
 
+Testdaten erstellen:
+python manage.py create_test_data
+# Erstellt: 5 Lieferanten, 7 Handelswaren, 5 Material & Supplies, 4 Assets, 12 Kunden
+
+
+Firmeneinstellungen konfigurieren:
+1. Admin-Interface öffnen: http://localhost:8000/admin
+2. Unter "Firmeneinstellungen" → "Company Settings" die Firmendaten eintragen
+3. Dokument-Header hochladen (visitron_document_header.png)
+4. Bankverbindung, Geschäftsführer, Handelsregister-Nr. eintragen
+
+
+Bestelldokumente:
+- Beim Erstellen/Bearbeiten einer Bestellung können Sie:
+  * Ein Bestelldokument hochladen (z.B. PDF von Online-Bestellung)
+  * Ein professionelles PDF-Bestelldokument generieren (Button "PDF herunterladen")
+- Das generierte PDF enthält:
+  * Firmen-Logo (aus Company Settings)
+  * Lieferantenadresse
+  * Bestellpositionen mit allen Details
+  * Footer mit Firmendaten, Bankverbindung und rechtlichen Informationen
+
+
 server starten :
 
 # Backend (Terminal 1)

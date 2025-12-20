@@ -36,6 +36,41 @@ class Supplier(models.Model):
     phone = models.CharField(max_length=50, blank=True, verbose_name='Telefonnummer')
     website = models.URLField(max_length=500, blank=True, verbose_name='Website')
     
+    # Bestellrelevante Felder
+    customer_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Unsere Kundennummer',
+        help_text='Unsere Kundennummer beim Lieferanten'
+    )
+    
+    payment_term = models.ForeignKey(
+        'verp_settings.PaymentTerm',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='suppliers',
+        verbose_name='Zahlungsbedingung'
+    )
+    
+    delivery_term = models.ForeignKey(
+        'verp_settings.DeliveryTerm',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='suppliers',
+        verbose_name='Lieferbedingung (Incoterm)'
+    )
+    
+    delivery_instruction = models.ForeignKey(
+        'verp_settings.DeliveryInstruction',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='suppliers',
+        verbose_name='Lieferanweisung'
+    )
+    
     # Metadaten
     notes = models.TextField(blank=True, verbose_name='Notizen')
     is_active = models.BooleanField(default=True, verbose_name='Aktiv')
@@ -269,7 +304,7 @@ class TradingProduct(models.Model):
         blank=True,
         editable=False,
         verbose_name='Visitron Partnummer',
-        help_text='Automatisch generiert: Lieferantennummer-laufende Nummer (z.B. 100-0001)'
+        help_text='Automatisch generiert: Lieferantennummer-laufende Nummer (z.B. 100-00001)'
     )
     supplier_part_number = models.CharField(
         max_length=100, 
@@ -284,6 +319,12 @@ class TradingProduct(models.Model):
         verbose_name='Kategorie'
     )
     description = models.TextField(blank=True, verbose_name='Beschreibung')
+    short_description = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Kurzbeschreibung',
+        help_text='Kurze Beschreibung für Bestellungen'
+    )
     
     # Lieferant
     supplier = models.ForeignKey(
@@ -465,8 +506,8 @@ class TradingProduct(models.Model):
         else:
             next_suffix = max(suffix_numbers) + 1
         
-        # Format: XXX-YYYY (3-stellig-4-stellig)
-        return f"{prefix}-{str(next_suffix).zfill(4)}"
+        # Format: XXX-YYYYY (3-stellig-5-stellig)
+        return f"{prefix}-{str(next_suffix).zfill(5)}"
     
     def calculate_purchase_price(self):
         """
@@ -598,7 +639,7 @@ class Asset(models.Model):
         blank=True,
         editable=False,
         verbose_name='Visitron Partnummer',
-        help_text='Automatisch generiert: Lieferantennummer-laufende Nummer (z.B. 100-A001)'
+        help_text='Automatisch generiert: Lieferantennummer-laufende Nummer (z.B. 100-A00001)'
     )
     serial_number = models.CharField(
         max_length=200,
@@ -631,6 +672,12 @@ class Asset(models.Model):
     )
     
     description = models.TextField(blank=True, verbose_name='Beschreibung')
+    short_description = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Kurzbeschreibung',
+        help_text='Kurze Beschreibung für Bestellungen'
+    )
     
     # Preise (manuell eingegeben)
     purchase_price = models.DecimalField(
@@ -730,8 +777,8 @@ class Asset(models.Model):
         else:
             next_suffix = max(suffix_numbers) + 1
         
-        # Format: XXX-AYYY (3-stellig-A-3-stellig)
-        return f"{self.supplier.supplier_number}-A{str(next_suffix).zfill(3)}"
+        # Format: XXX-AYYYYY (3-stellig-A-5-stellig)
+        return f"{self.supplier.supplier_number}-A{str(next_suffix).zfill(5)}"
 
 
 class MaterialSupply(models.Model):
@@ -751,7 +798,7 @@ class MaterialSupply(models.Model):
         unique=True,
         blank=True,
         verbose_name='Visitron Partnummer',
-        help_text='Automatisch generiert: Lieferantennummer-M-laufende Nummer (z.B. 100-M0001)'
+        help_text='Automatisch generiert: Lieferantennummer-M-laufende Nummer (z.B. 100-M00001)'
     )
     supplier_part_number = models.CharField(
         max_length=100,
@@ -766,6 +813,12 @@ class MaterialSupply(models.Model):
         verbose_name='Kategorie'
     )
     description = models.TextField(blank=True, verbose_name='Beschreibung')
+    short_description = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Kurzbeschreibung',
+        help_text='Kurze Beschreibung für Bestellungen'
+    )
     
     # Lieferant
     supplier = models.ForeignKey(
@@ -939,8 +992,8 @@ class MaterialSupply(models.Model):
         else:
             next_suffix = max(suffix_numbers) + 1
         
-        # Format: XXX-MYYY (3-stellig-M-4-stellig)
-        return f"{self.supplier.supplier_number}-M{str(next_suffix).zfill(4)}"
+        # Format: XXX-MYYYYY (3-stellig-M-5-stellig)
+        return f"{self.supplier.supplier_number}-M{str(next_suffix).zfill(5)}"
     
     def calculate_purchase_price(self):
         """

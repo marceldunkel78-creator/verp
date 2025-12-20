@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Bestellung {{ order.order_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm 2cm 3cm 2cm;
+            @bottom-center {
+                content: counter(page);
+            }
+        }
+        
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header img {
+            max-width: 600px;
+            height: auto;
+        }
+        
+        .sender-info {
+            font-size: 8pt;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .recipient {
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .recipient strong {
+            font-size: 11pt;
+        }
+        
+        .meta-info {
+            text-align: right;
+            margin-bottom: 30px;
+            font-size: 9pt;
+        }
+        
+        .subject {
+            font-size: 12pt;
+            font-weight: bold;
+            margin: 30px 0 20px 0;
+        }
+        
+        .intro-text {
+            margin-bottom: 20px;
+        }
+        
+        .custom-text {
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 20px 0;
+            border-left: 3px solid #0066cc;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        table thead {
+            background-color: #0066cc;
+            color: white;
+        }
+        
+        table th {
+            text-align: left;
+            padding: 8px 5px;
+            font-size: 9pt;
+        }
+        
+        table td {
+            padding: 6px 5px;
+            border-bottom: 1px solid #ddd;
+            font-size: 9pt;
+        }
+        
+        table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .amount {
+            text-align: right;
+        }
+        
+        .total-row {
+            font-weight: bold;
+            background-color: #f0f0f0;
+        }
+        
+        .total-row td {
+            padding: 10px 5px;
+            border-top: 2px solid #333;
+        }
+        
+        .conditions {
+            margin-top: 30px;
+            font-size: 9pt;
+        }
+        
+        .conditions h3 {
+            font-size: 10pt;
+            margin-bottom: 10px;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 2cm;
+            right: 2cm;
+            font-size: 7pt;
+            color: #666;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
+            text-align: center;
+        }
+        
+        .footer-section {
+            display: inline-block;
+            width: 32%;
+            vertical-align: top;
+        }
+        
+        .notes {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #fffbf0;
+            border: 1px solid #e0d090;
+            font-size: 9pt;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header mit Logo -->
+    <div class="header">
+        {% if company.document_header %}
+        <img src="file://{{ company.document_header.path }}" alt="{{ company.company_name }}">
+        {% else %}
+        <h1>{{ company.company_name }}</h1>
+        {% endif %}
+    </div>
+    
+    <!-- Absender -->
+    <div class="sender-info">
+        {{ company.company_name }} • {{ company.street }} {{ company.house_number }} • {{ company.postal_code }} {{ company.city }}
+    </div>
+    
+    <!-- Empfänger (Lieferant) -->
+    <div class="recipient">
+        <strong>{{ supplier.company_name }}</strong><br>
+        {{ supplier.street }} {{ supplier.house_number }}<br>
+        {{ supplier.postal_code }} {{ supplier.city }}<br>
+        {{ supplier.country }}
+    </div>
+    
+    <!-- Meta-Informationen -->
+    <div class="meta-info">
+        <strong>Bestellnummer:</strong> {{ order.order_number }}<br>
+        <strong>Bestelldatum:</strong> {{ order.order_date|date:"d.m.Y"|default:"—" }}<br>
+        {% if order.offer_reference %}
+        <strong>Ihre Angebots-Nr.:</strong> {{ order.offer_reference }}<br>
+        {% endif %}
+        {% if supplier.customer_number %}
+        <strong>Unsere Kundennr.:</strong> {{ supplier.customer_number }}<br>
+        {% endif %}
+    </div>
+    
+    <!-- Betreff -->
+    <div class="subject">
+        Bestellung {{ order.order_number }}
+    </div>
+    
+    <!-- Anrede -->
+    <div class="intro-text">
+        Sehr geehrte Damen und Herren,<br><br>
+        hiermit bestellen wir verbindlich folgende Positionen:
+    </div>
+    
+    <!-- Benutzerdefinierter Text -->
+    {% if order.custom_text %}
+    <div class="custom-text">
+        {{ order.custom_text|linebreaks }}
+    </div>
+    {% endif %}
+    
+    <!-- Bestelltabelle -->
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 5%;">Pos.</th>
+                <th style="width: 12%;">Art.-Nr.</th>
+                <th style="width: 35%;">Beschreibung</th>
+                <th style="width: 8%;" class="amount">Menge</th>
+                <th style="width: 8%;">Einheit</th>
+                <th style="width: 10%;" class="amount">Einzelpreis</th>
+                <th style="width: 8%;" class="amount">Rabatt</th>
+                <th style="width: 14%;" class="amount">Gesamtpreis</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.position }}</td>
+                <td>{{ item.article_number|default:"—" }}</td>
+                <td>
+                    <strong>{{ item.name }}</strong>
+                    {% if item.description %}
+                    <br><span style="font-size: 8pt; color: #666;">{{ item.description }}</span>
+                    {% endif %}
+                    {% if item.customer_order_number %}
+                    <br><span style="font-size: 8pt; color: #0066cc;">KA: {{ item.customer_order_number }}</span>
+                    {% endif %}
+                </td>
+                <td class="amount">{{ item.quantity }}</td>
+                <td>{{ item.unit|default:"Stk." }}</td>
+                <td class="amount">{{ item.list_price|floatformat:2 }} {{ item.currency }}</td>
+                <td class="amount">{{ item.discount_percent|floatformat:2 }}%</td>
+                <td class="amount">{{ item.total_price|floatformat:2 }} {{ item.currency }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="7" style="text-align: right;">Gesamtsumme:</td>
+                <td class="amount">{{ total_amount|floatformat:2 }} EUR</td>
+            </tr>
+        </tfoot>
+    </table>
+    
+    <!-- Konditionen -->
+    <div class="conditions">
+        <h3>Liefer- und Zahlungsbedingungen:</h3>
+        <p>
+            {% if order.delivery_term %}
+            <strong>Lieferbedingung:</strong> {{ order.delivery_term.incoterm_display }}<br>
+            {% endif %}
+            {% if order.payment_term %}
+            <strong>Zahlungsbedingung:</strong> {{ order.payment_term.formatted_terms }}<br>
+            {% endif %}
+            {% if order.delivery_instruction %}
+            <strong>Lieferanweisung:</strong> {{ order.delivery_instruction.name }}<br>
+            {% endif %}
+            {% if order.delivery_date %}
+            <strong>Gewünschter Liefertermin:</strong> {{ order.delivery_date|date:"d.m.Y" }}<br>
+            {% endif %}
+        </p>
+    </div>
+    
+    <!-- Abschluss -->
+    <p style="margin-top: 30px;">
+        Wir bitten um Auftragsbestätigung mit Angabe des voraussichtlichen Liefertermins.<br><br>
+        Mit freundlichen Grüßen<br>
+        {{ company.company_name }}
+    </p>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-section">
+            <strong>{{ company.company_name }}</strong><br>
+            {{ company.street }} {{ company.house_number }}<br>
+            {{ company.postal_code }} {{ company.city }}<br>
+            {% if company.phone %}Tel: {{ company.phone }}{% endif %}
+            {% if company.email %}<br>{{ company.email }}{% endif %}
+        </div>
+        <div class="footer-section">
+            <strong>Bankverbindung</strong><br>
+            {{ company.bank_name }}<br>
+            IBAN: {{ company.iban }}<br>
+            BIC: {{ company.bic }}
+        </div>
+        <div class="footer-section">
+            <strong>Geschäftsführer:</strong> {{ company.managing_director }}<br>
+            {{ company.register_court }}<br>
+            {{ company.commercial_register }}
+            {% if company.vat_id %}<br>USt-IdNr.: {{ company.vat_id }}{% endif %}
+        </div>
+    </div>
+</body>
+</html>

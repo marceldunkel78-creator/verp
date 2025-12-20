@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 
@@ -154,7 +155,15 @@ const Users = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Benutzerverwaltung</h1>
+        <div>
+          <nav className="text-sm text-gray-500 mb-2">
+            <Link to="/settings" className="hover:text-gray-700">Settings</Link>
+            <span className="mx-2">/</span>
+            <span className="text-gray-900">Users</span>
+          </nav>
+          <h1 className="text-3xl font-bold text-gray-900">Users</h1>
+          <p className="text-sm text-gray-600">Benutzerverwaltung und Berechtigungen</p>
+        </div>
         <button
           onClick={() => {
             setEditingUser(null);

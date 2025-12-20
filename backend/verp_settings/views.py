@@ -3,14 +3,17 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
-    CompanyManager, CompanyBankAccount
+    CompanyManager, CompanyBankAccount, PaymentTerm,
+    DeliveryTerm, DeliveryInstruction
 )
 from .serializers import (
     ExchangeRateSerializer, CompanySettingsSerializer,
     CompanySettingsUpdateSerializer, CompanyAddressSerializer,
-    CompanyManagerSerializer, CompanyBankAccountSerializer
+    CompanyManagerSerializer, CompanyBankAccountSerializer,
+    PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer
 )
 
 
@@ -106,3 +109,42 @@ class ExchangeRateViewSet(viewsets.ModelViewSet):
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['currency']
     ordering = ['currency']
+
+
+class PaymentTermViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Zahlungsbedingungen
+    """
+    queryset = PaymentTerm.objects.all()
+    serializer_class = PaymentTermSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'notes']
+    filterset_fields = ['is_active']
+    ordering = ['name']
+
+
+class DeliveryTermViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Lieferbedingungen (Incoterms)
+    """
+    queryset = DeliveryTerm.objects.all()
+    serializer_class = DeliveryTermSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['incoterm', 'description']
+    filterset_fields = ['is_active']
+    ordering = ['incoterm']
+
+
+class DeliveryInstructionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Lieferanweisungen
+    """
+    queryset = DeliveryInstruction.objects.all()
+    serializer_class = DeliveryInstructionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'instruction_text']
+    filterset_fields = ['is_active']
+    ordering = ['name']

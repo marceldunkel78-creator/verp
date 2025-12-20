@@ -10,6 +10,15 @@ import {
   ShoppingBagIcon,
   CogIcon,
   ArrowRightOnRectangleIcon,
+  BanknotesIcon,
+  CubeIcon,
+  ShoppingCartIcon,
+  UserGroupIcon,
+  WrenchScrewdriverIcon,
+  EyeIcon,
+  ClipboardDocumentCheckIcon,
+  ChartBarIcon,
+  DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 
 const Layout = () => {
@@ -19,10 +28,17 @@ const Layout = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-    { name: 'Benutzerverwaltung', href: '/users', icon: UsersIcon, adminOnly: true },
-    { name: 'Lieferanten', href: '/suppliers', icon: TruckIcon },
-    { name: 'Handelswaren', href: '/trading', icon: ShoppingBagIcon },
-    { name: 'Einstellungen', href: '/settings/exchange-rates', icon: CogIcon, settingsOnly: true },
+    { name: 'Finance', href: '/finance', icon: BanknotesIcon },
+    { name: 'Procurement', href: '/procurement', icon: TruckIcon },
+    { name: 'Inventory', href: '/inventory', icon: CubeIcon },
+    { name: 'Sales/Orders', href: '/sales', icon: ShoppingCartIcon },
+    { name: 'HR', href: '/hr', icon: UserGroupIcon },
+    { name: 'Manufacturing', href: '/manufacturing', icon: WrenchScrewdriverIcon },
+    { name: 'VisiView', href: '/visiview', icon: EyeIcon },
+    { name: 'Service', href: '/service', icon: ClipboardDocumentCheckIcon },
+    { name: 'BI', href: '/bi', icon: ChartBarIcon },
+    { name: 'Documents', href: '/documents', icon: DocumentDuplicateIcon },
+    { name: 'Settings', href: '/settings', icon: CogIcon },
   ];
 
   const filteredNavigation = navigation.filter((item) => {

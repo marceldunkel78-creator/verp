@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
-    CompanyManager, CompanyBankAccount
+    CompanyManager, CompanyBankAccount, PaymentTerm,
+    DeliveryTerm, DeliveryInstruction
 )
 
 
@@ -122,3 +123,46 @@ class ExchangeRateSerializer(serializers.ModelSerializer):
         model = ExchangeRate
         fields = ['id', 'currency', 'rate_to_eur', 'last_updated']
         read_only_fields = ['id', 'last_updated']
+
+
+class PaymentTermSerializer(serializers.ModelSerializer):
+    """Serializer für Zahlungsbedingungen"""
+    formatted_terms = serializers.CharField(source='get_formatted_terms', read_only=True)
+    
+    class Meta:
+        model = PaymentTerm
+        fields = [
+            'id', 'name', 'is_prepayment', 'payment_days',
+            'discount_days', 'discount_percent',
+            'has_custom_terms', 'down_payment_percent', 'down_payment_description',
+            'delivery_payment_percent', 'delivery_payment_description',
+            'acceptance_payment_percent', 'acceptance_payment_description',
+            'notes', 'is_active', 'formatted_terms',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class DeliveryTermSerializer(serializers.ModelSerializer):
+    """Serializer für Lieferbedingungen (Incoterms)"""
+    incoterm_display = serializers.CharField(source='get_incoterm_display', read_only=True)
+    
+    class Meta:
+        model = DeliveryTerm
+        fields = [
+            'id', 'incoterm', 'incoterm_display', 'is_active',
+            'description', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class DeliveryInstructionSerializer(serializers.ModelSerializer):
+    """Serializer für Lieferanweisungen"""
+    
+    class Meta:
+        model = DeliveryInstruction
+        fields = [
+            'id', 'name', 'instruction_text', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']

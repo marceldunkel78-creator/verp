@@ -15,7 +15,7 @@ class AssetListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'visitron_part_number', 'supplier_part_number', 'serial_number',
             'name', 'supplier', 'supplier_name', 'product_group', 'product_group_name',
-            'purchase_price', 'purchase_currency', 'sale_price', 
+            'short_description', 'purchase_price', 'purchase_currency', 'sale_price', 
             'purchase_date', 'expected_delivery_date', 'actual_delivery_date',
             'warranty_months', 'current_value', 'status', 'status_display',
             'is_active', 'created_at'

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
@@ -112,9 +113,14 @@ const ExchangeRates = () => {
     <div className="p-6">
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Wechselkurse</h1>
+          <nav className="text-sm text-gray-500 mb-2">
+            <Link to="/settings" className="hover:text-gray-700">Settings</Link>
+            <span className="mx-2">/</span>
+            <span className="text-gray-900">Currency Exchange Rates</span>
+          </nav>
+          <h1 className="text-2xl font-bold text-gray-900">Currency Exchange Rates</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Verwaltung der Wechselkurse für Fremdwährungen
+            Wechselkurse und Währungseinstellungen
           </p>
         </div>
         {canWrite && (

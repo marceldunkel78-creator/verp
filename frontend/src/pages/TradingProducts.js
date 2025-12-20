@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon, EyeIcon, CurrencyEuroIcon } from '@heroicons/react/24/outline';
@@ -7,6 +8,8 @@ const TradingProducts = () => {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [productGroups, setProductGroups] = useState([]);
+  const [priceLists, setPriceLists] = useState([]);
   const [exchangeRates, setExchangeRates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -27,6 +30,8 @@ const TradingProducts = () => {
     visitron_part_number: '',
     supplier_part_number: '',
     supplier: '',
+    product_group: '',
+    price_list: '',
     category: '',
     description: '',
     unit: 'Stück',
@@ -36,7 +41,7 @@ const TradingProducts = () => {
     price_valid_from: new Date().toISOString().split('T')[0],
     price_valid_until: '',
     discount_percent: 0,
-    markup_percent: 0,
+    margin_percent: 0,
     shipping_cost: 0,
     shipping_cost_is_percent: false,
     import_cost: 0,
@@ -71,14 +76,14 @@ const TradingProducts = () => {
     formData.handling_cost_is_percent,
     formData.storage_cost, 
     formData.storage_cost_is_percent,
-    formData.markup_percent
+    formData.margin_percent
   ]);
 
   const calculatePrices = () => {
     const listPrice = parseFloat(formData.list_price) || 0;
     const exchangeRate = parseFloat(formData.exchange_rate) || 1.0;
     const discountPercent = parseFloat(formData.discount_percent) || 0;
-    const markupPercent = parseFloat(formData.markup_percent) || 0;
+    const marginPercent = parseFloat(formData.margin_percent) || 0;
     
     // Basispreis nach Rabatt
     const basePrice = listPrice * (1 - discountPercent / 100);
@@ -103,8 +108,14 @@ const TradingProducts = () => {
     // Einkaufspreis (mit Wechselkurs)
     const purchasePrice = (basePrice + shipping + importCost + handling + storage) * exchangeRate;
     
-    // Visitron-Listenpreis (auf volle Euros gerundet)
-    const visitronListPrice = Math.ceil(purchasePrice * (1 + markupPercent / 100));
+    // Visitron-Listenpreis mit Marge: VLP = EK / (1 - Marge/100)
+    let visitronListPrice;
+    if (marginPercent >= 100) {
+      // Bei Marge >= 100% würde Division durch 0 auftreten
+      visitronListPrice = Math.ceil(purchasePrice * 10); // 10x als Obergrenze
+    } else {
+      visitronListPrice = Math.ceil(purchasePrice / (1 - marginPercent / 100));
+    }
     
     setCalculatedPrices({
       purchasePrice: purchasePrice,
@@ -149,6 +160,36 @@ const TradingProducts = () => {
     }
   };
 
+  const fetchProductGroups = async (supplierId = null) => {
+    try {
+      let url = '/suppliers/product-groups/';
+      if (supplierId) {
+        url += `?supplier=${supplierId}`;
+      }
+      const response = await api.get(url);
+      const data = response.data.results || response.data;
+      setProductGroups(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Warengruppen:', error);
+      setProductGroups([]);
+    }
+  };
+
+  const fetchPriceLists = async (supplierId = null) => {
+    try {
+      let url = '/suppliers/price-lists/';
+      if (supplierId) {
+        url += `?supplier=${supplierId}&is_active=true`;
+      }
+      const response = await api.get(url);
+      const data = response.data.results || response.data;
+      setPriceLists(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Preislisten:', error);
+      setPriceLists([]);
+    }
+  };
+
   const fetchExchangeRates = async () => {
     try {
       const response = await api.get('/settings/exchange-rates/');
@@ -185,6 +226,8 @@ const TradingProducts = () => {
       const submitData = {
         ...formData,
         supplier: formData.supplier || null,
+        product_group: formData.product_group || null,
+        price_list: formData.price_list || null,
         category: formData.category || null,
         price_valid_until: formData.price_valid_until || null,
       };
@@ -230,6 +273,8 @@ const TradingProducts = () => {
       visitron_part_number: '',
       supplier_part_number: '',
       supplier: '',
+      product_group: '',
+      price_list: '',
       category: '',
       description: '',
       unit: 'Stück',
@@ -239,7 +284,7 @@ const TradingProducts = () => {
       price_valid_from: new Date().toISOString().split('T')[0],
       price_valid_until: '',
       discount_percent: 0,
-      markup_percent: 0,
+      margin_percent: 0,
       shipping_cost: 0,
       shipping_cost_is_percent: false,
       import_cost: 0,
@@ -255,47 +300,62 @@ const TradingProducts = () => {
     setEditingProduct(null);
   };
 
-  const openEditModal = (product) => {
+  const openEditModal = async (product) => {
     setEditingProduct(product);
     
-    // Aktuellen Wechselkurs laden
-    const currency = product.list_price_currency || 'EUR';
-    let currentRate = 1.0;
-    if (currency !== 'EUR' && Array.isArray(exchangeRates)) {
-      const rate = exchangeRates.find(r => r.currency === currency);
-      if (rate) {
-        currentRate = parseFloat(rate.rate_to_eur);
+    // Lade die vollständigen Produktdetails vom Backend
+    try {
+      const response = await api.get(`/suppliers/products/${product.id}/`);
+      const fullProduct = response.data;
+      
+      // Aktuellen Wechselkurs laden
+      const currency = fullProduct.list_price_currency || 'EUR';
+      let currentRate = 1.0;
+      if (currency !== 'EUR' && Array.isArray(exchangeRates)) {
+        const rate = exchangeRates.find(r => r.currency === currency);
+        if (rate) {
+          currentRate = parseFloat(rate.rate_to_eur);
+        }
       }
+      
+      // Lade Warengruppen und Preislisten des Lieferanten
+      await fetchProductGroups(fullProduct.supplier);
+      await fetchPriceLists(fullProduct.supplier);
+      
+      setFormData({
+        name: fullProduct.name,
+        visitron_part_number: fullProduct.visitron_part_number,
+        supplier_part_number: fullProduct.supplier_part_number || '',
+        supplier: fullProduct.supplier,
+        product_group: fullProduct.product_group || '',
+        price_list: fullProduct.price_list || '',
+        category: fullProduct.category || '',
+        description: fullProduct.description || '',
+        unit: fullProduct.unit,
+        list_price: fullProduct.list_price,
+        list_price_currency: currency,
+        exchange_rate: currentRate,
+        price_valid_from: fullProduct.price_valid_from,
+        price_valid_until: fullProduct.price_valid_until || '',
+        discount_percent: fullProduct.discount_percent || 0,
+        margin_percent: fullProduct.margin_percent || 0,
+        shipping_cost: fullProduct.shipping_cost || 0,
+        shipping_cost_is_percent: fullProduct.shipping_cost_is_percent || false,
+        import_cost: fullProduct.import_cost || 0,
+        import_cost_is_percent: fullProduct.import_cost_is_percent || false,
+        handling_cost: fullProduct.handling_cost || 0,
+        handling_cost_is_percent: fullProduct.handling_cost_is_percent || false,
+        storage_cost: fullProduct.storage_cost || 0,
+        storage_cost_is_percent: fullProduct.storage_cost_is_percent || false,
+        costs_currency: fullProduct.costs_currency || 'EUR',
+        minimum_stock: fullProduct.minimum_stock || 0,
+        is_active: fullProduct.is_active,
+      });
+      setShowModal(true);
+    } catch (error) {
+      console.error('Fehler beim Laden der Produktdetails:', error);
+      alert('Fehler beim Laden der Produktdetails');
     }
-    
-    setFormData({
-      name: product.name,
-      visitron_part_number: product.visitron_part_number,
-      supplier_part_number: product.supplier_part_number || '',
-      supplier: product.supplier,
-      category: product.category || '',
-      description: product.description || '',
-      unit: product.unit,
-      list_price: product.list_price,
-      list_price_currency: currency,
-      exchange_rate: currentRate,
-      price_valid_from: product.price_valid_from,
-      price_valid_until: product.price_valid_until || '',
-      discount_percent: product.discount_percent,
-      markup_percent: product.markup_percent || 0,
-      shipping_cost: product.shipping_cost,
-      shipping_cost_is_percent: product.shipping_cost_is_percent,
-      import_cost: product.import_cost,
-      import_cost_is_percent: product.import_cost_is_percent,
-      handling_cost: product.handling_cost,
-      handling_cost_is_percent: product.handling_cost_is_percent,
-      storage_cost: product.storage_cost,
-      storage_cost_is_percent: product.storage_cost_is_percent,
-      costs_currency: product.costs_currency || 'EUR',
-      minimum_stock: product.minimum_stock,
-      is_active: product.is_active,
-    });
-    setShowModal(true);
   };
 
   const isPriceValid = (product) => {
@@ -319,7 +379,13 @@ const TradingProducts = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Handelswaren</h1>
+          <nav className="text-sm text-gray-500 mb-2">
+            <Link to="/procurement" className="hover:text-gray-700">Procurement</Link>
+            <span className="mx-2">/</span>
+            <span className="text-gray-900">Trading Goods</span>
+          </nav>
+          <h1 className="text-3xl font-bold text-gray-900">Trading Goods</h1>
+          <p className="text-sm text-gray-600">Handelswaren und Preislisten</p>
           {!canWrite && (
             <p className="text-sm text-gray-500 mt-1">
               Sie haben nur Leserechte für dieses Modul
@@ -398,7 +464,7 @@ const TradingProducts = () => {
       </div>
 
       {/* Produktliste */}
-      <div className="bg-white shadow overflow-hidden rounded-lg">
+      <div className="bg-white shadow overflow-hidden rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -418,7 +484,7 @@ const TradingProducts = () => {
                 Einkaufspreis
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Preisgültigkeit
+                Preisgültigkeit bis
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
@@ -448,10 +514,11 @@ const TradingProducts = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div className="flex flex-col">
-                    <span>Ab: {new Date(product.price_valid_from).toLocaleDateString('de-DE')}</span>
-                    {product.price_valid_until && (
-                      <span>Bis: {new Date(product.price_valid_until).toLocaleDateString('de-DE')}</span>
-                    )}
+                    <span>
+                      Bis: {product.price_valid_until 
+                        ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
+                        : 'unbeschränkt'}
+                    </span>
                     {!isPriceValid(product) && (
                       <span className="text-red-600 text-xs">Ungültig</span>
                     )}
@@ -533,8 +600,8 @@ const TradingProducts = () => {
                         <div className="text-white text-2xl font-bold">
                           {calculatedPrices.visitronListPrice.toFixed(0)} €
                         </div>
-                        {formData.markup_percent > 0 && (
-                          <div className="text-orange-100 text-xs">+{formData.markup_percent}%</div>
+                        {formData.margin_percent > 0 && (
+                          <div className="text-orange-100 text-xs">{formData.margin_percent}% Marge</div>
                         )}
                       </div>
                     </div>
@@ -563,15 +630,17 @@ const TradingProducts = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
-                        Visitron-Partnummer *
+                        Visitron-Partnummer
                       </label>
                       <input
                         type="text"
-                        required
-                        value={formData.visitron_part_number}
-                        onChange={(e) => setFormData({ ...formData, visitron_part_number: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                        value={formData.visitron_part_number || 'Wird automatisch generiert'}
+                        readOnly
+                        disabled
+                        className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 text-gray-500 shadow-sm cursor-not-allowed"
+                        title="Wird automatisch beim Speichern generiert: Lieferantennummer-laufende Nummer (z.B. 100-0001)"
                       />
+                      <p className="mt-1 text-xs text-gray-500">Wird automatisch generiert basierend auf Lieferant</p>
                     </div>
 
                     <div>
@@ -593,7 +662,17 @@ const TradingProducts = () => {
                       <select
                         required
                         value={formData.supplier}
-                        onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                        onChange={async (e) => {
+                          const supplierId = e.target.value;
+                          setFormData({ ...formData, supplier: supplierId, product_group: '', price_list: '', discount_percent: 0 });
+                          if (supplierId) {
+                            await fetchProductGroups(supplierId);
+                            await fetchPriceLists(supplierId);
+                          } else {
+                            setProductGroups([]);
+                            setPriceLists([]);
+                          }
+                        }}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
                       >
                         <option value="">Bitte wählen...</option>
@@ -603,6 +682,73 @@ const TradingProducts = () => {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Warengruppe
+                      </label>
+                      <select
+                        value={formData.product_group}
+                        onChange={(e) => {
+                          const groupId = e.target.value;
+                          setFormData({ ...formData, product_group: groupId });
+                          if (groupId) {
+                            const group = productGroups.find(g => g.id === parseInt(groupId));
+                            if (group) {
+                              setFormData({ ...formData, product_group: groupId, discount_percent: group.discount_percent });
+                            }
+                          }
+                        }}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                        disabled={!formData.supplier}
+                      >
+                        <option value="">Bitte wählen...</option>
+                        {productGroups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name} ({group.discount_percent}%)
+                          </option>
+                        ))}
+                      </select>
+                      {!formData.supplier && (
+                        <p className="mt-1 text-sm text-gray-500">Bitte zuerst Lieferant auswählen</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Preisliste
+                      </label>
+                      <select
+                        value={formData.price_list}
+                        onChange={(e) => {
+                          const priceListId = e.target.value;
+                          setFormData({ ...formData, price_list: priceListId });
+                          if (priceListId) {
+                            const priceList = priceLists.find(pl => pl.id === parseInt(priceListId));
+                            if (priceList) {
+                              setFormData({ 
+                                ...formData, 
+                                price_list: priceListId,
+                                price_valid_from: priceList.valid_from,
+                                price_valid_until: priceList.valid_until || ''
+                              });
+                            }
+                          }
+                        }}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        disabled={!formData.supplier}
+                      >
+                        <option value="">Bitte wählen...</option>
+                        {priceLists.map((priceList) => (
+                          <option key={priceList.id} value={priceList.id}>
+                            {priceList.name} ({new Date(priceList.valid_from).toLocaleDateString('de-DE')} - {priceList.valid_until ? new Date(priceList.valid_until).toLocaleDateString('de-DE') : 'unbegrenzt'})
+                          </option>
+                        ))}
+                      </select>
+                      {!formData.supplier && (
+                        <p className="mt-1 text-sm text-gray-500">Bitte zuerst Lieferant auswählen</p>
+                      )}
                     </div>
 
                     <div>
@@ -619,7 +765,9 @@ const TradingProducts = () => {
                         <option value="MIKROSKOPE">Mikroskope</option>
                         <option value="BELEUCHTUNG">Beleuchtung</option>
                         <option value="KAMERAS">Kameras</option>
-                        <option value="CONFOCALS">Confocals</option>
+                        <option value="DIENSTLEISTUNG">Dienstleistung</option>
+                        <option value="LICHTQUELLEN">Lichtquellen</option>
+                        <option value="SCANNING_BELEUCHTUNG">Scanning- und Beleuchtungsmodule</option>
                         <option value="PERIPHERALS">Peripherals</option>
                       </select>
                     </div>
@@ -756,14 +904,15 @@ const TradingProducts = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
-                        Aufschlag für Visitron-Listenpreis (%)
+                        Marge für Visitron-Listenpreis (%) - VLP = EK / (1 - Marge/100)
                       </label>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
-                        value={formData.markup_percent}
-                        onChange={(e) => setFormData({ ...formData, markup_percent: e.target.value })}
+                        max="99.9"
+                        value={formData.margin_percent}
+                        onChange={(e) => setFormData({ ...formData, margin_percent: e.target.value })}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
                       />
                     </div>

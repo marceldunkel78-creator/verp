@@ -3,6 +3,7 @@ from .models import (
     Supplier, SupplierContact, TradingProduct, 
     SupplierProduct, ProductGroup, PriceList
 )
+from verp_settings.serializers import PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer
 
 
 class SupplierContactSerializer(serializers.ModelSerializer):
@@ -89,13 +90,21 @@ class SupplierSerializer(serializers.ModelSerializer):
     supplier_products = SupplierProductSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     
+    # Nested Serializer für Payment & Delivery Settings
+    payment_term_detail = PaymentTermSerializer(source='payment_term', read_only=True)
+    delivery_term_detail = DeliveryTermSerializer(source='delivery_term', read_only=True)
+    delivery_instruction_detail = DeliveryInstructionSerializer(source='delivery_instruction', read_only=True)
+    
     class Meta:
         model = Supplier
         fields = [
             'id', 'supplier_number', 'company_name', 'street', 'house_number',
             'address_supplement', 'postal_code', 'city', 'state', 'country',
-            'address', 'email', 'phone', 'website', 'contacts', 'product_groups', 'price_lists',
-            'supplier_products', 'notes', 'is_active', 'created_by', 'created_by_name',
+            'address', 'email', 'phone', 'website', 'customer_number', 
+            'payment_term', 'delivery_term', 'delivery_instruction',
+            'payment_term_detail', 'delivery_term_detail', 'delivery_instruction_detail',
+            'contacts', 'product_groups', 'price_lists', 'supplier_products',
+            'notes', 'is_active', 'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'supplier_number', 'created_by', 'created_at', 'updated_at']
@@ -110,7 +119,9 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'company_name', 'street', 'house_number', 'address_supplement',
             'postal_code', 'city', 'state', 'country', 'address',
-            'email', 'phone', 'website', 'contacts', 'notes', 'is_active'
+            'email', 'phone', 'website', 'customer_number',
+            'payment_term', 'delivery_term', 'delivery_instruction',
+            'contacts', 'notes', 'is_active'
         ]
     
     def create(self, validated_data):
