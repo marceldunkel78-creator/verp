@@ -3,12 +3,17 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { COUNTRIES } from '../utils/countries';
-import { PlusIcon, PencilIcon, TrashIcon, EyeIcon } from '@heroicons/react/24/outline';
+import { 
+  PlusIcon, PencilIcon, TrashIcon, EyeIcon, 
+  BuildingOfficeIcon, EnvelopeIcon, PhoneIcon,
+  UserGroupIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon
+} from '@heroicons/react/24/outline';
 
 const Suppliers = () => {
   const { user } = useAuth();
   const [suppliers, setSuppliers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -18,6 +23,12 @@ const Suppliers = () => {
   const [showPriceListModal, setShowPriceListModal] = useState(false);
   const [priceLists, setPriceLists] = useState([]);
   const [editingPriceList, setEditingPriceList] = useState(null);
+  const [filters, setFilters] = useState({
+    search: '',
+    is_active: ''
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   
   // Payment & Delivery Settings
   const [paymentTerms, setPaymentTerms] = useState([]);
@@ -63,9 +74,14 @@ const Suppliers = () => {
   });
 
   useEffect(() => {
-    fetchSuppliers();
     fetchPaymentDeliverySettings();
   }, []);
+
+  useEffect(() => {
+    if (hasSearched) {
+      fetchSuppliers();
+    }
+  }, [currentPage]);
 
   const fetchPaymentDeliverySettings = async () => {
     try {
@@ -83,17 +99,35 @@ const Suppliers = () => {
   };
 
   const fetchSuppliers = async () => {
+    setLoading(true);
+    setHasSearched(true);
     try {
-      const response = await api.get('/suppliers/suppliers/');
-      // Handle paginated response
+      const params = new URLSearchParams({
+        page: currentPage,
+        page_size: 9
+      });
+      
+      if (filters.search) params.append('search', filters.search);
+      if (filters.is_active !== '') params.append('is_active', filters.is_active);
+      
+      const response = await api.get(`/suppliers/suppliers/?${params.toString()}`);
       const data = response.data.results || response.data;
       setSuppliers(Array.isArray(data) ? data : []);
+      
+      if (response.data.count) {
+        setTotalPages(Math.ceil(response.data.count / 9));
+      }
     } catch (error) {
       console.error('Fehler beim Laden der Lieferanten:', error);
       setSuppliers([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchSuppliers();
   };
 
   const handleSubmit = async (e) => {
@@ -372,7 +406,7 @@ const Suppliers = () => {
   }
 
   return (
-    <div>
+    <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <div>
           <nav className="text-sm text-gray-500 mb-2">
@@ -380,7 +414,10 @@ const Suppliers = () => {
             <span className="mx-2">/</span>
             <span className="text-gray-900">Suppliers</span>
           </nav>
-          <h1 className="text-3xl font-bold text-gray-900">Suppliers</h1>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+            <BuildingOfficeIcon className="h-8 w-8 mr-3 text-green-600" />
+            Suppliers
+          </h1>
           <p className="text-sm text-gray-600 mt-1">Lieferantenverwaltung und Kontakte</p>
           {!canWrite && (
             <p className="text-sm text-gray-500 mt-1">
@@ -402,75 +439,83 @@ const Suppliers = () => {
         )}
       </div>
 
-      <div className="bg-white shadow overflow-x-auto rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Nr.
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Firmenname
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                E-Mail
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Telefon
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kontakte
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Warengruppen
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Preislisten
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktionen
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+      {/* Filter/Search */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Suche</label>
+            <input
+              type="text"
+              placeholder="Firmenname, E-Mail, Telefon..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={filters.is_active}
+              onChange={(e) => setFilters({ ...filters, is_active: e.target.value })}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Alle</option>
+              <option value="true">Nur Aktive</option>
+              <option value="false">Nur Inaktive</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4">
+          <button
+            onClick={handleSearch}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+          >
+            Suchen
+          </button>
+        </div>
+      </div>
+
+      {/* Empty State - Before Search */}
+      {!hasSearched && suppliers.length === 0 && (
+        <div className="bg-white shadow rounded-lg p-12 text-center">
+          <BuildingOfficeIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Lieferanten durchsuchen</h3>
+          <p className="text-gray-500">
+            Verwenden Sie die Filter oben, um Lieferanten zu suchen.
+          </p>
+        </div>
+      )}
+
+      {/* Empty State - No Results */}
+      {hasSearched && suppliers.length === 0 && (
+        <div className="bg-white shadow rounded-lg p-12 text-center">
+          <BuildingOfficeIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Lieferanten gefunden</h3>
+          <p className="text-gray-500">
+            Versuchen Sie, Ihre Suchkriterien anzupassen.
+          </p>
+        </div>
+      )}
+
+      {/* Suppliers Grid */}
+      {suppliers.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             {suppliers.map((supplier) => (
-              <tr key={supplier.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                  {supplier.supplier_number || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {supplier.company_name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {supplier.email || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {supplier.phone || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {supplier.contacts?.length || 0}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <button
-                    onClick={() => openGroupModal(supplier)}
-                    className="text-orange-600 hover:text-orange-900 underline"
-                    title="Warengruppen verwalten"
-                  >
-                    {supplier.product_groups?.length || 0} Gruppen
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">                  <button
-                    onClick={() => openPriceListModal(supplier)}
-                    className="text-blue-600 hover:text-blue-900 underline"
-                    title="Preislisten verwalten"
-                  >
-                    {supplier.price_lists?.length || 0} Listen
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">                  <span
+              <div
+                key={supplier.id}
+                className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center">
+                    <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-2" />
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {supplier.company_name}
+                    </h3>
+                  </div>
+                  <span
                     className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                       supplier.is_active
                         ? 'bg-green-100 text-green-800'
@@ -479,44 +524,120 @@ const Suppliers = () => {
                   >
                     {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                </div>
+
+                {/* Supplier Number */}
+                <div className="text-xs text-gray-500 font-mono mb-3">
+                  Nr. {supplier.supplier_number || '-'}
+                </div>
+
+                {/* Contact Info */}
+                <div className="space-y-2 mb-4">
+                  {supplier.email && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <EnvelopeIcon className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span className="truncate">{supplier.email}</span>
+                    </div>
+                  )}
+                  {supplier.phone && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <PhoneIcon className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>{supplier.phone}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="border-t pt-3 mb-4 space-y-2">
+                  <button
+                    onClick={() => openGroupModal(supplier)}
+                    className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
+                  >
+                    <span className="text-gray-600 flex items-center">
+                      <UserGroupIcon className="h-4 w-4 mr-2" />
+                      Warengruppen:
+                    </span>
+                    <span className="font-medium text-orange-600">
+                      {supplier.product_groups?.length || 0}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => openPriceListModal(supplier)}
+                    className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
+                  >
+                    <span className="text-gray-600 flex items-center">
+                      <RectangleStackIcon className="h-4 w-4 mr-2" />
+                      Preislisten:
+                    </span>
+                    <span className="font-medium text-blue-600">
+                      {supplier.price_lists?.length || 0}
+                    </span>
+                  </button>
+                  <div className="flex justify-between text-sm p-2">
+                    <span className="text-gray-600">Kontakte:</span>
+                    <span className="font-medium text-gray-900">
+                      {supplier.contacts?.length || 0}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end space-x-2 border-t pt-3">
                   <Link
                     to={`/procurement/suppliers/${supplier.id}`}
-                    className="text-blue-600 hover:text-blue-900 mr-4"
+                    className="text-blue-600 hover:text-blue-900 p-1"
                     title="Details anzeigen"
                   >
-                    <EyeIcon className="h-5 w-5 inline" />
+                    <EyeIcon className="h-5 w-5" />
                   </Link>
                   {canWrite && (
                     <>
                       <button
                         onClick={() => openEditModal(supplier)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
+                        className="text-blue-600 hover:text-blue-900 p-1"
                         title="Bearbeiten"
                       >
-                        <PencilIcon className="h-5 w-5 inline" />
+                        <PencilIcon className="h-5 w-5" />
                       </button>
                       <button
                         onClick={() => handleDelete(supplier.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-red-600 hover:text-red-900 p-1"
                         title="Löschen"
                       >
-                        <TrashIcon className="h-5 w-5 inline" />
+                        <TrashIcon className="h-5 w-5" />
                       </button>
                     </>
                   )}
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
 
-      {suppliers.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-lg shadow mt-4">
-          <p className="text-gray-500">Keine Lieferanten gefunden</p>
-        </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-white shadow rounded-lg p-4 flex items-center justify-between">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeftIcon className="h-5 w-5 mr-1" />
+                Zurück
+              </button>
+              <span className="text-sm text-gray-700">
+                Seite {currentPage} von {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Weiter
+                <ChevronRightIcon className="h-5 w-5 ml-1" />
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal */}

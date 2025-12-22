@@ -30,6 +30,7 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'order_number',
+            'order_type',
             'status', 'status_display', 'supplier', 'supplier_name',
             'order_date', 'delivery_date', 'payment_date',
             'items_count', 'total_amount',
@@ -64,6 +65,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'order_number',
+            'order_type',
             'status', 'status_display', 'supplier', 'supplier_name',
             'supplier_details',
             'order_date', 'confirmation_date', 'delivery_date', 'payment_date',
@@ -134,6 +136,7 @@ class OrderCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
+            'order_type',
             'status', 'supplier',
             'order_date', 'confirmation_date', 'delivery_date', 'payment_date',
             'payment_term', 'delivery_term', 'delivery_instruction',
@@ -143,6 +146,13 @@ class OrderCreateUpdateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
+        # If items were submitted as JSON string (multipart/form-data), parse them
+        import json
+        if isinstance(items_data, str):
+            try:
+                items_data = json.loads(items_data)
+            except Exception:
+                items_data = []
         order = Order.objects.create(**validated_data)
         
         # Items erstellen
@@ -153,6 +163,12 @@ class OrderCreateUpdateSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', None)
+        import json
+        if isinstance(items_data, str):
+            try:
+                items_data = json.loads(items_data)
+            except Exception:
+                items_data = None
         
         # Update Order fields
         for attr, value in validated_data.items():

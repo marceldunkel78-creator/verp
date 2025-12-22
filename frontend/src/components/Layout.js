@@ -19,6 +19,7 @@ import {
   ClipboardDocumentCheckIcon,
   ChartBarIcon,
   DocumentDuplicateIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 
 const Layout = () => {
@@ -28,6 +29,7 @@ const Layout = () => {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+    { name: 'MyVERP', href: '/myverp', icon: ClockIcon },
     { name: 'Finance', href: '/finance', icon: BanknotesIcon },
     { name: 'Procurement', href: '/procurement', icon: TruckIcon },
     { name: 'Inventory', href: '/inventory', icon: CubeIcon },

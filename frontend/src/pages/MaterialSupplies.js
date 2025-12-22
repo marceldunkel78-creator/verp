@@ -20,7 +20,7 @@ const MaterialSupplies = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [calculatedPurchasePrice, setCalculatedPurchasePrice] = useState(0);
   
-  const canWrite = user?.is_staff || user?.is_superuser;
+  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_material_supplies || user?.can_write_manufacturing;
 
   const [formData, setFormData] = useState({
     name: '',

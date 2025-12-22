@@ -23,7 +23,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     """
     queryset = Order.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'supplier']
+    filterset_fields = ['status', 'supplier', 'order_type']
     search_fields = ['order_number', 'notes', 'supplier__company_name']
     ordering_fields = ['order_number', 'order_date', 'created_at', 'status']
     ordering = ['-created_at']
@@ -47,38 +47,6 @@ class OrderViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-    
-    def update(self, request, *args, **kwargs):
-        """
-        Überschreibe update, um Änderungen an nicht-Datumsfeldern zu verhindern,
-        wenn Status 'bestellt' oder höher ist.
-        """
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        
-        # Status-Hierarchie definieren
-        protected_statuses = ['bestellt', 'bestaetigt', 'geliefert', 'bezahlt', 'zahlung_on_hold']
-        
-        # Wenn Status geschützt ist, nur Datumsfelder und Status erlauben
-        if instance.status in protected_statuses:
-            allowed_fields = ['order_date', 'confirmation_date', 'delivery_date', 'payment_date', 'status', 'notes']
-            
-            # Prüfe ob nicht-erlaubte Felder geändert werden sollen
-            for field in request.data.keys():
-                if field not in allowed_fields:
-                    return Response(
-                        {
-                            'error': f'Bestellung mit Status "{instance.get_status_display()}" kann nicht mehr bearbeitet werden. '
-                                    f'Nur Datumsfelder, Status und Notizen können geändert werden.'
-                        },
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-        
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        
-        return Response(serializer.data)
     
     def partial_update(self, request, *args, **kwargs):
         """Nutze die gleiche Logik für PATCH-Requests"""

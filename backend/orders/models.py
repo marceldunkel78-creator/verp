@@ -49,6 +49,20 @@ class Order(models.Model):
         help_text='Format: B-001-10/25'
     )
     
+    # Bestelltyp: Unterscheidung zwischen Lieferantenbestellung und Kundenauftrag
+    ORDER_TYPE_CHOICES = [
+        ('online', 'Online-Bestellung'),
+        ('direct', 'Direkte Bestellung'),
+        ('customer_order', 'Kundenauftrag'),
+    ]
+    order_type = models.CharField(
+        max_length=20,
+        choices=ORDER_TYPE_CHOICES,
+        default='online',
+        verbose_name='Bestelltyp',
+        help_text='Typ der Bestellung (z.B. Kundenauftrag)'
+    )
+    
     # Status
     status = models.CharField(
         max_length=20,
@@ -176,7 +190,7 @@ class Order(models.Model):
     def save(self, *args, **kwargs):
         if not self.order_number:
             self.order_number = self._generate_order_number()
-        
+
         # Automatic status updates based on dates
         if self.status != 'storniert':  # Don't auto-update if cancelled
             if self.payment_date:
@@ -187,32 +201,32 @@ class Order(models.Model):
                 self.status = 'bestaetigt'
             elif self.order_date:
                 self.status = 'bestellt'
-        
+
         super().save(*args, **kwargs)
-    
-    @staticmethod
-    def _generate_order_number():
+
+    def _generate_order_number(self):
         """
-        Generiert Bestellnummer im Format B-001-10/25
-        B = Bestellung
-        001 = fortlaufende Nummer (pro Monat)
-        10 = Monat
-        25 = Jahr (2-stellig)
+        Generiert Bestellnummer.
+        Für Kundenaufträge (order_type='customer_order') wird das Präfix 'O' verwendet,
+        ansonsten 'B'. Die laufende Nummer ist pro Kalenderjahr (zunehmend).
+        Format: O-001-01/25
         """
         now = datetime.now()
         month = now.strftime('%m')  # 01-12
         year = now.strftime('%y')   # 25 für 2025
-        
-        # Finde höchste Bestellnummer im aktuellen Monat
-        month_year_suffix = f"{month}/{year}"
+
+        # Prefix: O for customer orders, B for supplier orders
+        prefix = 'O' if getattr(self, 'order_type', '') == 'customer_order' else 'B'
+
+        # Running number per calendar year for this prefix
+        year_suffix = f"/{year}"
         existing_orders = Order.objects.filter(
-            order_number__endswith=month_year_suffix
+            order_number__startswith=f"{prefix}-",
+            order_number__endswith=year_suffix
         ).order_by('-order_number')
-        
+
         if existing_orders.exists():
-            # Extrahiere die laufende Nummer aus der letzten Bestellung
             last_order_number = existing_orders.first().order_number
-            # Format: B-001-10/25, extrahiere die 001
             try:
                 parts = last_order_number.split('-')
                 if len(parts) >= 3:
@@ -223,8 +237,8 @@ class Order(models.Model):
                 running_number = 1
         else:
             running_number = 1
-        
-        return f"B-{running_number:03d}-{month}/{year}"
+
+        return f"{prefix}-{running_number:03d}-{month}/{year}"
 
 
 class OrderItem(models.Model):

@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "__meta": {
+    "version": "1.0.0",
+    "country": "DE",
+    "description": "GDPR-sensible Erweiterungen für HR-Daten in Deutschland: Optionale Felder mit hoher Sensibilität. Standardmäßig deaktiviert.",
+    "retention_policies": {
+      "sensitive": "Nur solange erforderlich; separate Aufbewahrung; Prüfung durch Datenschutzbeauftragten",
+      "special_categories": "Strengere Regeln gemäß Art. 9 DSGVO; nur mit Rechtsgrundlage oder Einwilligung",
+      "note": "Einwilligung dokumentieren; Löschung bei Widerruf."
+    },
+    "feature_flags": {
+      "gdpr_sensitive_enabled": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "salary": {
+      "type": "number",
+      "description": "Gehalt / Vergütung",
+      "validation": "Positive Dezimalzahl, Währung separat (z. B. EUR), max 2 Dezimalstellen",
+      "access_roles": ["hr", "payroll"],
+      "retention": "10 Jahre",
+      "gdpr_sensitive": true
+    },
+    "bank_account_iban": {
+      "type": "string",
+      "description": "Bankverbindung (IBAN)",
+      "validation": "IBAN-Format, Regex: ^[A-Z]{2}\\d{2}[A-Z0-9]{1,30}$",
+      "access_roles": ["payroll"],
+      "retention": "10 Jahre",
+      "gdpr_sensitive": true
+    },
+    "tax_id": {
+      "type": "string",
+      "description": "Steueridentifikationsnummer (IdNr.)",
+      "validation": "11-stellige Ziffernfolge, Regex: ^\\d{11}$",
+      "access_roles": ["payroll"],
+      "retention": "10 Jahre",
+      "gdpr_sensitive": true
+    },
+    "social_security_number": {
+      "type": "string",
+      "description": "Sozialversicherungsnummer",
+      "validation": "Deutsches SV-Nummer-Format (meist 12 Zeichen)",
+      "access_roles": ["payroll"],
+      "retention": "10 Jahre",
+      "gdpr_sensitive": true
+    },
+    "personal_identity_documents": {
+      "type": "string",
+      "format": "binary",
+      "description": "Ausweisdokumente (Kopie)",
+      "validation": "Erlaubte Formate PDF/JPG/PNG, Dateigröße begrenzen, Hash speichern",
+      "access_roles": ["hr"],
+      "retention": "Nur solange rechtlich erforderlich",
+      "gdpr_sensitive": true
+    },
+    "photo": {
+      "type": "string",
+      "format": "binary",
+      "description": "Passfoto / Mitarbeiterfoto",
+      "validation": "Formate JPG/PNG, max Abmessungen/Dateigröße, Einwilligung speichern",
+      "access_roles": ["hr", "manager"],
+      "retention": "Löschen wenn Einwilligung widerrufen",
+      "gdpr_sensitive": true
+    },
+    "health_information": {
+      "type": "string",
+      "description": "Gesundheitsdaten (z. B. Krankmeldungen, Schwerbehinderung)",
+      "validation": "Nur wenn rechtliche Grundlage; Einschränkung auf notwendige Infos",
+      "access_roles": ["hr", "medical"],
+      "retention": "Nur solange erforderlich",
+      "gdpr_sensitive": true,
+      "special_category": true
+    },
+    "disability_status": {
+      "type": "integer",
+      "description": "Schwerbehinderung / Grad der Behinderung",
+      "validation": "Nur mit Rechtsgrundlage/Einwilligung, Werte 0–100",
+      "access_roles": ["hr"],
+      "retention": "Nur solange erforderlich",
+      "gdpr_sensitive": true,
+      "special_category": true
+    },
+    "religion_belief": {
+      "type": "string",
+      "description": "Religiöse bzw. weltanschauliche Zugehörigkeit",
+      "validation": "Nur mit Rechtsgrundlage oder Einwilligung",
+      "access_roles": ["hr"],
+      "retention": "Nur solange erforderlich",
+      "gdpr_sensitive": true,
+      "special_category": true
+    },
+    "trade_union_membership": {
+      "type": "boolean",
+      "description": "Gewerkschaftszugehörigkeit",
+      "validation": "Nur mit Rechtsgrundlage oder Einwilligung",
+      "access_roles": ["hr"],
+      "retention": "Nur solange erforderlich",
+      "gdpr_sensitive": true,
+      "special_category": true
+    },
+    "criminal_convictions": {
+      "type": "string",
+      "description": "Vorstrafen / strafrechtliche Verurteilungen",
+      "validation": "Nur wenn gesetzlich erlaubt und zweckgebunden",
+      "access_roles": ["hr"],
+      "retention": "Nur solange gesetzlich zulässig",
+      "gdpr_sensitive": true,
+      "special_category": true
+    },
+    "biometric_data": {
+      "type": "string",
+      "format": "binary",
+      "description": "Biometrische Daten (z. B. Fingerabdruck)",
+      "validation": "Nur bei ausdrücklicher Rechtsgrundlage; minimale Speicherung (Hashes)",
+      "access_roles": ["security"],
+      "retention": "Nur solange technisch/gesetzlich nötig",
+      "gdpr_sensitive": true,
+      "special_category": true
+    },
+    "sexual_orientation": {
+      "type": "string",
+      "description": "Sexuelle Orientierung",
+      "validation": "Grundsätzlich nicht speichern ohne Einwilligung",
+      "access_roles": ["hr"],
+      "retention": "Nur mit Einwilligung",
+      "gdpr_sensitive": true,
+      "special_category": true
+    }
+  },
+  "required": []
+}

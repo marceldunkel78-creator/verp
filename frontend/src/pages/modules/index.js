@@ -1,5 +1,6 @@
 import React from 'react';
 import ComingSoon from './ComingSoon';
+import EmployeeList from '../EmployeeList';
 
 export const InventoryManagement = () => (
   <ComingSoon 
@@ -10,12 +11,7 @@ export const InventoryManagement = () => (
 
 // SalesOrderManagement is now imported directly from its own file
 
-export const HumanResources = () => (
-  <ComingSoon 
-    moduleName="Human Resources" 
-    description="Personalverwaltung und Zeiterfassung"
-  />
-);
+export const HumanResources = () => <EmployeeList />;
 
 export const Manufacturing = () => (
   <ComingSoon 

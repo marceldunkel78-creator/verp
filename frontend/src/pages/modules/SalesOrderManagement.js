@@ -41,7 +41,7 @@ const SalesOrderManagement = () => {
       icon: ClipboardDocumentCheckIcon,
       path: '/sales/order-processing',
       color: 'blue',
-      disabled: true
+      disabled: false
     },
     {
       name: 'Marketing',

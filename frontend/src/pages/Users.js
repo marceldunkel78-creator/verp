@@ -8,6 +8,7 @@ const Users = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [employees, setEmployees] = useState([]);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -18,6 +19,7 @@ const Users = () => {
     phone: '',
     position: '',
     department: '',
+    employee: '',
     is_active: true,
     can_read_accounting: false,
     can_read_hr: false,
@@ -25,17 +27,43 @@ const Users = () => {
     can_read_customers: false,
     can_read_manufacturing: false,
     can_read_service: false,
+    can_read_sales: false,
+    can_read_trading: false,
+    can_read_material_supplies: false,
+    can_read_assets: false,
     can_write_accounting: false,
     can_write_hr: false,
     can_write_suppliers: false,
     can_write_customers: false,
     can_write_manufacturing: false,
     can_write_service: false,
+    can_write_sales: false,
+    can_write_trading: false,
+    can_write_material_supplies: false,
+    can_write_assets: false,
   });
 
   useEffect(() => {
     fetchUsers();
+    fetchEmployees();
   }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      let res = await api.get('/users/employees/');
+      if (res.status === 404) {
+        // fallback
+        res = await api.get('/employees/');
+      }
+      const data = res.data.results || res.data;
+      setEmployees(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Fehler beim Laden der Mitarbeiter:', e);
+      if (e.config) console.error('Request config:', e.config);
+      if (e.response) console.error('Response data:', e.response.data, 'status:', e.response.status);
+      setEmployees([]);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -55,8 +83,16 @@ const Users = () => {
     e.preventDefault();
     try {
       if (editingUser) {
-        // Update - ohne Passwort
+        // Update - include password only if provided
         const { password, password_confirm, ...updateData } = formData;
+        if (password || password_confirm) {
+          if (password !== password_confirm) {
+            alert('Passwörter stimmen nicht überein');
+            return;
+          }
+          updateData.password = password;
+          updateData.password_confirm = password_confirm;
+        }
         await api.put(`/users/${editingUser.id}/`, updateData);
       } else {
         // Create - mit Passwort
@@ -95,6 +131,7 @@ const Users = () => {
       password_confirm: '',
       first_name: '',
       last_name: '',
+      employee: '',
       phone: '',
       position: '',
       department: '',
@@ -105,14 +142,38 @@ const Users = () => {
       can_read_customers: false,
       can_read_manufacturing: false,
       can_read_service: false,
+      can_read_sales: false,
+      can_read_trading: false,
+      can_read_material_supplies: false,
+      can_read_assets: false,
       can_write_accounting: false,
       can_write_hr: false,
       can_write_suppliers: false,
       can_write_customers: false,
       can_write_manufacturing: false,
       can_write_service: false,
+      can_write_sales: false,
+      can_write_trading: false,
+      can_write_material_supplies: false,
+      can_write_assets: false,
     });
     setEditingUser(null);
+  };
+
+  const handleEmployeeSelect = (employeeId) => {
+    const emp = employees.find((e) => String(e.id) === String(employeeId));
+    if (!emp) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      employee: emp.id,
+      first_name: emp.first_name || prev.first_name,
+      last_name: emp.last_name || prev.last_name,
+      position: emp.job_title || prev.position,
+      phone: emp.phone || prev.phone,
+      email: emp.work_email || prev.email,
+      department: emp.department || prev.department,
+    }));
   };
 
   const openEditModal = (user) => {
@@ -124,6 +185,7 @@ const Users = () => {
       password_confirm: '',
       first_name: user.first_name || '',
       last_name: user.last_name || '',
+      employee: user.employee && typeof user.employee === 'object' ? user.employee.id : user.employee || '',
       phone: user.phone || '',
       position: user.position || '',
       department: user.department || '',
@@ -134,13 +196,29 @@ const Users = () => {
       can_read_customers: user.can_read_customers,
       can_read_manufacturing: user.can_read_manufacturing,
       can_read_service: user.can_read_service,
+      can_read_sales: user.can_read_sales,
+      can_read_trading: user.can_read_trading,
+      can_read_material_supplies: user.can_read_material_supplies,
+      can_read_assets: user.can_read_assets,
       can_write_accounting: user.can_write_accounting,
       can_write_hr: user.can_write_hr,
       can_write_suppliers: user.can_write_suppliers,
       can_write_customers: user.can_write_customers,
       can_write_manufacturing: user.can_write_manufacturing,
       can_write_service: user.can_write_service,
+      can_write_sales: user.can_write_sales,
+      can_write_trading: user.can_write_trading,
+      can_write_material_supplies: user.can_write_material_supplies,
+      can_write_assets: user.can_write_assets,
     });
+    // load employees so dropdown is available
+    fetchEmployees();
+    setShowModal(true);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    fetchEmployees();
     setShowModal(true);
   };
 
@@ -165,10 +243,7 @@ const Users = () => {
           <p className="text-sm text-gray-600">Benutzerverwaltung und Berechtigungen</p>
         </div>
         <button
-          onClick={() => {
-            setEditingUser(null);
-            setShowModal(true);
-          }}
+          onClick={() => openCreateModal()}
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
@@ -182,6 +257,9 @@ const Users = () => {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Benutzername
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Mitarbeiter-ID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Name
@@ -205,6 +283,15 @@ const Users = () => {
               <tr key={user.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {user.username}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {(() => {
+                    // user.employee may be an object or id; try resolve to employee_id via employees list
+                    if (!user.employee) return '-';
+                    if (typeof user.employee === 'object' && user.employee.employee_id) return user.employee.employee_id;
+                    const emp = employees.find((e) => String(e.id) === String(user.employee));
+                    return emp ? emp.employee_id || emp.id : user.employee;
+                  })()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {user.first_name} {user.last_name}
@@ -266,6 +353,21 @@ const Users = () => {
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {employees && employees.length > 0 && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700">Mitarbeiter zuweisen</label>
+                        <select
+                          onChange={(e) => handleEmployeeSelect(e.target.value)}
+                          value={formData.employee || ''}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        >
+                          <option value="">-- keinen auswählen --</option>
+                          {employees.map((emp) => (
+                            <option key={emp.id} value={emp.id}>{`${emp.employee_id || emp.id} - ${emp.last_name}, ${emp.first_name}`}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {/* Basis-Informationen */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Benutzername *</label>
@@ -290,31 +392,29 @@ const Users = () => {
                       />
                     </div>
 
-                    {!editingUser && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Passwort *</label>
-                          <input
-                            type="password"
-                            required={!editingUser}
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          />
-                        </div>
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Passwort {editingUser ? '(leer lassen = unverändert)' : '*'}</label>
+                        <input
+                          type="password"
+                          required={!editingUser}
+                          value={formData.password}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        />
+                      </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Passwort bestätigen *</label>
-                          <input
-                            type="password"
-                            required={!editingUser}
-                            value={formData.password_confirm}
-                            onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          />
-                        </div>
-                      </>
-                    )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Passwort bestätigen {editingUser ? '(leer lassen = unverändert)' : '*'}</label>
+                        <input
+                          type="password"
+                          required={!editingUser}
+                          value={formData.password_confirm}
+                          onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
+                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        />
+                      </div>
+                    </>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Vorname</label>
@@ -388,6 +488,10 @@ const Users = () => {
                         { key: 'customers', label: 'Kunden' },
                         { key: 'manufacturing', label: 'Produktion' },
                         { key: 'service', label: 'Service' },
+                        { key: 'sales', label: 'Sales' },
+                        { key: 'trading', label: 'Handelsware' },
+                        { key: 'material_supplies', label: 'Material & Supplies' },
+                        { key: 'assets', label: 'Assets' },
                       ].map((module) => (
                         <div key={module.key} className="border rounded-lg p-3 bg-gray-50">
                           <div className="font-medium text-sm text-gray-900 mb-2">{module.label}</div>

@@ -33,6 +33,7 @@ const QuotationForm = () => {
     payment_term: '',
     delivery_term: '',
     show_terms_conditions: true,
+    show_group_item_prices: false,
     tax_enabled: true,
     tax_rate: 19,
     system_price: '',
@@ -207,9 +208,14 @@ const QuotationForm = () => {
       const response = await api.get(`/sales/quotations/${id}/`);
       const quotation = response.data;
       
+      console.log('FRONTEND DEBUG: Loaded quotation:', quotation);
+      console.log('FRONTEND DEBUG: Quotation items:', quotation.items);
+      console.log('FRONTEND DEBUG: Items count:', quotation.items?.length || 0);
+      
       // Items müssen die neuen Felder enthalten
       const mappedItems = (quotation.items || []).map(item => ({
-        content_type: item.content_type,
+        id: item.id,
+        content_type: item.content_type_data || item.content_type,
         object_id: item.object_id,
         group_id: item.group_id || null,
         group_name: item.group_name || '',
@@ -222,11 +228,16 @@ const QuotationForm = () => {
         purchase_price: item.purchase_price || 0,
         sale_price: item.sale_price || null,
         discount_percent: item.discount_percent,
-        tax_rate: item.tax_rate
+        tax_rate: item.tax_rate,
+        notes: item.notes || ''
       }));
+      
+      console.log('FRONTEND DEBUG: Mapped items:', mappedItems);
       
       // Update position numbers after loading items
       const itemsWithPositions = updatePositionNumbers(mappedItems);
+      
+      console.log('FRONTEND DEBUG: Items with positions:', itemsWithPositions);
       
       setFormData({
         customer: quotation.customer || '',
@@ -242,6 +253,7 @@ const QuotationForm = () => {
         payment_term: quotation.payment_term || '',
         delivery_term: quotation.delivery_term || '',
         show_terms_conditions: quotation.show_terms_conditions !== false,
+        show_group_item_prices: quotation.show_group_item_prices || false,
         tax_enabled: quotation.tax_enabled !== false,
         tax_rate: quotation.tax_rate || 19,
         system_price: quotation.system_price || '',
@@ -323,6 +335,8 @@ const QuotationForm = () => {
         purchase_price: 0,
         sale_price: null,
         discount_percent: 0,
+        tax_rate: prev.tax_rate || 19,
+        notes: '',
         group_id: null,
         group_name: '',
         is_group_header: false
@@ -348,6 +362,8 @@ const QuotationForm = () => {
         purchase_price: 0,
         sale_price: 0,
         discount_percent: 0,
+        tax_rate: prev.tax_rate || 19,
+        notes: '',
         group_id: groupId,
         group_name: 'Neue Warensammlung',
         is_group_header: true
@@ -372,6 +388,8 @@ const QuotationForm = () => {
         purchase_price: 0,
         sale_price: null,
         discount_percent: 0,
+        tax_rate: prev.tax_rate || 19,
+        notes: '',
         group_id: groupId,
         group_name: '',
         is_group_header: false
@@ -407,6 +425,16 @@ const QuotationForm = () => {
               updatedItem.unit_price = selectedProduct.visitron_list_price || 0;
               // Setze Einkaufspreis (Purchase Price in EUR)
               updatedItem.purchase_price = selectedProduct.purchase_price_eur || selectedProduct.purchase_price || 0;
+              
+              // Setze content_type basierend auf dem Produkttyp
+              const isTradingProduct = tradingProducts.some(p => p.id === parseInt(value));
+              const isAsset = assets.some(a => a.id === parseInt(value));
+              
+              if (isTradingProduct) {
+                updatedItem.content_type = { app_label: 'suppliers', model: 'tradingproduct' };
+              } else if (isAsset) {
+                updatedItem.content_type = { app_label: 'suppliers', model: 'asset' };
+              }
             }
           }
           
@@ -471,6 +499,7 @@ const QuotationForm = () => {
       submitData.append('status', formData.status);
       submitData.append('language', formData.language);
       submitData.append('show_terms_conditions', formData.show_terms_conditions);
+      submitData.append('show_group_item_prices', formData.show_group_item_prices);
       submitData.append('tax_enabled', formData.tax_enabled);
       submitData.append('tax_rate', formData.tax_rate);
       if (formData.system_price) submitData.append('system_price', formData.system_price);
@@ -507,6 +536,7 @@ const QuotationForm = () => {
         }
         
         return {
+          id: item.id || null,
           content_type: contentType,
           object_id: item.object_id ? parseInt(item.object_id) : null,
           group_id: item.group_id || null,
@@ -519,26 +549,43 @@ const QuotationForm = () => {
           unit_price: parseFloat(item.unit_price),
           purchase_price: parseFloat(item.purchase_price) || 0,
           sale_price: item.sale_price ? parseFloat(item.sale_price) : null,
-          discount_percent: parseFloat(item.discount_percent)
+          discount_percent: parseFloat(item.discount_percent),
+          tax_rate: parseFloat(item.tax_rate) || 19,
+          notes: item.notes || ''
         };
       });
       
+      console.log('FRONTEND DEBUG: Submitting quotation with items:', items.length);
+      console.log('FRONTEND DEBUG: First 2 items:', items.slice(0, 2));
+      console.log('FRONTEND DEBUG: All items:', items);
+      
       // Items als JSON-String senden
-      submitData.append('items', JSON.stringify(items));
+      const itemsJson = JSON.stringify(items);
+      console.log('FRONTEND DEBUG: Items JSON:', itemsJson);
+      submitData.append('items', itemsJson);
 
+      console.log('FRONTEND DEBUG: Sending request to:', isEditMode ? `/sales/quotations/${id}/` : '/sales/quotations/');
+      
       let response;
       if (isEditMode) {
+        console.log('FRONTEND DEBUG: PUT request for quotation', id);
         response = await api.put(`/sales/quotations/${id}/`, submitData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       } else {
+        console.log('FRONTEND DEBUG: POST request for new quotation');
         response = await api.post('/sales/quotations/', submitData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       }
 
+      console.log('FRONTEND DEBUG: Response received:', response.data);
       alert(`Angebot erfolgreich ${isEditMode ? 'aktualisiert' : 'erstellt'}!`);
-      navigate('/sales/quotations');
+      
+      // Bei neuem Angebot zur Detail-Seite navigieren, bei Edit bleiben
+      if (!isEditMode) {
+        navigate(`/sales/quotations/${response.data.id}`);
+      }
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
       console.error('Error details:', error.response?.data);
@@ -1053,6 +1100,18 @@ const QuotationForm = () => {
               <span className="ml-2 text-sm text-gray-700">AGB-Hinweis im Angebot anzeigen</span>
             </label>
           </div>
+          
+          <div className="mt-4">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.show_group_item_prices}
+                onChange={(e) => setFormData(prev => ({ ...prev, show_group_item_prices: e.target.checked }))}
+                className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+              />
+              <span className="ml-2 text-sm text-gray-700">Preise von Gruppen-Artikeln anzeigen</span>
+            </label>
+          </div>
 
           <div className="mt-4 flex items-center space-x-4">
             <label className="flex items-center">
@@ -1314,13 +1373,6 @@ const QuotationForm = () => {
                             onChange={(e) => {
                               const value = e.target.value;
                               handleItemChange(index, 'object_id', value);
-                              // Bestimme content_type
-                              if (value) {
-                                const isTradingProduct = tradingProducts.some(p => p.id === parseInt(value));
-                                handleItemChange(index, 'content_type', 
-                                  isTradingProduct ? 'tradingproduct' : 'asset'
-                                );
-                              }
                             }}
                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                           >

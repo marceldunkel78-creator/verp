@@ -124,6 +124,13 @@ class Quotation(models.Model):
         verbose_name='AGB-Hinweis anzeigen'
     )
     
+    # Gruppen-Artikel Preise anzeigen
+    show_group_item_prices = models.BooleanField(
+        default=False,
+        verbose_name='Preise von Gruppen-Artikeln anzeigen',
+        help_text='Wenn aktiviert, werden die Preise der einzelnen Artikel in Warensammlungen angezeigt'
+    )
+    
     # Empfängeradresse (editierbar, nicht zwingend Kundenadresse)
     recipient_company = models.CharField(
         max_length=200,
@@ -327,6 +334,14 @@ class QuotationItem(models.Model):
         verbose_name='Beschreibungstyp'
     )
     
+    # Visitron Artikelnummer (für Warensammlungen automatisch generiert)
+    item_article_number = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Visitron Artikelnummer',
+        help_text='Automatisch generiert für Warensammlungen (Format: 100-WS00001)'
+    )
+    
     # Angebotsdaten
     quantity = models.DecimalField(
         max_digits=10,
@@ -461,6 +476,42 @@ class QuotationItem(models.Model):
         for item in group_items:
             total += item.total_purchase_cost
         return total
+    
+    def save(self, *args, **kwargs):
+        """Override save to generate WS article number for group headers"""
+        if self.is_group_header and not self.item_article_number:
+            self.item_article_number = self._generate_ws_article_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_ws_article_number():
+        """Generiert die nächste WS-Artikelnummer im Format 100-WS00001"""
+        # Lieferantennummer ist fest 100
+        supplier_number = '100'
+        prefix = f'{supplier_number}-WS'
+        
+        # Finde die höchste WS-Nummer
+        existing_numbers = QuotationItem.objects.filter(
+            item_article_number__startswith=prefix
+        ).values_list('item_article_number', flat=True)
+        
+        if not existing_numbers:
+            return f'{prefix}00001'
+        
+        # Extrahiere Nummern und finde Maximum
+        numeric_numbers = []
+        for num in existing_numbers:
+            try:
+                numeric_part = int(num.split('-')[2][2:])  # Entferne 'WS' und konvertiere
+                numeric_numbers.append(numeric_part)
+            except (ValueError, IndexError):
+                continue
+        
+        if not numeric_numbers:
+            return f'{prefix}00001'
+        
+        next_number = max(numeric_numbers) + 1
+        return f'{prefix}{next_number:05d}'
     
     def get_group_margin(self):
         """Marge für eine Gruppe (Verkaufspreis - Summe Einkaufspreise)"""

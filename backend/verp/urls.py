@@ -9,19 +9,23 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from .jwt_cookie_views import CookieTokenObtainPairView, CookieTokenRefreshView, logout_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     
     # Authentication
-    path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # Cookie-based JWT endpoints
+    path('api/auth/login/', CookieTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/auth/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/logout/', logout_view, name='token_logout'),
     
     # App URLs
     path('api/users/', include('users.urls')),
     path('api/suppliers/', include('suppliers.urls')),
     path('api/customers/', include('customers.urls')),
     path('api/orders/', include('orders.urls')),
+    path('api/customer-orders/', include('customer_orders.urls')),
     path('api/core/', include('core.urls')),
     path('api/settings/', include('verp_settings.urls')),
     path('api/company-info/', include('company.urls')),

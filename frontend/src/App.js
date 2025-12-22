@@ -12,14 +12,19 @@ import Assets from './pages/Assets';
 import MaterialSupplies from './pages/MaterialSupplies';
 import Orders from './pages/Orders';
 import OrderForm from './pages/OrderForm';
+import OrderFormNew from './pages/OrderFormNew';
 import OrderDetail from './pages/OrderDetail';
 import Customers from './pages/Customers';
 import Quotations from './pages/Quotations';
+import OrderProcessing from './pages/OrderProcessing';
+import SalesOrderForm from './pages/SalesOrderForm';
 import QuotationForm from './pages/QuotationForm';
 import QuotationDetail from './pages/QuotationDetail';
 import ExchangeRates from './pages/ExchangeRates';
 import CompanyInfo from './pages/modules/CompanyInfo';
 import PaymentDeliverySettings from './pages/PaymentDeliverySettings';
+import EmployeeList from './pages/EmployeeList';
+import MyVERP from './pages/MyVERP';
 import Layout from './components/Layout';
 
 // Import Main Modules
@@ -53,6 +58,8 @@ function App() {
             <Route path="inventory" element={<InventoryManagement />} />
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<HumanResources />} />
+            <Route path="hr/employees" element={<EmployeeList />} />
+            <Route path="myverp" element={<MyVERP />} />
             <Route path="manufacturing" element={<Manufacturing />} />
             <Route path="visiview" element={<VisiView />} />
             <Route path="service" element={<Service />} />
@@ -67,18 +74,21 @@ function App() {
             <Route path="procurement/assets" element={<Assets />} />
             <Route path="procurement/materials-supplies" element={<MaterialSupplies />} />
             <Route path="procurement/orders" element={<Orders />} />
-            <Route path="procurement/orders/new" element={<OrderForm />} />
+            <Route path="procurement/orders/new" element={<OrderFormNew />} />
             <Route path="procurement/orders/:id" element={<OrderDetail />} />
-            <Route path="procurement/orders/:id/edit" element={<OrderForm />} />
+            <Route path="procurement/orders/:id/edit" element={<OrderFormNew />} />
             
             {/* Sales/Order Management Submodules */}
             <Route path="sales/customers" element={<Customers />} />
             <Route path="sales/projects" element={<Navigate to="/sales" replace />} />
             <Route path="sales/quotations" element={<Quotations />} />
+            <Route path="sales/order-processing" element={<OrderProcessing />} />
+            <Route path="sales/order-processing/new" element={<SalesOrderForm />} />
+            <Route path="sales/order-processing/:id" element={<SalesOrderForm />} />
             <Route path="sales/quotations/new" element={<QuotationForm />} />
             <Route path="sales/quotations/:id" element={<QuotationDetail />} />
             <Route path="sales/quotations/:id/edit" element={<QuotationForm />} />
-            <Route path="sales/order-processing" element={<Navigate to="/sales" replace />} />
+            {/* legacy redirect removed: order-processing now handled by OrderProcessing component */}
             <Route path="sales/marketing" element={<Navigate to="/sales" replace />} />
             <Route path="sales/systems" element={<Navigate to="/sales" replace />} />
             

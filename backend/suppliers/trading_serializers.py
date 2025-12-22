@@ -19,7 +19,7 @@ class TradingProductListSerializer(serializers.ModelSerializer):
             'id', 'visitron_part_number', 'supplier_part_number', 'name',
             'supplier', 'supplier_name', 'product_group', 'product_group_name',
             'price_list', 'price_list_name', 'category', 'category_display',
-            'short_description', 'list_price', 'list_price_currency', 'exchange_rate', 'discount_percent',
+            'short_description', 'description', 'list_price', 'list_price_currency', 'exchange_rate', 'discount_percent',
             'price_valid_from', 'price_valid_until', 'margin_percent',
             'purchase_price_eur', 'visitron_list_price', 'is_active', 'created_at'
         ]

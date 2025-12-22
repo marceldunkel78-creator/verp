@@ -5,53 +5,27 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
-
-// Request Interceptor - Füge Token zu jedem Request hinzu
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response Interceptor - Handle Token Refresh
+// Response Interceptor - handle refresh via cookie-based endpoint
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-
-    // Wenn 401 und noch nicht versucht zu refreshen
+    const originalRequest = error.config || {};
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-
       try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        const response = await axios.post(
-          `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/auth/refresh/`,
-          { refresh: refreshToken }
-        );
-
-        const { access } = response.data;
-        localStorage.setItem('access_token', access);
-
-        originalRequest.headers.Authorization = `Bearer ${access}`;
+        // Call refresh endpoint; cookie will be sent because withCredentials=true
+        const refreshUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/auth/refresh/`;
+        await axios.post(refreshUrl, {}, { withCredentials: true });
+        // Retry original request; cookies will be sent and backend will read access_token cookie
         return api(originalRequest);
       } catch (refreshError) {
-        // Refresh Token ist abgelaufen - Logout
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        // Failed refresh -> go to login
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }
-
     return Promise.reject(error);
   }
 );

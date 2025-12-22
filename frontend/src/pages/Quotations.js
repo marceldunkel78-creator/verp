@@ -2,59 +2,103 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusIcon, EyeIcon, PencilIcon, TrashIcon, DocumentArrowDownIcon, DocumentIcon } from '@heroicons/react/24/outline';
+import { 
+  PlusIcon, EyeIcon, PencilIcon, TrashIcon, 
+  DocumentArrowDownIcon, DocumentIcon, DocumentTextIcon,
+  UserIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon
+} from '@heroicons/react/24/outline';
 
 const Quotations = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, draft, active, expired, ordered
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [filters, setFilters] = useState({
+    search: '',
+    status: '',
+    year: '',
+    created_by: ''
+  });
   
-  const canWrite = user?.is_staff || user?.is_superuser;
+  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_sales;
   
   useEffect(() => {
-    fetchQuotations();
-  }, [filter]);
+    fetchUsers();
+  }, []);
+  
+  useEffect(() => {
+    if (hasSearched) {
+      fetchQuotations();
+    }
+  }, [currentPage]);
+  
+  const fetchUsers = async () => {
+    try {
+      const response = await api.get('/users/');
+      setUsers(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Benutzer:', error);
+      setUsers([]);
+    }
+  };
   
   const fetchQuotations = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       let url = '/sales/quotations/';
+      const params = new URLSearchParams();
       
-      // Filter anwenden
-      if (filter !== 'all') {
-        const statusMap = {
-          draft: 'DRAFT',
-          active: 'ACTIVE',
-          expired: 'EXPIRED',
-          ordered: 'ORDERED'
-        };
-        url += `?status=${statusMap[filter]}`;
-      }
+      if (filters.search) params.append('search', filters.search);
+      if (filters.status) params.append('status', filters.status);
+      if (filters.year) params.append('year', filters.year);
+      if (filters.created_by) params.append('created_by', filters.created_by);
+      
+      // Pagination
+      params.append('page', currentPage);
+      params.append('page_size', '9');
+      
+      url += `?${params.toString()}`;
       
       const response = await api.get(url);
       const data = response.data;
       
-      // Stelle sicher, dass quotations immer ein Array ist
       let quotationsData = [];
       if (Array.isArray(data)) {
         quotationsData = data;
       } else if (data && Array.isArray(data.results)) {
         quotationsData = data.results;
-      } else if (data && typeof data === 'object') {
-        quotationsData = [];
-        console.warn('Unerwartetes Datenformat:', data);
       }
       
       setQuotations(quotationsData);
+      setTotalPages(Math.ceil((data.count || quotationsData.length) / 9));
+      setHasSearched(true);
     } catch (error) {
       console.error('Fehler beim Laden der Angebote:', error);
-      alert('Fehler beim Laden der Angebote');
-      setQuotations([]); // Setze leeres Array im Fehlerfall
+      setQuotations([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchQuotations();
+  };
+
+  const handleReset = () => {
+    setFilters({
+      search: '',
+      status: '',
+      year: '',
+      created_by: ''
+    });
+    setQuotations([]);
+    setCurrentPage(1);
+    setHasSearched(false);
   };
   
   const handleDelete = async (id) => {
@@ -122,27 +166,37 @@ const Quotations = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-gray-500">Lade Angebote...</div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
       </div>
     );
   }
   
+  // Generiere Jahre für Filter (aktuelle Jahr +/- 5 Jahre)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({length: 11}, (_, i) => currentYear - 5 + i);
+  
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-6 flex justify-between items-center">
         <div>
           <nav className="text-sm text-gray-500 mb-2">
             <Link to="/sales" className="hover:text-gray-700">Sales & Order Management</Link>
             <span className="mx-2">/</span>
             <span className="text-gray-900">Angebote</span>
           </nav>
-          <h1 className="text-3xl font-bold text-gray-900">Angebote</h1>
-          <p className="text-sm text-gray-600">Kundenangebote verwalten und generieren</p>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+            <DocumentTextIcon className="h-8 w-8 mr-3 text-green-600" />
+            Angebotsverwaltung
+          </h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Kundenangebote verwalten und generieren
+          </p>
         </div>
         {canWrite && (
           <button
             onClick={() => navigate('/sales/quotations/new')}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
             Neues Angebot
@@ -150,144 +204,225 @@ const Quotations = () => {
         )}
       </div>
       
-      {/* Filter Tabs */}
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { key: 'all', label: 'Alle' },
-            { key: 'draft', label: 'In Arbeit' },
-            { key: 'active', label: 'Aktiv' },
-            { key: 'expired', label: 'Abgelaufen' },
-            { key: 'ordered', label: 'Bestellt' }
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={`${
-                filter === tab.key
-                  ? 'border-green-500 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+      {/* Suchfilter */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">Angebote suchen</h2>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Suche (Nummer, Kunde)
+            </label>
+            <input
+              type="text"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              placeholder="Suche nach Nummer oder Kunde..."
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
             >
-              {tab.label}
+              <option value="">Alle Status</option>
+              <option value="DRAFT">In Arbeit</option>
+              <option value="ACTIVE">Aktiv</option>
+              <option value="EXPIRED">Abgelaufen</option>
+              <option value="ORDERED">Bestellt</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Jahr</label>
+            <select
+              value={filters.year}
+              onChange={(e) => setFilters({ ...filters, year: e.target.value })}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Alle Jahre</option>
+              {years.reverse().map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ersteller</label>
+            <select
+              value={filters.created_by}
+              onChange={(e) => setFilters({ ...filters, created_by: e.target.value })}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Alle Ersteller</option>
+              {users && users.map(user => (
+                <option key={user.id} value={user.id}>{user.first_name} {user.last_name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end space-x-2">
+            <button
+              onClick={handleSearch}
+              className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              Suchen
             </button>
-          ))}
-        </nav>
-      </div>
-      
-      {/* Tabelle */}
-      <div className="bg-white shadow overflow-x-auto rounded-lg">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Angebotsnr.
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kunde
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Datum
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Gültig bis
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Referenz
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Positionen
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Gesamtsumme
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktionen
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {quotations.map((quotation) => (
-              <tr key={quotation.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                  {quotation.quotation_number}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <div className="font-medium">{quotation.customer_name}</div>
-                  <div className="text-gray-500 text-xs">{quotation.customer_number}</div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(quotation.date).toLocaleDateString('de-DE')}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(quotation.valid_until).toLocaleDateString('de-DE')}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {quotation.reference || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {quotation.items_count}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  € {quotation.total_amount?.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getStatusBadge(quotation.status, quotation.status_display)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => handleViewPDF(quotation.id)}
-                    className="text-blue-600 hover:text-blue-900 mr-3"
-                    title="PDF anzeigen"
-                  >
-                    <DocumentIcon className="h-5 w-5 inline" />
-                  </button>
-                  <button
-                    onClick={() => handleDownloadPDF(quotation.id, quotation.quotation_number)}
-                    className="text-green-600 hover:text-green-900 mr-3"
-                    title="PDF herunterladen"
-                  >
-                    <DocumentArrowDownIcon className="h-5 w-5 inline" />
-                  </button>
-                  <Link
-                    to={`/sales/quotations/${quotation.id}`}
-                    className="text-blue-600 hover:text-blue-900 mr-3"
-                    title="Details anzeigen"
-                  >
-                    <EyeIcon className="h-5 w-5 inline" />
-                  </Link>
-                  {canWrite && (
-                    <>
-                      <button
-                        onClick={() => navigate(`/sales/quotations/${quotation.id}/edit`)}
-                        className="text-blue-600 hover:text-blue-900 mr-3"
-                        title="Bearbeiten"
-                      >
-                        <PencilIcon className="h-5 w-5 inline" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(quotation.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Löschen"
-                      >
-                        <TrashIcon className="h-5 w-5 inline" />
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      
-      {quotations.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-lg shadow mt-4">
-          <p className="text-gray-500">Keine Angebote gefunden</p>
+            <button
+              onClick={handleReset}
+              className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+            >
+              Zurücksetzen
+            </button>
+          </div>
         </div>
+        {hasSearched && (
+          <div className="text-sm text-gray-600">
+            {quotations.length} Angebot(e) gefunden (Seite {currentPage} von {totalPages})
+          </div>
+        )}
+      </div>
+
+      {/* Angebote Kacheln */}
+      {!hasSearched ? (
+        <div className="bg-white shadow rounded-lg p-12 text-center">
+          <DocumentTextIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Angebote angezeigt</h3>
+          <p className="text-gray-500 mb-4">
+            Verwenden Sie die Suchfilter oben, um Angebote anzuzeigen.
+          </p>
+        </div>
+      ) : quotations.length === 0 ? (
+        <div className="bg-white shadow rounded-lg p-12 text-center">
+          <DocumentTextIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Angebote gefunden</h3>
+          <p className="text-gray-500">
+            Es wurden keine Angebote mit den angegebenen Filtern gefunden.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {quotations.map((quotation) => (
+              <div key={quotation.id} className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
+                <div className="p-6">
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 font-mono mb-1">
+                        {quotation.quotation_number}
+                      </h3>
+                      <div className="flex items-center text-sm text-gray-600">
+                        <UserIcon className="h-4 w-4 mr-1 text-gray-400" />
+                        <span className="truncate">{quotation.customer_name}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{quotation.customer_number}</p>
+                    </div>
+                    <div>
+                      {getStatusBadge(quotation.status, quotation.status_display)}
+                    </div>
+                  </div>
+
+                  {/* Details */}
+                  <div className="space-y-2 border-t pt-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <CalendarIcon className="h-4 w-4 mr-2 text-gray-400" />
+                      <span>Datum: {new Date(quotation.date).toLocaleDateString('de-DE')}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <ClockIcon className="h-4 w-4 mr-2 text-gray-400" />
+                      <span>Gültig bis: {new Date(quotation.valid_until).toLocaleDateString('de-DE')}</span>
+                    </div>
+                    {quotation.reference && (
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">Ref:</span> {quotation.reference}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <span className="text-sm text-gray-500">
+                        {quotation.items_count} Position(en)
+                      </span>
+                      <div className="flex items-center text-lg font-bold text-green-600">
+                        <CurrencyEuroIcon className="h-5 w-5 mr-1" />
+                        {quotation.total_amount?.toLocaleString('de-DE', { 
+                          minimumFractionDigits: 2, 
+                          maximumFractionDigits: 2 
+                        }) || '0,00'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Aktionen */}
+                  <div className="mt-4 pt-4 border-t flex justify-between items-center">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleViewPDF(quotation.id)}
+                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                        title="PDF anzeigen"
+                      >
+                        <DocumentIcon className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDownloadPDF(quotation.id, quotation.quotation_number)}
+                        className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 rounded"
+                        title="PDF herunterladen"
+                      >
+                        <DocumentArrowDownIcon className="h-5 w-5" />
+                      </button>
+                      <Link
+                        to={`/sales/quotations/${quotation.id}`}
+                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                        title="Details anzeigen"
+                      >
+                        <EyeIcon className="h-5 w-5" />
+                      </Link>
+                    </div>
+                    {canWrite && (
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => navigate(`/sales/quotations/${quotation.id}/edit`)}
+                          className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                          title="Bearbeiten"
+                        >
+                          <PencilIcon className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(quotation.id)}
+                          className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded"
+                          title="Löschen"
+                        >
+                          <TrashIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex justify-center items-center space-x-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Zurück
+              </button>
+              <span className="text-sm text-gray-700">
+                Seite {currentPage} von {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Weiter
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

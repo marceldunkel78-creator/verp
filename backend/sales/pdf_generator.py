@@ -146,27 +146,58 @@ def generate_quotation_pdf(quotation):
     
     # === POSITIONEN TABELLE ===
     position_labels = {
-        'DE': ['Pos.', 'Artikelname', 'Beschreibung', 'Menge', 'Einzelpreis', 'Rabatt', 'Gesamt'],
-        'EN': ['Pos.', 'Article', 'Description', 'Quantity', 'Unit Price', 'Discount', 'Total']
+        'DE': ['Pos.', 'Art.-Nr.', 'Artikel', 'Beschreibung', 'Menge', 'Einzelpreis', 'Rabatt', 'Gesamt'],
+        'EN': ['Pos.', 'Art. No.', 'Article', 'Description', 'Quantity', 'Unit Price', 'Discount', 'Total']
     }
     
     table_data = [position_labels[lang]]
     
     # Positionen hinzufügen
     for item in quotation.items.all().order_by('position'):
+        # Artikelnummer
+        article_number = item.item_article_number or (getattr(item.item, 'visitron_part_number', '') or getattr(item.item, 'supplier_part_number', '')) if item.item else ''
+        
         # Handle Gruppen-Header
         if item.is_group_header:
+            position_str = str(item.position)
             item_name = f"📦 {item.group_name}"
             description = "Warensammlung"
-            quantity_str = "-"
-            unit_price_str = "-"
+            quantity_str = "1.00"
+            unit_price_str = f"€ {item.sale_price:,.2f}" if item.sale_price else "-"
             discount_str = "-"
-            # Verkaufspreis der Gruppe
             subtotal_str = f"€ {item.sale_price:,.2f}" if item.sale_price else "-"
-        else:
-            # Gruppenmitglied einrücken
-            prefix = "  ↳ " if item.group_id else ""
+        elif item.group_id:
+            # Gruppenmitglied - keine Position, eingerückt, keine Preise
+            position_str = ""
+            prefix = "    "  # Eingerückt
             item_name = prefix + (item.item.name if item.item else '-')
+            
+            # Beschreibung
+            if item.item:
+                if item.description_type == 'SHORT':
+                    description = item.item.short_description or ''
+                else:
+                    description = item.item.description or ''
+            else:
+                description = ''
+            
+            quantity_str = f"{item.quantity:.2f}"
+            # Gruppen-Header zeigen immer Preise (außer bei Systempreis)
+            # Gruppen-Items zeigen Preise nur wenn show_group_item_prices aktiviert
+            show_prices = (item.is_group_header and not item.uses_system_price) or (not item.is_group_header and quotation.show_group_item_prices)
+            
+            if show_prices:
+                unit_price_str = f"€ {item.unit_price:,.2f}"
+                discount_str = f"{item.discount_percent:.1f}%" if item.discount_percent > 0 else '-'
+                subtotal_str = f"€ {item.subtotal:,.2f}"
+            else:
+                unit_price_str = "-"
+                discount_str = "-"
+                subtotal_str = "-"
+        else:
+            # Einzelposition
+            position_str = str(item.position)
+            item_name = item.item.name if item.item else '-'
             
             # Beschreibung basierend auf description_type
             if item.item:
@@ -191,7 +222,8 @@ def generate_quotation_pdf(quotation):
                 subtotal_str = f"€ {item.subtotal:,.2f}"
         
         table_data.append([
-            str(item.position),
+            position_str,
+            article_number,
             Paragraph(item_name, small_style),
             Paragraph(description[:100], small_style),  # Kürze lange Beschreibungen
             quantity_str,
@@ -201,7 +233,7 @@ def generate_quotation_pdf(quotation):
         ])
     
     # Tabelle erstellen
-    col_widths = [1*cm, 3.5*cm, 5*cm, 1.5*cm, 2*cm, 1.5*cm, 2.5*cm]
+    col_widths = [1*cm, 2*cm, 3*cm, 4*cm, 1.5*cm, 2*cm, 1.5*cm, 2.5*cm]
     items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     items_table.setStyle(TableStyle([
         # Header
@@ -217,10 +249,11 @@ def generate_quotation_pdf(quotation):
         ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
         ('FONTSIZE', (0,1), (-1,-1), 8),
         ('ALIGN', (0,1), (0,-1), 'CENTER'),  # Pos
-        ('ALIGN', (3,1), (3,-1), 'RIGHT'),   # Menge
-        ('ALIGN', (4,1), (4,-1), 'RIGHT'),   # Einzelpreis
-        ('ALIGN', (5,1), (5,-1), 'CENTER'),  # Rabatt
-        ('ALIGN', (6,1), (6,-1), 'RIGHT'),   # Gesamt
+        ('ALIGN', (1,1), (2,-1), 'LEFT'),    # Art.-Nr., Artikel
+        ('ALIGN', (4,1), (4,-1), 'RIGHT'),   # Menge
+        ('ALIGN', (5,1), (5,-1), 'RIGHT'),   # Einzelpreis
+        ('ALIGN', (6,1), (6,-1), 'CENTER'),  # Rabatt
+        ('ALIGN', (7,1), (7,-1), 'RIGHT'),   # Gesamt
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         
         # Grid
@@ -268,10 +301,12 @@ def generate_quotation_pdf(quotation):
     total_tax = Decimal('0.00')
     total_gross = Decimal('0.00')
     
+    # Nur Gruppen-Header und Einzelpositionen zählen (nicht Gruppenmitglieder)
     for item in quotation.items.all():
-        total_net += item.subtotal
-        total_tax += item.tax_amount
-        total_gross += item.total
+        if item.is_group_header or not item.group_id:
+            total_net += item.subtotal
+            total_tax += item.tax_amount
+            total_gross += item.total
     
     sum_labels = {
         'DE': ['Nettosumme:', 'MwSt:', 'Gesamtsumme:'],
@@ -284,7 +319,7 @@ def generate_quotation_pdf(quotation):
         ['', sum_labels[lang][2], f"€ {total_gross:,.2f}"],
     ]
     
-    sum_table = Table(sum_data, colWidths=[11.5*cm, 3*cm, 2.5*cm])
+    sum_table = Table(sum_data, colWidths=[12*cm, 3*cm, 2*cm])
     sum_table.setStyle(TableStyle([
         ('ALIGN', (1,0), (1,-1), 'RIGHT'),
         ('ALIGN', (2,0), (2,-1), 'RIGHT'),

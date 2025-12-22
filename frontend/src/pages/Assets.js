@@ -18,7 +18,7 @@ const Assets = () => {
   const [filterActive, setFilterActive] = useState('all');
   const [refreshKey, setRefreshKey] = useState(0);
   
-  const canWrite = user?.is_staff || user?.is_superuser;
+  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_assets;
 
   const statusChoices = [
     { value: 'in_progress', label: 'In Bearbeitung' },

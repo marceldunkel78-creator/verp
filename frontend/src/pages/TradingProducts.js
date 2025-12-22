@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusIcon, PencilIcon, TrashIcon, EyeIcon, CurrencyEuroIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, EyeIcon, CurrencyEuroIcon, CubeIcon } from '@heroicons/react/24/outline';
 
 const TradingProducts = () => {
   const { user } = useAuth();
@@ -11,19 +11,21 @@ const TradingProducts = () => {
   const [productGroups, setProductGroups] = useState([]);
   const [priceLists, setPriceLists] = useState([]);
   const [exchangeRates, setExchangeRates] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [sortBy, setSortBy] = useState('visitron_part_number');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterActive, setFilterActive] = useState('all');
+  const [search, setSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [calculatedPrices, setCalculatedPrices] = useState({
     purchasePrice: 0,
     visitronListPrice: 0
   });
   
-  const canWrite = user?.is_staff || user?.is_superuser;
+  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_trading || user?.can_write_suppliers;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -56,10 +58,18 @@ const TradingProducts = () => {
   });
 
   useEffect(() => {
-    fetchProducts();
+    // Load static helper data always
     fetchSuppliers();
     fetchExchangeRates();
-  }, [sortBy, filterSupplier, filterActive, refreshKey]);
+
+    // Only fetch products after the user initiated a search/filter
+    if (hasSearched) {
+      setLoading(true);
+      fetchProducts();
+    } else {
+      setLoading(false);
+    }
+  }, [sortBy, filterSupplier, filterActive, refreshKey, hasSearched]);
 
   // Berechne Preise live bei Formular-Änderungen
   useEffect(() => {
@@ -130,6 +140,7 @@ const TradingProducts = () => {
       
       if (sortBy) params.append('ordering', sortBy);
       if (filterSupplier) params.append('supplier', filterSupplier);
+      if (search) params.append('search', search);
       if (filterActive !== 'all') params.append('is_active', filterActive === 'active');
       
       // Cache-Buster mit zufälligem Wert
@@ -408,7 +419,19 @@ const TradingProducts = () => {
 
       {/* Filter und Sortierung */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Suche</label>
+            <input
+              type="text"
+              placeholder="Artikelnummer, Name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && (setHasSearched(true), setRefreshKey(prev => prev + 1))}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Sortieren nach
@@ -460,6 +483,15 @@ const TradingProducts = () => {
               <option value="inactive">Nur Inaktive</option>
             </select>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <button
+            onClick={() => { setHasSearched(true); setRefreshKey(prev => prev + 1); }}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700"
+          >
+            Suchen
+          </button>
         </div>
       </div>
 
@@ -561,7 +593,15 @@ const TradingProducts = () => {
         </table>
       </div>
 
-      {products.length === 0 && (
+      {!hasSearched && (
+        <div className="bg-white shadow rounded-lg p-12 text-center mt-4">
+          <CubeIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Handelswaren durchsuchen</h3>
+          <p className="text-gray-500">Bitte verwenden Sie die Filter oben oder führen Sie eine Suche aus, um Handelswaren anzuzeigen.</p>
+        </div>
+      )}
+
+      {hasSearched && products.length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow mt-4">
           <p className="text-gray-500">Keine Handelswaren gefunden</p>
         </div>

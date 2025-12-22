@@ -199,6 +199,20 @@ const QuotationDetail = () => {
               </dd>
             </div>
             
+            {quotation.created_by_name && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Ersteller</dt>
+                <dd className="mt-1 text-sm text-gray-900">{quotation.created_by_name}</dd>
+              </div>
+            )}
+            
+            {quotation.commission_user_name && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Provisionsempfänger</dt>
+                <dd className="mt-1 text-sm text-gray-900">{quotation.commission_user_name}</dd>
+              </div>
+            )}
+            
             <div>
               <dt className="text-sm font-medium text-gray-500">Sprache</dt>
               <dd className="mt-1 text-sm text-gray-900">{quotation.language_display}</dd>
@@ -313,6 +327,7 @@ const QuotationDetail = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pos.</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artikel-Nr.</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artikel</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Beschreibung</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Menge</th>
@@ -326,9 +341,16 @@ const QuotationDetail = () => {
               {quotation.items && quotation.items.length > 0 ? (
                 quotation.items.map((item) => (
                   <tr key={item.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.position}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {item.is_group_header || !item.group_id ? item.position : ''}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-mono">
+                      {item.item_article_number || '-'}
+                    </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      <div className="font-medium">{item.item_name}</div>
+                      <div className="font-medium">
+                        {item.item_name}
+                      </div>
                       <div className="text-xs text-gray-500">{item.item_type}</div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
@@ -339,22 +361,30 @@ const QuotationDetail = () => {
                       {parseFloat(item.quantity).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      € {parseFloat(item.unit_price).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {(item.is_group_header && !item.uses_system_price) || (!item.is_group_header && (!item.group_id || quotation.show_group_item_prices)) ? 
+                        `€ ${parseFloat(item.unit_price).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 
+                        '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {parseFloat(item.discount_percent).toFixed(1)}%
+                      {(item.is_group_header && !item.uses_system_price) || (!item.is_group_header && (!item.group_id || quotation.show_group_item_prices)) ? 
+                        `${parseFloat(item.discount_percent).toFixed(1)}%` : 
+                        '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      € {parseFloat(item.tax_amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {(item.is_group_header && !item.uses_system_price) || (!item.is_group_header && (!item.group_id || quotation.show_group_item_prices)) ? 
+                        `€ ${parseFloat(item.tax_amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 
+                        '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
-                      € {parseFloat(item.total).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {(item.is_group_header && !item.uses_system_price) || (!item.is_group_header && (!item.group_id || quotation.show_group_item_prices)) ? 
+                        `€ ${parseFloat(item.total).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 
+                        '-'}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan="9" className="px-6 py-4 text-center text-sm text-gray-500">
                     Keine Positionen vorhanden
                   </td>
                 </tr>
@@ -363,7 +393,7 @@ const QuotationDetail = () => {
             {quotation.items && quotation.items.length > 0 && (
               <tfoot className="bg-gray-50">
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                  <td colSpan="8" className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                     Nettosumme:
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
@@ -371,7 +401,7 @@ const QuotationDetail = () => {
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-right text-sm font-medium text-gray-700">
+                  <td colSpan="8" className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                     MwSt:
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
@@ -379,7 +409,7 @@ const QuotationDetail = () => {
                   </td>
                 </tr>
                 <tr>
-                  <td colSpan="7" className="px-6 py-4 text-right text-base font-bold text-gray-900">
+                  <td colSpan="8" className="px-6 py-4 text-right text-base font-bold text-gray-900">
                     Gesamtsumme:
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-base font-bold text-gray-900 text-right">

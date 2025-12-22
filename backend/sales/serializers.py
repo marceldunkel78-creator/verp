@@ -12,6 +12,8 @@ class QuotationItemSerializer(serializers.ModelSerializer):
     item_type = serializers.SerializerMethodField()
     item_name = serializers.SerializerMethodField()
     item_description = serializers.SerializerMethodField()
+    item_article_number = serializers.SerializerMethodField()
+    content_type_data = serializers.SerializerMethodField()
     subtotal = serializers.ReadOnlyField()
     tax_amount = serializers.ReadOnlyField()
     total = serializers.ReadOnlyField()
@@ -23,8 +25,8 @@ class QuotationItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuotationItem
         fields = [
-            'id', 'quotation', 'content_type', 'object_id', 'item',
-            'item_type', 'item_name', 'item_description',
+            'id', 'quotation', 'content_type', 'content_type_data', 'object_id',
+            'item_type', 'item_name', 'item_description', 'item_article_number',
             'group_id', 'group_name', 'is_group_header',
             'position', 'description_type', 'quantity', 
             'unit_price', 'purchase_price', 'sale_price', 'uses_system_price',
@@ -34,6 +36,15 @@ class QuotationItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['subtotal', 'tax_amount', 'total', 'total_purchase_cost', 
                            'margin_absolute', 'margin_percent']
+    
+    def get_content_type_data(self, obj):
+        """Gibt den Content Type als Dict zurück für Frontend-Kompatibilität"""
+        if obj.content_type:
+            return {
+                'app_label': obj.content_type.app_label,
+                'model': obj.content_type.model
+            }
+        return None
     
     def get_item_type(self, obj):
         """Gibt den Typ des Items zurück (TradingProduct oder Asset)"""
@@ -59,6 +70,16 @@ class QuotationItemSerializer(serializers.ModelSerializer):
         else:
             return getattr(obj.item, 'description', '')
     
+    def get_item_article_number(self, obj):
+        """Gibt die Artikelnummer des Items zurück"""
+        # Für Warensammlungen verwende die generierte Artikelnummer
+        if obj.item_article_number:
+            return obj.item_article_number
+        # Sonst die Artikelnummer vom Item (Visitron priorisiert)
+        if obj.item:
+            return getattr(obj.item, 'visitron_part_number', '') or getattr(obj.item, 'supplier_part_number', '')
+        return None
+    
     def get_group_margin(self, obj):
         """Marge für Gruppen"""
         if obj.is_group_header and obj.sale_price:
@@ -71,6 +92,7 @@ class QuotationItemCreateUpdateSerializer(serializers.ModelSerializer):
     Serializer für Erstellen/Aktualisieren von Angebotspositionen
     """
     content_type = serializers.DictField(write_only=True, required=False, allow_null=True)
+    quotation = serializers.PrimaryKeyRelatedField(read_only=True)
     
     class Meta:
         model = QuotationItem
@@ -79,8 +101,19 @@ class QuotationItemCreateUpdateSerializer(serializers.ModelSerializer):
             'group_id', 'group_name', 'is_group_header',
             'position', 'description_type', 'quantity', 
             'unit_price', 'purchase_price', 'sale_price', 'uses_system_price',
-            'discount_percent', 'tax_rate', 'notes'
+            'discount_percent', 'tax_rate', 'notes', 'item_article_number'
         ]
+    
+    def to_internal_value(self, data):
+        """Override to add debugging"""
+        print(f"DEBUG ITEM to_internal_value: Received data: {data}")
+        try:
+            result = super().to_internal_value(data)
+            print(f"DEBUG ITEM to_internal_value: Result: {result}")
+            return result
+        except Exception as e:
+            print(f"DEBUG ITEM to_internal_value ERROR: {e}")
+            raise
     
     def validate(self, data):
         """Validiere dass das Item existiert (außer für Gruppen-Header)"""
@@ -88,8 +121,22 @@ class QuotationItemCreateUpdateSerializer(serializers.ModelSerializer):
         object_id = data.get('object_id')
         is_group_header = data.get('is_group_header', False)
         
+        print(f"DEBUG ITEM validate: content_type={content_type_dict}, object_id={object_id}, is_group_header={is_group_header}")
+        
         # Gruppen-Header brauchen kein konkretes Item
         if is_group_header:
+            # Entferne content_type wenn es leer/None ist
+            if not content_type_dict:
+                data.pop('content_type', None)
+            print(f"DEBUG ITEM: Is group header, validation passed")
+            return data
+        
+        # Wenn wir ein Update machen und content_type nicht gesetzt ist, 
+        # versuche es vom existierenden Item zu nehmen
+        if self.instance and not content_type_dict:
+            # content_type bleibt unverändert, entferne es aus data
+            data.pop('content_type', None)
+            print(f"DEBUG ITEM: Is update without content_type, validation passed")
             return data
         
         if content_type_dict and object_id:
@@ -104,13 +151,27 @@ class QuotationItemCreateUpdateSerializer(serializers.ModelSerializer):
                 
                 model_class = content_type.model_class()
                 if not model_class.objects.filter(id=object_id).exists():
+                    print(f"DEBUG ITEM ERROR: Item with id {object_id} does not exist")
                     raise serializers.ValidationError(
                         f"{content_type.model} mit ID {object_id} existiert nicht"
                     )
+                print(f"DEBUG ITEM: Validation passed, content_type converted")
             except ContentType.DoesNotExist:
+                print(f"DEBUG ITEM ERROR: ContentType does not exist")
                 raise serializers.ValidationError(
                     f"Content Type {content_type_dict} existiert nicht"
                 )
+        elif not is_group_header:
+            # Normale Items brauchen content_type und object_id
+            # Aber nur bei Create, nicht bei Update
+            if not self.instance:
+                print(f"DEBUG ITEM ERROR: Missing content_type or object_id for new item")
+                raise serializers.ValidationError(
+                    "content_type und object_id sind erforderlich für normale Positionen"
+                )
+        
+        print(f"DEBUG ITEM: Validation passed")
+        return data
         
         return data
 
@@ -138,11 +199,13 @@ class QuotationListSerializer(serializers.ModelSerializer):
         return obj.items.count()
     
     def get_total_amount(self, obj):
-        """Gesamtsumme aller Positionen"""
+        """Gesamtsumme - nur Gruppen-Header und Einzelpositionen (ohne group_id)"""
         from decimal import Decimal
         total = Decimal('0.00')
         for item in obj.items.all():
-            total += item.total
+            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
+            if item.is_group_header or not item.group_id:
+                total += item.total
         return float(total)
 
 
@@ -160,6 +223,8 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
     total_net = serializers.SerializerMethodField()
     total_tax = serializers.SerializerMethodField()
     total_gross = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    commission_user_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Quotation
@@ -170,12 +235,12 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'language', 'language_display',
             'payment_term', 'payment_term_display',
             'delivery_term', 'delivery_term_display',
-            'show_terms_conditions', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
+            'show_terms_conditions', 'show_group_item_prices', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
             'recipient_company', 'recipient_name', 'recipient_street',
             'recipient_postal_code', 'recipient_city', 'recipient_country',
             'notes',
             'items', 'total_net', 'total_tax', 'total_gross',
-            'created_by', 'commission_user', 'created_at', 'updated_at'
+            'created_by', 'created_by_name', 'commission_user', 'commission_user_name', 'created_at', 'updated_at'
         ]
     
     def get_payment_term_display(self, obj):
@@ -199,35 +264,53 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
         return None
     
     def get_total_net(self, obj):
-        """Gesamtsumme netto"""
+        """Gesamtsumme netto - nur Gruppen-Header und Einzelpositionen"""
         from decimal import Decimal
         total = Decimal('0.00')
         for item in obj.items.all():
-            total += item.subtotal
+            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
+            if item.is_group_header or not item.group_id:
+                total += item.subtotal
         return float(total)
     
     def get_total_tax(self, obj):
-        """Gesamtsumme MwSt"""
+        """Gesamtsumme MwSt - nur Gruppen-Header und Einzelpositionen"""
         from decimal import Decimal
         total = Decimal('0.00')
         for item in obj.items.all():
-            total += item.tax_amount
+            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
+            if item.is_group_header or not item.group_id:
+                total += item.tax_amount
         return float(total)
     
     def get_total_gross(self, obj):
-        """Gesamtsumme brutto"""
+        """Gesamtsumme brutto - nur Gruppen-Header und Einzelpositionen"""
         from decimal import Decimal
         total = Decimal('0.00')
         for item in obj.items.all():
-            total += item.total
+            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
+            if item.is_group_header or not item.group_id:
+                total += item.total
         return float(total)
+    
+    def get_created_by_name(self, obj):
+        """Name des Erstellers"""
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip()
+        return None
+    
+    def get_commission_user_name(self, obj):
+        """Name des Provisionsempfängers"""
+        if obj.commission_user:
+            return f"{obj.commission_user.first_name} {obj.commission_user.last_name}".strip()
+        return None
 
 
 class QuotationCreateUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer für Erstellen und Aktualisieren von Angeboten
+    Items werden manuell in der View verarbeitet!
     """
-    items = QuotationItemCreateUpdateSerializer(many=True, required=False)
     
     class Meta:
         model = Quotation
@@ -235,39 +318,9 @@ class QuotationCreateUpdateSerializer(serializers.ModelSerializer):
             'customer', 'project_reference', 'system_reference', 'reference',
             'valid_until', 'delivery_time_weeks', 'status', 'language',
             'payment_term', 'delivery_term',
-            'show_terms_conditions', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
+            'show_terms_conditions', 'show_group_item_prices', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
             'recipient_company', 'recipient_name', 'recipient_street',
             'recipient_postal_code', 'recipient_city', 'recipient_country',
-            'notes', 'created_by', 'commission_user', 'items'
+            'notes', 'created_by', 'commission_user'
         ]
-    
-    def create(self, validated_data):
-        """Erstelle Angebot mit Positionen"""
-        items_data = validated_data.pop('items', [])
-        quotation = Quotation.objects.create(**validated_data)
-        
-        # Erstelle Positionen
-        for item_data in items_data:
-            QuotationItem.objects.create(quotation=quotation, **item_data)
-        
-        return quotation
-    
-    def update(self, instance, validated_data):
-        """Aktualisiere Angebot und Positionen"""
-        items_data = validated_data.pop('items', None)
-        
-        # Aktualisiere Angebot
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        
-        # Aktualisiere Positionen falls vorhanden
-        if items_data is not None:
-            # Lösche alte Positionen
-            instance.items.all().delete()
-            
-            # Erstelle neue Positionen
-            for item_data in items_data:
-                QuotationItem.objects.create(quotation=instance, **item_data)
-        
-        return instance
+

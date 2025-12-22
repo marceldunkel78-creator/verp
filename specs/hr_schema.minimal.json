@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "__meta": {
+    "version": "1.0.0",
+    "country": "DE",
+    "description": "Minimalset für HR-Daten in Deutschland: Pflichtfelder für Personalakte und Payroll. Nicht-sensible Felder.",
+    "retention_policies": {
+      "general": "10 Jahre nach Ende des Beschäftigungsverhältnisses (handels-/steuerrechtlich)",
+      "personal_data": "2 Jahre nach Ende, falls nicht steuerlich relevant",
+      "note": "Aufbewahrungsfristen gemäß § 257 HGB, § 147 AO. Prüfung durch Datenschutzbeauftragten."
+    },
+    "feature_flags": {
+      "gdpr_sensitive_enabled": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "employee_id": {
+      "type": "string",
+      "description": "Mitarbeiter-ID",
+      "validation": "Alphanumerisch, max 50 Zeichen, Regex: ^[A-Za-z0-9\\-_]{1,50}$",
+      "access_roles": ["hr", "payroll", "manager"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "first_name": {
+      "type": "string",
+      "description": "Vorname",
+      "validation": "Max 100 Zeichen, erlaubt: Buchstaben, Leerzeichen, Bindestrich, Apostroph",
+      "access_roles": ["hr", "manager"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Nachname",
+      "validation": "Max 100 Zeichen, erlaubt: Buchstaben, Leerzeichen, Bindestrich, Apostroph",
+      "access_roles": ["hr", "manager"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date",
+      "description": "Geburtsdatum",
+      "validation": "ISO 8601 YYYY-MM-DD, plausibilitätscheck gegen Eintrittsdatum",
+      "access_roles": ["hr", "payroll"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "address": {
+      "type": "string",
+      "description": "Anschrift/Adresse",
+      "validation": "Max 250 Zeichen",
+      "access_roles": ["hr"],
+      "retention": "2 Jahre nach Ende"
+    },
+    "personal_email": {
+      "type": "string",
+      "format": "email",
+      "description": "Private E-Mail",
+      "validation": "RFC 5322-simplifiziert, Regex: ^[\\w.%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$",
+      "access_roles": ["hr"],
+      "retention": "2 Jahre nach Ende"
+    },
+    "work_email": {
+      "type": "string",
+      "format": "email",
+      "description": "Dienstliche E-Mail",
+      "validation": "E-Mail-Format, Unternehmensdomäne bevorzugt",
+      "access_roles": ["hr", "manager"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Telefonnummer",
+      "validation": "E.164 empfohlen, Regex: ^\\+?[1-9]\\d{1,14}$",
+      "access_roles": ["hr"],
+      "retention": "2 Jahre nach Ende"
+    },
+    "employment_start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Eintrittsdatum",
+      "validation": "ISO 8601 YYYY-MM-DD, darf nicht in der Zukunft",
+      "access_roles": ["hr", "payroll"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "employment_end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Austrittsdatum",
+      "validation": "ISO 8601 YYYY-MM-DD, >= Eintrittsdatum",
+      "access_roles": ["hr", "payroll"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "contract_type": {
+      "type": "string",
+      "enum": ["unbefristet", "befristet", "teilzeit", "vollzeit", "ausbildung", "minijob", "praktikum"],
+      "description": "Vertragsart",
+      "validation": "Enum-Werte",
+      "access_roles": ["hr", "payroll"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "job_title": {
+      "type": "string",
+      "description": "Stellenbezeichnung",
+      "validation": "Max 150 Zeichen",
+      "access_roles": ["hr", "manager"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "department": {
+      "type": "string",
+      "description": "Abteilung",
+      "validation": "Max 100 Zeichen",
+      "access_roles": ["hr", "manager"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "working_time_percentage": {
+      "type": "number",
+      "description": "Beschäftigungsumfang (in %)",
+      "validation": "Ganzzahl oder Dezimal 0–100",
+      "access_roles": ["hr", "payroll"],
+      "retention": "10 Jahre nach Ende"
+    },
+    "employment_status": {
+      "type": "string",
+      "enum": ["aktiv", "inaktiv", "urlaub", "krank", "aufkündigung"],
+      "description": "Beschäftigungsstatus",
+      "validation": "Enum-Werte",
+      "access_roles": ["hr", "manager"],
+      "retention": "10 Jahre nach Ende"
+    }
+  },
+  "required": ["employee_id", "first_name", "last_name", "date_of_birth", "employment_start_date", "contract_type", "job_title", "employment_status"]
+}
