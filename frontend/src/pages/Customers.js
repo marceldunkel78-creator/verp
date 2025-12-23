@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import CustomerModal from '../components/CustomerModal';
+import storage from '../utils/sessionStore';
 import { 
   PlusIcon, PencilIcon, TrashIcon, UserIcon,
   PhoneIcon, EnvelopeIcon, MapPinIcon, GlobeAltIcon,
@@ -25,34 +27,133 @@ const Customers = () => {
     is_active: ''
   });
 
+  const SESSION_KEY = 'customers_search_state';
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.filters) setFilters(st.filters);
+      const page = st.currentPage || 1;
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.customers) setCustomers(st.customers);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.hasSearched) setHasSearched(true);
+
+      // Do NOT call fetch here (fetchCustomers may not be declared yet); return object
+      return { page, filters: st.filters || null };
+    } catch (e) {
+      console.warn('Failed to load customers search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters, currentPage, customers, totalPages, hasSearched };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save customers search state', e);
+    }
+  };
+
+
+  useEffect(() => {
+    // On mount prefer URL params; otherwise restore from localStorage and populate URL
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      // let the searchParams effect handle fetching
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.page) {
+      // populate URL so back/forward works and trigger fetch via effect
+      const params = {};
+      if (restored.filters) {
+        if (restored.filters.search) params.search = restored.filters.search;
+        if (restored.filters.city) params.city = restored.filters.city;
+        if (restored.filters.country) params.country = restored.filters.country;
+        if (restored.filters.language) params.language = restored.filters.language;
+        if (restored.filters.is_active) params.is_active = restored.filters.is_active;
+      }
+      params.page = String(restored.page);
+      setSearchParams(params);
+    } else if (!restored && hasSearched) {
+      fetchCustomers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (hasSearched) {
       fetchCustomers();
     }
   }, [currentPage]);
 
-  const fetchCustomers = async () => {
+  useEffect(() => {
+    // persist state whenever relevant parts change
+    saveSearchState();
+  }, [filters, currentPage, customers, totalPages, hasSearched]);
+
+  // React to URL query param changes (back/forward navigation)
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newFilters = {
+        search: params.search || '',
+        city: params.city || '',
+        country: params.country || '',
+        language: params.language || '',
+        is_active: params.is_active || ''
+      };
+      setFilters(newFilters);
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setCurrentPage(page);
+      setHasSearched(true);
+      // fetch to restore the list immediately when navigating back/forward
+      fetchCustomers(page, newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Make fetchCustomers accept filters/page so restoration can call it with saved values
+  const fetchCustomers = async (pageArg = null, filtersArg = null) => {
+    const page = pageArg || currentPage;
+    const useFilters = filtersArg || filters;
+
     setLoading(true);
     try {
       let url = '/customers/customers/';
       const params = new URLSearchParams();
       
-      if (filters.search) params.append('search', filters.search);
-      if (filters.city) params.append('city', filters.city);
-      if (filters.country) params.append('country', filters.country);
-      if (filters.language) params.append('language', filters.language);
-      if (filters.is_active) params.append('is_active', filters.is_active);
+      if (useFilters.search) params.append('search', useFilters.search);
+      if (useFilters.city) params.append('city', useFilters.city);
+      if (useFilters.country) params.append('country', useFilters.country);
+      if (useFilters.language) params.append('language', useFilters.language);
+      if (useFilters.is_active) params.append('is_active', useFilters.is_active);
       
       // Pagination
-      params.append('page', currentPage);
+      params.append('page', page);
       params.append('page_size', '9');
       
       url += `?${params.toString()}`;
       
       const response = await api.get(url);
-      setCustomers(response.data.results || []);
+      const results = response.data.results || [];
+      setCustomers(results);
       setTotalPages(Math.ceil((response.data.count || 0) / 9));
       setHasSearched(true);
+
+      // Persist immediately so localStorage is updated even if React effects are delayed
+      try {
+        saveSearchState();
+        console.log('Customers search state saved', storage.get(SESSION_KEY));
+      } catch (e) { console.warn('Could not persist customers search state', e); }
+
+      if (pageArg) setCurrentPage(page);
     } catch (error) {
       console.error('Fehler beim Laden der Kunden:', error);
       setCustomers([]);
@@ -62,8 +163,17 @@ const Customers = () => {
   };
 
   const handleSearch = () => {
+    // update URL params and let the searchParams effect perform the fetch
+    const params = {};
+    if (filters.search) params.search = filters.search;
+    if (filters.city) params.city = filters.city;
+    if (filters.country) params.country = filters.country;
+    if (filters.language) params.language = filters.language;
+    if (filters.is_active) params.is_active = filters.is_active;
+    params.page = '1';
+    setSearchParams(params);
     setCurrentPage(1);
-    fetchCustomers();
+    setHasSearched(true);
   };
 
   const handleReset = () => {
@@ -77,6 +187,7 @@ const Customers = () => {
     setCustomers([]);
     setCurrentPage(1);
     setHasSearched(false);
+    try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
   };
 
   const openCreateModal = () => {
@@ -220,7 +331,7 @@ const Customers = () => {
               Suchen
             </button>
             <button
-              onClick={handleReset}
+              onClick={() => { handleReset(); storage.remove(SESSION_KEY); }}
               className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
             >
               Zurücksetzen
@@ -333,7 +444,12 @@ const Customers = () => {
           {totalPages > 1 && (
             <div className="mt-6 flex justify-center items-center space-x-2">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                onClick={() => {
+                  const np = Math.max(1, currentPage - 1);
+                  setCurrentPage(np);
+                  setSearchParams({ ...(filters.search ? { search: filters.search } : {}), ...(filters.city ? { city: filters.city } : {}), ...(filters.country ? { country: filters.country } : {}), ...(filters.language ? { language: filters.language } : {}), ...(filters.is_active ? { is_active: filters.is_active } : {}), page: String(np) });
+                  fetchCustomers(np, filters);
+                }}
                 disabled={currentPage === 1}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -343,7 +459,12 @@ const Customers = () => {
                 Seite {currentPage} von {totalPages}
               </span>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                onClick={() => {
+                  const np = Math.min(totalPages, currentPage + 1);
+                  setCurrentPage(np);
+                  setSearchParams({ ...(filters.search ? { search: filters.search } : {}), ...(filters.city ? { city: filters.city } : {}), ...(filters.country ? { country: filters.country } : {}), ...(filters.language ? { language: filters.language } : {}), ...(filters.is_active ? { is_active: filters.is_active } : {}), page: String(np) });
+                  fetchCustomers(np, filters);
+                }}
                 disabled={currentPage === totalPages}
                 className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >

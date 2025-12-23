@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { 
   PlusIcon, ShoppingCartIcon, CheckCircleIcon, 
@@ -11,6 +11,7 @@ import {
 
 const Orders = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -22,6 +23,30 @@ const Orders = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [sessionExists, setSessionExists] = useState(false);
+
+  const SESSION_KEY = 'orders_search_state';
+  importSessionHelpers();
+
+  function importSessionHelpers() {
+    // dynamic import helper to avoid issues with SSR/test environments
+    try {
+      // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+      const mod = require('../utils/sessionStore');
+      window.__sessionStore = mod.default || mod;
+    } catch (e) {
+      console.warn('Could not load sessionStore helper', e);
+    }
+  }
+
+  // Try to restore session state on mount
+  useEffect(() => {
+    const restored = loadSearchState();
+    if (!restored && hasSearched) {
+      fetchOrders(currentPage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (hasSearched) {
@@ -29,26 +54,104 @@ const Orders = () => {
     }
   }, [currentPage]);
 
-  const fetchOrders = async () => {
+  const loadSearchState = () => {
+    try {
+      // URL params take precedence for navigation/back/forward behavior
+      const urlParams = Object.fromEntries([...searchParams]);
+      if (Object.keys(urlParams).length > 0) {
+        const newFilters = {
+          search: urlParams.search || '',
+          status: urlParams.status || '',
+          year: urlParams.year || ''
+        };
+        setFilters(newFilters);
+        const p = urlParams.page ? parseInt(urlParams.page, 10) : 1;
+        setCurrentPage(p);
+        setHasSearched(true);
+        // Fetch immediately so results match URL — pass the freshly built filters
+        fetchOrders(p, newFilters);
+        setSessionExists(true);
+        return true;
+      }
+
+      // use helper if available
+      const st = (window.__sessionStore && window.__sessionStore.get) ? window.__sessionStore.get(SESSION_KEY) : (function(){ try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } })();
+      if (!st) return false;
+      if (st.filters) setFilters(st.filters);
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.orders) setOrders(st.orders);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.hasSearched) setHasSearched(true);
+      setSessionExists(true);
+      return true;
+    } catch (e) {
+      console.warn('Failed to load orders search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters, currentPage, orders, totalPages, hasSearched };
+      if (window.__sessionStore && window.__sessionStore.set) {
+        window.__sessionStore.set(SESSION_KEY, st);
+      } else {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(st));
+      }
+      setSessionExists(true);
+    } catch (e) {
+      console.warn('Failed to save orders search state', e);
+    }
+  };
+
+  useEffect(() => {
+    // persist state whenever relevant parts change
+    saveSearchState();
+  }, [filters, currentPage, orders, totalPages, hasSearched]);
+
+  // React to URL query param changes (back/forward navigation)
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newFilters = {
+        search: params.search || '',
+        status: params.status || '',
+        year: params.year || ''
+      };
+      setFilters(newFilters);
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setCurrentPage(page);
+      setHasSearched(true);
+      // fetch to restore the list immediately when navigating back/forward — pass the freshly built filters
+      fetchOrders(page, newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const fetchOrders = async (pageArg = null, filtersArg = null) => {
+    const page = pageArg || currentPage;
+    const useFilters = filtersArg || filters;
     setLoading(true);
     setHasSearched(true);
     try {
       const params = new URLSearchParams({
-        page: currentPage,
+        page: page,
         page_size: 9
       });
-      
-      if (filters.search) params.append('search', filters.search);
-      if (filters.status) params.append('status', filters.status);
-      if (filters.year) params.append('year', filters.year);
-      
+
+      if (useFilters.search) params.append('search', useFilters.search);
+      if (useFilters.status) params.append('status', useFilters.status);
+      if (useFilters.year) params.append('year', useFilters.year);
+
       const response = await api.get(`/orders/orders/?${params.toString()}`);
       const data = response.data.results || response.data;
       setOrders(Array.isArray(data) ? data : []);
-      
+
       if (response.data.count) {
         setTotalPages(Math.ceil(response.data.count / 9));
       }
+      if (pageArg) setCurrentPage(page);
     } catch (error) {
       console.error('Fehler beim Laden der Bestellungen:', error);
       setOrders([]);
@@ -58,8 +161,14 @@ const Orders = () => {
   };
 
   const handleSearch = () => {
+    const params = {};
+    if (filters.search) params.search = filters.search;
+    if (filters.status) params.status = filters.status;
+    if (filters.year) params.year = filters.year;
+    params.page = '1';
+    setSearchParams(params);
     setCurrentPage(1);
-    fetchOrders();
+    fetchOrders(1, { search: filters.search || '', status: filters.status || '', year: filters.year || '' });
   };
 
   const canDelete = (order) => {
@@ -316,13 +425,22 @@ const Orders = () => {
             </select>
           </div>
         </div>
-        <div className="mt-4">
+            <div className="mt-4 flex items-center space-x-2">
           <button
             onClick={handleSearch}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
           >
             Suchen
           </button>
+          <button
+            onClick={() => { setFilters({ search: '', status: '', year: '' }); setOrders([]); setHasSearched(false); setCurrentPage(1); (window.__sessionStore && window.__sessionStore.remove) ? window.__sessionStore.remove('orders_search_state') : localStorage.removeItem('orders_search_state'); setSessionExists(false); setSearchParams({}); }}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Filter zurücksetzen
+          </button>
+          {sessionExists && (
+            <div className="mt-2 text-sm text-gray-500">Session: Suchergebnisse werden im Tab gespeichert</div>
+          )}
         </div>
       </div>
 
@@ -356,7 +474,7 @@ const Orders = () => {
               <div
                 key={order.id}
                 className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer"
-                onClick={() => navigate(`/procurement/orders/${order.id}`)}
+                onClick={() => { saveSearchState(); navigate(`/procurement/orders/${order.id}`); }}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between mb-4">
@@ -404,7 +522,7 @@ const Orders = () => {
                   <div className="flex justify-between text-sm mt-2">
                     <span className="text-gray-600">Summe:</span>
                     <span className="font-bold text-gray-900 flex items-center">
-                      {order.total_amount ? order.total_amount.toFixed(2) : '0.00'}
+                      {(order.confirmed_total ?? order.total_amount) ? (order.confirmed_total ?? order.total_amount).toFixed(2) : '0.00'}
                       <CurrencyEuroIcon className="h-4 w-4 ml-1" />
                     </span>
                   </div>
@@ -415,6 +533,7 @@ const Orders = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      saveSearchState();
                       navigate(`/procurement/orders/${order.id}`);
                     }}
                     className="text-blue-600 hover:text-blue-900 p-1"
@@ -425,6 +544,7 @@ const Orders = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      saveSearchState();
                       navigate(`/procurement/orders/${order.id}/edit`);
                     }}
                     className="text-green-600 hover:text-green-900 p-1"
@@ -464,7 +584,12 @@ const Orders = () => {
           {totalPages > 1 && (
             <div className="bg-white shadow rounded-lg p-4 flex items-center justify-between">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                onClick={() => {
+                  const np = Math.max(1, currentPage - 1);
+                  setCurrentPage(np);
+                  setSearchParams({ ...(filters.search ? { search: filters.search } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.year ? { year: filters.year } : {}), page: String(np) });
+                  fetchOrders(np);
+                }}
                 disabled={currentPage === 1}
                 className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -475,7 +600,12 @@ const Orders = () => {
                 Seite {currentPage} von {totalPages}
               </span>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                onClick={() => {
+                  const np = Math.min(totalPages, currentPage + 1);
+                  setCurrentPage(np);
+                  setSearchParams({ ...(filters.search ? { search: filters.search } : {}), ...(filters.status ? { status: filters.status } : {}), ...(filters.year ? { year: filters.year } : {}), page: String(np) });
+                  fetchOrders(np);
+                }}
                 disabled={currentPage === totalPages}
                 className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >

@@ -212,6 +212,15 @@ const OrderDetail = () => {
               {getStatusIcon(order.status)}
               <span className="ml-2">{order.status_display}</span>
             </span>
+            <div className="ml-4 inline-flex items-center px-3 py-1 rounded bg-gray-50 border border-gray-100 text-sm">
+              <div className="text-xs text-gray-500 mr-2">Gesamt:</div>
+              <div className="text-sm font-medium">€ {order.total_amount ? parseFloat(order.total_amount).toFixed(2) : '0.00'}</div>
+            </div>
+            {order.confirmed_total && (
+              <div className="ml-2 inline-flex items-center px-3 py-1 rounded bg-green-50 border border-green-100 text-sm text-green-800">
+                Bestätigt: <strong className="ml-2">€ {parseFloat(order.confirmed_total).toFixed(2)}</strong>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -240,12 +249,37 @@ const OrderDetail = () => {
             </div>
           </div>
 
+          {order.expected_delivery_date && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600">Voraussichtliches Lieferdatum</label>
+              <div className="mt-1 text-sm text-gray-900">
+                {new Date(order.expected_delivery_date).toLocaleDateString('de-DE')}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-600">Lieferdatum</label>
             <div className="mt-1 text-sm text-gray-900">
               {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('de-DE') : 'N/A'}
             </div>
           </div>
+
+          {order.supplier_confirmation_document && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600">Auftragsbestätigung (Dokument)</label>
+              <div className="mt-1">
+                <a
+                  href={order.supplier_confirmation_document.startsWith('http') ? order.supplier_confirmation_document : `${window.location.origin}${order.supplier_confirmation_document}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+                >
+                  📄 {order.supplier_confirmation_document.split('/').pop()}
+                </a>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-600">Zahlungsdatum</label>
@@ -376,7 +410,17 @@ const OrderDetail = () => {
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{item.customer_order_number || '-'}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{item.article_number}</td>
                   <td className="px-3 py-3 text-sm text-gray-900">{item.name}</td>
-                  <td className="px-3 py-3 text-sm text-gray-500">{item.description}</td>
+                  <td className="px-3 py-3 text-sm text-gray-500">
+                    <div className="mb-1 max-w-xs">{item.description}</div>
+                    {item.management_info && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        {item.management_info.warefunktion ? <div>Warenfunktion: {item.management_info.warefunktion}</div> : null}
+                        {item.management_info.auftrag ? <div>Auftrag: {item.management_info.auftrag}</div> : null}
+                        {item.management_info.projekt ? <div>Projekt: {item.management_info.projekt}</div> : null}
+                        {item.management_info.system ? <div>System: {item.management_info.system}</div> : null}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{item.unit}</td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
@@ -403,6 +447,16 @@ const OrderDetail = () => {
                   {order.total_amount ? parseFloat(order.total_amount).toFixed(2) : '0.00'} €
                 </td>
               </tr>
+              {order.confirmed_total && (
+                <tr>
+                  <td colSpan="9" className="px-3 py-3 text-right text-sm font-medium text-green-700">
+                    Bestätigter Bestellpreis:
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap text-sm font-bold text-green-800">
+                    {parseFloat(order.confirmed_total).toFixed(2)} €
+                  </td>
+                </tr>
+              )}
             </tfoot>
           </table>
         </div>

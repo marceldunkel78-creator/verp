@@ -12,14 +12,30 @@ def order_document_upload_path(instance, filename):
     """
     Benutzerdefinierter Upload-Pfad für Bestelldokumente.
     Behält den Original-Dateinamen bei (überschreibt bei Duplikaten).
+
+    Sicherheitsanpassungen: Ersetze in Order-Nummer und Dateiname alle Schrägstriche ("/") und
+    nicht-datei-geeignete Zeichen durch Unterstriche, damit keine Pfad-Traversal- oder
+    Verzeichnisunterteilung durch Sonderzeichen entsteht.
     """
-    # Extrahiere die Dateiendung
-    ext = os.path.splitext(filename)[1]
-    # Erstelle Pfad: orders/documents/YYYY/MM/ordernumber_originalname.ext
-    if instance.order_number:
-        new_filename = f"{instance.order_number}_{filename}"
+    import re
+
+    # Normalisiere Order-Nummer und Dateiname: ersetze '/' und sonstige ungültige Zeichen
+    def _sanitize(name):
+        if not name:
+            return ''
+        # Replace slashes and spaces with underscore
+        name = name.replace('/', '_').replace(' ', '_')
+        # Remove characters that are not alphanumeric, underscore, dot or hyphen
+        return re.sub(r'[^A-Za-z0-9_.-]', '_', name)
+
+    safe_filename = _sanitize(filename)
+    safe_ordernum = _sanitize(instance.order_number) if getattr(instance, 'order_number', None) else ''
+
+    if safe_ordernum:
+        new_filename = f"{safe_ordernum}_{safe_filename}"
     else:
-        new_filename = filename
+        new_filename = safe_filename
+
     return f"orders/documents/{datetime.now().strftime('%Y/%m')}/{new_filename}"
 
 
@@ -176,6 +192,32 @@ class Order(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    # Zusätzliche Felder: voraussichtliches Lieferdatum und Auftragsbestätigung vom Lieferanten
+    expected_delivery_date = models.DateField(
+        verbose_name='Voraussichtliches Lieferdatum',
+        null=True,
+        blank=True,
+        help_text='Voraussichtliches Lieferdatum laut Auftragsbestätigung'
+    )
+
+    # Bestätigter Gesamtpreis der Bestellung (einmalig gesetzt bei Auftragsbestätigung)
+    confirmed_total = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Bestätigter Bestellpreis',
+        help_text='Die Gesamtsumme nach Auftragsbestätigung (fixiert)'
+    )
+
+    supplier_confirmation_document = models.FileField(
+        upload_to=order_document_upload_path,
+        blank=True,
+        null=True,
+        verbose_name='Auftragsbestätigung (Lieferant)',
+        help_text='Hochladen der Auftragsbestätigung des Lieferanten (PDF)'
+    )
     
     class Meta:
         verbose_name = 'Bestellung'
@@ -303,6 +345,15 @@ class OrderItem(models.Model):
         blank=True,
         verbose_name='Beschreibung'
     )
+
+    # Verwaltungsdaten (flexibel als JSON gespeichert)
+    management_info = models.JSONField(
+        null=True,
+        blank=True,
+        default=dict,
+        verbose_name='Management Info',
+        help_text='Warenfunktion, Auftrags-/Projekt-/Systemzuordnungen etc.'
+    )
     
     # Preise und Mengen
     quantity = models.DecimalField(
@@ -337,6 +388,23 @@ class OrderItem(models.Model):
         decimal_places=2,
         verbose_name='Endpreis',
         help_text='Preis pro Einheit nach Rabatt'
+    )
+
+    # Bestätigter Positionspreis (wird bei Auftragsbestätigung separat gespeichert)
+    confirmed_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Bestätigter Positionspreis',
+        help_text='Vom Lieferanten bestätigter Preis pro Einheit (bleibt erhalten)'
+    )
+
+    # Controlling - Checkbox, die angibt, ob die Position vom Controlling geprüft wurde
+    controlling_checked = models.BooleanField(
+        default=False,
+        verbose_name='Controlling geprüft',
+        help_text='Markiert, ob Controlling die Position geprüft/abgenommen hat'
     )
     
     currency = models.CharField(

@@ -11,7 +11,6 @@ import TradingProducts from './pages/TradingProducts';
 import Assets from './pages/Assets';
 import MaterialSupplies from './pages/MaterialSupplies';
 import Orders from './pages/Orders';
-import OrderForm from './pages/OrderForm';
 import OrderFormNew from './pages/OrderFormNew';
 import OrderDetail from './pages/OrderDetail';
 import Customers from './pages/Customers';

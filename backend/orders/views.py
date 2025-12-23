@@ -47,7 +47,32 @@ class OrderViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-    
+
+    def create(self, request, *args, **kwargs):
+        # Use create serializer to validate/save then return full detail serializer so the client gets id and order_number
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        order = serializer.instance
+        # Refresh from DB to pick up file field updates applied by post_save signal
+        order = Order.objects.get(pk=order.pk)
+        detail_serializer = OrderDetailSerializer(order, context={'request': request})
+        headers = self.get_success_headers(detail_serializer.data)
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        # Ensure that on update we also return the full detail representation
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        order = serializer.instance
+        # Refresh from DB to pick up file field updates applied by post_save signal
+        order = Order.objects.get(pk=order.pk)
+        detail_serializer = OrderDetailSerializer(order, context={'request': request})
+        return Response(detail_serializer.data)
+
     def partial_update(self, request, *args, **kwargs):
         """Nutze die gleiche Logik für PATCH-Requests"""
         kwargs['partial'] = True
@@ -56,8 +81,15 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def download_pdf(self, request, pk=None):
         """Generiere und lade Bestelldokument als PDF herunter"""
+        print(f"download_pdf called for order pk={pk} by user={request.user}")
         try:
             order = self.get_object()
+            # Don't allow generating a server-side PDF for online orders — they should upload a receipt
+            if getattr(order, 'order_type', None) == 'online':
+                print(f"download_pdf: rejected for online order id={order.id}, order_number={order.order_number}")
+                return Response({'error': 'PDF generation is disabled for online orders. Please upload an order receipt.'}, status=404)
+
+            print(f"Generating PDF for order id={order.id}, order_number={order.order_number}")
             return generate_order_pdf(order)
         except Exception as e:
             import traceback

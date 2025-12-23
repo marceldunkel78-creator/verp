@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { COUNTRIES } from '../utils/countries';
+import storage from '../utils/sessionStore';
 import { 
   PlusIcon, PencilIcon, TrashIcon, EyeIcon, 
   BuildingOfficeIcon, EnvelopeIcon, PhoneIcon,
@@ -29,6 +31,37 @@ const Suppliers = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  const SESSION_KEY = 'suppliers_search_state';
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.filters) setFilters(st.filters);
+      const page = st.currentPage || 1;
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.suppliers) setSuppliers(st.suppliers);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.hasSearched) setHasSearched(true);
+
+      // Do NOT call fetch here (fetchSuppliers may not be declared yet); return object
+      return { page, filters: st.filters || null };
+    } catch (e) {
+      console.warn('Failed to load suppliers search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters, currentPage, suppliers, totalPages, hasSearched };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save suppliers search state', e);
+    }
+  };
   
   // Payment & Delivery Settings
   const [paymentTerms, setPaymentTerms] = useState([]);
@@ -78,10 +111,57 @@ const Suppliers = () => {
   }, []);
 
   useEffect(() => {
+    // On mount prefer URL params; otherwise restore from localStorage and populate URL
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      // let the searchParams effect handle fetching
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.page) {
+      const params = {};
+      if (restored.filters) {
+        if (restored.filters.search) params.search = restored.filters.search;
+        if (restored.filters.is_active) params.is_active = restored.filters.is_active;
+      }
+      params.page = String(restored.page);
+      setSearchParams(params);
+    } else if (!restored && hasSearched) {
+      fetchSuppliers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     if (hasSearched) {
       fetchSuppliers();
     }
   }, [currentPage]);
+
+  useEffect(() => {
+    // persist when relevant changes occur
+    saveSearchState();
+  }, [filters, currentPage, suppliers, totalPages, hasSearched]);
+
+  // React to URL query param changes (back/forward navigation)
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newFilters = {
+        search: params.search || '',
+        is_active: params.is_active || ''
+      };
+      setFilters(newFilters);
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setCurrentPage(page);
+      setHasSearched(true);
+      // fetch to restore the list immediately when navigating back/forward
+      fetchSuppliers(page, newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const fetchPaymentDeliverySettings = async () => {
     try {
@@ -98,25 +178,36 @@ const Suppliers = () => {
     }
   };
 
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = async (pageArg = null, filtersArg = null) => {
+    const page = pageArg || currentPage;
+    const useFilters = filtersArg || filters;
+
     setLoading(true);
     setHasSearched(true);
     try {
       const params = new URLSearchParams({
-        page: currentPage,
+        page: page,
         page_size: 9
       });
       
-      if (filters.search) params.append('search', filters.search);
-      if (filters.is_active !== '') params.append('is_active', filters.is_active);
+      if (useFilters.search) params.append('search', useFilters.search);
+      if (useFilters.is_active !== '') params.append('is_active', useFilters.is_active);
       
       const response = await api.get(`/suppliers/suppliers/?${params.toString()}`);
       const data = response.data.results || response.data;
-      setSuppliers(Array.isArray(data) ? data : []);
+      const results = Array.isArray(data) ? data : [];
+      setSuppliers(results);
       
       if (response.data.count) {
         setTotalPages(Math.ceil(response.data.count / 9));
       }
+      // Persist immediately
+      try {
+        saveSearchState();
+        console.log('Suppliers search state saved', storage.get(SESSION_KEY));
+      } catch (e) { console.warn('Could not persist suppliers search state', e); }
+
+      if (pageArg) setCurrentPage(page);
     } catch (error) {
       console.error('Fehler beim Laden der Lieferanten:', error);
       setSuppliers([]);
@@ -126,8 +217,13 @@ const Suppliers = () => {
   };
 
   const handleSearch = () => {
+    const params = {};
+    if (filters.search) params.search = filters.search;
+    if (filters.is_active !== '') params.is_active = filters.is_active;
+    params.page = '1';
+    setSearchParams(params);
     setCurrentPage(1);
-    fetchSuppliers();
+    setHasSearched(true);
   };
 
   const handleSubmit = async (e) => {
@@ -466,12 +562,18 @@ const Suppliers = () => {
             </select>
           </div>
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex items-center space-x-2">
           <button
             onClick={handleSearch}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
           >
             Suchen
+          </button>
+          <button
+            onClick={() => { setFilters({ search: '', is_active: '' }); setSuppliers([]); setHasSearched(false); setCurrentPage(1); storage.remove(SESSION_KEY); setSearchParams({}); }}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Filter zurücksetzen
           </button>
         </div>
       </div>
