@@ -64,7 +64,6 @@ const EmployeeList = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      console.log('Submitting:', editingEmployee, formData);
       // Erstelle eine Kopie der Daten und entferne leere optionale Felder und read-only Felder
       const submitData = { ...formData };
       if (!submitData.employment_end_date) {
@@ -72,7 +71,6 @@ const EmployeeList = () => {
       }
       delete submitData.employee_id; // Immer automatisch generiert
       if (editingEmployee) {
-        console.log('PUT to:', `/users/employees/${editingEmployee.id}/`);
         await api.put(`/users/employees/${editingEmployee.id}/`, submitData);
       } else {
         await api.post('/users/employees/', submitData);

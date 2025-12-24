@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import storage from '../utils/sessionStore';
 import {
   PlusIcon, EyeIcon, PencilIcon, TrashIcon,
   DocumentTextIcon, CalendarIcon, UserIcon, ClockIcon
@@ -21,25 +22,103 @@ const OrderProcessing = () => {
     year: ''
   });
 
+  const SESSION_KEY = 'orderprocessing_search_state';
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.filters) setFilters(st.filters);
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.orders) setOrders(st.orders);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.hasSearched) setHasSearched(true);
+      return { page: st.currentPage || 1, filters: st.filters || null };
+    } catch (e) {
+      console.warn('Failed to load orderprocessing search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters, currentPage, orders, totalPages, hasSearched };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save orderprocessing search state', e);
+    }
+  };
+
+  useEffect(() => {
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.page) {
+      const params = {};
+      if (restored.filters) {
+        if (restored.filters.search) params.search = restored.filters.search;
+        if (restored.filters.status) params.status = restored.filters.status;
+        if (restored.filters.year) params.year = restored.filters.year;
+      }
+      params.page = String(restored.page);
+      setSearchParams(params);
+    } else if (!restored && hasSearched) {
+      fetchOrders();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (hasSearched) fetchOrders();
+  }, [currentPage]);
+
+  useEffect(() => {
+    saveSearchState();
+  }, [filters, currentPage, orders, totalPages, hasSearched]);
+
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    if (Object.keys(params).length > 0) {
+      const newFilters = {
+        search: params.search || '',
+        status: params.status || '',
+        year: params.year || ''
+      };
+      setFilters(newFilters);
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setCurrentPage(page);
+      setHasSearched(true);
+      fetchOrders(page, newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_sales;
 
   useEffect(() => {
     if (hasSearched) fetchOrders();
   }, [currentPage]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (pageArg = null, filtersArg = null) => {
+    const page = pageArg || currentPage;
+    const useFilters = filtersArg || filters;
+
     setLoading(true);
     try {
       let url = '/orders/orders/';
       const params = new URLSearchParams();
 
-      if (filters.search) params.append('search', filters.search);
-      if (filters.status) params.append('status', filters.status);
-      if (filters.year) params.append('year', filters.year);
+      if (useFilters.search) params.append('search', useFilters.search);
+      if (useFilters.status) params.append('status', useFilters.status);
+      if (useFilters.year) params.append('year', useFilters.year);
       // Only fetch customer orders (Kundenaufträge), not supplier/online orders
       params.append('order_type', 'customer_order');
 
-      params.append('page', currentPage);
+      params.append('page', page);
       params.append('page_size', '9');
 
       url += `?${params.toString()}`;
@@ -57,6 +136,9 @@ const OrderProcessing = () => {
       setOrders(ordersData);
       setTotalPages(Math.ceil((data.count || ordersData.length) / 9));
       setHasSearched(true);
+
+      try { saveSearchState(); } catch (e) { console.warn('Could not persist orderprocessing search state', e); }
+      if (pageArg) setCurrentPage(page);
     } catch (error) {
       console.error('Fehler beim Laden der Aufträge:', error);
       setOrders([]);
@@ -66,8 +148,14 @@ const OrderProcessing = () => {
   };
 
   const handleSearch = () => {
+    const params = {};
+    if (filters.search) params.search = filters.search;
+    if (filters.status) params.status = filters.status;
+    if (filters.year) params.year = filters.year;
+    params.page = '1';
+    setSearchParams(params);
     setCurrentPage(1);
-    fetchOrders();
+    setHasSearched(true);
   };
 
   const handleReset = () => {
@@ -75,6 +163,8 @@ const OrderProcessing = () => {
     setOrders([]);
     setCurrentPage(1);
     setHasSearched(false);
+    try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
+    setSearchParams({});
   };
 
   const handleDelete = async (id) => {

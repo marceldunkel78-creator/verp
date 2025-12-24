@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import storage from '../utils/sessionStore';
 import { 
   PlusIcon, EyeIcon, PencilIcon, TrashIcon, 
   DocumentArrowDownIcon, DocumentIcon, DocumentTextIcon,
@@ -24,17 +25,94 @@ const Quotations = () => {
     created_by: ''
   });
   
-  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_sales;
-  
+  const SESSION_KEY = 'quotations_search_state';
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.filters) setFilters(st.filters);
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.quotations) setQuotations(st.quotations);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.hasSearched) setHasSearched(true);
+      return { page: st.currentPage || 1, filters: st.filters || null };
+    } catch (e) {
+      console.warn('Failed to load quotations search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters, currentPage, quotations, totalPages, hasSearched };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save quotations search state', e);
+    }
+  };
+
   useEffect(() => {
-    fetchUsers();
+    // On mount prefer URL params; otherwise restore from localStorage and populate URL
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      // let the searchParams effect handle fetching
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.page) {
+      const params = {};
+      if (restored.filters) {
+        if (restored.filters.search) params.search = restored.filters.search;
+        if (restored.filters.status) params.status = restored.filters.status;
+        if (restored.filters.year) params.year = restored.filters.year;
+        if (restored.filters.created_by) params.created_by = restored.filters.created_by;
+      }
+      params.page = String(restored.page);
+      setSearchParams(params);
+    } else if (!restored && hasSearched) {
+      fetchQuotations();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
+
   useEffect(() => {
     if (hasSearched) {
       fetchQuotations();
     }
   }, [currentPage]);
+
+  useEffect(() => {
+    // persist state whenever relevant parts change
+    saveSearchState();
+  }, [filters, currentPage, quotations, totalPages, hasSearched]);
+
+  // React to URL query param changes (back/forward navigation)
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newFilters = {
+        search: params.search || '',
+        status: params.status || '',
+        year: params.year || '',
+        created_by: params.created_by || ''
+      };
+      setFilters(newFilters);
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setCurrentPage(page);
+      setHasSearched(true);
+      // fetch to restore the list immediately when navigating back/forward
+      fetchQuotations(page, newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_sales;
+  
+
   
   const fetchUsers = async () => {
     try {
@@ -46,19 +124,22 @@ const Quotations = () => {
     }
   };
   
-  const fetchQuotations = async () => {
+  const fetchQuotations = async (pageArg = null, filtersArg = null) => {
+    const page = pageArg || currentPage;
+    const useFilters = filtersArg || filters;
+
     setLoading(true);
     try {
       let url = '/sales/quotations/';
       const params = new URLSearchParams();
       
-      if (filters.search) params.append('search', filters.search);
-      if (filters.status) params.append('status', filters.status);
-      if (filters.year) params.append('year', filters.year);
-      if (filters.created_by) params.append('created_by', filters.created_by);
+      if (useFilters.search) params.append('search', useFilters.search);
+      if (useFilters.status) params.append('status', useFilters.status);
+      if (useFilters.year) params.append('year', useFilters.year);
+      if (useFilters.created_by) params.append('created_by', useFilters.created_by);
       
       // Pagination
-      params.append('page', currentPage);
+      params.append('page', page);
       params.append('page_size', '9');
       
       url += `?${params.toString()}`;
@@ -76,6 +157,13 @@ const Quotations = () => {
       setQuotations(quotationsData);
       setTotalPages(Math.ceil((data.count || quotationsData.length) / 9));
       setHasSearched(true);
+
+      // Persist immediately so localStorage is updated even if React effects are delayed
+      try {
+        saveSearchState();
+      } catch (e) { console.warn('Could not persist quotations search state', e); }
+
+      if (pageArg) setCurrentPage(page);
     } catch (error) {
       console.error('Fehler beim Laden der Angebote:', error);
       setQuotations([]);
@@ -85,8 +173,15 @@ const Quotations = () => {
   };
 
   const handleSearch = () => {
+    const params = {};
+    if (filters.search) params.search = filters.search;
+    if (filters.status) params.status = filters.status;
+    if (filters.year) params.year = filters.year;
+    if (filters.created_by) params.created_by = filters.created_by;
+    params.page = '1';
+    setSearchParams(params);
     setCurrentPage(1);
-    fetchQuotations();
+    setHasSearched(true);
   };
 
   const handleReset = () => {
@@ -99,6 +194,8 @@ const Quotations = () => {
     setQuotations([]);
     setCurrentPage(1);
     setHasSearched(false);
+    try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
+    setSearchParams({});
   };
   
   const handleDelete = async (id) => {

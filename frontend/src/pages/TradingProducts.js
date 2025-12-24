@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import storage from '../utils/sessionStore';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon, EyeIcon, CurrencyEuroIcon, CubeIcon } from '@heroicons/react/24/outline';
@@ -26,6 +27,96 @@ const TradingProducts = () => {
   });
   
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_trading || user?.can_write_suppliers;
+
+  const SESSION_KEY = 'trading_products_search_state';
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.filters) {
+        setSortBy(st.filters.sortBy || 'visitron_part_number');
+        setFilterSupplier(st.filters.filterSupplier || '');
+        setFilterActive(st.filters.filterActive || 'all');
+        setSearch(st.filters.search || '');
+      }
+      if (st.hasSearched) setHasSearched(true);
+      return { filters: st.filters || null };
+    } catch (e) {
+      console.warn('Failed to load trading products search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters: { sortBy, filterSupplier, filterActive, search }, hasSearched };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save trading products search state', e);
+    }
+  };
+
+  const handleSearch = () => {
+    const params = {};
+    if (sortBy) params.ordering = sortBy;
+    if (filterSupplier) params.supplier = filterSupplier;
+    if (filterActive && filterActive !== 'all') params.is_active = filterActive;
+    if (search) params.search = search;
+    setSearchParams(params);
+    setHasSearched(true);
+    setRefreshKey(prev => prev + 1);
+  };
+
+  // On mount prefer URL params; otherwise restore from localStorage and populate URL
+  useEffect(() => {
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      // let the searchParams effect handle fetching
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.filters) {
+      const params = {};
+      if (restored.filters.sortBy) params.ordering = restored.filters.sortBy;
+      if (restored.filters.filterSupplier) params.supplier = restored.filters.filterSupplier;
+      if (restored.filters.filterActive) params.is_active = restored.filters.filterActive;
+      if (restored.filters.search) params.search = restored.filters.search;
+      setSearchParams(params);
+    } else if (!restored && hasSearched) {
+      setRefreshKey(prev => prev + 1);
+      fetchProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // React to URL query param changes (back/forward navigation)
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newSort = params.ordering || 'visitron_part_number';
+      const newSupplier = params.supplier || '';
+      const newActive = params.is_active || 'all';
+      const newSearch = params.search || '';
+      setSortBy(newSort);
+      setFilterSupplier(newSupplier);
+      setFilterActive(newActive);
+      setSearch(newSearch);
+      setHasSearched(true);
+      setRefreshKey(prev => prev + 1);
+      // fetch to restore the list immediately when navigating back/forward
+      fetchProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
+    // persist state whenever relevant parts change
+    saveSearchState();
+  }, [sortBy, filterSupplier, filterActive, search, hasSearched]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -148,11 +239,12 @@ const TradingProducts = () => {
       
       url += '?' + params.toString();
       
-      console.log('Fetching products from:', url);
       const response = await api.get(url);
       const data = response.data.results || response.data;
-      console.log('Products loaded:', data.length, 'items');
       setProducts(Array.isArray(data) ? data : []);
+
+      // Persist immediately so localStorage is updated even if React effects are delayed
+      try { saveSearchState(); } catch (e) { console.warn('Could not persist trading products search state', e); }
     } catch (error) {
       console.error('Fehler beim Laden der Handelswaren:', error);
       setProducts([]);
@@ -245,17 +337,15 @@ const TradingProducts = () => {
       
       if (editingProduct) {
         await api.put(`/suppliers/products/${editingProduct.id}/`, submitData);
-        console.log('Product updated successfully');
+;
       } else {
         await api.post('/suppliers/products/', submitData);
-        console.log('Product created successfully');
       }
       setShowModal(false);
       resetForm();
       // Warte kurz, damit das Backend die Berechnung durchführen kann
       await new Promise(resolve => setTimeout(resolve, 150));
       // Erzwinge einen kompletten Neuaufbau der Liste
-      console.log('Triggering refresh...');
       setRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
@@ -427,7 +517,7 @@ const TradingProducts = () => {
               placeholder="Artikelnummer, Name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (setHasSearched(true), setRefreshKey(prev => prev + 1))}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
             />
           </div>
@@ -487,7 +577,7 @@ const TradingProducts = () => {
 
         <div className="mt-4">
           <button
-            onClick={() => { setHasSearched(true); setRefreshKey(prev => prev + 1); }}
+            onClick={() => handleSearch()}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700"
           >
             Suchen

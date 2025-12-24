@@ -88,11 +88,8 @@ const SalesOrderForm = () => {
       if (customerTerm) params.append('search', customerTerm);
       params.append('is_active', 'true');
       const res = await api.get(`/customers/customers/?${params.toString()}`);
-      console.log('API Response:', res.data);
       const data = res.data.results || res.data || [];
-      console.log('Processed data:', data);
       const list = Array.isArray(data) ? data : [];
-      console.log('Customer list:', list);
       // If exactly one result, auto-select it; otherwise show list
       if (list.length === 1) {
         setOrderDraft(prev => ({ ...prev, customer: list[0] }));
@@ -111,22 +108,16 @@ const SalesOrderForm = () => {
       const params = new URLSearchParams();
       if (quotationTerm) params.append('search', quotationTerm);
       const res = await api.get(`/sales/quotations/?${params.toString()}`);
-      console.log('API Response:', res.data);  // DEBUG: API Response
-      
       const data = res.data.results || res.data || [];
       const list = Array.isArray(data) ? data : [];
-      console.log('Processed list:', list, 'Length:', list.length);  // DEBUG: Processed list
       
       if (list.length === 1) {
-        console.log('Auto-selecting quotation with ID:', list[0].id);  // DEBUG: Auto-select
         // auto-select full quotation
         try {
           const r = await api.get(`/sales/quotations/${list[0].id}/`);
-          console.log('Full quotation response:', r.data);  // DEBUG: Full quotation
           const full = r.data;
           
           const mapped = (full.items || []).map(i => {
-            console.log('Mapping item:', i);  // DEBUG: Each item before mapping
             return {
               name: i.item_name || '',
               article_number: i.item_article_number || '',
@@ -144,7 +135,7 @@ const SalesOrderForm = () => {
             };
           });
           
-          console.log('Mapped items:', mapped);  // DEBUG: Mapped items
+
           setOrderDraft(prev => ({ ...prev, quotation: full, items: mapped }));
         } catch (err) {
           console.error('Fehler beim Laden des Angebots:', err);
@@ -152,7 +143,7 @@ const SalesOrderForm = () => {
         }
         setQuotations([]);
       } else {
-        console.log('Setting quotations list:', list);  // DEBUG: Setting list
+
         setQuotations(list);
       }
     } catch (e) {

@@ -49,11 +49,9 @@ const CompanyInfo = () => {
   const fetchCompanySettings = async () => {
     try {
       const response = await api.get('/company-info/');
-      console.log('API Response:', response.data);
       
       if (response.data && response.data.length > 0) {
         const settings = response.data[0];
-        console.log('Settings loaded:', settings);
         
         // Extrahiere document_header URL, aber setze nicht das File-Objekt
         const { document_header, managing_director, ...otherSettings } = settings;
@@ -77,7 +75,6 @@ const CompanyInfo = () => {
         }
       } else {
         // Keine Einstellungen gefunden - setze Defaults
-        console.log('No settings found, using defaults');
         setManagingDirectors(['']);
       }
     } catch (err) {

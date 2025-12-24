@@ -105,7 +105,6 @@ const CompanySettings = () => {
           }))
       };
       
-      console.log('Sending data:', JSON.stringify(submitData, null, 2));
       await api.put('/settings/company-settings/1/', submitData);
       alert('Einstellungen erfolgreich gespeichert');
       fetchSettings();

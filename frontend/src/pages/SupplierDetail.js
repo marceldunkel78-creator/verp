@@ -10,9 +10,7 @@ const SupplierDetail = () => {
 
   const fetchSupplier = useCallback(async () => {
     try {
-      console.log('Fetching supplier with ID:', id);
       const response = await api.get(`/suppliers/suppliers/${id}/`);
-      console.log('Supplier data received:', response.data);
       setSupplier(response.data);
     } catch (error) {
       console.error('Fehler beim Laden des Lieferanten:', error);

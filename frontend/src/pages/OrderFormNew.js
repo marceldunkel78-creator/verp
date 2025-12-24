@@ -174,36 +174,26 @@ const OrderFormNew = () => {
   const fetchInitialData = async () => {
     try {
       // Fetch suppliers
-      console.log('Fetching suppliers...');
       const suppliersRes = await api.get('/suppliers/suppliers/?is_active=true');
       const supplierData = suppliersRes.data.results || suppliersRes.data;
       setSuppliers(Array.isArray(supplierData) ? supplierData : []);
-      console.log('✓ Loaded suppliers:', supplierData.length);
       
       // Fetch users
-      console.log('Fetching users...');
       const usersRes = await api.get('/users/');
       const userData = usersRes.data.results || usersRes.data;
       setUsers(Array.isArray(userData) ? userData : []);
-      console.log('✓ Loaded users:', userData.length);
       
       // Fetch payment terms
-      console.log('Fetching payment terms...');
       const paymentRes = await api.get('/settings/payment-terms/');
       setPaymentTerms(Array.isArray(paymentRes.data) ? paymentRes.data : (paymentRes.data.results || []));
-      console.log('✓ Loaded payment terms:', paymentRes.data.length || (paymentRes.data.results || []).length);
       
       // Fetch delivery terms
-      console.log('Fetching delivery terms...');
       const deliveryTermsRes = await api.get('/settings/delivery-terms/');
       setDeliveryTerms(Array.isArray(deliveryTermsRes.data) ? deliveryTermsRes.data : (deliveryTermsRes.data.results || []));
-      console.log('✓ Loaded delivery terms:', deliveryTermsRes.data.length || (deliveryTermsRes.data.results || []).length);
       
       // Fetch delivery instructions
-      console.log('Fetching delivery instructions...');
       const deliveryInstRes = await api.get('/settings/delivery-instructions/');
       setDeliveryInstructions(Array.isArray(deliveryInstRes.data) ? deliveryInstRes.data : (deliveryInstRes.data.results || []));
-      console.log('✓ Loaded delivery instructions:', deliveryInstRes.data.length || (deliveryInstRes.data.results || []).length);
       
       // Set default user as current logged in user (prefer auth context user)
       if (!isEditMode) {
@@ -284,7 +274,6 @@ const OrderFormNew = () => {
       if (order.order_type !== 'online') {
         warmupPdf(order.id).catch(() => {});
       } else {
-        console.log('FetchOrder: online order detected, skipping warmup');
       }
     } catch (error) {
       console.error('Fehler beim Laden der Bestellung:', error);
@@ -655,11 +644,11 @@ const OrderFormNew = () => {
           }
           return url;
         });
-        console.log(`warmupPdf: generated PDF URL on attempt ${i+1}`);
+    
         return url;
       } catch (error) {
         lastErr = error;
-        console.log(`warmupPdf: attempt ${i+1} failed, retrying in ${delayMs}ms`);
+
         // wait a bit
         await new Promise(res => setTimeout(res, delayMs));
       }
@@ -691,7 +680,7 @@ const OrderFormNew = () => {
     }
 
     // Debugging: log controlling flags when attempting to save
-    console.log('handleSave: status=', formData.status, 'confirmation_date=', formData.confirmation_date, 'controlling_flags=', formData.items.map(i => !!i.controlling_checked));
+
 
     setLoading(true);
     try {
@@ -735,29 +724,25 @@ const OrderFormNew = () => {
           const response = await api.put(`/orders/orders/${id}/`, formDataObj, {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
-          console.log('Order save response (file upload edit):', response?.data);
+  
           // If server returned updated data, ensure local state has id/order_number
           if (response?.data?.id) {
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
             // warm up PDF
-            console.log('Starting PDF warmup for order', response.data.id, 'order_type=', response.data.order_type);
             if (response.data.order_type !== 'online') {
               await warmupPdf(response.data.id);
-            } else {
-              console.log('Order is online; skipping PDF warmup.');
             }
           }
         } else {
           const response = await api.post('/orders/orders/', formDataObj, {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
-          console.log('Order save response (file upload create):', response?.data);
+
           if (response?.data?.id) {
             // Update local state so PDF buttons and order number are immediately available
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
 
             // Warm up PDF in background (no auto-open)
-            console.log('Starting PDF warmup for order', response.data.id);
             setTimeout(() => setPdfStatus(null), 12000);
             const pdfUrl = await warmupPdf(response.data.id);
             if (pdfUrl) {
@@ -780,12 +765,11 @@ const OrderFormNew = () => {
 
         if (isEditMode) {
           const response = await api.put(`/orders/orders/${id}/`, dataToSubmit);
-          console.log('Order save response (edit):', response?.data);
+
           if (response?.data?.id) {
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
 
             // Warm up PDF in background (no auto-open) unless order_type is 'online'
-            console.log('Starting PDF warmup for order', response.data.id, 'order_type=', response.data.order_type);
             if (response.data.order_type !== 'online') {
               setPdfStatus('opening');
               setTimeout(() => setPdfStatus(null), 12000);
@@ -798,18 +782,16 @@ const OrderFormNew = () => {
                 setTimeout(() => setPdfStatus(null), 12000);
               }
             } else {
-              console.log('Order is online; skipping PDF warmup.');
             }
           }
         } else {
           const response = await api.post('/orders/orders/', dataToSubmit);
-          console.log('Order save response (create):', response?.data);
+
           // Bei neuer Bestellung: zur Edit-Seite navigieren, damit weitere Bearbeitungen möglich sind
           if (response?.data?.id) {
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
 
             // Warm up PDF in background (no auto-open) unless order_type is 'online'
-            console.log('Starting PDF warmup for order', response.data.id, 'order_type=', response.data.order_type);
             if (response.data.order_type !== 'online') {
               setPdfStatus('opening');
               setTimeout(() => setPdfStatus(null), 12000);
@@ -822,7 +804,6 @@ const OrderFormNew = () => {
                 setTimeout(() => setPdfStatus(null), 12000);
               }
             } else {
-              console.log('Order is online; skipping PDF warmup.');
             }
 
             navigate(`/procurement/orders/${response.data.id}/edit`, { replace: true });

@@ -150,7 +150,6 @@ const Customers = () => {
       // Persist immediately so localStorage is updated even if React effects are delayed
       try {
         saveSearchState();
-        console.log('Customers search state saved', storage.get(SESSION_KEY));
       } catch (e) { console.warn('Could not persist customers search state', e); }
 
       if (pageArg) setCurrentPage(page);

@@ -204,7 +204,6 @@ const Suppliers = () => {
       // Persist immediately
       try {
         saveSearchState();
-        console.log('Suppliers search state saved', storage.get(SESSION_KEY));
       } catch (e) { console.warn('Could not persist suppliers search state', e); }
 
       if (pageArg) setCurrentPage(page);

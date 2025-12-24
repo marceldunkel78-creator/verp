@@ -208,10 +208,6 @@ const QuotationForm = () => {
       const response = await api.get(`/sales/quotations/${id}/`);
       const quotation = response.data;
       
-      console.log('FRONTEND DEBUG: Loaded quotation:', quotation);
-      console.log('FRONTEND DEBUG: Quotation items:', quotation.items);
-      console.log('FRONTEND DEBUG: Items count:', quotation.items?.length || 0);
-      
       // Items müssen die neuen Felder enthalten
       const mappedItems = (quotation.items || []).map(item => ({
         id: item.id,
@@ -232,12 +228,12 @@ const QuotationForm = () => {
         notes: item.notes || ''
       }));
       
-      console.log('FRONTEND DEBUG: Mapped items:', mappedItems);
+
       
       // Update position numbers after loading items
       const itemsWithPositions = updatePositionNumbers(mappedItems);
       
-      console.log('FRONTEND DEBUG: Items with positions:', itemsWithPositions);
+
       
       setFormData({
         customer: quotation.customer || '',
@@ -555,31 +551,30 @@ const QuotationForm = () => {
         };
       });
       
-      console.log('FRONTEND DEBUG: Submitting quotation with items:', items.length);
-      console.log('FRONTEND DEBUG: First 2 items:', items.slice(0, 2));
-      console.log('FRONTEND DEBUG: All items:', items);
+
+
+
       
       // Items als JSON-String senden
       const itemsJson = JSON.stringify(items);
-      console.log('FRONTEND DEBUG: Items JSON:', itemsJson);
       submitData.append('items', itemsJson);
 
-      console.log('FRONTEND DEBUG: Sending request to:', isEditMode ? `/sales/quotations/${id}/` : '/sales/quotations/');
+
       
       let response;
       if (isEditMode) {
-        console.log('FRONTEND DEBUG: PUT request for quotation', id);
+
         response = await api.put(`/sales/quotations/${id}/`, submitData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       } else {
-        console.log('FRONTEND DEBUG: POST request for new quotation');
+
         response = await api.post('/sales/quotations/', submitData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       }
 
-      console.log('FRONTEND DEBUG: Response received:', response.data);
+
       alert(`Angebot erfolgreich ${isEditMode ? 'aktualisiert' : 'erstellt'}!`);
       
       // Bei neuem Angebot zur Detail-Seite navigieren, bei Edit bleiben

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import storage from '../utils/sessionStore';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon, CurrencyEuroIcon } from '@heroicons/react/24/outline';
@@ -21,6 +22,75 @@ const MaterialSupplies = () => {
   const [calculatedPurchasePrice, setCalculatedPurchasePrice] = useState(0);
   
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_material_supplies || user?.can_write_manufacturing;
+
+  const SESSION_KEY = 'material_supplies_search_state';
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.filters) {
+        setSortBy(st.filters.sortBy || 'visitron_part_number');
+        setFilterSupplier(st.filters.filterSupplier || '');
+        setFilterActive(st.filters.filterActive || 'all');
+      }
+      if (st.hasSearched) setRefreshKey(prev => prev + 1);
+      return { filters: st.filters || null };
+    } catch (e) {
+      console.warn('Failed to load material supplies search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { filters: { sortBy, filterSupplier, filterActive } };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save material supplies search state', e);
+    }
+  };
+
+  useEffect(() => {
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.filters) {
+      const params = {};
+      if (restored.filters.sortBy) params.ordering = restored.filters.sortBy;
+      if (restored.filters.filterSupplier) params.supplier = restored.filters.filterSupplier;
+      if (restored.filters.filterActive) params.is_active = restored.filters.filterActive;
+      setSearchParams(params);
+    } else if (!restored) {
+      setRefreshKey(prev => prev + 1);
+      fetchProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newSort = params.ordering || 'visitron_part_number';
+      const newSupplier = params.supplier || '';
+      const newActive = params.is_active || 'all';
+      setSortBy(newSort);
+      setFilterSupplier(newSupplier);
+      setFilterActive(newActive);
+      setRefreshKey(prev => prev + 1);
+      fetchProducts();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
+    saveSearchState();
+  }, [sortBy, filterSupplier, filterActive]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -122,6 +192,9 @@ const MaterialSupplies = () => {
       const response = await api.get(url);
       const data = response.data.results || response.data;
       setProducts(Array.isArray(data) ? data : []);
+
+      // Persist immediately
+      try { saveSearchState(); } catch (e) { console.warn('Could not persist material supplies search state', e); }
     } catch (error) {
       console.error('Fehler beim Laden der Material & Supplies:', error);
       setProducts([]);
