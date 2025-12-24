@@ -2,11 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { 
-  PlusIcon, ShoppingCartIcon, CheckCircleIcon, 
-  TruckIcon, BanknotesIcon, ClockIcon,
-  EyeIcon, PencilIcon, TrashIcon, ArrowUturnLeftIcon,
+  PlusIcon, ShoppingCartIcon, PencilIcon, TrashIcon, ArrowUturnLeftIcon,
   DocumentTextIcon, BuildingOfficeIcon, CalendarIcon,
-  ChevronLeftIcon, ChevronRightIcon, CurrencyEuroIcon
+  ChevronLeftIcon, ChevronRightIcon, EyeIcon, CurrencyEuroIcon
 } from '@heroicons/react/24/outline';
 
 const Orders = () => {
@@ -48,11 +46,18 @@ const Orders = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (hasSearched) {
       fetchOrders();
     }
   }, [currentPage]);
+
+  // Persist state whenever relevant parts change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    saveSearchState();
+  }, [filters, currentPage, orders, totalPages, hasSearched]);
 
   const loadSearchState = () => {
     try {
@@ -180,7 +185,7 @@ const Orders = () => {
     
     const orderNum = parseInt(parts[1]);
     const monthYear = parts[2]; // "12/25"
-    const [month, year] = monthYear.split('/');
+    const [, year] = monthYear.split('/');
     const orderYear = 2000 + parseInt(year); // 25 -> 2025
     
     const currentYear = new Date().getFullYear();
@@ -305,24 +310,7 @@ const Orders = () => {
     }
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'angelegt':
-        return <ClockIcon className="h-5 w-5 text-gray-500" />;
-      case 'bestellt':
-        return <ShoppingCartIcon className="h-5 w-5 text-blue-500" />;
-      case 'bestaetigt':
-        return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
-      case 'geliefert':
-        return <TruckIcon className="h-5 w-5 text-purple-500" />;
-      case 'bezahlt':
-        return <BanknotesIcon className="h-5 w-5 text-emerald-500" />;
-      case 'zahlung_on_hold':
-        return <BanknotesIcon className="h-5 w-5 text-orange-500" />;
-      default:
-        return <ClockIcon className="h-5 w-5 text-gray-500" />;
-    }
-  };
+
 
   const getStatusColor = (status) => {
     switch (status) {

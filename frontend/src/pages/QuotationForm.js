@@ -16,7 +16,6 @@ const QuotationForm = () => {
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [deliveryTerms, setDeliveryTerms] = useState([]);
   const [users, setUsers] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
   const [collapsedGroups, setCollapsedGroups] = useState({});
   
   const [formData, setFormData] = useState({
@@ -48,18 +47,20 @@ const QuotationForm = () => {
     items: []
   });
   
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchInitialData();
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (id) {
       fetchQuotation();
     }
   }, [id]);
   
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (formData.customer) {
       loadCustomerDetails(formData.customer);
@@ -186,8 +187,6 @@ const QuotationForm = () => {
       setUsers(usersRes.data.results || usersRes.data || []);
       
       const user = currentUserRes.data;
-      setCurrentUser(user);
-      
       // Set default user for new quotations
       if (!isEditMode) {
         setFormData(prev => ({
@@ -273,7 +272,6 @@ const QuotationForm = () => {
 
   const loadCustomerDetails = async (customerId) => {
     if (!customerId) {
-      setSelectedCustomer(null);
       setCustomerAddresses([]);
       return;
     }
@@ -281,8 +279,7 @@ const QuotationForm = () => {
     try {
       const response = await api.get(`/customers/customers/${customerId}/`);
       const customer = response.data;
-      setSelectedCustomer(customer);
-      setCustomerAddresses(customer.addresses || []);
+setCustomerAddresses(customer.addresses || []);
       
       // Setze Kundensprache als Standard
       if (customer.language && !isEditMode) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+
 import api from '../services/api';
 import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import CalendarMonth from '../components/CalendarMonth';
@@ -12,7 +12,6 @@ const MyVERP = () => {
   const [vacationRequests, setVacationRequests] = useState([]);
   const [weeklyReport, setWeeklyReport] = useState(null);
   const [monthlyReport, setMonthlyReport] = useState(null);
-  const [me, setMe] = useState(null);
   const [employeeDetails, setEmployeeDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
@@ -31,7 +30,7 @@ const MyVERP = () => {
         vacation: api.get('/users/vacation-requests/'),
         report: api.get('/users/time-entries/weekly_report/'),
         month: api.get('/users/time-entries/monthly_report/'),
-        me: api.get('/users/me/')
+
       };
 
       const keys = Object.keys(endpoints);
@@ -48,7 +47,7 @@ const MyVERP = () => {
           else if (key === 'vacation') setVacationRequests(data.results || data);
           else if (key === 'report') setWeeklyReport(res.value.data);
           else if (key === 'month') setMonthlyReport(res.value.data);
-          else if (key === 'me') setMe(res.value.data);
+
         } else {
           // missing or failing endpoint — don't break the whole page
           const msg = res.reason?.response?.status
@@ -66,7 +65,6 @@ const MyVERP = () => {
     // additionally fetch /users/me and employee details (separate call)
     try {
       const meRes = await api.get('/users/me/');
-      setMe(meRes.data);
       try {
         const empRes = await api.get('/users/employees/me/');
         setEmployeeDetails(empRes.data || null);
@@ -604,24 +602,7 @@ const getBavarianHolidays = (year) => {
   return Array.from(new Set([...fixed, ...variable]));
 };
 
-const countWorkingDays = (startStr, endStr, work_days) => {
-  if (!startStr || !endStr) return 0;
-  const start = new Date(startStr);
-  const end = new Date(endStr);
-  if (end < start) return 0;
-  const mapping = {0:'sun',1:'mon',2:'tue',3:'wed',4:'thu',5:'fri',6:'sat'};
-  const indices = [];
-  for (let i=0;i<7;i++) if (work_days.includes(mapping[i])) indices.push(i);
-  const holidays = getBavarianHolidays(start.getFullYear()).concat(start.getFullYear()===end.getFullYear()?[]:getBavarianHolidays(end.getFullYear()));
-  let cur = new Date(start);
-  let count = 0;
-  while (cur <= end) {
-    const iso = cur.toISOString().slice(0,10);
-    if (!holidays.includes(iso) && indices.includes(cur.getDay())) count += 1;
-    cur.setDate(cur.getDate()+1);
-  }
-  return count;
-};
+
 
 // compute requested days more robustly: consider if start/end are non-working days so half-day flags only apply when that day counts
 const computeRequestedDays = (startStr, endStr, work_days, startHalf=false, endHalf=false) => {
@@ -664,15 +645,6 @@ const computeRequestedDays = (startStr, endStr, work_days, startHalf=false, endH
 };
 
 const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) => {
-  const statusLabel = (s) => {
-    switch (s) {
-      case 'approved': return 'Genehmigt';
-      case 'rejected': return 'Abgelehnt';
-      case 'cancelled': return 'Storniert';
-      case 'pending': return 'Ausstehend';
-      default: return s;
-    }
-  }
   const [showModal, setShowModal] = React.useState(false);
   const [form, setForm] = React.useState({ start_date: '', end_date: '', start_half: 'none', end_half: 'none', reason: '' });
   const [previewDays, setPreviewDays] = React.useState(0);

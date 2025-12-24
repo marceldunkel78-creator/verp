@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import CustomerModal from '../components/CustomerModal';
 import storage from '../utils/sessionStore';
 import { 
   PlusIcon, PencilIcon, TrashIcon, UserIcon,
-  PhoneIcon, EnvelopeIcon, MapPinIcon, GlobeAltIcon,
+  PhoneIcon, EnvelopeIcon, GlobeAltIcon,
   BuildingOfficeIcon, BeakerIcon, AcademicCapIcon
 } from '@heroicons/react/24/outline';
-
 const Customers = () => {
-  const { user } = useAuth();
+
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,14 +84,16 @@ const Customers = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (hasSearched) {
       fetchCustomers();
     }
   }, [currentPage]);
 
+  // Persist state whenever relevant parts change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // persist state whenever relevant parts change
     saveSearchState();
   }, [filters, currentPage, customers, totalPages, hasSearched]);
 

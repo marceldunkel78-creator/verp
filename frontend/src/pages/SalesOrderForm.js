@@ -192,6 +192,7 @@ const SalesOrderForm = () => {
   }, [params]);
 
   // Load products when entering items tab and no quotation is selected
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (step === 2 && !orderDraft.quotation && (!tradingProducts.length || !assets.length)) {
       loadProducts();
@@ -362,6 +363,7 @@ const SalesOrderForm = () => {
     setOrderDraft(prev => ({ ...prev, documentFile: file, documentPreview: url }));
   };
 
+  // eslint-disable-next-line no-unused-vars
   const gotoNext = () => setStep(s => Math.min(3, s + 1));
   const gotoPrev = () => setStep(s => Math.max(1, s - 1));
 
@@ -471,14 +473,14 @@ const SalesOrderForm = () => {
 
       if (id) {
         // Update existing
-        const res = await api.patch(`/customer-orders/customer-orders/${id}/`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.patch(`/customer-orders/customer-orders/${id}/`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('Kundenauftrag erfolgreich aktualisiert.');
       } else {
-        const res = await api.post('/customer-orders/customer-orders/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+        const response = await api.post('/customer-orders/customer-orders/', form, { headers: { 'Content-Type': 'multipart/form-data' } });
         alert('Kundenauftrag erfolgreich erstellt.');
         
         // Adressen zu Kundendaten hinzufügen, falls gewünscht
-        await addAddressesToCustomer(res.data.id);
+        await addAddressesToCustomer(response.data.id);
       }
       navigate('/sales/order-processing');
     } catch (e) {
@@ -510,6 +512,7 @@ const SalesOrderForm = () => {
     setOrderDraft(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     

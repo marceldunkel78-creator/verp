@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
-  BanknotesIcon, TruckIcon
+  BanknotesIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {

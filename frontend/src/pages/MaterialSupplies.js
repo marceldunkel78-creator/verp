@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import storage from '../utils/sessionStore';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusIcon, PencilIcon, TrashIcon, CurrencyEuroIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 const MaterialSupplies = () => {
   const { user } = useAuth();
@@ -88,6 +88,8 @@ const MaterialSupplies = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // persist state whenever relevant parts change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     saveSearchState();
   }, [sortBy, filterSupplier, filterActive]);
@@ -121,6 +123,7 @@ const MaterialSupplies = () => {
     is_active: true,
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchProducts();
     fetchSuppliers();
@@ -128,6 +131,7 @@ const MaterialSupplies = () => {
   }, [sortBy, filterSupplier, filterActive, refreshKey]);
 
   // Berechne Einkaufspreis live bei Formular-Änderungen
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     calculatePurchasePrice();
   }, [

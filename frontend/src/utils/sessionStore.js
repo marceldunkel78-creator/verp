@@ -45,9 +45,11 @@ export function clearNamespace() {
   }
 }
 
-export default {
+const sessionStore = {
   get: getSession,
   set: setSession,
   remove: removeSession,
   clear: clearNamespace
 };
+
+export default sessionStore;

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import storage from '../utils/sessionStore';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusIcon, PencilIcon, TrashIcon, EyeIcon, CurrencyEuroIcon, CubeIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, CubeIcon } from '@heroicons/react/24/outline';
 
 const TradingProducts = () => {
   const { user } = useAuth();
@@ -148,6 +148,7 @@ const TradingProducts = () => {
     is_active: true,
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Load static helper data always
     fetchSuppliers();
@@ -163,6 +164,7 @@ const TradingProducts = () => {
   }, [sortBy, filterSupplier, filterActive, refreshKey, hasSearched]);
 
   // Berechne Preise live bei Formular-Änderungen
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     calculatePrices();
   }, [
@@ -304,6 +306,7 @@ const TradingProducts = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const loadExchangeRate = () => {
     const currency = formData.list_price_currency;
     if (currency === 'EUR') {

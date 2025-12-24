@@ -12,6 +12,7 @@ const OrderDetail = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchOrder();
   }, [id]);
@@ -29,6 +30,7 @@ const OrderDetail = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleEdit = async () => {
     if (order.status === 'angelegt') {
       navigate(`/procurement/orders/${id}/edit`);
@@ -118,6 +120,7 @@ const OrderDetail = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleDelete = async () => {
     if (!window.confirm('Möchten Sie diese Bestellung wirklich löschen?')) {
       return;

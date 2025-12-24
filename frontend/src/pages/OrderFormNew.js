@@ -143,6 +143,7 @@ const OrderFormNew = () => {
     { id: 6, name: 'Bezahlung', icon: CurrencyEuroIcon, enabled: isEditMode || formData.status === 'geliefert' || formData.status === 'bezahlt' },
   ];
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchInitialData();
     
@@ -165,6 +166,7 @@ const OrderFormNew = () => {
     }
   }, [authUser, isEditMode, formData.created_by]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (id) {
       fetchOrder();

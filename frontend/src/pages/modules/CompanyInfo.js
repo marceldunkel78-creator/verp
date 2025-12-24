@@ -4,7 +4,6 @@ import api from '../../services/api';
 import { 
   BuildingOfficeIcon, 
   PhoneIcon, 
-  EnvelopeIcon, 
   BanknotesIcon,
   DocumentTextIcon,
   PhotoIcon,
@@ -148,11 +147,10 @@ const CompanyInfo = () => {
       // Prüfe ob Einstellungen bereits existieren
       const existingSettings = await api.get('/company-info/');
       
-      let response;
       if (existingSettings.data && existingSettings.data.length > 0) {
         // Update - verwende die ID aus der Liste
         const settingsId = existingSettings.data[0].id;
-        response = await api.put(
+        await api.put(
           `/company-info/${settingsId}/`,
           submitData,
           {
@@ -163,7 +161,7 @@ const CompanyInfo = () => {
         );
       } else {
         // Falls keine Einstellungen existieren, verwende PUT mit ID 1 (Singleton)
-        response = await api.put(
+        await api.put(
           '/company-info/1/',
           submitData,
           {

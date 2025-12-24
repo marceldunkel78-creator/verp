@@ -131,12 +131,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
     setAddresses(updated);
   };
 
-  const setAddressPosition = (index, latlng) => {
-    const updated = [...addresses];
-    updated[index].latitude = latlng.lat;
-    updated[index].longitude = latlng.lng;
-    setAddresses(updated);
-  };
+
 
   // Phone functions
   const addPhone = () => {
@@ -520,6 +515,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
                     <div className="p-4 bg-gray-50" style={{ height: '500px' }}>
                       {selectedAddress?.latitude && selectedAddress?.longitude ? (
                         <iframe
+                          title={`customer-address-map-${selectedAddressIndex}`}
                           width="100%"
                           height="100%"
                           frameBorder="0"

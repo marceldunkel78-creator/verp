@@ -78,12 +78,14 @@ const Quotations = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (hasSearched) {
       fetchQuotations();
     }
   }, [currentPage]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     // persist state whenever relevant parts change
     saveSearchState();
@@ -111,9 +113,7 @@ const Quotations = () => {
   }, [searchParams]);
 
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_sales;
-  
 
-  
   const fetchUsers = async () => {
     try {
       const response = await api.get('/users/');
@@ -123,7 +123,12 @@ const Quotations = () => {
       setUsers([]);
     }
   };
-  
+
+  // Load users once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchUsers();
+  }, []);
   const fetchQuotations = async (pageArg = null, filtersArg = null) => {
     const page = pageArg || currentPage;
     const useFilters = filtersArg || filters;

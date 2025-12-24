@@ -55,7 +55,6 @@ const getMonthMatrix = (year, month) => {
   return weeks;
 };
 
-const isSameDate = (a,b) => a && b && iso(a) === iso(b);
 
 export default function CalendarMonth({ year, month, vacationRequests = [], onSelect }){
   const today = new Date();
@@ -75,7 +74,6 @@ export default function CalendarMonth({ year, month, vacationRequests = [], onSe
   const monthMatrix = useMemo(() => getMonthMatrix(curYear,curMonth), [curYear,curMonth]);
   const approvedSet = useMemo(()=> buildDatesSetFiltered(vacationRequests, req => req.status === 'approved'), [vacationRequests]);
   const pendingSet = useMemo(()=> buildDatesSetFiltered(vacationRequests, req => req.status === 'pending'), [vacationRequests]);
-  const vacationSet = useMemo(()=> buildDatesSet(vacationRequests), [vacationRequests]);
 
   const prevMonth = () => {
     if (curMonth === 1) { setCurMonth(12); setCurYear(curYear - 1); }
@@ -93,7 +91,8 @@ export default function CalendarMonth({ year, month, vacationRequests = [], onSe
 
   useEffect(()=>{
     if (onSelect) onSelect({ start, end });
-  }, [start,end]);
+    // include onSelect in deps to satisfy lint rule
+  }, [start,end,onSelect]);
 
   const onDayClick = (d) => {
     const dayIso = iso(d);
@@ -169,8 +168,7 @@ export default function CalendarMonth({ year, month, vacationRequests = [], onSe
             {week.map((d, di) => {
               const dayIso = iso(d);
               const inMonth = d.getMonth() === (curMonth-1);
-              const isVacation = vacationSet.has(dayIso);
-              const selected = inRange(d);
+                          const selected = inRange(d);
               const startMark = isStart(d);
               const endMark = isEnd(d);
 

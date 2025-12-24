@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import storage from '../utils/sessionStore';
 import {
   PlusIcon, EyeIcon, PencilIcon, TrashIcon,
-  DocumentTextIcon, CalendarIcon, UserIcon, ClockIcon
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 const OrderProcessing = () => {
@@ -72,10 +72,12 @@ const OrderProcessing = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (hasSearched) fetchOrders();
   }, [currentPage]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     saveSearchState();
   }, [filters, currentPage, orders, totalPages, hasSearched]);
