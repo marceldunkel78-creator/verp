@@ -11,6 +11,18 @@ python manage.py makemigrations
 python manage.py migrate
 
 
+SECRET_KEY konfigurieren (empfohlen für Produktion):
+- Generiere einen sicheren SECRET_KEY:
+  cd backend
+  python tools/generate_secret_key.py
+
+- Setze die Umgebungsvariable (PowerShell, einmalig für die Sitzung):
+  $env:SECRET_KEY = "<kopierten_key_hier>"
+
+- Für dauerhaftes Setzen unter Windows (Systemweite Umgebungsvariable):
+  setx SECRET_KEY "<kopierten_key_hier>"
+
+
 Superuser erstellen bei activated venv
 python manage.py createsuperuser
 
