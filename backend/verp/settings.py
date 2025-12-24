@@ -10,12 +10,20 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-change-this-in-production-!@#$%^&*()'
+# Read SECRET_KEY from environment in production; fallback to the
+# development key defined previously.
+ENV_SECRET_KEY = os.environ.get('SECRET_KEY')
+if ENV_SECRET_KEY:
+    SECRET_KEY = ENV_SECRET_KEY
+else:
+    # Keep the existing (insecure) default as a fallback for local dev.
+    SECRET_KEY = 'django-insecure-change-this-in-production-!@#$%^&*()'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG should be disabled in production. Control via DJANGO_DEBUG env var.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']
+# ALLOWED_HOSTS can be provided via comma-separated env var, default to localhost
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -42,6 +50,7 @@ INSTALLED_APPS = [
     'verp_settings',
     'company',
     'sales',
+    'inventory',
 ]
 
 MIDDLEWARE = [
@@ -164,3 +173,11 @@ CORS_ALLOW_CREDENTIALS = True
 # Media files (uploads)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Security-related settings (sane defaults; override via environment variables)
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get('SECURE_HSTS_INCLUDE_SUBDOMAINS', 'True') == 'True'
+SECURE_HSTS_PRELOAD = os.environ.get('SECURE_HSTS_PRELOAD', 'True') == 'True'
+SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'True') == 'True'
+SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'True') == 'True'
+CSRF_COOKIE_SECURE = os.environ.get('CSRF_COOKIE_SECURE', 'True') == 'True'
