@@ -236,3 +236,83 @@ class CustomerEmail(models.Model):
     
     def __str__(self):
         return f"{self.customer} - {self.email}"
+
+
+class CustomerSystem(models.Model):
+    """
+    Kundensysteme (z.B. installierte Geräte/Systeme)
+    """
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name='systems',
+        verbose_name='Kunde'
+    )
+    
+    system_number = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='Systemnummer',
+        help_text='Automatisch generierte Systemnummer'
+    )
+    
+    name = models.CharField(max_length=200, verbose_name='Systemname')
+    system_type = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Systemtyp'
+    )
+    description = models.TextField(blank=True, verbose_name='Beschreibung')
+    installation_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Installationsdatum'
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Kundensystem'
+        verbose_name_plural = 'Kundensysteme'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        if self.system_number:
+            return f"{self.system_number} - {self.name}"
+        return self.name
+    
+    def save(self, *args, **kwargs):
+        if not self.system_number:
+            self.system_number = self._generate_system_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_system_number():
+        """Generiert die nächste freie Systemnummer im Format S-XXXXX"""
+        existing_numbers = CustomerSystem.objects.filter(
+            system_number__isnull=False
+        ).values_list('system_number', flat=True)
+        
+        if not existing_numbers:
+            return 'S-00001'
+        
+        # Extrahiere Nummern und finde Maximum
+        numeric_numbers = []
+        for num in existing_numbers:
+            try:
+                numeric_part = int(num.split('-')[1])
+                numeric_numbers.append(numeric_part)
+            except (ValueError, IndexError):
+                continue
+        
+        if not numeric_numbers:
+            return 'S-00001'
+        
+        next_number = max(numeric_numbers) + 1
+        return f'S-{next_number:05d}'
+

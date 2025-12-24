@@ -100,6 +100,81 @@ class OrderViewSet(viewsets.ModelViewSet):
                 {'error': str(e), 'details': error_details}, 
                 status=500
             )
+    
+    @action(detail=True, methods=['post'])
+    def transfer_to_incoming_goods(self, request, pk=None):
+        """Überträgt Bestellpositionen in den Wareneingang"""
+        from inventory.models import IncomingGoods
+        
+        order = self.get_object()
+        
+        # Prüfe ob Order bestätigt ist
+        if order.status not in ['bestaetigt', 'geliefert', 'bezahlt']:
+            return Response(
+                {'error': 'Nur bestätigte Bestellungen können in den Wareneingang übertragen werden.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Hole die zu übertragenden Positionen aus dem Request
+        item_ids = request.data.get('item_ids', [])
+        
+        if not item_ids:
+            return Response(
+                {'error': 'Keine Positionen zum Übertragen ausgewählt.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        transferred_count = 0
+        errors = []
+        
+        for item_id in item_ids:
+            try:
+                order_item = OrderItem.objects.get(id=item_id, order=order)
+                
+                # Prüfe ob bereits im Wareneingang
+                existing = IncomingGoods.objects.filter(order_item=order_item, is_transferred=False).first()
+                if existing:
+                    errors.append(f'Position {order_item.position} ist bereits im Wareneingang.')
+                    continue
+                
+                # Erstelle Wareneingangsposition
+                IncomingGoods.objects.create(
+                    order_item=order_item,
+                    article_number=order_item.article_number,
+                    name=order_item.name,
+                    description=order_item.description,
+                    delivered_quantity=order_item.quantity,
+                    unit=order_item.unit,
+                    purchase_price=order_item.final_price,
+                    currency=order_item.currency,
+                    item_function='TRADING_GOOD',  # Default, kann im Wareneingang editiert werden
+                    item_category='',
+                    serial_number='',
+                    trading_product=order_item.trading_product,
+                    material_supply=order_item.material_supply,
+                    supplier=order.supplier,
+                    order_number=order.order_number,
+                    customer_order_number=order_item.customer_order_number,
+                    management_info=order_item.management_info or {},
+                    created_by=request.user
+                )
+                
+                transferred_count += 1
+                
+            except OrderItem.DoesNotExist:
+                errors.append(f'Position mit ID {item_id} nicht gefunden.')
+            except Exception as e:
+                errors.append(f'Fehler bei Position ID {item_id}: {str(e)}')
+        
+        response_data = {
+            'message': f'{transferred_count} Position(en) wurden in den Wareneingang übertragen.',
+            'transferred_count': transferred_count
+        }
+        
+        if errors:
+            response_data['errors'] = errors
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):

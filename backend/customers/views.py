@@ -1,8 +1,10 @@
 from rest_framework import viewsets, filters
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
-from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail
+from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerSystem
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
     CustomerCreateUpdateSerializer, CustomerAddressSerializer,
@@ -52,6 +54,24 @@ class CustomerViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['get'])
+    def systems(self, request, pk=None):
+        """Hole alle Systeme eines Kunden"""
+        customer = self.get_object()
+        systems = customer.systems.filter(is_active=True)
+        data = [
+            {
+                'id': sys.id,
+                'system_number': sys.system_number,
+                'name': sys.name,
+                'system_type': sys.system_type,
+                'description': sys.description,
+                'installation_date': sys.installation_date,
+            }
+            for sys in systems
+        ]
+        return Response(data)
 
 
 class CustomerAddressViewSet(viewsets.ModelViewSet):

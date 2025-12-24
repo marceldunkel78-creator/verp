@@ -30,6 +30,8 @@ urlpatterns = [
     path('api/settings/', include('verp_settings.urls')),
     path('api/company-info/', include('company.urls')),
     path('api/sales/', include('sales.urls')),
+    path('api/inventory/', include('inventory.urls')),
+    path('api/projects/', include('projects.urls')),
 ]
 
 if settings.DEBUG:
