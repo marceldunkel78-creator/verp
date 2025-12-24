@@ -1,13 +1,9 @@
 import React from 'react';
 import ComingSoon from './ComingSoon';
 import EmployeeList from '../EmployeeList';
+import InventoryManagementModule from './InventoryManagement';
 
-export const InventoryManagement = () => (
-  <ComingSoon 
-    moduleName="Inventory Management" 
-    description="Lagerverwaltung, Bestände und Logistik"
-  />
-);
+export const InventoryManagement = () => <InventoryManagementModule />;
 
 // SalesOrderManagement is now imported directly from its own file
 

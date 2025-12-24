@@ -24,6 +24,9 @@ import PaymentDeliverySettings from './pages/PaymentDeliverySettings';
 import EmployeeList from './pages/EmployeeList';
 import MyVERP from './pages/MyVERP';
 import Layout from './components/Layout';
+import Inventory from './pages/Inventory';
+import Projects from './pages/Projects';
+import ProjectEdit from './pages/ProjectEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -54,6 +57,7 @@ function App() {
             <Route path="finance" element={<Finance />} />
             <Route path="procurement" element={<Procurement />} />
             <Route path="inventory" element={<InventoryManagement />} />
+            <Route path="inventory/warehouse" element={<Inventory />} />
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<HumanResources />} />
             <Route path="hr/employees" element={<EmployeeList />} />
@@ -77,7 +81,8 @@ function App() {
             
             {/* Sales/Order Management Submodules */}
             <Route path="sales/customers" element={<Customers />} />
-            <Route path="sales/projects" element={<Navigate to="/sales" replace />} />
+            <Route path="sales/projects" element={<Projects />} />
+            <Route path="projects/:id" element={<ProjectEdit />} />
             <Route path="sales/quotations" element={<Quotations />} />
             <Route path="sales/order-processing" element={<OrderProcessing />} />
             <Route path="sales/order-processing/new" element={<SalesOrderForm />} />

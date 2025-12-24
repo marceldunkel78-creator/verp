@@ -1933,15 +1933,41 @@ const OrderFormNew = () => {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h3 className="text-md font-medium text-gray-900 mb-2">Wareneingang</h3>
                   <p className="text-sm text-gray-600 mb-3">
-                    Der Wareneingang wird in einem zukünftigen Lagermodul verwaltet.
+                    Übertragen Sie die Bestellpositionen in den Wareneingang zur weiteren Verarbeitung im Lager.
                   </p>
                   <button
                     type="button"
-                    disabled
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-400 bg-gray-100 cursor-not-allowed"
+                    onClick={async () => {
+                      if (!formData.items || formData.items.length === 0) {
+                        alert('Keine Positionen zum Übertragen vorhanden.');
+                        return;
+                      }
+                      
+                      if (window.confirm(`Möchten Sie alle ${formData.items.length} Position(en) in den Wareneingang übertragen?`)) {
+                        try {
+                          const itemIds = formData.items.map(item => item.id);
+                          const res = await api.post(`/orders/orders/${id}/transfer_to_incoming_goods/`, {
+                            item_ids: itemIds
+                          });
+                          alert(res.data.message);
+                          if (res.data.errors && res.data.errors.length > 0) {
+                            alert('Einige Fehler sind aufgetreten:\n' + res.data.errors.join('\n'));
+                          }
+                          // Navigiere zum Wareneingang
+                          if (window.confirm('Möchten Sie zum Wareneingang navigieren?')) {
+                            navigate('/inventory/warehouse');
+                          }
+                        } catch (error) {
+                          console.error('Error transferring to incoming goods:', error);
+                          alert('Fehler beim Übertragen: ' + (error.response?.data?.error || error.message));
+                        }
+                      }
+                    }}
+                    disabled={!formData.items || formData.items.length === 0}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
                     <InboxArrowDownIcon className="h-5 w-5 mr-2" />
-                    Wareneingang erfassen (in Entwicklung)
+                    Wareneingang erfassen
                   </button>
                 </div>
 

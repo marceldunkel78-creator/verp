@@ -25,7 +25,7 @@ const SalesOrderManagement = () => {
       icon: BriefcaseIcon,
       path: '/sales/projects',
       color: 'blue',
-      disabled: true
+      disabled: false
     },
     {
       name: 'Quotations',
@@ -57,7 +57,7 @@ const SalesOrderManagement = () => {
       icon: ComputerDesktopIcon,
       path: '/sales/systems',
       color: 'blue',
-      disabled: true
+      disabled: false
     }
   ];
 

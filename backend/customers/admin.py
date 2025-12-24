@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail
+from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerSystem
 
 
 class CustomerAddressInline(admin.TabularInline):
@@ -62,3 +62,11 @@ class CustomerEmailAdmin(admin.ModelAdmin):
     list_display = ['customer', 'email', 'is_primary', 'newsletter_consent', 'marketing_consent']
     list_filter = ['is_primary', 'newsletter_consent', 'marketing_consent']
     search_fields = ['customer__first_name', 'customer__last_name', 'email']
+
+
+@admin.register(CustomerSystem)
+class CustomerSystemAdmin(admin.ModelAdmin):
+    list_display = ['system_number', 'name', 'customer', 'is_active', 'installation_date', 'created_at']
+    list_filter = ['is_active', 'installation_date']
+    search_fields = ['system_number', 'name', 'customer__first_name', 'customer__last_name']
+    readonly_fields = ['system_number', 'created_at', 'updated_at']
