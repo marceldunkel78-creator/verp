@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
 import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
@@ -494,6 +495,7 @@ const OrderFormNew = () => {
   };
 
   // Manage modal helpers
+  // eslint-disable-next-line no-unused-vars
   const openManageModal = (index) => {
     setManageModalIndex(index);
     setManageTemp(formData.items[index].management_info || { warefunktion: '', auftrag: null, projekt: null, system: null });

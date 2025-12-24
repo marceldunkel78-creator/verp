@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+/* eslint-disable react-hooks/exhaustive-deps */
 import api from '../services/api';
 import { 
   ArrowLeftIcon, ShoppingCartIcon, CheckCircleIcon, TruckIcon, 

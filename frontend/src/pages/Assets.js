@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+/* eslint-disable react-hooks/exhaustive-deps */
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';

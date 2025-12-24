@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { 

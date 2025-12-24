@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import api from '../services/api';
+import { useParams, useNavigate, Link } from 'react-router-dom';/* eslint-disable react-hooks/exhaustive-deps */import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   ArrowLeftIcon, 

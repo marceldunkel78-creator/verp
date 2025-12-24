@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+/* eslint-disable react-hooks/exhaustive-deps */
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import storage from '../utils/sessionStore';

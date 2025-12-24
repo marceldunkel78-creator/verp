@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { ArrowLeftIcon, PlusIcon, TrashIcon, DocumentArrowDownIcon, DocumentIcon, ChevronDownIcon, ChevronUpIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline';

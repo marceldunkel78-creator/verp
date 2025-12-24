@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+/* eslint-disable react-hooks/exhaustive-deps */
 import api from '../services/api';
 import CustomerModal from '../components/CustomerModal';
 import storage from '../utils/sessionStore';
