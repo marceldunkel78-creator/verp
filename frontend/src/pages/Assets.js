@@ -1,241 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-/* eslint-disable react-hooks/exhaustive-deps */
-import api from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import React from 'react';
 
-const Assets = () => {
-  const { user } = useAuth();
-  const [assets, setAssets] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [productGroups, setProductGroups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editingAsset, setEditingAsset] = useState(null);
-  const [sortBy, setSortBy] = useState('visitron_part_number');
-  const [filterSupplier, setFilterSupplier] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [filterActive, setFilterActive] = useState('all');
-  const [refreshKey, setRefreshKey] = useState(0);
-  
-  const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_assets;
-
-  const statusChoices = [
-    { value: 'in_progress', label: 'In Bearbeitung' },
-    { value: 'ordered', label: 'Bestellt' },
-    { value: 'confirmed', label: 'Bestätigt' },
-    { value: 'in_stock', label: 'Auf Lager' },
-    { value: 'sold', label: 'Verkauft' }
-  ];
-
-  const [formData, setFormData] = useState({
-    name: '',
-    visitron_part_number: '',
-    supplier_part_number: '',
-    supplier: '',
-    product_group: null,
-    serial_number: '',
-    description: '',
-    purchase_price: '',
-    purchase_currency: 'EUR',
-    sale_price: '',
-    current_value: '',
-    purchase_date: '',
-    expected_delivery_date: '',
-    actual_delivery_date: '',
-    warranty_months: '',
-    status: 'in_progress',
-    notes: '',
-    is_active: true,
-  });
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    fetchAssets();
-    fetchSuppliers();
-    fetchProductGroups();
-  }, [sortBy, filterSupplier, filterStatus, filterActive, refreshKey]);
-
-  const fetchAssets = async () => {
-    try {
-      setLoading(true);
-      let url = '/suppliers/assets/?ordering=' + sortBy;
-      
-      if (filterSupplier) {
-        url += `&supplier=${filterSupplier}`;
-      }
-      
-      if (filterStatus) {
-        url += `&status=${filterStatus}`;
-      }
-      
-      if (filterActive !== 'all') {
-        url += `&is_active=${filterActive === 'active'}`;
-      }
-      
-      const response = await api.get(url);
-      // Handle both paginated and non-paginated responses
-      const data = response.data.results || response.data;
-      setAssets(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error fetching assets:', error);
-      setAssets([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSuppliers = async () => {
-    try {
-      const response = await api.get('/suppliers/suppliers/');
-      const data = response.data.results || response.data;
-      setSuppliers(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      setSuppliers([]);
-    }
-  };
-
-  const fetchProductGroups = async () => {
-    try {
-      const response = await api.get('/suppliers/product-groups/');
-      const data = response.data.results || response.data;
-      setProductGroups(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Error fetching product groups:', error);
-      setProductGroups([]);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      // Prepare data for submission
-      const submitData = {
-        ...formData,
-        purchase_price: formData.purchase_price ? parseFloat(formData.purchase_price) : null,
-        sale_price: formData.sale_price ? parseFloat(formData.sale_price) : null,
-        current_value: formData.current_value ? parseFloat(formData.current_value) : null,
-        warranty_months: formData.warranty_months ? parseInt(formData.warranty_months) : null,
-        purchase_date: formData.purchase_date || null,
-        expected_delivery_date: formData.expected_delivery_date || null,
-        actual_delivery_date: formData.actual_delivery_date || null,
-      };
-
-      if (editingAsset) {
-        await api.put(`/suppliers/assets/${editingAsset.id}/`, submitData);
-      } else {
-        await api.post('/suppliers/assets/', submitData);
-      }
-      
-      setShowModal(false);
-      setRefreshKey(prev => prev + 1);
-      resetForm();
-    } catch (error) {
-      console.error('Error saving asset:', error);
-      if (error.response?.data) {
-        alert('Fehler beim Speichern: ' + JSON.stringify(error.response.data));
-      }
-    }
-  };
-
-  const handleEdit = (asset) => {
-    setEditingAsset(asset);
-    setFormData({
-      name: asset.name || '',
-      visitron_part_number: asset.visitron_part_number || '',
-      supplier_part_number: asset.supplier_part_number || '',
-      supplier: asset.supplier || '',
-      product_group: asset.product_group || '',
-      serial_number: asset.serial_number || '',
-      description: asset.description || '',
-      purchase_price: asset.purchase_price || '',
-      purchase_currency: asset.purchase_currency || 'EUR',
-      sale_price: asset.sale_price || '',
-      current_value: asset.current_value || '',
-      purchase_date: asset.purchase_date || '',
-      expected_delivery_date: asset.expected_delivery_date || '',
-      actual_delivery_date: asset.actual_delivery_date || '',
-      warranty_months: asset.warranty_months || '',
-      status: asset.status || 'in_progress',
-      notes: asset.notes || '',
-      is_active: asset.is_active !== undefined ? asset.is_active : true,
-    });
-    setShowModal(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm('Möchten Sie diese Anlage wirklich löschen?')) {
-      try {
-        await api.delete(`/suppliers/assets/${id}/`);
-        setRefreshKey(prev => prev + 1);
-      } catch (error) {
-        console.error('Error deleting asset:', error);
-        alert('Fehler beim Löschen der Anlage');
-      }
-    }
-  };
-
-  const resetForm = () => {
-    // Find the "Anlage" product group
-    const anlageGroup = productGroups.find(g => g.name === 'Anlage');
-    
-    setFormData({
-      name: '',
-      visitron_part_number: '',
-      supplier_part_number: '',
-      supplier: '',
-      product_group: anlageGroup ? anlageGroup.id : null,
-      serial_number: '',
-      description: '',
-      purchase_price: '',
-      purchase_currency: 'EUR',
-      sale_price: '',
-      current_value: '',
-      purchase_date: '',
-      expected_delivery_date: '',
-      actual_delivery_date: '',
-      warranty_months: '',
-      status: 'in_progress',
-      notes: '',
-      is_active: true,
-    });
-    setEditingAsset(null);
-  };
-
-  const formatCurrency = (value, currency = 'EUR') => {
-    if (!value) return '-';
-    return new Intl.NumberFormat('de-DE', {
-      style: 'currency',
-      currency: currency
-    }).format(value);
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('de-DE');
-  };
-
-  const getStatusLabel = (status) => {
-    const choice = statusChoices.find(c => c.value === status);
-    return choice ? choice.label : status;
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      'in_progress': 'bg-yellow-100 text-yellow-800',
-      'ordered': 'bg-blue-100 text-blue-800',
-      'confirmed': 'bg-purple-100 text-purple-800',
-      'in_stock': 'bg-green-100 text-green-800',
+// Assets module removed — placeholder retained for route compatibility.
+export default function Assets() {
+  return (
+    <div className="p-6 text-gray-600">
+      <h1 className="text-xl font-semibold">Assets entfernt</h1>
+      <p className="mt-2 text-sm">Die Verwaltung von Anlagen wurde entfernt. Bitte benutzen Sie stattdessen Inventories (zukünftig).</p>
+    </div>
+  );
+}
+/*
       'sold': 'bg-gray-100 text-gray-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
@@ -464,8 +238,7 @@ const Assets = () => {
                 {/* Grundinformationen */}
                 <div className="col-span-2">
                   <h4 className="text-md font-semibold text-gray-700 mb-3 border-b pb-2">
-                    Grundinformationen
-                  </h4>
+                    Grundinformationen                  </h4>
                 </div>
 
                 <div className="col-span-2">
@@ -751,4 +524,4 @@ const Assets = () => {
   );
 };
 
-export default Assets;
+

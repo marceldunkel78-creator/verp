@@ -30,7 +30,6 @@ const Users = () => {
     can_read_sales: false,
     can_read_trading: false,
     can_read_material_supplies: false,
-    can_read_assets: false,
     can_write_accounting: false,
     can_write_hr: false,
     can_write_suppliers: false,
@@ -40,7 +39,6 @@ const Users = () => {
     can_write_sales: false,
     can_write_trading: false,
     can_write_material_supplies: false,
-    can_write_assets: false,
   });
 
   useEffect(() => {
@@ -145,7 +143,6 @@ const Users = () => {
       can_read_sales: false,
       can_read_trading: false,
       can_read_material_supplies: false,
-      can_read_assets: false,
       can_write_accounting: false,
       can_write_hr: false,
       can_write_suppliers: false,
@@ -155,7 +152,6 @@ const Users = () => {
       can_write_sales: false,
       can_write_trading: false,
       can_write_material_supplies: false,
-      can_write_assets: false,
     });
     setEditingUser(null);
   };
@@ -199,7 +195,6 @@ const Users = () => {
       can_read_sales: user.can_read_sales,
       can_read_trading: user.can_read_trading,
       can_read_material_supplies: user.can_read_material_supplies,
-      can_read_assets: user.can_read_assets,
       can_write_accounting: user.can_write_accounting,
       can_write_hr: user.can_write_hr,
       can_write_suppliers: user.can_write_suppliers,
@@ -209,7 +204,6 @@ const Users = () => {
       can_write_sales: user.can_write_sales,
       can_write_trading: user.can_write_trading,
       can_write_material_supplies: user.can_write_material_supplies,
-      can_write_assets: user.can_write_assets,
     });
     // load employees so dropdown is available
     fetchEmployees();
@@ -491,7 +485,7 @@ const Users = () => {
                         { key: 'sales', label: 'Sales' },
                         { key: 'trading', label: 'Handelsware' },
                         { key: 'material_supplies', label: 'Material & Supplies' },
-                        { key: 'assets', label: 'Assets' },
+
                       ].map((module) => (
                         <div key={module.key} className="border rounded-lg p-3 bg-gray-50">
                           <div className="font-medium text-sm text-gray-900 mb-2">{module.label}</div>

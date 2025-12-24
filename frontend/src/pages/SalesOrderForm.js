@@ -62,7 +62,6 @@ const SalesOrderForm = () => {
 
   // Additional state for product management
   const [tradingProducts, setTradingProducts] = useState([]);
-  const [assets, setAssets] = useState([]);
   const [productSearchTerm, setProductSearchTerm] = useState('');
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [showProductSearch, setShowProductSearch] = useState(false);
@@ -194,23 +193,20 @@ const SalesOrderForm = () => {
   // Load products when entering items tab and no quotation is selected
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (step === 2 && !orderDraft.quotation && (!tradingProducts.length || !assets.length)) {
+    if (step === 2 && !orderDraft.quotation && !tradingProducts.length) {
       loadProducts();
     }
   }, [step, orderDraft.quotation]);
 
   const loadProducts = async () => {
     try {
-      const [tradingRes, assetsRes] = await Promise.all([
+      const [tradingRes] = await Promise.all([
         api.get('/suppliers/products/'),
-        api.get('/suppliers/assets/')
       ]);
       
       const tradingData = tradingRes.data.results || tradingRes.data || [];
-      const assetsData = assetsRes.data.results || assetsRes.data || [];
       
       setTradingProducts(tradingData);
-      setAssets(assetsData);
     } catch (error) {
       console.error('Fehler beim Laden der Produkte:', error);
     }
@@ -225,8 +221,7 @@ const SalesOrderForm = () => {
     }
     
     const allProducts = [
-      ...tradingProducts.map(p => ({ ...p, type: 'trading', displayName: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Handelsware)` })),
-      ...assets.map(p => ({ ...p, type: 'asset', displayName: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Anlage)` }))
+      ...tradingProducts.map(p => ({ ...p, type: 'trading', displayName: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Handelsware)` }))
     ];
     
     const filtered = allProducts.filter(p => 
@@ -790,7 +785,7 @@ const SalesOrderForm = () => {
             <div>
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
                 <p className="text-sm text-green-800">
-                  <strong>Produkte hinzufügen:</strong> Suchen Sie nach Trading Goods oder Assets, um sie dem Auftrag hinzuzufügen.
+                  <strong>Produkte hinzufügen:</strong> Suchen Sie nach Trading Goods, um sie dem Auftrag hinzuzufügen.
                 </p>
               </div>
 

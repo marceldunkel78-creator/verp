@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import Quotation, QuotationItem
 from customers.models import Customer
-from suppliers.models import TradingProduct, Asset
+from suppliers.models import TradingProduct
 from django.contrib.contenttypes.models import ContentType
 
 

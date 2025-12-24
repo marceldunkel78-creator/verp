@@ -69,13 +69,7 @@ const Dashboard = () => {
       color: 'orange',
       icon: '📦'
     },
-    {
-      id: 'assets',
-      name: 'Anlagegüter',
-      route: '/procurement/assets',
-      color: 'cyan',
-      icon: '🏭'
-    },
+
     {
       id: 'materials',
       name: 'Material & Supplies',

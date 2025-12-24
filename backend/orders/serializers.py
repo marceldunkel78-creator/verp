@@ -12,7 +12,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = [
-            'id', 'trading_product', 'asset', 'material_supply',
+            'id', 'trading_product', 'material_supply',
             'customer_order_number',
             'article_number', 'name', 'description', 'management_info',
             'quantity', 'unit', 'list_price', 'discount_percent',

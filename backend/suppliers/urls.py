@@ -5,7 +5,6 @@ from .views import (
     TradingProductViewSet, SupplierProductViewSet,
     ProductGroupViewSet, PriceListViewSet, MaterialSupplyViewSet
 )
-from .asset_views import AssetViewSet
 
 router = DefaultRouter()
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
@@ -14,7 +13,6 @@ router.register(r'products', TradingProductViewSet, basename='trading-product')
 router.register(r'supplier-products', SupplierProductViewSet, basename='supplier-product')
 router.register(r'product-groups', ProductGroupViewSet, basename='product-group')
 router.register(r'price-lists', PriceListViewSet, basename='price-list')
-router.register(r'assets', AssetViewSet, basename='asset')
 router.register(r'material-supplies', MaterialSupplyViewSet, basename='material-supply')
 
 urlpatterns = [

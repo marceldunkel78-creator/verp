@@ -305,13 +305,7 @@ class OrderItem(models.Model):
         verbose_name='Trading Product'
     )
     
-    asset = models.ForeignKey(
-        'suppliers.Asset',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        verbose_name='Asset'
-    )
+
     
     material_supply = models.ForeignKey(
         'suppliers.MaterialSupply',

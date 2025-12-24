@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Supplier, SupplierContact, TradingProduct,
-    SupplierProduct, ProductGroup, PriceList, Asset, MaterialSupply
+    SupplierProduct, ProductGroup, PriceList, MaterialSupply
 )
 
 
@@ -96,33 +96,7 @@ class SupplierProductAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at']
 
 
-@admin.register(Asset)
-class AssetAdmin(admin.ModelAdmin):
-    list_display = [
-        'visitron_part_number', 'name', 'supplier', 'serial_number',
-        'status', 'purchase_price', 'purchase_date', 'is_active'
-    ]
-    list_filter = ['status', 'is_active', 'supplier', 'purchase_date', 'created_at']
-    search_fields = ['name', 'visitron_part_number', 'serial_number', 'supplier_part_number']
-    readonly_fields = ['visitron_part_number', 'created_at', 'updated_at']
-    fieldsets = (
-        ('Grundinformationen', {
-            'fields': ('name', 'visitron_part_number', 'supplier_part_number', 'serial_number', 'supplier', 'product_group', 'description')
-        }),
-        ('Preise', {
-            'fields': ('purchase_price', 'purchase_currency', 'sale_price', 'current_value')
-        }),
-        ('Daten', {
-            'fields': ('purchase_date', 'expected_delivery_date', 'actual_delivery_date', 'warranty_months')
-        }),
-        ('Status', {
-            'fields': ('status', 'is_active', 'notes')
-        }),
-        ('Metadaten', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
+
 
 
 @admin.register(MaterialSupply)

@@ -13,7 +13,6 @@ const QuotationForm = () => {
   const [customers, setCustomers] = useState([]);
   const [customerAddresses, setCustomerAddresses] = useState([]);
   const [tradingProducts, setTradingProducts] = useState([]);
-  const [assets, setAssets] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [deliveryTerms, setDeliveryTerms] = useState([]);
   const [users, setUsers] = useState([]);
@@ -170,10 +169,9 @@ const QuotationForm = () => {
 
   const fetchInitialData = async () => {
     try {
-      const [customersRes, tradingRes, assetsRes, paymentRes, deliveryTermsRes, usersRes, currentUserRes] = await Promise.all([
+      const [customersRes, tradingRes, paymentRes, deliveryTermsRes, usersRes, currentUserRes] = await Promise.all([
         api.get('/customers/customers/?is_active=true'),
         api.get('/suppliers/products/'),
-        api.get('/suppliers/assets/'),
         api.get('/settings/payment-terms/'),
         api.get('/settings/delivery-terms/'),
         api.get('/users/'),
@@ -182,7 +180,6 @@ const QuotationForm = () => {
       
       setCustomers(customersRes.data.results || customersRes.data || []);
       setTradingProducts(tradingRes.data.results || tradingRes.data || []);
-      setAssets(assetsRes.data.results || assetsRes.data || []);
       setPaymentTerms(paymentRes.data.results || paymentRes.data || []);
       setDeliveryTerms(deliveryTermsRes.data.results || deliveryTermsRes.data || []);
       setUsers(usersRes.data.results || usersRes.data || []);
@@ -413,21 +410,17 @@ setCustomerAddresses(customer.addresses || []);
           
           // Wenn Produkt gewechselt wird, lade Preise automatisch
           if (field === 'object_id' && value) {
-            const selectedProduct = [...tradingProducts, ...assets].find(p => p.id === parseInt(value));
+            const selectedProduct = tradingProducts.find(p => p.id === parseInt(value));
             if (selectedProduct) {
               // Setze Verkaufspreis (Visitron List Price)
               updatedItem.unit_price = selectedProduct.visitron_list_price || 0;
               // Setze Einkaufspreis (Purchase Price in EUR)
               updatedItem.purchase_price = selectedProduct.purchase_price_eur || selectedProduct.purchase_price || 0;
               
-              // Setze content_type basierend auf dem Produkttyp
+              // Set content_type based on the selected trading product
               const isTradingProduct = tradingProducts.some(p => p.id === parseInt(value));
-              const isAsset = assets.some(a => a.id === parseInt(value));
-              
               if (isTradingProduct) {
                 updatedItem.content_type = { app_label: 'suppliers', model: 'tradingproduct' };
-              } else if (isAsset) {
-                updatedItem.content_type = { app_label: 'suppliers', model: 'asset' };
               }
             }
           }
@@ -520,12 +513,9 @@ setCustomerAddresses(customer.addresses || []);
         // Nur für normale Positionen, nicht für Gruppen-Header ohne Item
         if (item.object_id && !item.is_group_header) {
           const isTradingProduct = tradingProducts.some(p => p.id === parseInt(item.object_id));
-          const isAsset = assets.some(a => a.id === parseInt(item.object_id));
           
           if (isTradingProduct) {
             contentType = { app_label: 'suppliers', model: 'tradingproduct' };
-          } else if (isAsset) {
-            contentType = { app_label: 'suppliers', model: 'asset' };
           }
         }
         
@@ -1377,13 +1367,7 @@ setCustomerAddresses(customer.addresses || []);
                                 </option>
                               ))}
                             </optgroup>
-                            <optgroup label="Assets">
-                              {assets.map(asset => (
-                                <option key={`as-${asset.id}`} value={asset.id}>
-                                  {asset.visitron_part_number} - {asset.name}
-                                </option>
-                              ))}
-                            </optgroup>
+
                           </select>
                         </div>
 

@@ -26,13 +26,7 @@ const Procurement = () => {
       color: 'orange',
       disabled: false
     },
-    {
-      name: 'Assets',
-      description: 'Anlagenverwaltung',
-      icon: WrenchScrewdriverIcon,
-      path: '/procurement/assets',
-      color: 'orange'
-    },
+
     {
       name: 'M&S',
       description: 'Roh-, Hilfs- und Betriebsstoffe',

@@ -313,8 +313,7 @@ class QuotationItem(models.Model):
     content_type = models.ForeignKey(
         ContentType,
         on_delete=models.CASCADE,
-        limit_choices_to=models.Q(app_label='suppliers', model='tradingproduct') | 
-                        models.Q(app_label='suppliers', model='asset'),
+        limit_choices_to=models.Q(app_label='suppliers', model='tradingproduct'),
         null=True,
         blank=True
     )

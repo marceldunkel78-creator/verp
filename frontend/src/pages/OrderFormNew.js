@@ -297,9 +297,8 @@ const OrderFormNew = () => {
       const supplierResponse = await api.get(`/suppliers/suppliers/${supplierId}/`);
       setSelectedSupplier(supplierResponse.data);
 
-      const [tradingRes, assetsRes, materialsRes] = await Promise.all([
+      const [tradingRes, materialsRes] = await Promise.all([
         api.get(`/suppliers/products/?supplier=${supplierId}`).catch(() => ({ data: { results: [] } })),
-        api.get(`/suppliers/assets/?supplier=${supplierId}`).catch(() => ({ data: { results: [] } })),
         api.get(`/suppliers/material-supplies/?supplier=${supplierId}`).catch(() => ({ data: { results: [] } }))
       ]);
 
@@ -309,19 +308,13 @@ const OrderFormNew = () => {
         display_name: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Handelswaren)`
       }));
 
-      const assets = (assetsRes.data.results || assetsRes.data || []).map(p => ({
-        ...p,
-        type: 'asset',
-        display_name: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Anlagen)`
-      }));
-
       const materials = (materialsRes.data.results || materialsRes.data || []).map(p => ({
         ...p,
         type: 'material',
         display_name: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Materialien)`
       }));
 
-      setProducts([...tradingProducts, ...assets, ...materials]);
+      setProducts([...tradingProducts, ...materials]);
     } catch (error) {
       console.error('Fehler beim Laden der Lieferanten-Details:', error);
     }

@@ -31,7 +31,6 @@ class User(AbstractUser):
     can_read_sales = models.BooleanField(default=False, verbose_name='Sales - Lesen')
     can_read_trading = models.BooleanField(default=False, verbose_name='Handelsware - Lesen')
     can_read_material_supplies = models.BooleanField(default=False, verbose_name='Material & Supplies - Lesen')
-    can_read_assets = models.BooleanField(default=False, verbose_name='Assets - Lesen')
     
     # Berechtigungen für Module - Schreiben
     can_write_accounting = models.BooleanField(default=False, verbose_name='Buchhaltung - Schreiben')
@@ -45,7 +44,6 @@ class User(AbstractUser):
     can_write_sales = models.BooleanField(default=False, verbose_name='Sales - Schreiben')
     can_write_trading = models.BooleanField(default=False, verbose_name='Handelsware - Schreiben')
     can_write_material_supplies = models.BooleanField(default=False, verbose_name='Material & Supplies - Schreiben')
-    can_write_assets = models.BooleanField(default=False, verbose_name='Assets - Schreiben')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

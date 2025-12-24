@@ -8,7 +8,6 @@ import Users from './pages/Users';
 import Suppliers from './pages/Suppliers';
 import SupplierDetail from './pages/SupplierDetail';
 import TradingProducts from './pages/TradingProducts';
-import Assets from './pages/Assets';
 import MaterialSupplies from './pages/MaterialSupplies';
 import Orders from './pages/Orders';
 import OrderFormNew from './pages/OrderFormNew';
@@ -70,7 +69,6 @@ function App() {
             <Route path="procurement/suppliers" element={<Suppliers />} />
             <Route path="procurement/suppliers/:id" element={<SupplierDetail />} />
             <Route path="procurement/trading-goods" element={<TradingProducts />} />
-            <Route path="procurement/assets" element={<Assets />} />
             <Route path="procurement/materials-supplies" element={<MaterialSupplies />} />
             <Route path="procurement/orders" element={<Orders />} />
             <Route path="procurement/orders/new" element={<OrderFormNew />} />

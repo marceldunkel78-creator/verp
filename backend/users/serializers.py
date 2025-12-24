@@ -70,9 +70,9 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'employee',
             'email', 'first_name', 'last_name', 'phone', 'position', 'department',
             'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
-            'can_read_customers', 'can_read_manufacturing', 'can_read_service', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies', 'can_read_assets',
+            'can_read_customers', 'can_read_manufacturing', 'can_read_service', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
-            'can_write_customers', 'can_write_manufacturing', 'can_write_service', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies', 'can_write_assets',
+            'can_write_customers', 'can_write_manufacturing', 'can_write_service', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'password', 'password_confirm',
             'is_active' 
         ]
