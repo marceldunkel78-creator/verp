@@ -27,6 +27,11 @@ import Layout from './components/Layout';
 import Inventory from './pages/Inventory';
 import Projects from './pages/Projects';
 import ProjectEdit from './pages/ProjectEdit';
+import Systems from './pages/Systems';
+import SystemEdit from './pages/SystemEdit';
+import VSHardware from './pages/VSHardware';
+import VSHardwareEdit from './pages/VSHardwareEdit';
+import ProductionOrders from './pages/ProductionOrders';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -63,6 +68,9 @@ function App() {
             <Route path="hr/employees" element={<EmployeeList />} />
             <Route path="myverp" element={<MyVERP />} />
             <Route path="manufacturing" element={<Manufacturing />} />
+            <Route path="manufacturing/vs-hardware" element={<VSHardware />} />
+            <Route path="manufacturing/vs-hardware/:id" element={<VSHardwareEdit />} />
+            <Route path="manufacturing/production-orders" element={<ProductionOrders />} />
             <Route path="visiview" element={<VisiView />} />
             <Route path="service" element={<Service />} />
             <Route path="bi" element={<BusinessIntelligence />} />
@@ -83,6 +91,8 @@ function App() {
             <Route path="sales/customers" element={<Customers />} />
             <Route path="sales/projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectEdit />} />
+            <Route path="sales/systems" element={<Systems />} />
+            <Route path="sales/systems/:id" element={<SystemEdit />} />
             <Route path="sales/quotations" element={<Quotations />} />
             <Route path="sales/order-processing" element={<OrderProcessing />} />
             <Route path="sales/order-processing/new" element={<SalesOrderForm />} />
@@ -92,7 +102,6 @@ function App() {
             <Route path="sales/quotations/:id/edit" element={<QuotationForm />} />
             {/* legacy redirect removed: order-processing now handled by OrderProcessing component */}
             <Route path="sales/marketing" element={<Navigate to="/sales" replace />} />
-            <Route path="sales/systems" element={<Navigate to="/sales" replace />} />
             
             {/* Settings Submodules */}
             <Route path="settings/users" element={<Users />} />

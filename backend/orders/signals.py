@@ -9,13 +9,19 @@ import traceback
 
 @receiver(post_save, sender=Order)
 def generate_and_save_order_pdf(sender, instance, created, **kwargs):
-    """Generiere bei Save das PDF und speichere es in `order_document` (überschreibt alte Datei).
-
-    Wenn `order_type` == 'online' ist, wird kein automatisch generiertes PDF erzeugt.
+    """Generiere bei Save das PDF nur wenn explizit angefordert.
+    
+    Das PDF wird nur generiert wenn:
+    - Das Flag `_generate_pdf` am Objekt gesetzt ist
+    - Oder die Order einen `order_type == 'online'` hat (wird übersprungen)
     """
     try:
+        # Skip PDF generation for online orders
         if getattr(instance, 'order_type', None) == 'online':
-            print(f"Skipping PDF generation for online order {instance.pk} ({instance.order_number})")
+            return
+
+        # PDF nur generieren wenn explizit angefordert
+        if not getattr(instance, '_generate_pdf', False):
             return
 
         # Render PDF bytes

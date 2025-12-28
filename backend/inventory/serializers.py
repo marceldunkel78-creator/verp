@@ -41,8 +41,14 @@ class IncomingGoodsSerializer(serializers.ModelSerializer):
 
 class IncomingGoodsDetailSerializer(serializers.ModelSerializer):
     supplier = SupplierSerializer(read_only=True)
-    transferred_by_name = serializers.CharField(source='transferred_by.get_full_name', read_only=True)
-    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    transferred_by_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    
+    def get_transferred_by_name(self, obj):
+        return obj.transferred_by.get_full_name() if obj.transferred_by else None
+    
+    def get_created_by_name(self, obj):
+        return obj.created_by.get_full_name() if obj.created_by else None
     
     class Meta:
         model = IncomingGoods

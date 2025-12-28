@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from suppliers.models import Supplier
 from verp_settings.models import PaymentTerm, DeliveryTerm, DeliveryInstruction
+from core.upload_paths import order_upload_path
 from datetime import datetime
 import os
 
@@ -10,33 +11,10 @@ User = get_user_model()
 
 def order_document_upload_path(instance, filename):
     """
-    Benutzerdefinierter Upload-Pfad für Bestelldokumente.
-    Behält den Original-Dateinamen bei (überschreibt bei Duplikaten).
-
-    Sicherheitsanpassungen: Ersetze in Order-Nummer und Dateiname alle Schrägstriche ("/") und
-    nicht-datei-geeignete Zeichen durch Unterstriche, damit keine Pfad-Traversal- oder
-    Verzeichnisunterteilung durch Sonderzeichen entsteht.
+    Wrapper für die zentrale order_upload_path Funktion.
+    Wird für Migrations-Kompatibilität beibehalten.
     """
-    import re
-
-    # Normalisiere Order-Nummer und Dateiname: ersetze '/' und sonstige ungültige Zeichen
-    def _sanitize(name):
-        if not name:
-            return ''
-        # Replace slashes and spaces with underscore
-        name = name.replace('/', '_').replace(' ', '_')
-        # Remove characters that are not alphanumeric, underscore, dot or hyphen
-        return re.sub(r'[^A-Za-z0-9_.-]', '_', name)
-
-    safe_filename = _sanitize(filename)
-    safe_ordernum = _sanitize(instance.order_number) if getattr(instance, 'order_number', None) else ''
-
-    if safe_ordernum:
-        new_filename = f"{safe_ordernum}_{safe_filename}"
-    else:
-        new_filename = safe_filename
-
-    return f"orders/documents/{datetime.now().strftime('%Y/%m')}/{new_filename}"
+    return order_upload_path(instance, filename)
 
 
 class Order(models.Model):
@@ -217,6 +195,13 @@ class Order(models.Model):
         null=True,
         verbose_name='Auftragsbestätigung (Lieferant)',
         help_text='Hochladen der Auftragsbestätigung des Lieferanten (PDF)'
+    )
+
+    # Flag: Wareneingang bereits erfasst (wird gesetzt, wenn Positionen in den Wareneingang übertragen wurden)
+    incoming_recorded = models.BooleanField(
+        default=False,
+        verbose_name='Wareneingang erfasst',
+        help_text='Setzt an, dass für diese Bestellung bereits ein Wareneingang angelegt wurde'
     )
     
     class Meta:

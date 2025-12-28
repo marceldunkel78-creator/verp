@@ -464,6 +464,15 @@ class TradingProduct(models.Model):
         verbose_name='Mindestbestand'
     )
     
+    # Release-Manual Upload
+    release_manual = models.FileField(
+        upload_to='TradingProducts/manuals/',
+        blank=True,
+        null=True,
+        verbose_name='Release-Manual',
+        help_text='Freigegebenes Handbuch zum Produkt'
+    )
+    
     is_active = models.BooleanField(default=True, verbose_name='Aktiv')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

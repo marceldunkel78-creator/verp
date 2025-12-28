@@ -5,26 +5,21 @@ Django settings for VERP project.
 from pathlib import Path
 import os
 from datetime import timedelta
+from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Read SECRET_KEY from environment in production; fallback to the
-# development key defined previously.
-ENV_SECRET_KEY = os.environ.get('SECRET_KEY')
-if ENV_SECRET_KEY:
-    SECRET_KEY = ENV_SECRET_KEY
-else:
-    # Keep the existing (insecure) default as a fallback for local dev.
-    SECRET_KEY = 'django-insecure-change-this-in-production-!@#$%^&*()'
+# Read SECRET_KEY from environment or .env file
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production-!@#$%^&*()')
 
 # DEBUG should be disabled in production. Control via DJANGO_DEBUG env var.
 # Default to True for local development unless explicitly set to 'False'.
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 
 # ALLOWED_HOSTS can be provided via comma-separated env var, default to localhost
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 # Application definition
 INSTALLED_APPS = [
@@ -53,6 +48,8 @@ INSTALLED_APPS = [
     'sales',
     'inventory',
     'projects',
+    'systems',
+    'manufacturing',
 ]
 
 MIDDLEWARE = [
@@ -124,8 +121,22 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Media files (uploads) - Externer Speicherort aus .env
+# Der Pfad kann absolut sein (z.B. C:/VERP-Media oder /var/verp-media)
+MEDIA_URL = '/media/'
+_media_root_env = config('MEDIA_ROOT', default='')
+if _media_root_env:
+    MEDIA_ROOT = Path(_media_root_env)
+else:
+    MEDIA_ROOT = BASE_DIR / 'media'
+
+# Ensure MEDIA_ROOT directory exists
+if not MEDIA_ROOT.exists():
+    try:
+        MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+        print(f"Created MEDIA_ROOT directory: {MEDIA_ROOT}")
+    except Exception as e:
+        print(f"Warning: Could not create MEDIA_ROOT directory {MEDIA_ROOT}: {e}")
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -184,10 +195,6 @@ if DEBUG:
 else:
     # In production, rely on explicit CORS_ALLOWED_ORIGINS above
     CORS_ALLOW_ALL_ORIGINS = False
-
-# Media files (uploads)
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
 
 # Security-related settings (sane defaults; override via environment variables)
 if DEBUG:

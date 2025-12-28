@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from customers.models import Customer
+from core.upload_paths import customer_order_upload_path
 from datetime import datetime
 import os
 
@@ -8,12 +9,11 @@ User = get_user_model()
 
 
 def customer_order_document_upload_path(instance, filename):
-    ext = os.path.splitext(filename)[1]
-    if instance.order_number:
-        new_filename = f"{instance.order_number}_{filename}"
-    else:
-        new_filename = filename
-    return f"customer_orders/documents/{datetime.now().strftime('%Y/%m')}/{new_filename}"
+    """
+    Wrapper für die zentrale customer_order_upload_path Funktion.
+    Wird für Migrations-Kompatibilität beibehalten.
+    """
+    return customer_order_upload_path(instance, filename)
 
 
 class CustomerOrder(models.Model):

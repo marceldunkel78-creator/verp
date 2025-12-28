@@ -19,7 +19,9 @@ class IncomingGoods(models.Model):
     # Verknüpfung zur Bestellposition
     order_item = models.ForeignKey(
         'orders.OrderItem',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='incoming_goods',
         verbose_name='Bestellposition'
     )

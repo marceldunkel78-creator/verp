@@ -35,9 +35,11 @@ class OrderListSerializer(serializers.ModelSerializer):
             'id', 'order_number',
             'order_type', 'status', 'status_display', 'supplier', 'supplier_name',
             'order_date', 'delivery_date', 'payment_date',
-            'items_count', 'total_amount', 'confirmed_total',
+            'items_count', 'total_amount', 'confirmed_total', 'incoming_recorded',
             'created_by_name', 'created_at', 'updated_at'
         ]
+
+    incoming_recorded = serializers.BooleanField(read_only=True)
     
     def get_items_count(self, obj):
         return obj.items.count()
@@ -76,9 +78,24 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'delivery_instruction', 'delivery_instruction_display',
             'offer_reference', 'custom_text', 'order_document', 'supplier_confirmation_document',
             'notes', 'items', 'total_amount', 'confirmed_total',
+            'incoming_recorded',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'order_number', 'created_by', 'created_at', 'updated_at']
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Ensure incoming_recorded is set if IncomingGoods exist for this order
+        if not instance.incoming_recorded:
+            try:
+                from inventory.models import IncomingGoods
+                if IncomingGoods.objects.filter(order_item__order=instance).exists():
+                    instance.incoming_recorded = True
+                    instance.save(update_fields=['incoming_recorded'])
+                    data['incoming_recorded'] = True
+            except Exception as e:
+                print(f"Error checking IncomingGoods for order {instance.id}: {e}")
+        return data
     
     def get_total_amount(self, obj):
         total = sum(item.total_price for item in obj.items.all())
@@ -144,6 +161,7 @@ class OrderCreateUpdateSerializer(serializers.ModelSerializer):
             'payment_term', 'delivery_term', 'delivery_instruction',
             'offer_reference', 'custom_text', 'order_document', 'supplier_confirmation_document',
             'notes', 'items'
+            , 'incoming_recorded'
         ]
 
     def validate(self, data):

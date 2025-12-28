@@ -46,8 +46,11 @@ const OrderFormNew = () => {
     custom_text: '',
     order_document: null,
     notes: '',
-    items: []
+    items: [],
+    incoming_recorded: false,
+    confirmed_total: null
   });
+  const [incomingExists, setIncomingExists] = useState(false);
   
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [productSearch, setProductSearch] = useState({});
@@ -127,6 +130,24 @@ const OrderFormNew = () => {
       </div>,
       document.body
     );
+  };
+
+  const checkIncomingExists = async (orderNumber) => {
+    try {
+      if (!orderNumber) {
+        setIncomingExists(false);
+        return false;
+      }
+      const res = await api.get(`/inventory/incoming-goods/?search=${encodeURIComponent(orderNumber)}`);
+      const list = res.data.results || res.data;
+      const count = (res.data.count != null) ? res.data.count : (Array.isArray(list) ? list.length : 0);
+      setIncomingExists(count > 0);
+      return count > 0;
+    } catch (e) {
+      console.error('Fehler beim Prüfen von Wareneingängen:', e);
+      setIncomingExists(false);
+      return false;
+    }
   };
 
   const isConfirmed = formData.status === 'bestaetigt';
@@ -265,6 +286,8 @@ const OrderFormNew = () => {
         confirmed_total: order.confirmed_total || null
       };
 
+      // include persisted incoming flag from backend
+      orderData.incoming_recorded = order.incoming_recorded || false;
       setFormData(orderData);
       // Ensure id and order_number are available locally right away
       setFormData(prev => ({ ...prev, id: order.id, order_number: order.order_number || prev.order_number }));
@@ -272,6 +295,9 @@ const OrderFormNew = () => {
       if (order.supplier) {
         loadSupplierProducts(order.supplier);
       }
+
+      // initialize local incoming flag so the button state persists
+      setIncomingExists(!!order.incoming_recorded);
 
       // Try to warm up the PDF (with retries) so user can open it immediately (unless this is an online order)
       if (order.order_type !== 'online') {
@@ -725,10 +751,6 @@ const OrderFormNew = () => {
           // If server returned updated data, ensure local state has id/order_number
           if (response?.data?.id) {
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
-            // warm up PDF
-            if (response.data.order_type !== 'online') {
-              await warmupPdf(response.data.id);
-            }
           }
         } else {
           const response = await api.post('/orders/orders/', formDataObj, {
@@ -738,17 +760,6 @@ const OrderFormNew = () => {
           if (response?.data?.id) {
             // Update local state so PDF buttons and order number are immediately available
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
-
-            // Warm up PDF in background (no auto-open)
-            setTimeout(() => setPdfStatus(null), 12000);
-            const pdfUrl = await warmupPdf(response.data.id);
-            if (pdfUrl) {
-              setPdfStatus('opened');
-              setTimeout(() => setPdfStatus(null), 6000);
-            } else {
-              setPdfStatus('failed');
-              setTimeout(() => setPdfStatus(null), 12000);
-            }
 
             // Navigate to edit route so URL reflects the saved order
             navigate(`/procurement/orders/${response.data.id}/edit`, { replace: true });
@@ -765,21 +776,6 @@ const OrderFormNew = () => {
 
           if (response?.data?.id) {
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
-
-            // Warm up PDF in background (no auto-open) unless order_type is 'online'
-            if (response.data.order_type !== 'online') {
-              setPdfStatus('opening');
-              setTimeout(() => setPdfStatus(null), 12000);
-              const pdfUrl = await warmupPdf(response.data.id);
-              if (pdfUrl) {
-                setPdfStatus('opened');
-                setTimeout(() => setPdfStatus(null), 6000);
-              } else {
-                setPdfStatus('failed');
-                setTimeout(() => setPdfStatus(null), 12000);
-              }
-            } else {
-            }
           }
         } else {
           const response = await api.post('/orders/orders/', dataToSubmit);
@@ -788,21 +784,6 @@ const OrderFormNew = () => {
           if (response?.data?.id) {
             setFormData(prev => ({ ...prev, id: response.data.id, order_number: response.data.order_number || prev.order_number, order_document: response.data.order_document || prev.order_document, supplier_confirmation_document: response.data.supplier_confirmation_document || prev.supplier_confirmation_document, status: response.data.status || prev.status, status_display: response.data.status_display || prev.status_display }));
 
-            // Warm up PDF in background (no auto-open) unless order_type is 'online'
-            if (response.data.order_type !== 'online') {
-              setPdfStatus('opening');
-              setTimeout(() => setPdfStatus(null), 12000);
-              const pdfUrl = await warmupPdf(response.data.id);
-              if (pdfUrl) {
-                setPdfStatus('opened');
-                setTimeout(() => setPdfStatus(null), 6000);
-              } else {
-                setPdfStatus('failed');
-                setTimeout(() => setPdfStatus(null), 12000);
-              }
-            } else {
-            }
-
             navigate(`/procurement/orders/${response.data.id}/edit`, { replace: true });
           }
         }
@@ -810,6 +791,103 @@ const OrderFormNew = () => {
 
       setHasUnsavedChanges(false);
       alert('Bestellung erfolgreich gespeichert!');
+    } catch (error) {
+      console.error('Fehler beim Speichern der Bestellung:', error);
+      const errorMsg = error.response?.data ? JSON.stringify(error.response.data, null, 2) : error.message;
+      alert('Fehler beim Speichern:\n\n' + errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handler for "Speichern und PDF generieren" button
+  const handleSaveAndGeneratePdf = async () => {
+    if (!formData.supplier) {
+      alert('Bitte wählen Sie einen Lieferanten aus');
+      setActiveTab(0);
+      return;
+    }
+
+    if (formData.items.length === 0) {
+      alert('Bitte fügen Sie mindestens eine Position hinzu');
+      setActiveTab(1);
+      return;
+    }
+
+    // Check controlling checkboxes for confirmed orders
+    const allCheckedGlobal = formData.items && formData.items.length > 0 ? formData.items.every(i => !!i.controlling_checked) : false;
+    if (formData.status === 'bestaetigt' && formData.confirmation_date && !allCheckedGlobal) {
+      alert('Alle Controlling-Checkboxen müssen gesetzt sein, bevor die Bestellung als bestätigt gespeichert werden kann.');
+      setActiveTab(4);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const submitData = {
+        ...formData,
+        order_date: formData.order_date || null,
+        confirmation_date: formData.confirmation_date || null,
+        delivery_date: formData.delivery_date || null,
+        expected_delivery_date: formData.expected_delivery_date || null,
+        payment_date: formData.payment_date || null
+      };
+
+      // Remove file fields - they need to be uploaded separately
+      delete submitData.order_document;
+      delete submitData.offer_document;
+      delete submitData.supplier_confirmation_document;
+
+      let orderId = id;
+
+      if (isEditMode) {
+        // Use the new endpoint that saves AND generates PDF
+        const response = await api.post(`/orders/orders/${id}/save_and_generate_pdf/`, submitData);
+        if (response?.data?.id) {
+          setFormData(prev => ({ 
+            ...prev, 
+            id: response.data.id, 
+            order_number: response.data.order_number || prev.order_number, 
+            order_document: response.data.order_document || prev.order_document,
+            status: response.data.status || prev.status, 
+            status_display: response.data.status_display || prev.status_display 
+          }));
+          orderId = response.data.id;
+        }
+      } else {
+        // For new orders, first create, then generate PDF
+        const createResponse = await api.post('/orders/orders/', submitData);
+        if (createResponse?.data?.id) {
+          orderId = createResponse.data.id;
+          // Now generate PDF
+          const pdfResponse = await api.post(`/orders/orders/${orderId}/save_and_generate_pdf/`, {});
+          setFormData(prev => ({ 
+            ...prev, 
+            id: pdfResponse.data.id, 
+            order_number: pdfResponse.data.order_number || prev.order_number, 
+            order_document: pdfResponse.data.order_document || prev.order_document,
+            status: pdfResponse.data.status || prev.status, 
+            status_display: pdfResponse.data.status_display || prev.status_display 
+          }));
+          navigate(`/procurement/orders/${orderId}/edit`, { replace: true });
+        }
+      }
+
+      // Warm up PDF for display
+      if (orderId && formData.order_type !== 'online') {
+        setPdfStatus('opening');
+        const pdfUrl = await warmupPdf(orderId);
+        if (pdfUrl) {
+          setPdfStatus('opened');
+          setTimeout(() => setPdfStatus(null), 6000);
+        } else {
+          setPdfStatus('failed');
+          setTimeout(() => setPdfStatus(null), 12000);
+        }
+      }
+
+      setHasUnsavedChanges(false);
+      alert('Bestellung erfolgreich gespeichert und PDF generiert!');
     } catch (error) {
       console.error('Fehler beim Speichern der Bestellung:', error);
       const errorMsg = error.response?.data ? JSON.stringify(error.response.data, null, 2) : error.message;
@@ -1682,7 +1760,7 @@ const OrderFormNew = () => {
                   if (formData.order_date && formData.status === 'angelegt') {
                     setFormData(prev => ({ ...prev, status: 'bestellt' }));
                   }
-                  await handleSave();
+                  await handleSaveAndGeneratePdf();
                 }}
                 disabled={loading}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400"
@@ -1942,17 +2020,32 @@ const OrderFormNew = () => {
                         alert('Keine Positionen zum Übertragen vorhanden.');
                         return;
                       }
-                      
+
                       if (window.confirm(`Möchten Sie alle ${formData.items.length} Position(en) in den Wareneingang übertragen?`)) {
                         try {
                           const itemIds = formData.items.map(item => item.id);
                           const res = await api.post(`/orders/orders/${id}/transfer_to_incoming_goods/`, {
                             item_ids: itemIds
                           });
-                          alert(res.data.message);
+                          const msg = res.data.message + (res.data.incoming_count !== undefined ? ` (Incoming count: ${res.data.incoming_count})` : '');
+                          alert(msg);
+                          console.log('transfer_to_incoming_goods response:', res.data);
                           if (res.data.errors && res.data.errors.length > 0) {
                             alert('Einige Fehler sind aufgetreten:\n' + res.data.errors.join('\n'));
                           }
+
+                          // Wenn tatsächlich Positionen übertragen wurden, deaktiviere den Button und speichere automatisch
+                          if (res.data.transferred_count && res.data.transferred_count > 0) {
+                            setIncomingExists(true);
+                            // persist flag on order by setting formData and saving
+                            setFormData(prev => ({ ...prev, incoming_recorded: true }));
+                            try {
+                              await handleSave();
+                            } catch (e) {
+                              console.error('Fehler beim automatischen Speichern nach Wareneingang:', e);
+                            }
+                          }
+
                           // Navigiere zum Wareneingang
                           if (window.confirm('Möchten Sie zum Wareneingang navigieren?')) {
                             navigate('/inventory/warehouse');
@@ -1963,7 +2056,7 @@ const OrderFormNew = () => {
                         }
                       }
                     }}
-                    disabled={!formData.items || formData.items.length === 0}
+                    disabled={!formData.items || formData.items.length === 0 || incomingExists}
                     className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
                     <InboxArrowDownIcon className="h-5 w-5 mr-2" />

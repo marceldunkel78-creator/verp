@@ -57,7 +57,7 @@ class IncomingGoodsViewSet(viewsets.ModelViewSet):
                 Q(serial_number__icontains=search)
             )
         
-        return queryset.select_related('supplier', 'order_item', 'trading_product', 'material_supply')
+        return queryset
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

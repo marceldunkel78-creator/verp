@@ -1,4 +1,5 @@
 from django.db import models
+from core.upload_paths import company_upload_path
 
 
 class CompanySettings(models.Model):
@@ -63,7 +64,7 @@ class CompanySettings(models.Model):
     
     # Dokument-Header Logo
     document_header = models.ImageField(
-        upload_to='company/headers/',
+        upload_to=company_upload_path,
         blank=True,
         null=True,
         verbose_name='Dokument-Header',

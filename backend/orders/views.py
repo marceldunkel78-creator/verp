@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import transaction
 from .models import Order, OrderItem
 from .serializers import (
     OrderListSerializer, OrderDetailSerializer,
@@ -105,6 +106,8 @@ class OrderViewSet(viewsets.ModelViewSet):
     def transfer_to_incoming_goods(self, request, pk=None):
         """Überträgt Bestellpositionen in den Wareneingang"""
         from inventory.models import IncomingGoods
+        from inventory.serializers import IncomingGoodsSerializer
+        from django.utils import timezone
         
         order = self.get_object()
         
@@ -126,6 +129,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         transferred_count = 0
         errors = []
+        created_ids = []
         
         for item_id in item_ids:
             try:
@@ -137,28 +141,30 @@ class OrderViewSet(viewsets.ModelViewSet):
                     errors.append(f'Position {order_item.position} ist bereits im Wareneingang.')
                     continue
                 
-                # Erstelle Wareneingangsposition
-                IncomingGoods.objects.create(
+                # Erstelle IncomingGoods-Eintrag mit Django ORM
+                incoming = IncomingGoods.objects.create(
                     order_item=order_item,
-                    article_number=order_item.article_number,
-                    name=order_item.name,
-                    description=order_item.description,
-                    delivered_quantity=order_item.quantity,
-                    unit=order_item.unit,
-                    purchase_price=order_item.final_price,
-                    currency=order_item.currency,
-                    item_function='TRADING_GOOD',  # Default, kann im Wareneingang editiert werden
+                    article_number=order_item.article_number or '',
+                    name=order_item.name or '',
+                    description=order_item.description or '',
+                    delivered_quantity=order_item.quantity or 0,
+                    unit=order_item.unit or '',
+                    purchase_price=order_item.final_price or 0,
+                    currency=order_item.currency or 'EUR',
+                    item_function='TRADING_GOOD',
                     item_category='',
                     serial_number='',
                     trading_product=order_item.trading_product,
                     material_supply=order_item.material_supply,
                     supplier=order.supplier,
-                    order_number=order.order_number,
-                    customer_order_number=order_item.customer_order_number,
-                    management_info=order_item.management_info or {},
+                    order_number=order.order_number or '',
+                    customer_order_number=order_item.customer_order_number or '',
+                    management_info={},
+                    is_transferred=False,
+                    received_at=timezone.now(),
                     created_by=request.user
                 )
-                
+                created_ids.append(incoming.id)
                 transferred_count += 1
                 
             except OrderItem.DoesNotExist:
@@ -166,15 +172,60 @@ class OrderViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 errors.append(f'Fehler bei Position ID {item_id}: {str(e)}')
         
+        # Set incoming_recorded using update() to avoid triggering signals
+        if transferred_count > 0:
+            Order.objects.filter(pk=order.pk).update(incoming_recorded=True)
+        
         response_data = {
             'message': f'{transferred_count} Position(en) wurden in den Wareneingang übertragen.',
-            'transferred_count': transferred_count
+            'transferred_count': transferred_count,
+            'created_ids': created_ids
         }
         
         if errors:
             response_data['errors'] = errors
+
+        # Add count and serialized items to response
+        incoming_count = IncomingGoods.objects.filter(order_item__order=order).count()
+        response_data['incoming_count'] = incoming_count
         
+        if created_ids:
+            created_objs = IncomingGoods.objects.filter(id__in=created_ids)
+            response_data['incoming_items'] = IncomingGoodsSerializer(
+                created_objs, many=True, context={'request': request}
+            ).data
+        else:
+            response_data['incoming_items'] = []
+
         return Response(response_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def save_and_generate_pdf(self, request, pk=None):
+        """Speichert die Bestellung und generiert das PDF"""
+        instance = self.get_object()
+        
+        # Don't allow for online orders
+        if getattr(instance, 'order_type', None) == 'online':
+            return Response(
+                {'error': 'PDF generation is disabled for online orders. Please upload an order receipt.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update order with request data if provided
+        if request.data:
+            serializer = OrderCreateUpdateSerializer(instance, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+        
+        # Set flag to trigger PDF generation and save
+        instance._generate_pdf = True
+        instance.save()
+        
+        # Refresh to get updated order_document path
+        instance = Order.objects.get(pk=instance.pk)
+        
+        detail_serializer = OrderDetailSerializer(instance, context={'request': request})
+        return Response(detail_serializer.data)
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):

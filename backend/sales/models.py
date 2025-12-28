@@ -2,16 +2,15 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from core.upload_paths import quotation_upload_path
 
 User = get_user_model()
 
 
-# Temporär für alte Migration - kann nach erfolgreicher Migration entfernt werden
+# Wrapper für Migrations-Kompatibilität
 def quotation_document_upload_path(instance, filename):
     """Generate upload path with quotation number prefix"""
-    if instance.quotation_number:
-        return f'quotations/{instance.quotation_number}_{filename}'
-    return f'quotations/{filename}'
+    return quotation_upload_path(instance, filename)
 
 
 class Quotation(models.Model):

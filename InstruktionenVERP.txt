@@ -11,16 +11,44 @@ python manage.py makemigrations
 python manage.py migrate
 
 
-SECRET_KEY konfigurieren (empfohlen für Produktion):
+Umgebungsvariablen konfigurieren (.env Datei):
+- Kopiere backend/.env.example nach backend/.env
+- Passe die Werte an:
+
+  # Django Settings
+  SECRET_KEY=dein-sicherer-key-hier
+  DJANGO_DEBUG=True
+  ALLOWED_HOSTS=localhost,127.0.0.1
+
+  # Database
+  DB_NAME=verp_db
+  DB_USER=verp_user
+  DB_PASSWORD=verp_password
+  DB_HOST=localhost
+  DB_PORT=5432
+
+  # Media Storage - Absoluter Pfad zum externen Medienordner
+  MEDIA_ROOT=C:/VERP-Media
+
 - Generiere einen sicheren SECRET_KEY:
   cd backend
   python tools/generate_secret_key.py
 
-- Setze die Umgebungsvariable (PowerShell, einmalig für die Sitzung):
-  $env:SECRET_KEY = "<kopierten_key_hier>"
 
-- Für dauerhaftes Setzen unter Windows (Systemweite Umgebungsvariable):
-  setx SECRET_KEY "<kopierten_key_hier>"
+Medien-Speicherstruktur (VERP-Media):
+Der MEDIA_ROOT Ordner enthält alle hochgeladenen und generierten Dateien:
+  /customer_orders/Jahr/Auftragsnummer/    - Kundenaufträge
+  /orders/Jahr/Bestellnummer/              - Lieferantenbestellungen
+  /quotations/Jahr/Angebotsnummer/         - Angebote
+  /Systems/Systemnummer/                   - Systeme
+  /projects/Projektnummer/                 - Projekte
+  /HR/Mitarbeiternummer/                   - Personal (DSGVO-geschützt)
+  /Trading Goods/VS-Artikelnummer/         - Handelswaren
+  /M&S/VS-Artikelnummer/                   - Material & Supplies
+  /Service/Serviceticketnummer/            - Service-Tickets
+  /Manufacturing/Produktnummer/            - Fertigung
+  /VisiView/Lizenznummer/                  - VisiView Lizenzen
+  /company/                                - Firmenlogos/Header
 
 
 Superuser erstellen bei activated venv
@@ -42,12 +70,14 @@ Firmeneinstellungen konfigurieren:
 Bestelldokumente:
 - Beim Erstellen/Bearbeiten einer Bestellung können Sie:
   * Ein Bestelldokument hochladen (z.B. PDF von Online-Bestellung)
-  * Ein professionelles PDF-Bestelldokument generieren (Button "PDF herunterladen")
+  * Ein professionelles PDF-Bestelldokument generieren (Button "Speichern und PDF generieren")
 - Das generierte PDF enthält:
   * Firmen-Logo (aus Company Settings)
   * Lieferantenadresse
   * Bestellpositionen mit allen Details
   * Footer mit Firmendaten, Bankverbindung und rechtlichen Informationen
+- HINWEIS: PDFs werden nur beim Klick auf "Speichern und PDF generieren" erstellt,
+  nicht bei jedem Speichervorgang.
 
 
 server starten :
