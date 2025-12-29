@@ -23,6 +23,11 @@ class VisiViewProduct(models.Model):
     
     name = models.CharField(max_length=200, verbose_name='Produktname')
     description = models.TextField(blank=True, verbose_name='Beschreibung')
+    description_en = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung (Englisch)',
+        help_text='English description for international quotations'
+    )
     
     # Warenkategorie - Vorauswahl VisiView
     product_category = models.ForeignKey(

@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 
 User = get_user_model()
 
@@ -319,11 +319,22 @@ class TradingProduct(models.Model):
         verbose_name='Kategorie'
     )
     description = models.TextField(blank=True, verbose_name='Beschreibung')
+    description_en = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung (Englisch)',
+        help_text='English description for international quotations'
+    )
     short_description = models.CharField(
         max_length=200,
         blank=True,
         verbose_name='Kurzbeschreibung',
         help_text='Kurze Beschreibung für Bestellungen'
+    )
+    short_description_en = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Kurzbeschreibung (Englisch)',
+        help_text='Short English description for orders'
     )
     
     # Lieferant
@@ -562,6 +573,139 @@ class TradingProduct(models.Model):
         
         # Auf volle Euros aufrunden
         return visitron_price.quantize(Decimal('1'), rounding=ROUND_UP)
+    
+    def get_current_price(self):
+        """Gibt den aktuell gültigen Preis-Eintrag zurück"""
+        from django.utils import timezone
+        today = timezone.now().date()
+        return self.price_history.filter(
+            valid_from__lte=today
+        ).filter(
+            models.Q(valid_until__isnull=True) | models.Q(valid_until__gte=today)
+        ).order_by('-valid_from').first()
+
+
+class TradingProductPrice(models.Model):
+    """
+    Preishistorie für Trading Products mit Gültigkeitszeitraum
+    EK = Einkaufspreis (berechnet), LP/VK = Listenpreis/Verkaufspreis
+    """
+    product = models.ForeignKey(
+        TradingProduct,
+        on_delete=models.CASCADE,
+        related_name='price_history',
+        verbose_name='Trading Product'
+    )
+    
+    # Lieferanten-Listenpreis (Basis für Berechnung)
+    supplier_list_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name='Lieferanten-Listenpreis',
+        help_text='Original-Listenpreis des Lieferanten'
+    )
+    supplier_currency = models.CharField(
+        max_length=3,
+        default='EUR',
+        verbose_name='Listenpreis-Währung'
+    )
+    exchange_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=Decimal('1.0'),
+        verbose_name='Wechselkurs zu EUR'
+    )
+    
+    # Rabatte und Kosten
+    discount_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='Rabatt (%)'
+    )
+    shipping_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Versandkosten')
+    shipping_cost_is_percent = models.BooleanField(default=False, verbose_name='Versandkosten in %')
+    import_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Importkosten')
+    import_cost_is_percent = models.BooleanField(default=False, verbose_name='Importkosten in %')
+    handling_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Handlingkosten')
+    handling_cost_is_percent = models.BooleanField(default=False, verbose_name='Handlingkosten in %')
+    storage_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Lagerkosten')
+    storage_cost_is_percent = models.BooleanField(default=False, verbose_name='Lagerkosten in %')
+    
+    # Marge für VLP-Berechnung
+    margin_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='Marge (%)',
+        help_text='Marge für Visitron-Listenpreis'
+    )
+    
+    # Berechnete Preise (zum Zeitpunkt der Erstellung gespeichert)
+    purchase_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name='Einkaufspreis (EK)',
+        help_text='Berechneter Einkaufspreis in EUR'
+    )
+    list_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name='Visitron-Listenpreis (LP/VK)',
+        help_text='Berechneter Verkaufspreis für Angebote in EUR'
+    )
+    
+    # Gültigkeit
+    valid_from = models.DateField(verbose_name='Gültig von')
+    valid_until = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Gültig bis',
+        help_text='Leer = unbegrenzt gültig'
+    )
+    
+    notes = models.TextField(blank=True, verbose_name='Notizen')
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='trading_product_prices_created'
+    )
+    
+    class Meta:
+        verbose_name = 'Trading Product Preis'
+        verbose_name_plural = 'Trading Product Preise'
+        ordering = ['product', '-valid_from']
+    
+    def __str__(self):
+        return f"{self.product.visitron_part_number}: EK {self.purchase_price}€ / LP {self.list_price}€ ab {self.valid_from}"
+    
+    def calculate_prices(self):
+        """Berechnet EK und VLP basierend auf den eingegebenen Werten"""
+        # Basispreis nach Rabatt
+        base_price = self.supplier_list_price * (Decimal('1') - self.discount_percent / Decimal('100'))
+        
+        # Zusätzliche Kosten berechnen
+        shipping = self.shipping_cost if not self.shipping_cost_is_percent else base_price * (self.shipping_cost / Decimal('100'))
+        import_c = self.import_cost if not self.import_cost_is_percent else base_price * (self.import_cost / Decimal('100'))
+        handling = self.handling_cost if not self.handling_cost_is_percent else base_price * (self.handling_cost / Decimal('100'))
+        storage = self.storage_cost if not self.storage_cost_is_percent else base_price * (self.storage_cost / Decimal('100'))
+        
+        # Einkaufspreis (mit Wechselkurs)
+        self.purchase_price = (base_price + shipping + import_c + handling + storage) * self.exchange_rate
+        
+        # Visitron-Listenpreis mit Marge
+        if self.margin_percent >= Decimal('100'):
+            self.list_price = self.purchase_price * Decimal('10')
+        else:
+            margin_divisor = Decimal('1') - (self.margin_percent / Decimal('100'))
+            self.list_price = (self.purchase_price / margin_divisor).quantize(Decimal('1'), rounding=ROUND_UP)
+    
+    def save(self, *args, **kwargs):
+        # Preise berechnen vor dem Speichern
+        self.calculate_prices()
+        super().save(*args, **kwargs)
 
 
 class SupplierProduct(models.Model):

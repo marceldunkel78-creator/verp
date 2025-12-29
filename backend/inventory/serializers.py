@@ -1,11 +1,14 @@
 from rest_framework import serializers
-from .models import IncomingGoods, InventoryItem
+from decimal import Decimal
+from .models import IncomingGoods, InventoryItem, EQUIPMENT_TEMPLATES, QM_TEMPLATES
 from suppliers.serializers import SupplierSerializer
+from verp_settings.serializers import ProductCategorySerializer
 
 
 class IncomingGoodsSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
     supplier_number = serializers.CharField(source='supplier.supplier_number', read_only=True)
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
     
     class Meta:
         model = IncomingGoods
@@ -15,11 +18,14 @@ class IncomingGoodsSerializer(serializers.ModelSerializer):
             'article_number',
             'name',
             'description',
+            'model_designation',
             'delivered_quantity',
             'unit',
             'purchase_price',
             'currency',
             'item_function',
+            'product_category',
+            'product_category_name',
             'item_category',
             'serial_number',
             'trading_product',
@@ -59,7 +65,10 @@ class IncomingGoodsDetailSerializer(serializers.ModelSerializer):
 class InventoryItemSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
     supplier_number = serializers.CharField(source='supplier.supplier_number', read_only=True)
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
+    product_category_code = serializers.CharField(source='product_category.code', read_only=True)
     total_value = serializers.SerializerMethodField()
+    customer_display = serializers.SerializerMethodField()
     
     class Meta:
         model = InventoryItem
@@ -69,8 +78,12 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'article_number',
             'visitron_part_number',
             'name',
+            'model_designation',
             'description',
             'item_function',
+            'product_category',
+            'product_category_name',
+            'product_category_code',
             'item_category',
             'serial_number',
             'quantity',
@@ -83,8 +96,22 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'supplier_number',
             'trading_product',
             'material_supply',
+            'order',
             'order_number',
+            'customer',
+            'customer_name',
+            'customer_display',
+            'customer_order',
             'customer_order_number',
+            'system',
+            'system_number',
+            'project',
+            'project_number',
+            'firmware_version',
+            'firmware_notes',
+            'equipment_data',
+            'qm_data',
+            'notes',
             'management_info',
             'status',
             'stored_at',
@@ -95,13 +122,34 @@ class InventoryItemSerializer(serializers.ModelSerializer):
     
     def get_total_value(self, obj):
         """Berechnet den Gesamtwert (Menge * Einkaufspreis)"""
-        return float(obj.quantity * obj.purchase_price)
+        try:
+            q = obj.quantity if obj.quantity is not None else Decimal('0')
+            p = obj.purchase_price if obj.purchase_price is not None else Decimal('0')
+            return float(q * p)
+        except Exception:
+            return 0.0
+    
+    def get_customer_display(self, obj):
+        """Gibt den Kundennamen zurück"""
+        if obj.customer:
+            # Customer model uses first_name/last_name; fall back to string representation
+            if hasattr(obj.customer, 'get_full_name'):
+                try:
+                    return obj.customer.get_full_name()
+                except Exception:
+                    return str(obj.customer)
+            return str(obj.customer)
+        return obj.customer_name
 
 
 class InventoryItemDetailSerializer(serializers.ModelSerializer):
     supplier = SupplierSerializer(read_only=True)
+    product_category_data = ProductCategorySerializer(source='product_category', read_only=True)
     stored_by_name = serializers.CharField(source='stored_by.get_full_name', read_only=True)
     total_value = serializers.SerializerMethodField()
+    equipment_template = serializers.SerializerMethodField()
+    qm_template = serializers.SerializerMethodField()
+    customer_display = serializers.SerializerMethodField()
     
     class Meta:
         model = InventoryItem
@@ -110,7 +158,39 @@ class InventoryItemDetailSerializer(serializers.ModelSerializer):
     
     def get_total_value(self, obj):
         """Berechnet den Gesamtwert (Menge * Einkaufspreis)"""
-        return float(obj.quantity * obj.purchase_price)
+        try:
+            q = obj.quantity if obj.quantity is not None else Decimal('0')
+            p = obj.purchase_price if obj.purchase_price is not None else Decimal('0')
+            return float(q * p)
+        except Exception:
+            return 0.0
+    
+    def get_equipment_template(self, obj):
+        """Gibt das Ausstattungs-Template basierend auf der Kategorie zurück"""
+        if obj.product_category:
+            category_code = obj.product_category.code
+        else:
+            category_code = obj.item_category
+        return EQUIPMENT_TEMPLATES.get(category_code, {})
+    
+    def get_qm_template(self, obj):
+        """Gibt das QM-Template basierend auf der Kategorie zurück"""
+        if obj.product_category:
+            category_code = obj.product_category.code
+        else:
+            category_code = obj.item_category
+        return QM_TEMPLATES.get(category_code, QM_TEMPLATES.get('DEFAULT', {}))
+    
+    def get_customer_display(self, obj):
+        """Gibt den Kundennamen zurück"""
+        if obj.customer:
+            if hasattr(obj.customer, 'get_full_name'):
+                try:
+                    return obj.customer.get_full_name()
+                except Exception:
+                    return str(obj.customer)
+            return str(obj.customer)
+        return obj.customer_name
 
 
 class TransferToInventorySerializer(serializers.Serializer):

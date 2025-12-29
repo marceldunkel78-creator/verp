@@ -7,7 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
 from .models import (
-    Supplier, SupplierContact, TradingProduct,
+    Supplier, SupplierContact, TradingProduct, TradingProductPrice,
     SupplierProduct, ProductGroup, PriceList, MaterialSupply
 )
 from .serializers import (
@@ -18,7 +18,8 @@ from .serializers import (
 from .trading_serializers import (
     TradingProductListSerializer,
     TradingProductDetailSerializer,
-    TradingProductCreateUpdateSerializer
+    TradingProductCreateUpdateSerializer,
+    TradingProductPriceSerializer
 )
 from .ms_serializers import (
     MaterialSupplyListSerializer,
@@ -195,3 +196,19 @@ class MaterialSupplyViewSet(viewsets.ModelViewSet):
         elif self.action in ['create', 'update', 'partial_update']:
             return MaterialSupplyCreateUpdateSerializer
         return MaterialSupplyListSerializer
+
+
+class TradingProductPriceViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Trading Product Preishistorie
+    """
+    queryset = TradingProductPrice.objects.select_related('product', 'created_by').all()
+    serializer_class = TradingProductPriceSerializer
+    permission_classes = [IsAuthenticated, SupplierPermission]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['product']
+    ordering_fields = ['valid_from', 'created_at']
+    ordering = ['-valid_from']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)

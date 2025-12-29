@@ -31,8 +31,11 @@ const EmployeeList = () => {
     weekly_work_hours: 40.00,
     work_days: ['mon','tue','wed','thu','fri'],
     annual_vacation_days: 30,
-    employment_status: 'aktiv'
+    employment_status: 'aktiv',
+    closing_greeting: 'Mit freundlichen Grüßen'
   });
+  const [signatureFile, setSignatureFile] = useState(null);
+  const [signaturePreview, setSignaturePreview] = useState(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -68,14 +71,47 @@ const EmployeeList = () => {
         delete submitData.employment_end_date;
       }
       delete submitData.employee_id; // Immer automatisch generiert
-      if (editingEmployee) {
-        await api.put(`/users/employees/${editingEmployee.id}/`, submitData);
+      
+      // Wenn Signatur-Datei vorhanden, verwende FormData
+      if (signatureFile) {
+        const submitFormData = new FormData();
+        
+        // Füge alle Text-Felder zum FormData hinzu
+        Object.keys(submitData).forEach(key => {
+          if (key === 'work_days') {
+            // Array als JSON-String für FormData
+            submitFormData.append(key, JSON.stringify(submitData[key]));
+          } else if (submitData[key] !== null && submitData[key] !== undefined && submitData[key] !== '') {
+            submitFormData.append(key, submitData[key]);
+          }
+        });
+        
+        // Füge Signatur-Datei hinzu
+        submitFormData.append('signature_image', signatureFile);
+        
+        if (editingEmployee) {
+          await api.put(`/users/employees/${editingEmployee.id}/`, submitFormData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        } else {
+          await api.post('/users/employees/', submitFormData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        }
       } else {
-        await api.post('/users/employees/', submitData);
+        // Ohne Datei-Upload, normaler JSON-Request
+        if (editingEmployee) {
+          await api.put(`/users/employees/${editingEmployee.id}/`, submitData);
+        } else {
+          await api.post('/users/employees/', submitData);
+        }
       }
+      
       fetchEmployees();
       setShowModal(false);
       setEditingEmployee(null);
+      setSignatureFile(null);
+      setSignaturePreview(null);
       resetForm();
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
@@ -105,8 +141,12 @@ const EmployeeList = () => {
       weekly_work_hours: employee.weekly_work_hours ? parseFloat(employee.weekly_work_hours) : 40.00,
       annual_vacation_days: employee.annual_vacation_days || 30,
       work_days: Array.isArray(employee.work_days) ? employee.work_days : ['mon','tue','wed','thu','fri'],
-      employment_status: employee.employment_status || 'aktiv'
+      employment_status: employee.employment_status || 'aktiv',
+      closing_greeting: employee.closing_greeting || 'Mit freundlichen Grüßen'
     });
+    // Setze Signatur-Vorschau wenn vorhanden
+    setSignaturePreview(employee.signature_image_url || null);
+    setSignatureFile(null);
     setShowModal(true);
   };
 
@@ -233,8 +273,11 @@ const EmployeeList = () => {
       weekly_work_hours: 40.00,
       annual_vacation_days: 30,
       work_days: ['mon','tue','wed','thu','fri'],
-      employment_status: 'aktiv'
+      employment_status: 'aktiv',
+      closing_greeting: 'Mit freundlichen Grüßen'
     });
+    setSignatureFile(null);
+    setSignaturePreview(null);
   };
 
   const openModal = () => {
@@ -720,6 +763,47 @@ const EmployeeList = () => {
                               <span className="ml-2 text-sm text-gray-700">{d.label}</span>
                             </label>
                           ))}
+                        </div>
+                      </div>
+                      
+                      {/* Signatur für PDF-Dokumente */}
+                      <div className="mt-6 border-t pt-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-3">Unterschrift für Dokumente</h4>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Grußformel</label>
+                            <input
+                              type="text"
+                              value={formData.closing_greeting}
+                              onChange={(e) => setFormData({...formData, closing_greeting: e.target.value})}
+                              placeholder="Mit freundlichen Grüßen"
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Unterschrift (Bild)</label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  setSignatureFile(file);
+                                  setSignaturePreview(URL.createObjectURL(file));
+                                }
+                              }}
+                              className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            {signaturePreview && (
+                              <div className="mt-2">
+                                <img 
+                                  src={signaturePreview} 
+                                  alt="Unterschrift Vorschau" 
+                                  className="h-12 border rounded"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">

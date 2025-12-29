@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
     CompanyManager, CompanyBankAccount, PaymentTerm,
-    DeliveryTerm, DeliveryInstruction
+    DeliveryTerm, DeliveryInstruction, ProductCategory
 )
 
 
@@ -163,6 +163,22 @@ class DeliveryInstructionSerializer(serializers.ModelSerializer):
         model = DeliveryInstruction
         fields = [
             'id', 'name', 'instruction_text', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ProductCategorySerializer(serializers.ModelSerializer):
+    """Serializer für Warenkategorien"""
+    code_display = serializers.CharField(source='get_code_display', read_only=True)
+    
+    class Meta:
+        model = ProductCategory
+        fields = [
+            'id', 'code', 'code_display', 'name', 'description',
+            'applies_to_trading_goods', 'applies_to_material_supplies',
+            'applies_to_vs_hardware', 'applies_to_vs_software', 'applies_to_vs_service',
+            'requires_serial_number', 'is_active', 'sort_order',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

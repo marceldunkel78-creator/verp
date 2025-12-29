@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
-import { ArrowLeftIcon, PlusIcon, TrashIcon, DocumentArrowDownIcon, DocumentIcon, ChevronDownIcon, ChevronUpIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlusIcon, TrashIcon, DocumentArrowDownIcon, DocumentIcon, ChevronDownIcon, ChevronUpIcon, ArrowUpIcon, ArrowDownIcon, UserIcon, ClipboardDocumentListIcon, CogIcon, DocumentTextIcon, ShoppingCartIcon } from '@heroicons/react/24/outline';
 
 const QuotationForm = () => {
   const navigate = useNavigate();
@@ -13,10 +13,33 @@ const QuotationForm = () => {
   const [customers, setCustomers] = useState([]);
   const [customerAddresses, setCustomerAddresses] = useState([]);
   const [tradingProducts, setTradingProducts] = useState([]);
+  const [visiviewProducts, setVisiviewProducts] = useState([]);
+  const [vsHardwareProducts, setVsHardwareProducts] = useState([]);
+  const [vsServiceProducts, setVsServiceProducts] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [deliveryTerms, setDeliveryTerms] = useState([]);
   const [users, setUsers] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [systems, setSystems] = useState([]);
   const [collapsedGroups, setCollapsedGroups] = useState({});
+  const [activeTab, setActiveTab] = useState(1);
+  
+  // Customer search
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
+  // Product filter for item selection
+  const [productFilter, setProductFilter] = useState('');
+  
+  // Tab configuration
+  const tabs = [
+    { id: 1, name: 'Basisinfos', icon: UserIcon },
+    { id: 2, name: 'Positionen', icon: ClipboardDocumentListIcon },
+    { id: 3, name: 'Konditionen', icon: CogIcon },
+    { id: 4, name: 'PDF erstellen', icon: DocumentTextIcon },
+    { id: 5, name: 'Auftrag', icon: ShoppingCartIcon }
+  ];
   
   const [formData, setFormData] = useState({
     customer: '',
@@ -25,7 +48,7 @@ const QuotationForm = () => {
     project_reference: '',
     system_reference: '',
     reference: '',
-    valid_until: '',
+    valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 Tage ab heute
     delivery_time_weeks: 0,
     status: 'DRAFT',
     language: 'DE',
@@ -44,9 +67,21 @@ const QuotationForm = () => {
     recipient_city: '',
     recipient_country: 'DE',
     notes: '',
+    description_text: '',
+    footer_text: '',
+    pdf_file_url: '',
+    quotation_date: new Date().toISOString().split('T')[0],
     items: []
   });
   
+  // Track if form has unsaved changes
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // Wrapper function to update formData and mark as having unsaved changes
+  const updateFormData = (updater) => {
+    setFormData(updater);
+    setHasUnsavedChanges(true);
+  };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -169,20 +204,28 @@ const QuotationForm = () => {
 
   const fetchInitialData = async () => {
     try {
-      const [customersRes, tradingRes, paymentRes, deliveryTermsRes, usersRes, currentUserRes] = await Promise.all([
-        api.get('/customers/customers/?is_active=true'),
+      const [tradingRes, visiviewRes, vsHardwareRes, vsServiceRes, paymentRes, deliveryTermsRes, usersRes, projectsRes, systemsRes, currentUserRes] = await Promise.all([
         api.get('/suppliers/products/'),
+        api.get('/visiview/products/?is_active=true'),
+        api.get('/manufacturing/vs-hardware/?is_active=true'),
+        api.get('/service/vs-service/?is_active=true'),
         api.get('/settings/payment-terms/'),
         api.get('/settings/delivery-terms/'),
         api.get('/users/'),
+        api.get('/projects/projects/?is_active=true'),
+        api.get('/systems/systems/?is_active=true'),
         api.get('/users/me/')
       ]);
       
-      setCustomers(customersRes.data.results || customersRes.data || []);
       setTradingProducts(tradingRes.data.results || tradingRes.data || []);
+      setVisiviewProducts(visiviewRes.data.results || visiviewRes.data || []);
+      setVsHardwareProducts(vsHardwareRes.data.results || vsHardwareRes.data || []);
+      setVsServiceProducts(vsServiceRes.data.results || vsServiceRes.data || []);
       setPaymentTerms(paymentRes.data.results || paymentRes.data || []);
       setDeliveryTerms(deliveryTermsRes.data.results || deliveryTermsRes.data || []);
       setUsers(usersRes.data.results || usersRes.data || []);
+      setProjects(projectsRes.data.results || projectsRes.data || []);
+      setSystems(systemsRes.data.results || systemsRes.data || []);
       
       const user = currentUserRes.data;
       // Set default user for new quotations
@@ -198,6 +241,28 @@ const QuotationForm = () => {
       alert('Fehler beim Laden der Daten');
     }
   };
+  
+  // Customer search function
+  const searchCustomers = async () => {
+    if (!customerSearchTerm.trim()) {
+      setCustomerSearchResults([]);
+      return;
+    }
+    try {
+      const response = await api.get(`/customers/customers/?search=${encodeURIComponent(customerSearchTerm)}&is_active=true`);
+      setCustomerSearchResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Fehler bei Kundensuche:', error);
+    }
+  };
+  
+  // Select customer from search results
+  const handleSelectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setFormData(prev => ({ ...prev, customer: customer.id }));
+    setCustomerSearchResults([]);
+    setCustomerSearchTerm('');
+  };
 
   const fetchQuotation = async () => {
     setLoading(true);
@@ -206,24 +271,42 @@ const QuotationForm = () => {
       const quotation = response.data;
       
       // Items müssen die neuen Felder enthalten
-      const mappedItems = (quotation.items || []).map(item => ({
-        id: item.id,
-        content_type: item.content_type_data || item.content_type,
-        object_id: item.object_id,
-        group_id: item.group_id || null,
-        group_name: item.group_name || '',
-        is_group_header: item.is_group_header || false,
-        position: item.position,
-        description_type: item.description_type,
-        uses_system_price: item.uses_system_price || false,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        purchase_price: item.purchase_price || 0,
-        sale_price: item.sale_price || null,
-        discount_percent: item.discount_percent,
-        tax_rate: item.tax_rate,
-        notes: item.notes || ''
-      }));
+      const mappedItems = (quotation.items || []).map(item => {
+        // Bestimme object_id Format für das Frontend
+        let frontendObjectId = null;
+        if (item.object_id && item.content_type_data) {
+          if (item.content_type_data.model === 'tradingproduct') {
+            frontendObjectId = `tp-${item.object_id}`;
+          } else if (item.content_type_data.model === 'visiviewproduct') {
+            frontendObjectId = `vv-${item.object_id}`;
+          } else if (item.content_type_data.model === 'vshardware') {
+            frontendObjectId = `vs-${item.object_id}`;
+          } else if (item.content_type_data.model === 'vsservice') {
+            frontendObjectId = `vss-${item.object_id}`;
+          }
+        }
+        
+        return {
+          id: item.id,
+          content_type: item.content_type_data || item.content_type,
+          object_id: frontendObjectId,
+          actual_object_id: item.object_id,
+          group_id: item.group_id || null,
+          group_name: item.group_name || '',
+          is_group_header: item.is_group_header || false,
+          position: item.position,
+          description_type: item.description_type,
+          uses_system_price: item.uses_system_price || false,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          purchase_price: item.purchase_price || 0,
+          sale_price: item.sale_price || null,
+          discount_percent: item.discount_percent,
+          tax_rate: item.tax_rate,
+          notes: item.notes || '',
+          custom_description: item.custom_description || ''
+        };
+      });
       
 
       
@@ -233,6 +316,7 @@ const QuotationForm = () => {
 
       
       setFormData({
+        quotation_number: quotation.quotation_number || '',
         customer: quotation.customer || '',
         created_by: quotation.created_by || '',
         commission_user: quotation.commission_user || '',
@@ -257,9 +341,23 @@ const QuotationForm = () => {
         recipient_postal_code: quotation.recipient_postal_code || '',
         recipient_city: quotation.recipient_city || '',
         recipient_country: quotation.recipient_country || 'DE',
+        description_text: quotation.description_text || '',
+        footer_text: quotation.footer_text || '',
+        pdf_file_url: quotation.pdf_file_url || '',
+        quotation_date: quotation.date || new Date().toISOString().split('T')[0],
         notes: quotation.notes || '',
         items: itemsWithPositions
       });
+      
+      // Load selected customer for display
+      if (quotation.customer) {
+        try {
+          const customerRes = await api.get(`/customers/customers/${quotation.customer}/`);
+          setSelectedCustomer(customerRes.data);
+        } catch (err) {
+          console.warn('Kunde konnte nicht geladen werden:', err);
+        }
+      }
     } catch (error) {
       console.error('Fehler beim Laden des Angebots:', error);
       alert('Fehler beim Laden des Angebots');
@@ -301,10 +399,15 @@ setCustomerAddresses(customer.addresses || []);
   const handleCustomerAddressSelect = (addressId) => {
     const address = customerAddresses.find(a => a.id === parseInt(addressId));
     if (address) {
-      setFormData(prev => ({
+      // Include the selected customer's display name as well as the address name
+      const customerDisplay = selectedCustomer ? (`${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`.trim() || selectedCustomer.company || '') : '';
+      const addressName = `${address.title || ''} ${address.first_name || ''} ${address.last_name || ''}`.trim();
+      const combinedName = [customerDisplay, addressName].filter(Boolean).join(' - ');
+
+      updateFormData(prev => ({
         ...prev,
-        recipient_company: address.institute || '',
-        recipient_name: `${address.title || ''} ${address.first_name || ''} ${address.last_name || ''}`.trim(),
+        recipient_company: address.institute || (selectedCustomer ? selectedCustomer.company || '' : ''),
+        recipient_name: combinedName || (selectedCustomer ? (selectedCustomer.company || '') : ''),
         recipient_street: `${address.street || ''} ${address.house_number || ''}`.trim(),
         recipient_postal_code: address.postal_code || '',
         recipient_city: address.city || '',
@@ -328,6 +431,7 @@ setCustomerAddresses(customer.addresses || []);
         discount_percent: 0,
         tax_rate: prev.tax_rate || 19,
         notes: '',
+        custom_description: '',
         group_id: null,
         group_name: '',
         is_group_header: false
@@ -337,6 +441,7 @@ setCustomerAddresses(customer.addresses || []);
         items: updatePositionNumbers(newItems)
       };
     });
+    setHasUnsavedChanges(true);
   };
 
   const handleAddItemGroup = () => {
@@ -355,6 +460,7 @@ setCustomerAddresses(customer.addresses || []);
         discount_percent: 0,
         tax_rate: prev.tax_rate || 19,
         notes: '',
+        custom_description: '',
         group_id: groupId,
         group_name: 'Neue Warensammlung',
         is_group_header: true
@@ -364,6 +470,7 @@ setCustomerAddresses(customer.addresses || []);
         items: updatePositionNumbers(newItems)
       };
     });
+    setHasUnsavedChanges(true);
   };
 
   const handleAddItemToGroup = (groupId) => {
@@ -381,6 +488,7 @@ setCustomerAddresses(customer.addresses || []);
         discount_percent: 0,
         tax_rate: prev.tax_rate || 19,
         notes: '',
+        custom_description: '',
         group_id: groupId,
         group_name: '',
         is_group_header: false
@@ -390,6 +498,7 @@ setCustomerAddresses(customer.addresses || []);
         items: updatePositionNumbers(newItems)
       };
     });
+    setHasUnsavedChanges(true);
   };
 
   const handleRemoveItem = (index) => {
@@ -400,6 +509,7 @@ setCustomerAddresses(customer.addresses || []);
         items: updatePositionNumbers(updatedItems)
       };
     });
+    setHasUnsavedChanges(true);
   };
 
   const handleItemChange = (index, field, value) => {
@@ -408,19 +518,135 @@ setCustomerAddresses(customer.addresses || []);
         if (i === index) {
           const updatedItem = { ...item, [field]: value };
           
-          // Wenn Produkt gewechselt wird, lade Preise automatisch
+          // Wenn Produkt gewechselt wird, lade Preise und Beschreibung automatisch
           if (field === 'object_id' && value) {
-            const selectedProduct = tradingProducts.find(p => p.id === parseInt(value));
-            if (selectedProduct) {
-              // Setze Verkaufspreis (Visitron List Price)
-              updatedItem.unit_price = selectedProduct.visitron_list_price || 0;
-              // Setze Einkaufspreis (Purchase Price in EUR)
-              updatedItem.purchase_price = selectedProduct.purchase_price_eur || selectedProduct.purchase_price || 0;
-              
-              // Set content_type based on the selected trading product
-              const isTradingProduct = tradingProducts.some(p => p.id === parseInt(value));
-              if (isTradingProduct) {
+            // Parse the value - format: "tp-123" or "vv-456"
+            const [productType, productId] = value.split('-');
+            const numericId = parseInt(productId);
+            
+            if (productType === 'tp') {
+              const selectedProduct = tradingProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                updatedItem.unit_price = selectedProduct.visitron_list_price || 0;
+                updatedItem.purchase_price = selectedProduct.purchase_price_eur || selectedProduct.purchase_price || 0;
                 updatedItem.content_type = { app_label: 'suppliers', model: 'tradingproduct' };
+                updatedItem.actual_object_id = numericId;
+                
+                // Lade Beschreibung basierend auf Sprache und Beschreibungstyp
+                const isEnglish = prev.language === 'EN';
+                const isShort = updatedItem.description_type === 'SHORT';
+                if (isShort) {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.short_description_en || selectedProduct.short_description || '')
+                    : (selectedProduct.short_description || '');
+                } else {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.description_en || selectedProduct.description || '')
+                    : (selectedProduct.description || '');
+                }
+              }
+            } else if (productType === 'vv') {
+              const selectedProduct = visiviewProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                updatedItem.unit_price = selectedProduct.current_list_price || 0;
+                updatedItem.purchase_price = selectedProduct.current_purchase_price || 0;
+                updatedItem.content_type = { app_label: 'visiview', model: 'visiviewproduct' };
+                updatedItem.actual_object_id = numericId;
+                
+                // Lade Beschreibung basierend auf Sprache
+                const isEnglish = prev.language === 'EN';
+                updatedItem.custom_description = isEnglish 
+                  ? (selectedProduct.description_en || selectedProduct.description || '')
+                  : (selectedProduct.description || '');
+              }
+            } else if (productType === 'vs') {
+              // VS-Hardware
+              const selectedProduct = vsHardwareProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                updatedItem.unit_price = selectedProduct.current_sales_price || 0;
+                updatedItem.purchase_price = selectedProduct.current_purchase_price || 0;
+                updatedItem.content_type = { app_label: 'manufacturing', model: 'vshardware' };
+                updatedItem.actual_object_id = numericId;
+                
+                // Lade Beschreibung basierend auf Sprache
+                const isEnglish = prev.language === 'EN';
+                updatedItem.custom_description = isEnglish 
+                  ? (selectedProduct.description_en || selectedProduct.description || '')
+                  : (selectedProduct.description || '');
+              }
+            } else if (productType === 'vss') {
+              // VS-Service Produkte
+              const selectedProduct = vsServiceProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                updatedItem.unit_price = selectedProduct.current_list_price || selectedProduct.current_sales_price || 0;
+                updatedItem.purchase_price = selectedProduct.current_purchase_price || 0;
+                updatedItem.content_type = { app_label: 'service', model: 'vsservice' };
+                updatedItem.actual_object_id = numericId;
+                
+                // Lade Beschreibung basierend auf Sprache und Beschreibungstyp
+                const isEnglish = prev.language === 'EN';
+                const isShort = updatedItem.description_type === 'SHORT';
+                if (isShort) {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.short_description_en || selectedProduct.short_description || '')
+                    : (selectedProduct.short_description || '');
+                } else {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.description_en || selectedProduct.description || '')
+                    : (selectedProduct.description || '');
+                }
+              }
+            }
+          }
+          
+          // Wenn Beschreibungstyp gewechselt wird, lade entsprechende Beschreibung
+          if (field === 'description_type' && item.object_id) {
+            const [productType, productId] = item.object_id.split('-');
+            const numericId = parseInt(productId);
+            const isEnglish = prev.language === 'EN';
+            const isShort = value === 'SHORT';
+            
+            if (productType === 'tp') {
+              const selectedProduct = tradingProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                if (isShort) {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.short_description_en || selectedProduct.short_description || '')
+                    : (selectedProduct.short_description || '');
+                } else {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.description_en || selectedProduct.description || '')
+                    : (selectedProduct.description || '');
+                }
+              }
+            } else if (productType === 'vv') {
+              const selectedProduct = visiviewProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                updatedItem.custom_description = isEnglish 
+                  ? (selectedProduct.description_en || selectedProduct.description || '')
+                  : (selectedProduct.description || '');
+              }
+            } else if (productType === 'vs') {
+              // VS-Hardware - hat keine Kurzbeschreibung, nur description
+              const selectedProduct = vsHardwareProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                updatedItem.custom_description = isEnglish 
+                  ? (selectedProduct.description_en || selectedProduct.description || '')
+                  : (selectedProduct.description || '');
+              }
+            } else if (productType === 'vss') {
+              // VS-Service - hat short/long description
+              const selectedProduct = vsServiceProducts.find(p => p.id === numericId);
+              if (selectedProduct) {
+                if (isShort) {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.short_description_en || selectedProduct.short_description || '')
+                    : (selectedProduct.short_description || '');
+                } else {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedProduct.description_en || selectedProduct.description || '')
+                    : (selectedProduct.description || '');
+                }
               }
             }
           }
@@ -465,10 +691,35 @@ setCustomerAddresses(customer.addresses || []);
         items: updatedItems
       };
     });
+    setHasUnsavedChanges(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Warnung wenn Angebot bereits verschickt wurde
+    if (isEditMode && formData.status === 'SENT') {
+      const confirmed = window.confirm(
+        'Achtung: Dieses Angebot wurde bereits verschickt.\n\n' +
+        'Möchten Sie die Änderungen trotzdem speichern?\n' +
+        'Das PDF muss danach erneut erstellt werden.'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    
+    // Prüfe auf leere Positionen (ohne Produkt und kein Gruppen-Header)
+    const emptyPositions = formData.items.filter(item => 
+      !item.is_group_header && !item.object_id
+    );
+    
+    if (emptyPositions.length > 0) {
+      const positionNumbers = emptyPositions.map(item => item.display_position || item.position).join(', ');
+      alert(`Das Angebot kann nicht erstellt werden.\n\nFolgende Positionen haben kein Produkt ausgewählt:\nPosition(en): ${positionNumbers}\n\nBitte wählen Sie für alle Positionen ein Produkt aus oder entfernen Sie die leeren Positionen.`);
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -481,6 +732,7 @@ setCustomerAddresses(customer.addresses || []);
       submitData.append('project_reference', formData.project_reference);
       submitData.append('system_reference', formData.system_reference);
       submitData.append('reference', formData.reference);
+      if (formData.quotation_date) submitData.append('date', formData.quotation_date);
       submitData.append('valid_until', formData.valid_until);
       submitData.append('delivery_time_weeks', formData.delivery_time_weeks);
       submitData.append('status', formData.status);
@@ -505,16 +757,31 @@ setCustomerAddresses(customer.addresses || []);
       submitData.append('recipient_country', formData.recipient_country);
       submitData.append('notes', formData.notes);
       
+      // Angebotsbeschreibung und Fußtext
+      submitData.append('description_text', formData.description_text || '');
+      submitData.append('footer_text', formData.footer_text || '');
+      
       // Positionen - als JSON
       const items = formData.items.map(item => {
         // Bestimme content_type basierend auf dem ausgewählten Produkt
-        let contentType = null;
+        let contentType = item.content_type || null;
+        let objectId = item.actual_object_id || null;
         
-        // Nur für normale Positionen, nicht für Gruppen-Header ohne Item
-        if (item.object_id && !item.is_group_header) {
-          const isTradingProduct = tradingProducts.some(p => p.id === parseInt(item.object_id));
-          
-          if (isTradingProduct) {
+        // Parse object_id wenn es im neuen Format ist (tp-123 oder vv-456 oder vs-789)
+        if (item.object_id && typeof item.object_id === 'string' && item.object_id.includes('-')) {
+          const [productType, productId] = item.object_id.split('-');
+          objectId = parseInt(productId);
+          if (productType === 'tp') {
+            contentType = { app_label: 'suppliers', model: 'tradingproduct' };
+          } else if (productType === 'vv') {
+            contentType = { app_label: 'visiview', model: 'visiviewproduct' };
+          } else if (productType === 'vs') {
+            contentType = { app_label: 'manufacturing', model: 'vshardware' };
+          }
+        } else if (item.object_id && !item.is_group_header) {
+          // Legacy-Format (nur ID)
+          objectId = parseInt(item.object_id);
+          if (!contentType) {
             contentType = { app_label: 'suppliers', model: 'tradingproduct' };
           }
         }
@@ -522,7 +789,7 @@ setCustomerAddresses(customer.addresses || []);
         return {
           id: item.id || null,
           content_type: contentType,
-          object_id: item.object_id ? parseInt(item.object_id) : null,
+          object_id: objectId,
           group_id: item.group_id || null,
           group_name: item.group_name || '',
           is_group_header: item.is_group_header || false,
@@ -535,7 +802,8 @@ setCustomerAddresses(customer.addresses || []);
           sale_price: item.sale_price ? parseFloat(item.sale_price) : null,
           discount_percent: parseFloat(item.discount_percent),
           tax_rate: parseFloat(item.tax_rate) || 19,
-          notes: item.notes || ''
+          notes: item.notes || '',
+          custom_description: item.custom_description || ''
         };
       });
       
@@ -564,10 +832,14 @@ setCustomerAddresses(customer.addresses || []);
 
 
       alert(`Angebot erfolgreich ${isEditMode ? 'aktualisiert' : 'erstellt'}!`);
+      setHasUnsavedChanges(false);
       
-      // Bei neuem Angebot zur Detail-Seite navigieren, bei Edit bleiben
-      if (!isEditMode) {
-        navigate(`/sales/quotations/${response.data.id}`);
+      // Bei neuem Angebot zur Edit-Seite des erstellten Angebots navigieren
+      if (!isEditMode && response.data.id) {
+        navigate(`/sales/quotations/${response.data.id}/edit`, { replace: true });
+      } else {
+        // Aktualisiere das Formular mit den gespeicherten Daten
+        await fetchQuotation();
       }
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
@@ -610,6 +882,26 @@ setCustomerAddresses(customer.addresses || []);
     } catch (error) {
       console.error('Fehler beim PDF-Anzeigen:', error);
       alert('Fehler beim Anzeigen des PDFs');
+    }
+  };
+
+  const handleCreateAndSavePDF = async () => {
+    try {
+      // Generiere PDF und speichere es auf dem Server, dann öffne es
+      const response = await api.post(`/sales/quotations/${id}/create_and_save_pdf/`, {}, {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      
+      // Aktualisiere das Angebot um den neuen Status und PDF-Link zu laden
+      await fetchQuotation();
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      console.error('Fehler beim PDF-Erstellen:', error);
+      alert('Fehler beim Erstellen des PDFs: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -806,13 +1098,45 @@ setCustomerAddresses(customer.addresses || []);
           Zurück zur Übersicht
         </Link>
         <h1 className="text-3xl font-bold text-gray-900">
-          {isEditMode ? 'Angebot bearbeiten' : 'Neues Angebot'}
+          {isEditMode ? `Angebot ${formData.quotation_number || id} bearbeiten` : 'Neues Angebot'}
         </h1>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm
+                  ${activeTab === tab.id
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }
+                `}
+              >
+                <Icon className={`
+                  -ml-0.5 mr-2 h-5 w-5
+                  ${activeTab === tab.id ? 'text-green-500' : 'text-gray-400 group-hover:text-gray-500'}
+                `} />
+                {tab.name}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* TAB 1: Basisinfos */}
+        {activeTab === 1 && (
+          <>
         {/* Kunde und Grunddaten */}
-        <div className="bg-white shadow rounded-lg p-6">
+        <div className="bg-white shadow rounded-lg p-6" style={{ width: 'calc(100% - 4cm)', marginLeft: '2cm', marginRight: '2cm' }}>
           <h2 className="text-lg font-medium text-gray-900 mb-4">Kundeninformationen</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -821,7 +1145,7 @@ setCustomerAddresses(customer.addresses || []);
               <select
                 required
                 value={formData.created_by}
-                onChange={(e) => setFormData(prev => ({ ...prev, created_by: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, created_by: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               >
                 <option value="">Mitarbeiter auswählen</option>
@@ -838,7 +1162,7 @@ setCustomerAddresses(customer.addresses || []);
               <select
                 required
                 value={formData.commission_user}
-                onChange={(e) => setFormData(prev => ({ ...prev, commission_user: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, commission_user: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               >
                 <option value="">Mitarbeiter auswählen</option>
@@ -850,32 +1174,73 @@ setCustomerAddresses(customer.addresses || []);
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Kunde *</label>
-              <select
-                required
-                value={formData.customer}
-                onChange={(e) => setFormData(prev => ({ ...prev, customer: e.target.value }))}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">Kunde auswählen</option>
-                {customers.map(customer => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.customer_number} - {customer.first_name} {customer.last_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Gültig bis *</label>
-              <input
-                type="date"
-                required
-                value={formData.valid_until}
-                onChange={(e) => setFormData(prev => ({ ...prev, valid_until: e.target.value }))}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-              />
+            {/* Kundensuche */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700">Kunde suchen *</label>
+              <div className="flex gap-2 mt-1">
+                <input
+                  type="text"
+                  value={customerSearchTerm}
+                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchCustomers(); } }}
+                  className="flex-1 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+                  placeholder="Name, Firma oder Kundennummer eingeben..."
+                />
+                <button
+                  type="button"
+                  onClick={searchCustomers}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Suchen
+                </button>
+              </div>
+              
+              {/* Suchergebnisse */}
+              {customerSearchResults.length > 0 && (
+                <ul className="mt-2 border border-gray-200 rounded-md max-h-48 overflow-y-auto bg-white shadow-lg">
+                  {customerSearchResults.map(customer => (
+                    <li
+                      key={customer.id}
+                      className="p-3 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      onClick={() => handleSelectCustomer(customer)}
+                    >
+                      <div className="font-medium text-gray-900">
+                        {customer.customer_number} - {customer.first_name} {customer.last_name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {customer.company && `${customer.company} • `}
+                        {customer.primary_email || customer.email}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              
+              {/* Ausgewählter Kunde */}
+              {selectedCustomer && (
+                <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md flex items-start justify-between">
+                  <div>
+                    <div className="font-semibold text-green-800">Ausgewählter Kunde</div>
+                    <div className="text-gray-900">
+                      {selectedCustomer.customer_number} - {selectedCustomer.first_name} {selectedCustomer.last_name}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {selectedCustomer.company && `${selectedCustomer.company} • `}
+                      {selectedCustomer.primary_email || selectedCustomer.email}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      updateFormData(prev => ({ ...prev, customer: '' }));
+                    }}
+                    className="text-sm text-gray-600 hover:text-red-600"
+                  >
+                    Entfernen
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -883,20 +1248,9 @@ setCustomerAddresses(customer.addresses || []);
               <input
                 type="text"
                 value={formData.reference}
-                onChange={(e) => setFormData(prev => ({ ...prev, reference: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, reference: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
                 placeholder="z.B. Projekt XY, Ihre Anfrage vom..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Lieferzeit (Wochen)</label>
-              <input
-                type="number"
-                min="0"
-                value={formData.delivery_time_weeks}
-                onChange={(e) => setFormData(prev => ({ ...prev, delivery_time_weeks: e.target.value }))}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
             </div>
 
@@ -904,10 +1258,11 @@ setCustomerAddresses(customer.addresses || []);
               <label className="block text-sm font-medium text-gray-700">Status</label>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, status: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               >
                 <option value="DRAFT">In Arbeit</option>
+                <option value="SENT">Verschickt</option>
                 <option value="ACTIVE">Aktiv</option>
                 <option value="EXPIRED">Abgelaufen</option>
                 <option value="ORDERED">Bestellt</option>
@@ -926,26 +1281,38 @@ setCustomerAddresses(customer.addresses || []);
               </select>
             </div>
 
+            {/* Projekt-Dropdown */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">Projekt-Referenz (intern)</label>
-              <input
-                type="text"
+              <label className="block text-sm font-medium text-gray-700">Projekt zuordnen</label>
+              <select
                 value={formData.project_reference}
-                onChange={(e) => setFormData(prev => ({ ...prev, project_reference: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, project_reference: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-                placeholder="Interne Projektzuordnung"
-              />
+              >
+                <option value="">Kein Projekt</option>
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.project_number || project.id} - {project.name} {project.customer_name && `(${project.customer_name})`}
+                  </option>
+                ))}
+              </select>
             </div>
 
+            {/* System-Dropdown */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">System-Referenz (intern)</label>
-              <input
-                type="text"
+              <label className="block text-sm font-medium text-gray-700">System zuordnen</label>
+              <select
                 value={formData.system_reference}
-                onChange={(e) => setFormData(prev => ({ ...prev, system_reference: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, system_reference: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-                placeholder="Interne Systemzuordnung"
-              />
+              >
+                <option value="">Kein System</option>
+                {systems.map(system => (
+                  <option key={system.id} value={system.id}>
+                    {system.system_number || system.id} - {system.name} {system.customer_name && `(${system.customer_name})`}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -977,7 +1344,7 @@ setCustomerAddresses(customer.addresses || []);
               <input
                 type="text"
                 value={formData.recipient_company}
-                onChange={(e) => setFormData(prev => ({ ...prev, recipient_company: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, recipient_company: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
             </div>
@@ -987,7 +1354,7 @@ setCustomerAddresses(customer.addresses || []);
               <input
                 type="text"
                 value={formData.recipient_name}
-                onChange={(e) => setFormData(prev => ({ ...prev, recipient_name: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, recipient_name: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
             </div>
@@ -997,7 +1364,7 @@ setCustomerAddresses(customer.addresses || []);
               <input
                 type="text"
                 value={formData.recipient_street}
-                onChange={(e) => setFormData(prev => ({ ...prev, recipient_street: e.target.value }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, recipient_street: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
             </div>
@@ -1008,7 +1375,7 @@ setCustomerAddresses(customer.addresses || []);
                 <input
                   type="text"
                   value={formData.recipient_postal_code}
-                  onChange={(e) => setFormData(prev => ({ ...prev, recipient_postal_code: e.target.value }))}
+                  onChange={(e) => updateFormData(prev => ({ ...prev, recipient_postal_code: e.target.value }))}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
                 />
               </div>
@@ -1018,7 +1385,7 @@ setCustomerAddresses(customer.addresses || []);
                 <input
                   type="text"
                   value={formData.recipient_city}
-                  onChange={(e) => setFormData(prev => ({ ...prev, recipient_city: e.target.value }))}
+                  onChange={(e) => updateFormData(prev => ({ ...prev, recipient_city: e.target.value }))}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
                 />
               </div>
@@ -1030,7 +1397,7 @@ setCustomerAddresses(customer.addresses || []);
                 type="text"
                 maxLength="2"
                 value={formData.recipient_country}
-                onChange={(e) => setFormData(prev => ({ ...prev, recipient_country: e.target.value.toUpperCase() }))}
+                onChange={(e) => updateFormData(prev => ({ ...prev, recipient_country: e.target.value.toUpperCase() }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
                 placeholder="DE"
               />
@@ -1038,92 +1405,24 @@ setCustomerAddresses(customer.addresses || []);
           </div>
         </div>
 
-        {/* Konditionen */}
+        {/* Angebotsbeschreibung (erscheint über Positionsliste im PDF) */}
         <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Konditionen</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Zahlungsbedingung</label>
-              <select
-                value={formData.payment_term}
-                onChange={(e) => setFormData(prev => ({ ...prev, payment_term: e.target.value }))}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">Keine</option>
-                {paymentTerms.map(term => (
-                  <option key={term.id} value={term.id}>{term.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Lieferbedingung (Incoterm)</label>
-              <select
-                value={formData.delivery_term}
-                onChange={(e) => setFormData(prev => ({ ...prev, delivery_term: e.target.value }))}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">Keine</option>
-                {deliveryTerms.map(term => (
-                  <option key={term.id} value={term.id}>{term.incoterm}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          
-          <div className="mt-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.show_terms_conditions}
-                onChange={(e) => setFormData(prev => ({ ...prev, show_terms_conditions: e.target.checked }))}
-                className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
-              />
-              <span className="ml-2 text-sm text-gray-700">AGB-Hinweis im Angebot anzeigen</span>
-            </label>
-          </div>
-          
-          <div className="mt-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.show_group_item_prices}
-                onChange={(e) => setFormData(prev => ({ ...prev, show_group_item_prices: e.target.checked }))}
-                className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
-              />
-              <span className="ml-2 text-sm text-gray-700">Preise von Gruppen-Artikeln anzeigen</span>
-            </label>
-          </div>
-
-          <div className="mt-4 flex items-center space-x-4">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.tax_enabled}
-                onChange={(e) => setFormData(prev => ({ ...prev, tax_enabled: e.target.checked }))}
-                className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
-              />
-              <span className="ml-2 text-sm text-gray-700">MwSt aktiviert</span>
-            </label>
-            
-            {formData.tax_enabled && (
-              <div className="flex items-center">
-                <label className="text-sm text-gray-700 mr-2">MwSt-Satz (%):</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={formData.tax_rate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, tax_rate: parseFloat(e.target.value) || 0 }))}
-                  className="w-20 border border-gray-300 rounded-md shadow-sm py-1 px-2 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                />
-              </div>
-            )}
-          </div>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Angebotsbeschreibung</h2>
+          <p className="text-sm text-gray-500 mb-4">Dieser Text erscheint im PDF über der Positionsliste.</p>
+          <textarea
+            rows="4"
+            value={formData.description_text}
+            onChange={(e) => updateFormData(prev => ({ ...prev, description_text: e.target.value }))}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+            placeholder="z.B. Wir freuen uns, Ihnen folgendes Angebot unterbreiten zu dürfen..."
+          />
         </div>
+        </>
+        )}
 
+        {/* TAB 2: Positionen */}
+        {activeTab === 2 && (
+          <>
         {/* Angebotspositionen */}
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
@@ -1350,6 +1649,14 @@ setCustomerAddresses(customer.addresses || []);
                       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div className="md:col-span-3">
                           <label className="block text-sm font-medium text-gray-700">Produkt/Anlage *</label>
+                          {/* Product Filter */}
+                          <input
+                            type="text"
+                            placeholder="Filter: Artikelnummer oder Name..."
+                            value={productFilter}
+                            onChange={(e) => setProductFilter(e.target.value)}
+                            className="mt-1 mb-1 block w-full border border-gray-200 rounded-md shadow-sm py-1 px-2 text-xs focus:outline-none focus:ring-green-500 focus:border-green-500 bg-gray-50"
+                          />
                           <select
                             required
                             value={item.object_id || ''}
@@ -1360,14 +1667,73 @@ setCustomerAddresses(customer.addresses || []);
                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
                           >
                             <option value="">Auswählen...</option>
-                            <optgroup label="Trading Products">
-                              {tradingProducts.map(product => (
-                                <option key={`tp-${product.id}`} value={product.id}>
+                            <optgroup label="🛒 Trading Products (Handelswaren)">
+                              {tradingProducts
+                                .filter(p => {
+                                  if (!productFilter) return true;
+                                  const search = productFilter.toLowerCase();
+                                  return (
+                                    (p.visitron_part_number || '').toLowerCase().includes(search) ||
+                                    (p.name || '').toLowerCase().includes(search) ||
+                                    (p.supplier_part_number || '').toLowerCase().includes(search)
+                                  );
+                                })
+                                .map(product => (
+                                <option key={`tp-${product.id}`} value={`tp-${product.id}`}>
                                   {product.visitron_part_number} - {product.name}
                                 </option>
                               ))}
                             </optgroup>
-
+                            <optgroup label="💻 VisiView Software">
+                              {visiviewProducts
+                                .filter(p => {
+                                  if (!productFilter) return true;
+                                  const search = productFilter.toLowerCase();
+                                  return (
+                                    (p.article_number || '').toLowerCase().includes(search) ||
+                                    (p.name || '').toLowerCase().includes(search)
+                                  );
+                                })
+                                .map(product => (
+                                <option key={`vv-${product.id}`} value={`vv-${product.id}`}>
+                                  {product.article_number} - {product.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="🔧 VS-Hardware (Eigenprodukte)">
+                              {vsHardwareProducts
+                                .filter(p => {
+                                  if (!productFilter) return true;
+                                  const search = productFilter.toLowerCase();
+                                  return (
+                                    (p.part_number || '').toLowerCase().includes(search) ||
+                                    (p.name || '').toLowerCase().includes(search) ||
+                                    (p.model_designation || '').toLowerCase().includes(search)
+                                  );
+                                })
+                                .map(product => (
+                                <option key={`vs-${product.id}`} value={`vs-${product.id}`}>
+                                  {product.part_number} - {product.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="🛠️ VS-Service (Dienstleistungen)">
+                              {vsServiceProducts
+                                .filter(p => {
+                                  if (!productFilter) return true;
+                                  const search = productFilter.toLowerCase();
+                                  return (
+                                    (p.article_number || '').toLowerCase().includes(search) ||
+                                    (p.name || '').toLowerCase().includes(search) ||
+                                    (p.short_description || '').toLowerCase().includes(search)
+                                  );
+                                })
+                                .map(product => (
+                                <option key={`vss-${product.id}`} value={`vss-${product.id}`}>
+                                  {product.article_number} - {product.name}
+                                </option>
+                              ))}
+                            </optgroup>
                           </select>
                         </div>
 
@@ -1432,6 +1798,20 @@ setCustomerAddresses(customer.addresses || []);
                             value={item.discount_percent}
                             onChange={(e) => handleItemChange(index, 'discount_percent', parseFloat(e.target.value) || 0)}
                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                          />
+                        </div>
+
+                        {/* Beschreibungstext */}
+                        <div className="md:col-span-6">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Beschreibungstext ({formData.language === 'DE' ? 'Deutsch' : 'Englisch'})
+                          </label>
+                          <textarea
+                            rows="2"
+                            value={item.custom_description || ''}
+                            onChange={(e) => handleItemChange(index, 'custom_description', e.target.value)}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                            placeholder="Beschreibung für das Angebot (wird aus Produktdaten geladen, kann bearbeitet werden)"
                           />
                         </div>
 
@@ -1569,25 +1949,275 @@ setCustomerAddresses(customer.addresses || []);
           )}
         </div>
 
-        {/* Notizen und Dokument */}
+        {/* Interne Notizen in Tab 2 */}
         <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Notizen und Dokument</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Interne Notizen</h2>
+          <textarea
+            rows="3"
+            value={formData.notes}
+            onChange={(e) => updateFormData(prev => ({ ...prev, notes: e.target.value }))}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+            placeholder="Interne Notizen (erscheinen nicht im Angebot)"
+          />
+        </div>
+        </>
+        )}
+
+        {/* TAB 3: Konditionen */}
+        {activeTab === 3 && (
+          <>
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Angebotskonditionen</h2>
           
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Interne Notizen</label>
-              <textarea
-                rows="3"
-                value={formData.notes}
-                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              <label className="block text-sm font-medium text-gray-700">Zahlungsbedingung</label>
+              <select
+                value={formData.payment_term}
+                onChange={(e) => updateFormData(prev => ({ ...prev, payment_term: e.target.value }))}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-                placeholder="Interne Notizen (erscheinen nicht im Angebot)"
+              >
+                <option value="">Keine</option>
+                {paymentTerms.map(term => (
+                  <option key={term.id} value={term.id}>{term.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Lieferbedingung (Incoterm)</label>
+              <select
+                value={formData.delivery_term}
+                onChange={(e) => updateFormData(prev => ({ ...prev, delivery_term: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+              >
+                <option value="">Keine</option>
+                {deliveryTerms.map(term => (
+                  <option key={term.id} value={term.id}>{term.incoterm}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Lieferzeit (Wochen)</label>
+              <input
+                type="number"
+                min="0"
+                value={formData.delivery_time_weeks}
+                onChange={(e) => updateFormData(prev => ({ ...prev, delivery_time_weeks: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Angebots-Gültigkeit bis *</label>
+              <input
+                type="date"
+                required
+                value={formData.valid_until}
+                onChange={(e) => updateFormData(prev => ({ ...prev, valid_until: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+              />
+            </div>
+          </div>
+          
+          <div className="mt-6 space-y-4">
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.show_terms_conditions}
+                  onChange={(e) => updateFormData(prev => ({ ...prev, show_terms_conditions: e.target.checked }))}
+                  className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">AGB-Hinweis im Angebot anzeigen</span>
+              </label>
+            </div>
+            
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.show_group_item_prices}
+                  onChange={(e) => updateFormData(prev => ({ ...prev, show_group_item_prices: e.target.checked }))}
+                  className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">Preise von Gruppen-Artikeln anzeigen</span>
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.tax_enabled}
+                  onChange={(e) => updateFormData(prev => ({ ...prev, tax_enabled: e.target.checked }))}
+                  className="rounded border-gray-300 text-green-600 shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                />
+                <span className="ml-2 text-sm text-gray-700">MwSt aktiviert</span>
+              </label>
+              
+              {formData.tax_enabled && (
+                <div className="flex items-center">
+                  <label className="text-sm text-gray-700 mr-2">MwSt-Satz (%):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={formData.tax_rate}
+                    onChange={(e) => updateFormData(prev => ({ ...prev, tax_rate: parseFloat(e.target.value) || 0 }))}
+                    className="w-20 border border-gray-300 rounded-md shadow-sm py-1 px-2 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Buttons */}
+        {/* Fußtext für PDF */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Fußtext (Ende des Angebots)</h2>
+          <p className="text-sm text-gray-500 mb-4">Dieser Text erscheint im PDF am Ende des Angebots.</p>
+          <textarea
+            rows="4"
+            value={formData.footer_text}
+            onChange={(e) => updateFormData(prev => ({ ...prev, footer_text: e.target.value }))}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+            placeholder="z.B. Wir freuen uns auf Ihre Bestellung und stehen für Rückfragen gerne zur Verfügung."
+          />
+        </div>
+        </>
+        )}
+
+        {/* TAB 4: PDF erstellen */}
+        {activeTab === 4 && (
+          <>
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">PDF-Dokument erstellen</h2>
+          
+          {/* Warnung bei ungespeicherten Änderungen */}
+          {hasUnsavedChanges && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <p className="text-yellow-800 font-medium">
+                ⚠️ Sie haben ungespeicherte Änderungen. Bitte speichern Sie das Angebot bevor Sie ein PDF erstellen.
+              </p>
+            </div>
+          )}
+          
+          {/* Existierendes PDF anzeigen */}
+          {formData.pdf_file_url && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+              <p className="text-green-800 font-medium mb-2">
+                ✅ PDF wurde bereits erstellt
+              </p>
+              <a 
+                href={formData.pdf_file_url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-green-700 hover:text-green-900 underline"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5 mr-1" />
+                PDF herunterladen
+              </a>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Angebotsdatum</label>
+              <input
+                type="date"
+                value={formData.quotation_date}
+                onChange={(e) => updateFormData(prev => ({ ...prev, quotation_date: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Sprache</label>
+              <select
+                value={formData.language}
+                onChange={(e) => updateFormData(prev => ({ ...prev, language: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+              >
+                <option value="DE">Deutsch</option>
+                <option value="EN">English</option>
+              </select>
+            </div>
+          </div>
+
+          {isEditMode ? (
+            <div className="flex space-x-4">
+              <button
+                type="button"
+                onClick={handleCreateAndSavePDF}
+                disabled={hasUnsavedChanges}
+                className={`inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                  hasUnsavedChanges 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
+                {formData.pdf_file_url ? 'PDF neu erstellen' : 'PDF erstellen'}
+              </button>
+            </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800">
+                Bitte speichern Sie das Angebot zuerst, um ein PDF zu erstellen.
+              </p>
+            </div>
+          )}
+        </div>
+        </>
+        )}
+
+        {/* TAB 5: Auftrag erstellen */}
+        {activeTab === 5 && (
+          <>
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Auftrag aus Angebot erstellen</h2>
+          
+          {isEditMode ? (
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                Erstellen Sie einen neuen Kundenauftrag basierend auf diesem Angebot. 
+                Alle Informationen werden automatisch übernommen.
+              </p>
+              
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-medium text-gray-900 mb-2">Übernommene Daten:</h3>
+                <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
+                  <li>Kunde und Adressdaten</li>
+                  <li>Alle Angebotspositionen</li>
+                  <li>Preise und Konditionen</li>
+                  <li>Lieferbedingungen</li>
+                </ul>
+              </div>
+              
+              <button
+                type="button"
+                onClick={() => navigate(`/sales/order-processing/new?from_quotation=${id}`)}
+                className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <ShoppingCartIcon className="h-5 w-5 mr-2" />
+                Neuen Auftrag anlegen
+              </button>
+            </div>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800">
+                Bitte speichern Sie das Angebot zuerst, um einen Auftrag daraus zu erstellen.
+              </p>
+            </div>
+          )}
+        </div>
+        </>
+        )}
+
+        {/* Buttons - immer sichtbar */}
         <div className="flex justify-between items-center">
           <button
             type="button"
@@ -1598,26 +2228,6 @@ setCustomerAddresses(customer.addresses || []);
           </button>
           
           <div className="flex space-x-3">
-            {isEditMode && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleViewPDF}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                >
-                  <DocumentIcon className="h-5 w-5 mr-2" />
-                  PDF anzeigen
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadPDF}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                >
-                  <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
-                  PDF herunterladen
-                </button>
-              </>
-            )}
             <button
               type="submit"
               disabled={loading}

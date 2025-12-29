@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 /* eslint-disable react-hooks/exhaustive-deps */
 import storage from '../utils/sessionStore';
 import api from '../services/api';
@@ -8,15 +8,14 @@ import { PlusIcon, PencilIcon, TrashIcon, CubeIcon } from '@heroicons/react/24/o
 
 const TradingProducts = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [productGroups, setProductGroups] = useState([]);
-  const [priceLists, setPriceLists] = useState([]);
   const [exchangeRates, setExchangeRates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
+  
   const [sortBy, setSortBy] = useState('visitron_part_number');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterActive, setFilterActive] = useState('all');
@@ -268,11 +267,10 @@ const TradingProducts = () => {
 
   const fetchProductGroups = async (supplierId = null) => {
     try {
-      let url = '/suppliers/product-groups/';
-      if (supplierId) {
-        url += `?supplier=${supplierId}`;
-      }
-      const response = await api.get(url);
+      const params = new URLSearchParams();
+      if (supplierId) params.append('supplier', supplierId);
+      params.append('page_size', '500');
+      const response = await api.get(`/suppliers/product-groups/?${params.toString()}`);
       const data = response.data.results || response.data;
       setProductGroups(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -281,20 +279,7 @@ const TradingProducts = () => {
     }
   };
 
-  const fetchPriceLists = async (supplierId = null) => {
-    try {
-      let url = '/suppliers/price-lists/';
-      if (supplierId) {
-        url += `?supplier=${supplierId}&is_active=true`;
-      }
-      const response = await api.get(url);
-      const data = response.data.results || response.data;
-      setPriceLists(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Fehler beim Laden der Preislisten:', error);
-      setPriceLists([]);
-    }
-  };
+  // price lists are not used on this page; removed
 
   const fetchExchangeRates = async () => {
     try {
@@ -306,6 +291,16 @@ const TradingProducts = () => {
       setExchangeRates([]);
     }
   };
+
+  // Load product groups when top-level supplier filter changes
+  useEffect(() => {
+    if (filterSupplier) {
+      fetchProductGroups(filterSupplier);
+    } else {
+      setProductGroups([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterSupplier]);
 
   // eslint-disable-next-line no-unused-vars
   const loadExchangeRate = () => {
@@ -326,40 +321,6 @@ const TradingProducts = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      // Prepare data - convert empty strings to null for foreign keys and dates
-      const submitData = {
-        ...formData,
-        supplier: formData.supplier || null,
-        product_group: formData.product_group || null,
-        price_list: formData.price_list || null,
-        category: formData.category || null,
-        price_valid_until: formData.price_valid_until || null,
-      };
-      
-      if (editingProduct) {
-        await api.put(`/suppliers/products/${editingProduct.id}/`, submitData);
-;
-      } else {
-        await api.post('/suppliers/products/', submitData);
-      }
-      setShowModal(false);
-      resetForm();
-      // Warte kurz, damit das Backend die Berechnung durchführen kann
-      await new Promise(resolve => setTimeout(resolve, 150));
-      // Erzwinge einen kompletten Neuaufbau der Liste
-      setRefreshKey(prev => prev + 1);
-    } catch (error) {
-      console.error('Fehler beim Speichern:', error);
-      const errorMsg = error.response?.data 
-        ? JSON.stringify(error.response.data) 
-        : (error.response?.data?.detail || 'Unbekannter Fehler');
-      alert('Fehler beim Speichern der Handelsware: ' + errorMsg);
-    }
-  };
-
   const handleDelete = async (id) => {
     if (window.confirm('Möchten Sie diese Handelsware wirklich löschen?')) {
       try {
@@ -372,96 +333,11 @@ const TradingProducts = () => {
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      visitron_part_number: '',
-      supplier_part_number: '',
-      supplier: '',
-      product_group: '',
-      price_list: '',
-      category: '',
-      description: '',
-      unit: 'Stück',
-      list_price: '',
-      list_price_currency: 'EUR',
-      exchange_rate: 1.0,
-      price_valid_from: new Date().toISOString().split('T')[0],
-      price_valid_until: '',
-      discount_percent: 0,
-      margin_percent: 0,
-      shipping_cost: 0,
-      shipping_cost_is_percent: false,
-      import_cost: 0,
-      import_cost_is_percent: false,
-      handling_cost: 0,
-      handling_cost_is_percent: false,
-      storage_cost: 0,
-      storage_cost_is_percent: false,
-      costs_currency: 'EUR',
-      minimum_stock: 0,
-      is_active: true,
-    });
-    setEditingProduct(null);
-  };
+  
 
-  const openEditModal = async (product) => {
-    setEditingProduct(product);
-    
-    // Lade die vollständigen Produktdetails vom Backend
-    try {
-      const response = await api.get(`/suppliers/products/${product.id}/`);
-      const fullProduct = response.data;
-      
-      // Aktuellen Wechselkurs laden
-      const currency = fullProduct.list_price_currency || 'EUR';
-      let currentRate = 1.0;
-      if (currency !== 'EUR' && Array.isArray(exchangeRates)) {
-        const rate = exchangeRates.find(r => r.currency === currency);
-        if (rate) {
-          currentRate = parseFloat(rate.rate_to_eur);
-        }
-      }
-      
-      // Lade Warengruppen und Preislisten des Lieferanten
-      await fetchProductGroups(fullProduct.supplier);
-      await fetchPriceLists(fullProduct.supplier);
-      
-      setFormData({
-        name: fullProduct.name,
-        visitron_part_number: fullProduct.visitron_part_number,
-        supplier_part_number: fullProduct.supplier_part_number || '',
-        supplier: fullProduct.supplier,
-        product_group: fullProduct.product_group || '',
-        price_list: fullProduct.price_list || '',
-        category: fullProduct.category || '',
-        description: fullProduct.description || '',
-        unit: fullProduct.unit,
-        list_price: fullProduct.list_price,
-        list_price_currency: currency,
-        exchange_rate: currentRate,
-        price_valid_from: fullProduct.price_valid_from,
-        price_valid_until: fullProduct.price_valid_until || '',
-        discount_percent: fullProduct.discount_percent || 0,
-        margin_percent: fullProduct.margin_percent || 0,
-        shipping_cost: fullProduct.shipping_cost || 0,
-        shipping_cost_is_percent: fullProduct.shipping_cost_is_percent || false,
-        import_cost: fullProduct.import_cost || 0,
-        import_cost_is_percent: fullProduct.import_cost_is_percent || false,
-        handling_cost: fullProduct.handling_cost || 0,
-        handling_cost_is_percent: fullProduct.handling_cost_is_percent || false,
-        storage_cost: fullProduct.storage_cost || 0,
-        storage_cost_is_percent: fullProduct.storage_cost_is_percent || false,
-        costs_currency: fullProduct.costs_currency || 'EUR',
-        minimum_stock: fullProduct.minimum_stock || 0,
-        is_active: fullProduct.is_active,
-      });
-      setShowModal(true);
-    } catch (error) {
-      console.error('Fehler beim Laden der Produktdetails:', error);
-      alert('Fehler beim Laden der Produktdetails');
-    }
-  };
+  // Inline modal-based edit removed; full-page editor is used instead.
+
+  // Modal submit handler removed; creation/editing handled by full-page editor.
 
   const isPriceValid = (product) => {
     const today = new Date().toISOString().split('T')[0];
@@ -499,10 +375,7 @@ const TradingProducts = () => {
         </div>
         {canWrite && (
           <button
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
+            onClick={() => navigate('/procurement/trading-goods/new')}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
@@ -551,7 +424,15 @@ const TradingProducts = () => {
             </label>
             <select
               value={filterSupplier}
-              onChange={(e) => setFilterSupplier(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFilterSupplier(v);
+                if (v) {
+                  fetchProductGroups(v);
+                } else {
+                  setProductGroups([]);
+                }
+              }}
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
             >
               <option value="">Alle Lieferanten</option>
@@ -665,7 +546,7 @@ const TradingProducts = () => {
                   {canWrite && (
                     <>
                       <button
-                        onClick={() => openEditModal(product)}
+                        onClick={() => navigate(`/procurement/trading-goods/${product.id}`)}
                         className="text-blue-600 hover:text-blue-900 mr-4"
                         title="Bearbeiten"
                       >
@@ -701,514 +582,7 @@ const TradingProducts = () => {
         </div>
       )}
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed z-10 inset-0 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowModal(false)} />
-
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
-              <form onSubmit={handleSubmit}>
-                {/* Header mit Preisinformationen */}
-                <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-bold text-white mb-2">
-                        {editingProduct ? 'Handelsware bearbeiten' : 'Neue Handelsware'}
-                      </h3>
-                      {formData.supplier && suppliers.find(s => s.id === parseInt(formData.supplier)) && (
-                        <p className="text-orange-100 text-sm">
-                          Lieferant: {suppliers.find(s => s.id === parseInt(formData.supplier))?.company_name}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-4">
-                      <div className="bg-white bg-opacity-20 rounded-lg px-4 py-2 text-center min-w-[120px]">
-                        <div className="text-orange-100 text-xs font-medium">Einkaufspreis</div>
-                        <div className="text-white text-2xl font-bold">
-                          {calculatedPrices.purchasePrice.toFixed(2)} €
-                        </div>
-                      </div>
-                      <div className="bg-white bg-opacity-30 rounded-lg px-4 py-2 text-center min-w-[120px]">
-                        <div className="text-orange-100 text-xs font-medium">Visitron-LP</div>
-                        <div className="text-white text-2xl font-bold">
-                          {calculatedPrices.visitronListPrice.toFixed(0)} €
-                        </div>
-                        {formData.margin_percent > 0 && (
-                          <div className="text-orange-100 text-xs">{formData.margin_percent}% Marge</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[60vh] overflow-y-auto">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Grundinformationen */}
-                    <div className="col-span-2">
-                      <h4 className="text-md font-semibold text-gray-700 mb-2">Grundinformationen</h4>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Visitron-Partnummer
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.visitron_part_number || 'Wird automatisch generiert'}
-                        readOnly
-                        disabled
-                        className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 text-gray-500 shadow-sm cursor-not-allowed"
-                        title="Wird automatisch beim Speichern generiert: Lieferantennummer-laufende Nummer (z.B. 100-0001)"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">Wird automatisch generiert basierend auf Lieferant</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Händler-Partnummer
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.supplier_part_number}
-                        onChange={(e) => setFormData({ ...formData, supplier_part_number: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Lieferant *
-                      </label>
-                      <select
-                        required
-                        value={formData.supplier}
-                        onChange={async (e) => {
-                          const supplierId = e.target.value;
-                          setFormData({ ...formData, supplier: supplierId, product_group: '', price_list: '', discount_percent: 0 });
-                          if (supplierId) {
-                            await fetchProductGroups(supplierId);
-                            await fetchPriceLists(supplierId);
-                          } else {
-                            setProductGroups([]);
-                            setPriceLists([]);
-                          }
-                        }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      >
-                        <option value="">Bitte wählen...</option>
-                        {suppliers.map((supplier) => (
-                          <option key={supplier.id} value={supplier.id}>
-                            {supplier.company_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Warengruppe
-                      </label>
-                      <select
-                        value={formData.product_group}
-                        onChange={(e) => {
-                          const groupId = e.target.value;
-                          setFormData({ ...formData, product_group: groupId });
-                          if (groupId) {
-                            const group = productGroups.find(g => g.id === parseInt(groupId));
-                            if (group) {
-                              setFormData({ ...formData, product_group: groupId, discount_percent: group.discount_percent });
-                            }
-                          }
-                        }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                        disabled={!formData.supplier}
-                      >
-                        <option value="">Bitte wählen...</option>
-                        {productGroups.map((group) => (
-                          <option key={group.id} value={group.id}>
-                            {group.name} ({group.discount_percent}%)
-                          </option>
-                        ))}
-                      </select>
-                      {!formData.supplier && (
-                        <p className="mt-1 text-sm text-gray-500">Bitte zuerst Lieferant auswählen</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Preisliste
-                      </label>
-                      <select
-                        value={formData.price_list}
-                        onChange={(e) => {
-                          const priceListId = e.target.value;
-                          setFormData({ ...formData, price_list: priceListId });
-                          if (priceListId) {
-                            const priceList = priceLists.find(pl => pl.id === parseInt(priceListId));
-                            if (priceList) {
-                              setFormData({ 
-                                ...formData, 
-                                price_list: priceListId,
-                                price_valid_from: priceList.valid_from,
-                                price_valid_until: priceList.valid_until || ''
-                              });
-                            }
-                          }
-                        }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        disabled={!formData.supplier}
-                      >
-                        <option value="">Bitte wählen...</option>
-                        {priceLists.map((priceList) => (
-                          <option key={priceList.id} value={priceList.id}>
-                            {priceList.name} ({new Date(priceList.valid_from).toLocaleDateString('de-DE')} - {priceList.valid_until ? new Date(priceList.valid_until).toLocaleDateString('de-DE') : 'unbegrenzt'})
-                          </option>
-                        ))}
-                      </select>
-                      {!formData.supplier && (
-                        <p className="mt-1 text-sm text-gray-500">Bitte zuerst Lieferant auswählen</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Kategorie
-                      </label>
-                      <select
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      >
-                        <option value="">Bitte wählen...</option>
-                        <option value="SOFTWARE">Software</option>
-                        <option value="MIKROSKOPE">Mikroskope</option>
-                        <option value="BELEUCHTUNG">Beleuchtung</option>
-                        <option value="KAMERAS">Kameras</option>
-                        <option value="DIENSTLEISTUNG">Dienstleistung</option>
-                        <option value="LICHTQUELLEN">Lichtquellen</option>
-                        <option value="SCANNING_BELEUCHTUNG">Scanning- und Beleuchtungsmodule</option>
-                        <option value="PERIPHERALS">Peripherals</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Einheit
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.unit}
-                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Beschreibung
-                      </label>
-                      <textarea
-                        rows="2"
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    {/* Preisinformationen */}
-                    <div className="col-span-2 mt-4">
-                      <h4 className="text-md font-semibold text-gray-700 mb-2">Preisinformationen</h4>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Lieferanten-Listenpreis *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={formData.list_price}
-                        onChange={(e) => setFormData({ ...formData, list_price: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Listenpreis Währung *
-                      </label>
-                      <select
-                        required
-                        value={formData.list_price_currency}
-                        onChange={(e) => {
-                          const newCurrency = e.target.value;
-                          setFormData({ ...formData, list_price_currency: newCurrency });
-                          // Auto-load exchange rate when currency changes
-                          setTimeout(() => {
-                            if (newCurrency === 'EUR') {
-                              setFormData(prev => ({ ...prev, exchange_rate: 1.0 }));
-                            } else if (Array.isArray(exchangeRates)) {
-                              const rate = exchangeRates.find(r => r.currency === newCurrency);
-                              if (rate) {
-                                setFormData(prev => ({ ...prev, exchange_rate: rate.rate_to_eur }));
-                              }
-                            }
-                          }, 100);
-                        }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      >
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                        <option value="CHF">CHF</option>
-                        <option value="GBP">GBP</option>
-                        <option value="JPY">JPY</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Wechselkurs zu EUR
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.exchange_rate ? parseFloat(formData.exchange_rate).toFixed(6) : '1.000000'}
-                        readOnly
-                        className="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 text-gray-700 font-mono"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Wird automatisch aus Einstellungen geladen (EUR = 1.0)
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Preis gültig ab *
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={formData.price_valid_from}
-                        onChange={(e) => setFormData({ ...formData, price_valid_from: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Preis gültig bis (optional)
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.price_valid_until}
-                        onChange={(e) => setFormData({ ...formData, price_valid_until: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Rabatt (%)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        value={formData.discount_percent}
-                        onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Marge für Visitron-Listenpreis (%) - VLP = EK / (1 - Marge/100)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="99.9"
-                        value={formData.margin_percent}
-                        onChange={(e) => setFormData({ ...formData, margin_percent: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      />
-                    </div>
-
-                    {/* Zusätzliche Kosten */}
-                    <div className="col-span-2 mt-4">
-                      <h4 className="text-md font-semibold text-gray-700 mb-2">Zusätzliche Kosten</h4>
-                    </div>
-                    
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Kosten Währung
-                      </label>
-                      <select
-                        value={formData.costs_currency}
-                        onChange={(e) => setFormData({ ...formData, costs_currency: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                      >
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                        <option value="CHF">CHF</option>
-                        <option value="GBP">GBP</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Versandkosten
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.shipping_cost}
-                          onChange={(e) => setFormData({ ...formData, shipping_cost: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                        />
-                        <label className="flex items-center mt-1">
-                          <input
-                            type="checkbox"
-                            checked={formData.shipping_cost_is_percent}
-                            onChange={(e) => setFormData({ ...formData, shipping_cost_is_percent: e.target.checked })}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                          />
-                          <span className="ml-2 text-sm text-gray-600">%</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Importkosten
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.import_cost}
-                          onChange={(e) => setFormData({ ...formData, import_cost: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                        />
-                        <label className="flex items-center mt-1">
-                          <input
-                            type="checkbox"
-                            checked={formData.import_cost_is_percent}
-                            onChange={(e) => setFormData({ ...formData, import_cost_is_percent: e.target.checked })}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                          />
-                          <span className="ml-2 text-sm text-gray-600">%</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Handlingkosten
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.handling_cost}
-                          onChange={(e) => setFormData({ ...formData, handling_cost: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                        />
-                        <label className="flex items-center mt-1">
-                          <input
-                            type="checkbox"
-                            checked={formData.handling_cost_is_percent}
-                            onChange={(e) => setFormData({ ...formData, handling_cost_is_percent: e.target.checked })}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                          />
-                          <span className="ml-2 text-sm text-gray-600">%</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Lagerkosten
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.storage_cost}
-                          onChange={(e) => setFormData({ ...formData, storage_cost: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                        />
-                        <label className="flex items-center mt-1">
-                          <input
-                            type="checkbox"
-                            checked={formData.storage_cost_is_percent}
-                            onChange={(e) => setFormData({ ...formData, storage_cost_is_percent: e.target.checked })}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                          />
-                          <span className="ml-2 text-sm text-gray-600">%</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Status */}
-                    <div className="col-span-2 mt-4">
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.is_active}
-                          onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                          className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                        />
-                        <span className="ml-2 text-sm font-medium text-gray-700">
-                          Aktiv (für Angebote verwendbar)
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button
-                    type="submit"
-                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-orange-600 text-base font-medium text-white hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 sm:ml-3 sm:w-auto sm:text-sm"
-                  >
-                    Speichern
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 sm:mt-0 sm:w-auto sm:text-sm"
-                  >
-                    Abbrechen
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal removed — full-page editor used instead */}
     </div>
   );
 };

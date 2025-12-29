@@ -177,6 +177,7 @@ class VSHardwareListSerializer(serializers.ModelSerializer):
         model = VSHardware
         fields = [
             'id', 'part_number', 'name', 'model_designation',
+            'description', 'description_en',
             'unit', 'is_active',
             'current_purchase_price', 'current_sales_price',
             'created_at', 'created_by_name'
@@ -215,7 +216,7 @@ class VSHardwareDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = VSHardware
         fields = [
-            'id', 'part_number', 'name', 'model_designation', 'description',
+            'id', 'part_number', 'name', 'model_designation', 'description', 'description_en',
             'release_manual', 'release_manual_url', 'release_manual_name',
             'draft_manual', 'draft_manual_url', 'draft_manual_name',
             'unit', 'is_active',

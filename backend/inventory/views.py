@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 from decimal import Decimal
 
-from .models import IncomingGoods, InventoryItem
+from .models import IncomingGoods, InventoryItem, EQUIPMENT_TEMPLATES, QM_TEMPLATES
 from .serializers import (
     IncomingGoodsSerializer,
     IncomingGoodsDetailSerializer,
@@ -41,10 +41,17 @@ class IncomingGoodsViewSet(viewsets.ModelViewSet):
         if item_function:
             queryset = queryset.filter(item_function=item_function)
         
-        # Filter nach Kategorie
+        # Filter nach Kategorie (product_category)
+        product_category = self.request.query_params.get('product_category', None)
+        if product_category:
+            queryset = queryset.filter(product_category_id=product_category)
+        
+        # Filter nach Legacy-Kategorie
         item_category = self.request.query_params.get('item_category', None)
         if item_category:
-            queryset = queryset.filter(item_category=item_category)
+            queryset = queryset.filter(
+                Q(item_category=item_category) | Q(product_category__code=item_category)
+            )
         
         # Suche
         search = self.request.query_params.get('search', None)
@@ -57,7 +64,7 @@ class IncomingGoodsViewSet(viewsets.ModelViewSet):
                 Q(serial_number__icontains=search)
             )
         
-        return queryset
+        return queryset.select_related('supplier', 'product_category')
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -125,6 +132,10 @@ class IncomingGoodsViewSet(viewsets.ModelViewSet):
         """
         Prüft ob für diese Ware eine Seriennummer erforderlich ist
         """
+        # Wenn ProductCategory gesetzt ist, verwende deren Einstellung
+        if incoming.product_category:
+            return incoming.product_category.requires_serial_number
+        
         # Handelsware und Asset benötigen immer Seriennummer
         if incoming.item_function in ['TRADING_GOOD', 'ASSET']:
             return True
@@ -163,8 +174,10 @@ class IncomingGoodsViewSet(viewsets.ModelViewSet):
                 incoming.material_supply.visitron_part_number if incoming.material_supply else ''
             ),
             name=incoming.name,
+            model_designation=incoming.model_designation,
             description=incoming.description,
             item_function=incoming.item_function,
+            product_category=incoming.product_category,
             item_category=incoming.item_category,
             serial_number=incoming.serial_number,
             quantity=incoming.delivered_quantity if not incoming.serial_number else Decimal('1'),
@@ -212,10 +225,32 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         if item_function:
             queryset = queryset.filter(item_function=item_function)
         
-        # Filter nach Kategorie
+        # Filter nach Kategorie (product_category)
+        product_category = self.request.query_params.get('product_category', None)
+        if product_category:
+            queryset = queryset.filter(product_category_id=product_category)
+        
+        # Filter nach Legacy-Kategorie oder category code
         item_category = self.request.query_params.get('item_category', None)
         if item_category:
-            queryset = queryset.filter(item_category=item_category)
+            queryset = queryset.filter(
+                Q(item_category=item_category) | Q(product_category__code=item_category)
+            )
+        
+        # Filter nach Kunde
+        customer = self.request.query_params.get('customer', None)
+        if customer:
+            queryset = queryset.filter(customer_id=customer)
+        
+        # Filter nach Projekt
+        project = self.request.query_params.get('project', None)
+        if project:
+            queryset = queryset.filter(project_id=project)
+        
+        # Filter nach System
+        system = self.request.query_params.get('system', None)
+        if system:
+            queryset = queryset.filter(system_id=system)
         
         # Suche
         search = self.request.query_params.get('search', None)
@@ -228,12 +263,12 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
                 Q(serial_number__icontains=search) |
                 Q(order_number__icontains=search) |
                 Q(customer_order_number__icontains=search) |
-                Q(management_info__customer__icontains=search) |
-                Q(management_info__project__icontains=search) |
-                Q(management_info__system__icontains=search)
+                Q(customer_name__icontains=search) |
+                Q(system_number__icontains=search) |
+                Q(project_number__icontains=search)
             )
         
-        return queryset.select_related('supplier', 'trading_product', 'material_supply')
+        return queryset.select_related('supplier', 'product_category', 'customer', 'project', 'system')
     
     def perform_create(self, serializer):
         serializer.save(stored_by=self.request.user)
@@ -260,3 +295,43 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         }
         
         return Response(stats)
+    
+    @action(detail=True, methods=['get'])
+    def equipment_template(self, request, pk=None):
+        """
+        Gibt das Ausstattungs-Template für diesen Artikel zurück
+        """
+        item = self.get_object()
+        category_code = item.product_category.code if item.product_category else item.item_category
+        template = EQUIPMENT_TEMPLATES.get(category_code, {})
+        return Response(template)
+    
+    @action(detail=True, methods=['get'])
+    def qm_template(self, request, pk=None):
+        """
+        Gibt das QM-Template für diesen Artikel zurück
+        """
+        item = self.get_object()
+        category_code = item.product_category.code if item.product_category else item.item_category
+        template = QM_TEMPLATES.get(category_code, QM_TEMPLATES.get('DEFAULT', {}))
+        return Response(template)
+    
+    @action(detail=True, methods=['patch'])
+    def update_equipment(self, request, pk=None):
+        """
+        Aktualisiert die Ausstattungsdaten
+        """
+        item = self.get_object()
+        item.equipment_data = request.data.get('equipment_data', {})
+        item.save()
+        return Response({'status': 'success', 'equipment_data': item.equipment_data})
+    
+    @action(detail=True, methods=['patch'])
+    def update_qm(self, request, pk=None):
+        """
+        Aktualisiert die QM-Daten
+        """
+        item = self.get_object()
+        item.qm_data = request.data.get('qm_data', {})
+        item.save()
+        return Response({'status': 'success', 'qm_data': item.qm_data})

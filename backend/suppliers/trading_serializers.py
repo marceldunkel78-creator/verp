@@ -1,5 +1,65 @@
 from rest_framework import serializers
-from .models import TradingProduct, Supplier
+from .models import TradingProduct, TradingProductPrice, Supplier
+
+
+class TradingProductPriceSerializer(serializers.ModelSerializer):
+    """
+    Serializer für Trading Product Preise (Preishistorie)
+    """
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = TradingProductPrice
+        fields = [
+            'id', 'product', 'supplier_list_price', 'supplier_currency', 'exchange_rate',
+            'discount_percent', 'shipping_cost', 'shipping_cost_is_percent',
+            'import_cost', 'import_cost_is_percent', 'handling_cost', 'handling_cost_is_percent',
+            'storage_cost', 'storage_cost_is_percent', 'margin_percent',
+            'purchase_price', 'list_price', 'valid_from', 'valid_until',
+            'notes', 'created_at', 'created_by', 'created_by_name'
+        ]
+        read_only_fields = ['purchase_price', 'list_price', 'created_at', 'created_by']
+    
+    def validate(self, data):
+        """Prüft auf überlappende Gültigkeitszeiträume"""
+        product = data.get('product') or (self.instance.product if self.instance else None)
+        valid_from = data.get('valid_from') or (self.instance.valid_from if self.instance else None)
+        valid_until = data.get('valid_until')
+        
+        if product and valid_from:
+            overlapping = TradingProductPrice.objects.filter(product=product)
+            if self.instance:
+                overlapping = overlapping.exclude(pk=self.instance.pk)
+            
+            for price in overlapping:
+                # Prüfe Überlappung
+                if not valid_until and not price.valid_until:
+                    # Beide ohne Enddatum
+                    raise serializers.ValidationError(
+                        f'Überlappung mit bestehendem Preis ab {price.valid_from}'
+                    )
+                elif not valid_until:
+                    if price.valid_until and price.valid_until >= valid_from:
+                        raise serializers.ValidationError(
+                            f'Überlappung mit bestehendem Preis ({price.valid_from} - {price.valid_until})'
+                        )
+                elif not price.valid_until:
+                    if price.valid_from <= valid_until:
+                        raise serializers.ValidationError(
+                            f'Überlappung mit bestehendem Preis ab {price.valid_from}'
+                        )
+                else:
+                    # Beide haben Enddatum
+                    if not (valid_until < price.valid_from or valid_from > price.valid_until):
+                        raise serializers.ValidationError(
+                            f'Überlappung mit bestehendem Preis ({price.valid_from} - {price.valid_until})'
+                        )
+        
+        return data
+    
+    def create(self, validated_data):
+        validated_data['created_by'] = self.context['request'].user
+        return super().create(validated_data)
 
 
 class TradingProductListSerializer(serializers.ModelSerializer):
@@ -12,6 +72,7 @@ class TradingProductListSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     purchase_price_eur = serializers.SerializerMethodField()
     visitron_list_price = serializers.SerializerMethodField()
+    current_price = serializers.SerializerMethodField()
     
     class Meta:
         model = TradingProduct
@@ -19,9 +80,10 @@ class TradingProductListSerializer(serializers.ModelSerializer):
             'id', 'visitron_part_number', 'supplier_part_number', 'name',
             'supplier', 'supplier_name', 'product_group', 'product_group_name',
             'price_list', 'price_list_name', 'category', 'category_display',
-            'short_description', 'description', 'list_price', 'list_price_currency', 'exchange_rate', 'discount_percent',
+            'short_description', 'short_description_en', 'description', 'description_en',
+            'list_price', 'list_price_currency', 'exchange_rate', 'discount_percent',
             'price_valid_from', 'price_valid_until', 'margin_percent',
-            'purchase_price_eur', 'visitron_list_price', 'is_active', 'created_at'
+            'purchase_price_eur', 'visitron_list_price', 'current_price', 'is_active', 'created_at'
         ]
     
     def get_purchase_price_eur(self, obj):
@@ -31,6 +93,19 @@ class TradingProductListSerializer(serializers.ModelSerializer):
     def get_visitron_list_price(self, obj):
         """Berechnet den Visitron-Listenpreis (auf volle Euros gerundet)"""
         return float(obj.calculate_visitron_list_price())
+    
+    def get_current_price(self, obj):
+        """Gibt den aktuell gültigen Preis aus der Preishistorie zurück"""
+        current = obj.get_current_price()
+        if current:
+            return {
+                'id': current.id,
+                'purchase_price': float(current.purchase_price),
+                'list_price': float(current.list_price),
+                'valid_from': current.valid_from,
+                'valid_until': current.valid_until
+            }
+        return None
 
 
 class TradingProductDetailSerializer(serializers.ModelSerializer):
@@ -42,6 +117,8 @@ class TradingProductDetailSerializer(serializers.ModelSerializer):
     purchase_price_eur = serializers.SerializerMethodField()
     visitron_list_price = serializers.SerializerMethodField()
     price_breakdown = serializers.SerializerMethodField()
+    price_history = TradingProductPriceSerializer(many=True, read_only=True)
+    current_price = serializers.SerializerMethodField()
     
     class Meta:
         model = TradingProduct
@@ -55,6 +132,13 @@ class TradingProductDetailSerializer(serializers.ModelSerializer):
     def get_visitron_list_price(self, obj):
         """Berechnet den Visitron-Listenpreis (auf volle Euros gerundet)"""
         return float(obj.calculate_visitron_list_price())
+    
+    def get_current_price(self, obj):
+        """Gibt den aktuell gültigen Preis aus der Preishistorie zurück"""
+        current = obj.get_current_price()
+        if current:
+            return TradingProductPriceSerializer(current).data
+        return None
     
     def get_price_breakdown(self, obj):
         """Detaillierte Preisaufschlüsselung"""
@@ -92,9 +176,10 @@ class TradingProductCreateUpdateSerializer(serializers.ModelSerializer):
         model = TradingProduct
         fields = [
             'name', 'visitron_part_number', 'supplier_part_number',
-            'supplier', 'product_group', 'price_list', 'category', 'description', 'unit',
-            'list_price', 'list_price_currency', 'exchange_rate', 'price_valid_from', 'price_valid_until',
-            'discount_percent', 'margin_percent',
+            'supplier', 'product_group', 'price_list', 'category',
+            'description', 'description_en', 'short_description', 'short_description_en',
+            'unit', 'list_price', 'list_price_currency', 'exchange_rate',
+            'price_valid_from', 'price_valid_until', 'discount_percent', 'margin_percent',
             'shipping_cost', 'shipping_cost_is_percent',
             'import_cost', 'import_cost_is_percent',
             'handling_cost', 'handling_cost_is_percent',

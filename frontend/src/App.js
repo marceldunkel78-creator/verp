@@ -8,6 +8,7 @@ import Users from './pages/Users';
 import Suppliers from './pages/Suppliers';
 import SupplierDetail from './pages/SupplierDetail';
 import TradingProducts from './pages/TradingProducts';
+import TradingProductEdit from './pages/TradingProductEdit';
 import MaterialSupplies from './pages/MaterialSupplies';
 import Orders from './pages/Orders';
 import OrderFormNew from './pages/OrderFormNew';
@@ -35,6 +36,10 @@ import ProductionOrders from './pages/ProductionOrders';
 import InventoryItemEdit from './pages/InventoryItemEdit';
 import VisiViewProducts from './pages/VisiViewProducts';
 import VisiViewProductEdit from './pages/VisiViewProductEdit';
+import VSServiceProducts from './pages/VSServiceProducts';
+import VSServiceProductEdit from './pages/VSServiceProductEdit';
+import RMACases from './pages/RMACases';
+import RMACaseEdit from './pages/RMACaseEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -79,6 +84,10 @@ function App() {
             <Route path="visiview/products" element={<VisiViewProducts />} />
             <Route path="visiview/products/:id" element={<VisiViewProductEdit />} />
             <Route path="service" element={<Service />} />
+            <Route path="service/vs-service" element={<VSServiceProducts />} />
+            <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />
+            <Route path="service/rma" element={<RMACases />} />
+            <Route path="service/rma/:id" element={<RMACaseEdit />} />
             <Route path="bi" element={<BusinessIntelligence />} />
             <Route path="documents" element={<DocumentManagement />} />
             <Route path="settings" element={<Settings />} />
@@ -87,6 +96,8 @@ function App() {
             <Route path="procurement/suppliers" element={<Suppliers />} />
             <Route path="procurement/suppliers/:id" element={<SupplierDetail />} />
             <Route path="procurement/trading-goods" element={<TradingProducts />} />
+            <Route path="procurement/trading-goods/new" element={<TradingProductEdit />} />
+            <Route path="procurement/trading-goods/:id" element={<TradingProductEdit />} />
             <Route path="procurement/materials-supplies" element={<MaterialSupplies />} />
             <Route path="procurement/orders" element={<Orders />} />
             <Route path="procurement/orders/new" element={<OrderFormNew />} />

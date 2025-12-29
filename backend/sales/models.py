@@ -19,6 +19,7 @@ class Quotation(models.Model):
     """
     STATUS_CHOICES = [
         ('DRAFT', 'In Arbeit'),
+        ('SENT', 'Verschickt'),
         ('ACTIVE', 'Aktiv'),
         ('EXPIRED', 'Abgelaufen'),
         ('ORDERED', 'Bestellt'),
@@ -71,7 +72,9 @@ class Quotation(models.Model):
     )
     
     date = models.DateField(
-        auto_now_add=True,
+        default=None,
+        blank=True,
+        null=True,
         verbose_name='Angebotsdatum'
     )
     
@@ -197,6 +200,29 @@ class Quotation(models.Model):
         help_text='Globaler MwSt-Satz für das Angebot'
     )
     
+    # Angebotsbeschreibung (erscheint über Positionen im PDF)
+    description_text = models.TextField(
+        blank=True,
+        verbose_name='Angebotsbeschreibung',
+        help_text='Einleitender Text der über den Positionen erscheint'
+    )
+    
+    # Fußtext (erscheint unter den Konditionen im PDF)
+    footer_text = models.TextField(
+        blank=True,
+        verbose_name='Fußtext',
+        help_text='Text der unter den Konditionen im PDF erscheint'
+    )
+    
+    # PDF Datei (nach Erstellung)
+    pdf_file = models.FileField(
+        upload_to='quotations/%Y/',
+        blank=True,
+        null=True,
+        verbose_name='PDF Datei',
+        help_text='Gespeichertes PDF des Angebots'
+    )
+    
     # Notizen (intern)
     notes = models.TextField(
         blank=True,
@@ -236,6 +262,10 @@ class Quotation(models.Model):
     def save(self, *args, **kwargs):
         if not self.quotation_number:
             self.quotation_number = self._generate_quotation_number()
+        # Auto-set date if not provided
+        if not self.date:
+            import datetime
+            self.date = datetime.date.today()
         super().save(*args, **kwargs)
     
     @staticmethod
@@ -308,11 +338,13 @@ class QuotationItem(models.Model):
         help_text='True wenn dies die Haupt-Position einer Warensammlung ist'
     )
     
-    # Generic Foreign Key für TradingProduct oder Asset (optional für Gruppen-Header)
+    # Generic Foreign Key für TradingProduct, VisiView oder VS-Hardware (optional für Gruppen-Header)
     content_type = models.ForeignKey(
         ContentType,
         on_delete=models.CASCADE,
-        limit_choices_to=models.Q(app_label='suppliers', model='tradingproduct'),
+        limit_choices_to=models.Q(app_label='suppliers', model='tradingproduct') | 
+                         models.Q(app_label='visiview', model='visiviewproduct') |
+                         models.Q(app_label='manufacturing', model='vshardware'),
         null=True,
         blank=True
     )
@@ -398,6 +430,13 @@ class QuotationItem(models.Model):
     notes = models.TextField(
         blank=True,
         verbose_name='Positions-Notizen'
+    )
+    
+    # Benutzerdefinierter Beschreibungstext (kann bearbeitet werden)
+    custom_description = models.TextField(
+        blank=True,
+        verbose_name='Beschreibungstext',
+        help_text='Editierbare Beschreibung für das Angebot (wird aus Produktbeschreibung geladen)'
     )
     
     class Meta:

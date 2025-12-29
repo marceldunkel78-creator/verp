@@ -44,7 +44,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = [
-            'id', 'customer_number', 'title', 'first_name', 'last_name',
+            'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
             'primary_email', 'primary_phone', 'is_active',
             'created_at', 'updated_at'
@@ -74,7 +74,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = [
-            'id', 'customer_number', 'title', 'first_name', 'last_name',
+            'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
             'addresses', 'phones', 'emails',
             'notes', 'is_active',
@@ -95,7 +95,7 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = [
-            'title', 'first_name', 'last_name', 'language',
+            'salutation', 'title', 'first_name', 'last_name', 'language',
             'addresses', 'phones', 'emails',
             'notes', 'is_active'
         ]

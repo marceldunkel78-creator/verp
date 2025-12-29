@@ -59,6 +59,11 @@ class VSHardware(models.Model):
         verbose_name='Modellbezeichnung'
     )
     description = models.TextField(blank=True, verbose_name='Beschreibung')
+    description_en = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung (Englisch)',
+        help_text='English description for international quotations'
+    )
     
     # Handbücher
     release_manual = models.FileField(

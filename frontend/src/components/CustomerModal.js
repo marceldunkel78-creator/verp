@@ -6,6 +6,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
   const isEditing = !!customer;
   
   const [formData, setFormData] = useState({
+    salutation: '',
     title: '',
     first_name: '',
     last_name: '',
@@ -23,6 +24,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
   useEffect(() => {
     if (customer) {
       setFormData({
+        salutation: customer.salutation || '',
         title: customer.title || '',
         first_name: customer.first_name || '',
         last_name: customer.last_name || '',
@@ -190,16 +192,35 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
           {/* Grunddaten */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-4">Grunddaten</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Anrede</label>
+                <select
+                  value={formData.salutation}
+                  onChange={(e) => setFormData({ ...formData, salutation: e.target.value })}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">-- Wählen --</option>
+                  <option value="Herr">Herr</option>
+                  <option value="Frau">Frau</option>
+                  <option value="Mr.">Mr.</option>
+                  <option value="Ms.">Ms.</option>
+                  <option value="Mrs.">Mrs.</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Titel</label>
-                <input
-                  type="text"
+                <select
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Dr., Prof."
-                />
+                >
+                  <option value="">-- Kein Titel --</option>
+                  <option value="Prof.">Prof.</option>
+                  <option value="Dr.">Dr.</option>
+                  <option value="Prof. Dr.">Prof. Dr.</option>
+                  <option value="Jun-Prof.">Jun-Prof.</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Vorname *</label>

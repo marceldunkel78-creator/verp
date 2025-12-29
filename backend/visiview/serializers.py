@@ -80,7 +80,7 @@ class VisiViewProductListSerializer(serializers.ModelSerializer):
     class Meta:
         model = VisiViewProduct
         fields = [
-            'id', 'article_number', 'name', 'description',
+            'id', 'article_number', 'name', 'description', 'description_en',
             'product_category', 'product_category_name',
             'unit', 'is_active',
             'current_purchase_price', 'current_list_price',
@@ -105,7 +105,7 @@ class VisiViewProductDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = VisiViewProduct
         fields = [
-            'id', 'article_number', 'name', 'description',
+            'id', 'article_number', 'name', 'description', 'description_en',
             'product_category', 'product_category_name',
             'unit', 'is_active',
             'prices', 'current_purchase_price', 'current_list_price',
@@ -131,7 +131,7 @@ class VisiViewProductCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = VisiViewProduct
         fields = [
-            'id', 'article_number', 'name', 'description',
+            'id', 'article_number', 'name', 'description', 'description_en',
             'product_category', 'unit', 'is_active'
         ]
         read_only_fields = ['article_number']

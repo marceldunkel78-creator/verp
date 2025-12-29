@@ -115,6 +115,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class EmployeeSerializer(serializers.ModelSerializer):
     """Serializer für Employee Model (HR-Daten)"""
+    signature_image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Employee
@@ -125,9 +126,34 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'job_title', 'department', 'working_time_percentage', 'employment_status',
             'weekly_work_hours', 'work_days',
             'annual_vacation_days', 'vacation_balance',
+            'signature_image', 'signature_image_url', 'closing_greeting',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id', 'signature_image_url']
+    
+    def get_signature_image_url(self, obj):
+        if obj.signature_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.signature_image.url)
+            return obj.signature_image.url
+        return None
+    
+    def validate_work_days(self, value):
+        """Validiere work_days: kann als JSON-String oder Liste kommen"""
+        import json
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                raise serializers.ValidationError("Ungültiges Format für Arbeitstage.")
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Arbeitstage müssen eine Liste sein.")
+        valid_days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+        for day in value:
+            if day not in valid_days:
+                raise serializers.ValidationError(f"Ungültiger Tag: {day}")
+        return value
     
     def validate_date_of_birth(self, value):
         """Validiere Geburtsdatum: nicht in Zukunft, plausibel"""

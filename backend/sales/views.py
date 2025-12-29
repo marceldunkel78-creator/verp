@@ -224,6 +224,58 @@ class QuotationViewSet(viewsets.ModelViewSet):
             )
     
     @action(detail=True, methods=['post'])
+    def create_and_save_pdf(self, request, pk=None):
+        """
+        Generiert PDF, speichert es im Dateisystem und gibt es zurück.
+        Setzt den Status auf SENT nach erfolgreicher Erstellung.
+        """
+        import os
+        from django.conf import settings
+        from django.core.files.base import ContentFile
+        
+        quotation = self.get_object()
+        
+        try:
+            from .pdf_generator import generate_quotation_pdf
+            pdf_buffer = generate_quotation_pdf(quotation)
+            
+            # Speichere das PDF im media/quotations/Jahr/ Verzeichnis
+            year = quotation.date.year
+            save_dir = os.path.join(settings.MEDIA_ROOT, 'quotations', str(year))
+            os.makedirs(save_dir, exist_ok=True)
+            
+            filename = f'Angebot_{quotation.quotation_number}.pdf'
+            filepath = os.path.join(save_dir, filename)
+            
+            # Schreibe Datei
+            pdf_content = pdf_buffer.getvalue()
+            with open(filepath, 'wb') as f:
+                f.write(pdf_content)
+            
+            # Speichere Datei-Referenz im Model und setze Status auf SENT
+            relative_path = f'quotations/{year}/{filename}'
+            quotation.pdf_file = relative_path
+            quotation.status = 'SENT'
+            quotation.save(update_fields=['pdf_file', 'status'])
+            
+            # Gebe das PDF zurück
+            pdf_buffer.seek(0)
+            response = FileResponse(
+                pdf_buffer,
+                content_type='application/pdf',
+                as_attachment=False,
+                filename=filename
+            )
+            return response
+        except Exception as e:
+            print(f"Error generating/saving PDF: {e}")
+            traceback.print_exc()
+            return Response(
+                {'error': f'Fehler beim Generieren des PDFs: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'])
     def duplicate(self, request, pk=None):
         """
         Dupliziert ein Angebot

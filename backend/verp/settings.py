@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'systems',
     'manufacturing',
     'visiview',
+    'service',
 ]
 
 MIDDLEWARE = [

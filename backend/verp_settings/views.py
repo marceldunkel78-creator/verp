@@ -7,13 +7,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
     CompanyManager, CompanyBankAccount, PaymentTerm,
-    DeliveryTerm, DeliveryInstruction
+    DeliveryTerm, DeliveryInstruction, ProductCategory
 )
 from .serializers import (
     ExchangeRateSerializer, CompanySettingsSerializer,
     CompanySettingsUpdateSerializer, CompanyAddressSerializer,
     CompanyManagerSerializer, CompanyBankAccountSerializer,
-    PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer
+    PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer,
+    ProductCategorySerializer
 )
 
 
@@ -148,3 +149,71 @@ class DeliveryInstructionViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'instruction_text']
     filterset_fields = ['is_active']
     ordering = ['name']
+
+
+class ProductCategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Warenkategorien
+    """
+    queryset = ProductCategory.objects.all()
+    serializer_class = ProductCategorySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'code', 'description']
+    filterset_fields = ['is_active', 'applies_to_trading_goods', 'applies_to_material_supplies', 
+                        'applies_to_vs_hardware', 'applies_to_vs_software', 'applies_to_vs_service']
+    ordering = ['sort_order', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def trading_goods(self, request):
+        """Gibt alle für Handelswaren gültigen Kategorien zurück"""
+        categories = ProductCategory.get_trading_goods_categories()
+        serializer = self.get_serializer(categories, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def material_supplies(self, request):
+        """Gibt alle für M&S gültigen Kategorien zurück"""
+        categories = ProductCategory.get_material_supplies_categories()
+        serializer = self.get_serializer(categories, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def vs_hardware(self, request):
+        """Gibt alle für VS-Hardware gültigen Kategorien zurück"""
+        categories = ProductCategory.get_vs_hardware_categories()
+        serializer = self.get_serializer(categories, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def initialize_defaults(self, request):
+        """Initialisiert alle Standard-Kategorien"""
+        created_count = 0
+        for code, name in ProductCategory.PRODUCT_CATEGORY_CHOICES:
+            # Bestimme Standard-Eigenschaften basierend auf Kategorie
+            requires_serial = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF']
+            applies_to_ms = code in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF', 'KABEL', 'FILTER', 'SONSTIGES']
+            applies_to_tg = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF']
+            applies_to_vsh = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF', 'SERVICE', 'SOFTWARE']
+            applies_to_vss = code in ['SOFTWARE', 'VISIVIEW']
+            applies_to_service = code in ['SERVICE', 'SONSTIGES']
+            
+            _, created = ProductCategory.objects.get_or_create(
+                code=code,
+                defaults={
+                    'name': name,
+                    'requires_serial_number': requires_serial,
+                    'applies_to_trading_goods': applies_to_tg,
+                    'applies_to_material_supplies': applies_to_ms,
+                    'applies_to_vs_hardware': applies_to_vsh,
+                    'applies_to_vs_software': applies_to_vss,
+                    'applies_to_vs_service': applies_to_service,
+                }
+            )
+            if created:
+                created_count += 1
+        
+        return Response({
+            'message': f'{created_count} Kategorien erstellt',
+            'total': ProductCategory.objects.count()
+        })

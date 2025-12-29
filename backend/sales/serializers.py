@@ -30,7 +30,7 @@ class QuotationItemSerializer(serializers.ModelSerializer):
             'group_id', 'group_name', 'is_group_header',
             'position', 'description_type', 'quantity', 
             'unit_price', 'purchase_price', 'sale_price', 'uses_system_price',
-            'discount_percent', 'tax_rate', 'notes',
+            'discount_percent', 'tax_rate', 'notes', 'custom_description',
             'subtotal', 'tax_amount', 'total',
             'total_purchase_cost', 'margin_absolute', 'margin_percent', 'group_margin'
         ]
@@ -101,7 +101,8 @@ class QuotationItemCreateUpdateSerializer(serializers.ModelSerializer):
             'group_id', 'group_name', 'is_group_header',
             'position', 'description_type', 'quantity', 
             'unit_price', 'purchase_price', 'sale_price', 'uses_system_price',
-            'discount_percent', 'tax_rate', 'notes', 'item_article_number'
+            'discount_percent', 'tax_rate', 'notes', 'item_article_number',
+            'custom_description'
         ]
     
     def to_internal_value(self, data):
@@ -225,6 +226,7 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
     total_gross = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     commission_user_name = serializers.SerializerMethodField()
+    pdf_file_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Quotation
@@ -238,10 +240,20 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
             'show_terms_conditions', 'show_group_item_prices', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
             'recipient_company', 'recipient_name', 'recipient_street',
             'recipient_postal_code', 'recipient_city', 'recipient_country',
+            'description_text', 'footer_text', 'pdf_file', 'pdf_file_url',
             'notes',
             'items', 'total_net', 'total_tax', 'total_gross',
             'created_by', 'created_by_name', 'commission_user', 'commission_user_name', 'created_at', 'updated_at'
         ]
+    
+    def get_pdf_file_url(self, obj):
+        """URL zur PDF-Datei"""
+        if obj.pdf_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.pdf_file.url)
+            return obj.pdf_file.url
+        return None
     
     def get_payment_term_display(self, obj):
         """Zahlungsbedingung formatiert"""
@@ -316,11 +328,12 @@ class QuotationCreateUpdateSerializer(serializers.ModelSerializer):
         model = Quotation
         fields = [
             'customer', 'project_reference', 'system_reference', 'reference',
-            'valid_until', 'delivery_time_weeks', 'status', 'language',
+            'date', 'valid_until', 'delivery_time_weeks', 'status', 'language',
             'payment_term', 'delivery_term',
             'show_terms_conditions', 'show_group_item_prices', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
             'recipient_company', 'recipient_name', 'recipient_street',
             'recipient_postal_code', 'recipient_city', 'recipient_country',
+            'description_text', 'footer_text',
             'notes', 'created_by', 'commission_user'
         ]
 

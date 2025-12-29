@@ -420,3 +420,166 @@ class DeliveryInstruction(models.Model):
     
     def __str__(self):
         return self.name
+
+
+class ProductCategory(models.Model):
+    """
+    Globale Warenkategorien für alle Produkttypen
+    (Trading Goods, M&S, VS-Hardware, VS-Software, VS-Service)
+    """
+    PRODUCT_CATEGORY_CHOICES = [
+        ('KAMERA', 'Kamera'),
+        ('CONFOCAL', 'Confocal'),
+        ('VIRTEX', 'ViRTEx'),
+        ('FRAP', 'FRAP'),
+        ('ORBITAL', 'Orbital'),
+        ('VS_LMS', 'VS-LMS'),
+        ('INKUBATION', 'Inkubation'),
+        ('SCANNINGTISCH', 'Scanningtisch'),
+        ('LED', 'LED'),
+        ('LASER', 'Laser'),
+        ('VISIVIEW', 'VisiView'),
+        ('DUALCAM_SPLITTER', 'DualCam/Splitter'),
+        ('FILTER', 'Filter'),
+        ('FILTERRAD', 'Filterrad'),
+        ('MIKROSKOP', 'Mikroskop'),
+        ('PC', 'PC'),
+        ('KABEL', 'Kabel'),
+        ('ROHSTOFF', 'Rohstoff'),
+        ('HILFSSTOFF', 'Hilfsstoff'),
+        ('BETRIEBSSTOFF', 'Betriebsstoff'),
+        ('SOFTWARE', 'Software'),
+        ('SERVICE', 'Service'),
+        ('SONSTIGES', 'Sonstiges'),
+    ]
+    
+    code = models.CharField(
+        max_length=30,
+        unique=True,
+        choices=PRODUCT_CATEGORY_CHOICES,
+        verbose_name='Kategorie-Code'
+    )
+    
+    name = models.CharField(
+        max_length=100,
+        verbose_name='Kategoriename'
+    )
+    
+    description = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung'
+    )
+    
+    # Für welche Produkttypen gilt diese Kategorie?
+    applies_to_trading_goods = models.BooleanField(
+        default=True,
+        verbose_name='Für Handelswaren'
+    )
+    
+    applies_to_material_supplies = models.BooleanField(
+        default=True,
+        verbose_name='Für M&S'
+    )
+    
+    applies_to_vs_hardware = models.BooleanField(
+        default=True,
+        verbose_name='Für VS-Hardware'
+    )
+    
+    applies_to_vs_software = models.BooleanField(
+        default=False,
+        verbose_name='Für VS-Software'
+    )
+    
+    applies_to_vs_service = models.BooleanField(
+        default=False,
+        verbose_name='Für VS-Service'
+    )
+    
+    # Ob diese Kategorie Seriennummern benötigt
+    requires_serial_number = models.BooleanField(
+        default=True,
+        verbose_name='Seriennummer erforderlich',
+        help_text='Ob Waren dieser Kategorie eine Seriennummer benötigen'
+    )
+    
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    sort_order = models.PositiveIntegerField(default=0, verbose_name='Sortierung')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Warenkategorie'
+        verbose_name_plural = 'Warenkategorien'
+        ordering = ['sort_order', 'name']
+    
+    def __str__(self):
+        return self.name
+    
+    @classmethod
+    def get_trading_goods_categories(cls):
+        """Gibt alle für Handelswaren gültigen Kategorien zurück"""
+        return cls.objects.filter(applies_to_trading_goods=True, is_active=True)
+    
+    @classmethod
+    def get_material_supplies_categories(cls):
+        """Gibt alle für M&S gültigen Kategorien zurück"""
+        return cls.objects.filter(applies_to_material_supplies=True, is_active=True)
+    
+    @classmethod
+    def get_vs_hardware_categories(cls):
+        """Gibt alle für VS-Hardware gültigen Kategorien zurück"""
+        return cls.objects.filter(applies_to_vs_hardware=True, is_active=True)
+    
+    @classmethod
+    def initialize_defaults(cls):
+        """Erstellt alle Standard-Kategorien"""
+        defaults = [
+            # Hardware-Kategorien
+            ('KAMERA', 'Kamera', True, True, True, False, False, True),
+            ('CONFOCAL', 'Confocal', True, True, True, False, False, True),
+            ('VIRTEX', 'ViRTEx', True, True, True, False, False, True),
+            ('FRAP', 'FRAP', True, True, True, False, False, True),
+            ('ORBITAL', 'Orbital', True, True, True, False, False, True),
+            ('VS_LMS', 'VS-LMS', True, True, True, False, False, True),
+            ('INKUBATION', 'Inkubation', True, True, True, False, False, True),
+            ('SCANNINGTISCH', 'Scanningtisch', True, True, True, False, False, True),
+            ('LED', 'LED', True, True, True, False, False, True),
+            ('LASER', 'Laser', True, True, True, False, False, True),
+            ('VISIVIEW', 'VisiView', True, True, True, False, False, True),
+            ('DUALCAM_SPLITTER', 'DualCam/Splitter', True, True, True, False, False, True),
+            ('FILTER', 'Filter', True, True, True, False, False, False),
+            ('FILTERRAD', 'Filterrad', True, True, True, False, False, True),
+            ('MIKROSKOP', 'Mikroskop', True, True, True, False, False, True),
+            ('PC', 'PC', True, True, True, False, False, True),
+            ('KABEL', 'Kabel', True, True, True, False, False, False),
+            # Material-Kategorien (keine Seriennummer)
+            ('ROHSTOFF', 'Rohstoff', False, True, False, False, False, False),
+            ('HILFSSTOFF', 'Hilfsstoff', False, True, False, False, False, False),
+            ('BETRIEBSSTOFF', 'Betriebsstoff', False, True, False, False, False, False),
+            # Software & Service
+            ('SOFTWARE', 'Software', False, False, False, True, False, False),
+            ('SERVICE', 'Service', False, False, False, False, True, False),
+            ('SONSTIGES', 'Sonstiges', True, True, True, True, True, False),
+        ]
+        
+        created = 0
+        for i, (code, name, trading, ms, hw, sw, svc, serial) in enumerate(defaults):
+            obj, was_created = cls.objects.get_or_create(
+                code=code,
+                defaults={
+                    'name': name,
+                    'applies_to_trading_goods': trading,
+                    'applies_to_material_supplies': ms,
+                    'applies_to_vs_hardware': hw,
+                    'applies_to_vs_software': sw,
+                    'applies_to_vs_service': svc,
+                    'requires_serial_number': serial,
+                    'sort_order': i * 10,
+                    'is_active': True
+                }
+            )
+            if was_created:
+                created += 1
+        
+        return created

@@ -104,6 +104,24 @@ class Employee(models.Model):
     vacation_balance = models.DecimalField(max_digits=5, decimal_places=1, default=30.0, verbose_name='Urlaubskonto (Tage)')
     employment_status = models.CharField(max_length=20, choices=EMPLOYMENT_STATUS_CHOICES, verbose_name='Beschäftigungsstatus')
     
+    # Unterschriftsbild für Angebote/Dokumente
+    signature_image = models.ImageField(
+        upload_to='hr/signatures/',
+        blank=True,
+        null=True,
+        verbose_name='Unterschrift',
+        help_text='Unterschriftsbild für Angebote und Dokumente (PNG/JPG)'
+    )
+    
+    # Grußformel für Angebote/Dokumente
+    closing_greeting = models.CharField(
+        max_length=200,
+        blank=True,
+        default='Mit freundlichen Grüßen',
+        verbose_name='Grußformel',
+        help_text='z.B. "Mit freundlichen Grüßen" oder "Best regards"'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

@@ -8,7 +8,10 @@ import {
   ClipboardDocumentListIcon,
   CubeIcon,
   KeyIcon,
-  TicketIcon
+  TicketIcon,
+  WrenchScrewdriverIcon,
+  ArrowPathIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 export const InventoryManagement = () => <InventoryManagementModule />;
@@ -108,10 +111,55 @@ export const VisiView = () => (
 );
 
 export const Service = () => (
-  <ComingSoon 
-    moduleName="Service" 
-    description="Kundenservice und Support"
-  />
+  <div className="space-y-6">
+    <div>
+      <h1 className="text-2xl font-bold text-gray-900">Service</h1>
+      <p className="text-gray-500">Kundenservice, Support und Reparaturverwaltung</p>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <Link
+        to="/service/vs-service"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-green-100 rounded-lg">
+            <WrenchScrewdriverIcon className="h-8 w-8 text-green-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">VS-Service Produkte</h3>
+            <p className="text-sm text-gray-500">Service- und Dienstleistungen</p>
+          </div>
+        </div>
+      </Link>
+      <div
+        className="bg-white rounded-lg shadow p-6 opacity-60 cursor-not-allowed"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-gray-100 rounded-lg">
+            <DocumentTextIcon className="h-8 w-8 text-gray-400" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-500">Service-Tickets</h3>
+            <p className="text-sm text-gray-400">Demnächst verfügbar</p>
+          </div>
+        </div>
+      </div>
+      <Link
+        to="/service/rma"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-orange-100 rounded-lg">
+            <ArrowPathIcon className="h-8 w-8 text-orange-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">RMA-Verwaltung</h3>
+            <p className="text-sm text-gray-500">Rücksendungen & Reparaturen</p>
+          </div>
+        </div>
+      </Link>
+    </div>
+  </div>
 );
 
 export const BusinessIntelligence = () => (

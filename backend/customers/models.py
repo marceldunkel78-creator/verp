@@ -16,6 +16,16 @@ class Customer(models.Model):
         ('IT', 'Italiano'),
     ]
     
+    SALUTATION_CHOICES = [
+        ('Herr', 'Herr'),
+        ('Frau', 'Frau'),
+        ('Mr.', 'Mr.'),
+        ('Mrs.', 'Mrs.'),
+        ('Ms.', 'Ms.'),
+        ('Dr.', 'Dr.'),
+        ('Prof.', 'Prof.'),
+    ]
+    
     customer_number = models.CharField(
         max_length=10,
         unique=True,
@@ -24,6 +34,15 @@ class Customer(models.Model):
         editable=False,
         verbose_name='Kundennummer',
         help_text='Automatisch generierte Kundennummer'
+    )
+    
+    # Anrede
+    salutation = models.CharField(
+        max_length=20,
+        choices=SALUTATION_CHOICES,
+        blank=True,
+        verbose_name='Anrede',
+        help_text='z.B. Herr, Frau, Mr., Mrs.'
     )
     
     # Persönliche Daten
