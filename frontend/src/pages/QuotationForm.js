@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
@@ -28,6 +28,7 @@ const QuotationForm = () => {
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const lastLoadedCustomerRef = useRef(null);
   
   // Product filter for item selection
   const [productFilter, setProductFilter] = useState('');
@@ -97,7 +98,8 @@ const QuotationForm = () => {
   
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (formData.customer) {
+    if (formData.customer && formData.customer !== lastLoadedCustomerRef.current) {
+      lastLoadedCustomerRef.current = formData.customer;
       loadCustomerDetails(formData.customer);
     }
   }, [formData.customer]);
