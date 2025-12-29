@@ -652,6 +652,11 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
 
   // calendar selection state
   const [selectedRange, setSelectedRange] = React.useState({ start: null, end: null });
+  
+  // Stable callback to prevent infinite re-render loop in CalendarMonth
+  const handleCalendarSelect = React.useCallback(({ start, end }) => {
+    setSelectedRange({ start, end });
+  }, []);
 
   const formatDate = (s) => s ? new Date(s).toLocaleDateString() : '-';
 
@@ -723,7 +728,7 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
 
         {/* Calendar selector */}
         <div className="p-3 bg-white rounded border">
-          <CalendarMonth vacationRequests={vacationRequests} onSelect={({start,end}) => setSelectedRange({start,end})} />
+          <CalendarMonth vacationRequests={vacationRequests} onSelect={handleCalendarSelect} />
 
           <div className="mt-3 flex items-center justify-between">
             <div className="text-sm">
