@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
 import api from '../services/api';
-import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon } from '@heroicons/react/24/outline';
+import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon } from '@heroicons/react/24/outline';
 import CalendarMonth from '../components/CalendarMonth';
 
 const MyVERP = () => {
-  const [activeTab, setActiveTab] = useState('time-tracking');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [timeEntries, setTimeEntries] = useState([]);
   const [messages, setMessages] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -88,6 +88,7 @@ const MyVERP = () => {
   };
 
   const tabs = [
+    { id: 'dashboard', name: 'Dashboard', icon: Squares2X2Icon },
     { id: 'time-tracking', name: 'Zeiterfassung', icon: ClockIcon },
     { id: 'messages', name: 'Nachrichtencenter', icon: ChatBubbleLeftIcon },
     { id: 'reporting', name: 'Reporting', icon: ChartBarIcon },
@@ -141,6 +142,9 @@ const MyVERP = () => {
 
       {/* Tab Content */}
       <div className="mt-6">
+        {activeTab === 'dashboard' && (
+          <PersonalDashboardTab />
+        )}
         {activeTab === 'time-tracking' && (
           <TimeTrackingTab
             timeEntries={timeEntries}
@@ -851,6 +855,184 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// PersonalDashboardTab Component - Persönliche Schnellzugriffe
+const PersonalDashboardTab = () => {
+  const STORAGE_KEY = 'myverp_dashboard_modules';
+  
+  // Alle verfügbaren Module
+  const allModules = [
+    // Vertrieb
+    { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb' },
+    { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb' },
+    { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb' },
+    // Beschaffung
+    { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung' },
+    { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung' },
+    { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Beschaffung' },
+    { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung' },
+    // Produkte
+    { id: 'visiview', name: 'VisiView Produkte', route: '/products/visiview', icon: '🔬', category: 'Produkte' },
+    { id: 'vshardware', name: 'VS-Hardware', route: '/products/vs-hardware', icon: '🔧', category: 'Produkte' },
+    { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service' },
+    // Service
+    { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service' },
+    // Lager & Fertigung
+    { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager' },
+    { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung' },
+    // Projekte
+    { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte' },
+    // Einstellungen
+    { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System' },
+    { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System' },
+    { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System' },
+    { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'System' },
+  ];
+  
+  // Standard-Module die initial aktiviert sind
+  const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
+  
+  // Geladene Auswahl aus localStorage
+  const loadSavedModules = () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn('Fehler beim Laden der gespeicherten Module:', e);
+    }
+    return defaultModules;
+  };
+  
+  const [selectedModules, setSelectedModules] = React.useState(loadSavedModules);
+  const [showSettings, setShowSettings] = React.useState(false);
+  
+  // Speichern bei Änderung
+  React.useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedModules));
+  }, [selectedModules]);
+  
+  const toggleModule = (moduleId) => {
+    setSelectedModules(prev => {
+      if (prev.includes(moduleId)) {
+        return prev.filter(id => id !== moduleId);
+      } else {
+        return [...prev, moduleId];
+      }
+    });
+  };
+  
+  const activeModules = allModules.filter(m => selectedModules.includes(m.id));
+  const categories = [...new Set(allModules.map(m => m.category))];
+  
+  const colorClasses = {
+    'Vertrieb': 'bg-blue-500 hover:bg-blue-600',
+    'Beschaffung': 'bg-green-500 hover:bg-green-600',
+    'Produkte': 'bg-cyan-500 hover:bg-cyan-600',
+    'Service': 'bg-orange-500 hover:bg-orange-600',
+    'Lager': 'bg-violet-500 hover:bg-violet-600',
+    'Fertigung': 'bg-gray-500 hover:bg-gray-600',
+    'Projekte': 'bg-indigo-500 hover:bg-indigo-600',
+    'System': 'bg-purple-500 hover:bg-purple-600',
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-medium text-gray-900">Mein Dashboard</h2>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+        >
+          ⚙️ Anpassen
+        </button>
+      </div>
+      
+      {/* Schnellzugriff-Kacheln */}
+      {!showSettings && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {activeModules.map((module) => {
+            const colorClass = colorClasses[module.category] || 'bg-gray-500 hover:bg-gray-600';
+            return (
+              <a
+                key={module.id}
+                href={module.route}
+                className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
+              >
+                <div className="text-center">
+                  <div className="text-3xl mb-2">{module.icon}</div>
+                  <div className="text-lg font-semibold">{module.name}</div>
+                  <div className="text-xs opacity-75">{module.category}</div>
+                </div>
+              </a>
+            );
+          })}
+          {activeModules.length === 0 && (
+            <div className="col-span-full text-center text-gray-500 py-8">
+              Keine Module ausgewählt. Klicken Sie auf "Anpassen", um Module hinzuzufügen.
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Einstellungen / Modul-Auswahl */}
+      {showSettings && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Module für Schnellzugriff auswählen</h3>
+          <p className="text-sm text-gray-500 mb-6">
+            Wählen Sie die Module aus, die in Ihrem persönlichen Dashboard angezeigt werden sollen.
+          </p>
+          
+          {categories.map(category => (
+            <div key={category} className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">{category}</h4>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {allModules.filter(m => m.category === category).map(module => (
+                  <label
+                    key={module.id}
+                    className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                      selectedModules.includes(module.id)
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedModules.includes(module.id)}
+                      onChange={() => toggleModule(module.id)}
+                      className="sr-only"
+                    />
+                    <span className="text-2xl mr-3">{module.icon}</span>
+                    <span className="text-sm font-medium text-gray-700">{module.name}</span>
+                    {selectedModules.includes(module.id) && (
+                      <span className="ml-auto text-blue-500">✓</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          
+          <div className="flex justify-between items-center mt-6 pt-4 border-t">
+            <button
+              onClick={() => setSelectedModules(defaultModules)}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Auf Standard zurücksetzen
+            </button>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            >
+              Fertig
+            </button>
           </div>
         </div>
       )}

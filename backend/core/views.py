@@ -3,6 +3,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from suppliers.models import Supplier, TradingProduct
+from customers.models import Customer
+from visiview.models import VisiViewProduct
+from manufacturing.models import VSHardware
+from service.models import VSService
 
 User = get_user_model()
 
@@ -15,14 +19,32 @@ def dashboard_stats(request):
     """
     user = request.user
     
+    # Produktzählung: Trading + VS-Hardware + VisiView + VS-Service
+    trading_total = TradingProduct.objects.count()
+    trading_active = TradingProduct.objects.filter(is_active=True).count()
+    vshardware_total = VSHardware.objects.count()
+    vshardware_active = VSHardware.objects.filter(is_active=True).count()
+    visiview_total = VisiViewProduct.objects.count()
+    visiview_active = VisiViewProduct.objects.filter(is_active=True).count()
+    vsservice_total = VSService.objects.count()
+    vsservice_active = VSService.objects.filter(is_active=True).count()
+    
+    total_products = trading_total + vshardware_total + visiview_total + vsservice_total
+    active_products = trading_active + vshardware_active + visiview_active + vsservice_active
+    
     # Sammle Statistiken
     stats = {
-        'total_users': User.objects.count(),
-        'active_users': User.objects.filter(is_active=True).count(),
+        'total_customers': Customer.objects.count(),
+        'active_customers': Customer.objects.filter(is_active=True).count(),
         'total_suppliers': Supplier.objects.count(),
         'active_suppliers': Supplier.objects.filter(is_active=True).count(),
-        'total_products': TradingProduct.objects.count(),
-        'active_products': TradingProduct.objects.filter(is_active=True).count(),
+        'total_products': total_products,
+        'active_products': active_products,
+        # Einzelne Produktkategorien für Details
+        'trading_products': trading_total,
+        'vshardware_products': vshardware_total,
+        'visiview_products': visiview_total,
+        'vsservice_products': vsservice_total,
     }
     
     # Module zu denen der Benutzer Zugang hat

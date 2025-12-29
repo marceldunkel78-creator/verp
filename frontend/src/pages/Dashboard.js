@@ -48,6 +48,29 @@ const Dashboard = () => {
   }
 
   const implementedModules = [
+    // Vertrieb
+    {
+      id: 'customers',
+      name: 'Kunden',
+      route: '/sales/customers',
+      color: 'indigo',
+      icon: '👤'
+    },
+    {
+      id: 'quotations',
+      name: 'Angebote',
+      route: '/sales/quotations',
+      color: 'blue',
+      icon: '📋'
+    },
+    {
+      id: 'orders',
+      name: 'Aufträge',
+      route: '/sales/order-processing',
+      color: 'green',
+      icon: '📑'
+    },
+    // Beschaffung
     {
       id: 'procurement',
       name: 'Beschaffung',
@@ -69,14 +92,45 @@ const Dashboard = () => {
       color: 'orange',
       icon: '📦'
     },
-
+    // Produkte
     {
-      id: 'materials',
-      name: 'Material & Supplies',
-      route: '/procurement/materials-supplies',
-      color: 'green',
-      icon: '🧪'
+      id: 'visiview',
+      name: 'VisiView Produkte',
+      route: '/products/visiview',
+      color: 'cyan',
+      icon: '🔬'
     },
+    {
+      id: 'vshardware',
+      name: 'VS-Hardware',
+      route: '/products/vs-hardware',
+      color: 'teal',
+      icon: '🔧'
+    },
+    {
+      id: 'vsservice',
+      name: 'VS-Service',
+      route: '/service/vs-service',
+      color: 'rose',
+      icon: '🛠️'
+    },
+    // Service
+    {
+      id: 'rma',
+      name: 'RMA-Fälle',
+      route: '/service/rma',
+      color: 'amber',
+      icon: '🔄'
+    },
+    // Fertigung
+    {
+      id: 'inventory',
+      name: 'Lagerverwaltung',
+      route: '/inventory',
+      color: 'violet',
+      icon: '📊'
+    },
+    // Einstellungen
     {
       id: 'settings',
       name: 'Einstellungen',
@@ -92,25 +146,11 @@ const Dashboard = () => {
       icon: '👥'
     },
     {
-      id: 'exchange-rates',
-      name: 'Wechselkurse',
-      route: '/settings/currency-exchange-rates',
-      color: 'yellow',
-      icon: '💱'
-    },
-    {
-      id: 'company',
-      name: 'Firmendaten',
-      route: '/settings/company-info',
-      color: 'blue',
-      icon: '🏛️'
-    },
-    {
-      id: 'customers',
-      name: 'Kunden',
-      route: '/sales/customers',
-      color: 'indigo',
-      icon: '👤'
+      id: 'myverp',
+      name: 'MyVERP',
+      route: '/my-verp',
+      color: 'sky',
+      icon: '🏠'
     }
   ];
 
@@ -139,9 +179,9 @@ const Dashboard = () => {
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Benutzer</dt>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Kunden</dt>
                   <dd className="text-lg font-semibold text-gray-900">
-                    {dashboardData?.stats?.active_users} / {dashboardData?.stats?.total_users}
+                    {dashboardData?.stats?.active_customers} / {dashboardData?.stats?.total_customers}
                   </dd>
                 </dl>
               </div>
@@ -207,7 +247,7 @@ const Dashboard = () => {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Module</dt>
                   <dd className="text-lg font-semibold text-gray-900">
-                    {dashboardData?.modules?.length || 0}
+                    {implementedModules.length}
                   </dd>
                 </dl>
               </div>
