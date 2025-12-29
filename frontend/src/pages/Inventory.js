@@ -103,63 +103,6 @@ const Inventory = () => {
     }
   }, [activeView, fetchSuppliers, fetchProductCategories, fetchIncomingGoods, fetchInventoryItems]);
   
-  const fetchSuppliers = async () => {
-    try {
-      const res = await api.get('/suppliers/suppliers/');
-      setSuppliers(res.data.results || res.data);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-    }
-  };
-  
-  const fetchProductCategories = async () => {
-    try {
-      const res = await api.get('/settings/product-categories/?is_active=true');
-      setProductCategories(res.data.results || res.data);
-    } catch (error) {
-      console.error('Error fetching product categories:', error);
-    }
-  };
-  
-  const fetchIncomingGoods = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (incomingFilters.supplier) params.append('supplier', incomingFilters.supplier);
-      if (incomingFilters.item_function) params.append('item_function', incomingFilters.item_function);
-      if (incomingFilters.product_category) params.append('product_category', incomingFilters.product_category);
-      if (incomingFilters.search) params.append('search', incomingFilters.search);
-      
-      const res = await api.get(`/inventory/incoming-goods/?${params.toString()}`);
-      setIncomingGoods(res.data.results || res.data);
-    } catch (error) {
-      console.error('Error fetching incoming goods:', error);
-      alert('Fehler beim Laden der Wareneingänge');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const fetchInventoryItems = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (inventoryFilters.status) params.append('status', inventoryFilters.status);
-      if (inventoryFilters.supplier) params.append('supplier', inventoryFilters.supplier);
-      if (inventoryFilters.item_function) params.append('item_function', inventoryFilters.item_function);
-      if (inventoryFilters.product_category) params.append('product_category', inventoryFilters.product_category);
-      if (inventoryFilters.search) params.append('search', inventoryFilters.search);
-      
-      const res = await api.get(`/inventory/inventory-items/?${params.toString()}`);
-      setInventoryItems(res.data.results || res.data);
-    } catch (error) {
-      console.error('Error fetching inventory items:', error);
-      alert('Fehler beim Laden des Warenlagers');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
   const handleTransferToInventory = async (incomingGoodId) => {
     if (!window.confirm('Möchten Sie diese Position wirklich ins Lager überführen?')) {
       return;

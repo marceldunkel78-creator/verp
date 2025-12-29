@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/projects/', include('projects.urls')),
     path('api/systems/', include('systems.urls')),
     path('api/manufacturing/', include('manufacturing.urls')),
+    path('api/visiview/', include('visiview.urls')),
 ]
 
 if settings.DEBUG:

@@ -32,6 +32,9 @@ import SystemEdit from './pages/SystemEdit';
 import VSHardware from './pages/VSHardware';
 import VSHardwareEdit from './pages/VSHardwareEdit';
 import ProductionOrders from './pages/ProductionOrders';
+import InventoryItemEdit from './pages/InventoryItemEdit';
+import VisiViewProducts from './pages/VisiViewProducts';
+import VisiViewProductEdit from './pages/VisiViewProductEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -63,6 +66,7 @@ function App() {
             <Route path="procurement" element={<Procurement />} />
             <Route path="inventory" element={<InventoryManagement />} />
             <Route path="inventory/warehouse" element={<Inventory />} />
+            <Route path="inventory/warehouse/:id" element={<InventoryItemEdit />} />
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<HumanResources />} />
             <Route path="hr/employees" element={<EmployeeList />} />
@@ -72,6 +76,8 @@ function App() {
             <Route path="manufacturing/vs-hardware/:id" element={<VSHardwareEdit />} />
             <Route path="manufacturing/production-orders" element={<ProductionOrders />} />
             <Route path="visiview" element={<VisiView />} />
+            <Route path="visiview/products" element={<VisiViewProducts />} />
+            <Route path="visiview/products/:id" element={<VisiViewProductEdit />} />
             <Route path="service" element={<Service />} />
             <Route path="bi" element={<BusinessIntelligence />} />
             <Route path="documents" element={<DocumentManagement />} />
