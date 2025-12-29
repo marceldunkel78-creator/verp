@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
-  MagnifyingGlassIcon,
   FunnelIcon,
-  ArrowPathIcon,
   InboxArrowDownIcon,
-  ArchiveBoxIcon
+  ArchiveBoxIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 
 const Inventory = () => {
@@ -19,7 +18,7 @@ const Inventory = () => {
   const [incomingFilters, setIncomingFilters] = useState({
     supplier: '',
     item_function: '',
-    item_category: '',
+    product_category: '',
     search: ''
   });
   
@@ -29,25 +28,80 @@ const Inventory = () => {
     status: '',
     supplier: '',
     item_function: '',
-    item_category: '',
+    product_category: '',
     search: ''
   });
   
   // Common Data
   const [suppliers, setSuppliers] = useState([]);
+  const [productCategories, setProductCategories] = useState([]);
   
-  // Category choices based on function
-  const tradingCategories = ['SOFTWARE', 'MIKROSKOPE', 'BELEUCHTUNG', 'KAMERAS', 'DIENSTLEISTUNG', 'LICHTQUELLEN', 'SCANNING_BELEUCHTUNG', 'PERIPHERALS'];
-  const msCategories = ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF'];
-  
+  const fetchSuppliers = useCallback(async () => {
+    try {
+      const res = await api.get('/suppliers/suppliers/');
+      setSuppliers(res.data.results || res.data);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+    }
+  }, []);
+
+  const fetchProductCategories = useCallback(async () => {
+    try {
+      const res = await api.get('/settings/product-categories/?is_active=true');
+      setProductCategories(res.data.results || res.data);
+    } catch (error) {
+      console.error('Error fetching product categories:', error);
+    }
+  }, []);
+
+  const fetchIncomingGoods = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (incomingFilters.supplier) params.append('supplier', incomingFilters.supplier);
+      if (incomingFilters.item_function) params.append('item_function', incomingFilters.item_function);
+      if (incomingFilters.product_category) params.append('product_category', incomingFilters.product_category);
+      if (incomingFilters.search) params.append('search', incomingFilters.search);
+
+      const res = await api.get(`/inventory/incoming-goods/?${params.toString()}`);
+      setIncomingGoods(res.data.results || res.data);
+    } catch (error) {
+      console.error('Error fetching incoming goods:', error);
+      alert('Fehler beim Laden der Wareneingänge');
+    } finally {
+      setLoading(false);
+    }
+  }, [incomingFilters]);
+
+  const fetchInventoryItems = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (inventoryFilters.status) params.append('status', inventoryFilters.status);
+      if (inventoryFilters.supplier) params.append('supplier', inventoryFilters.supplier);
+      if (inventoryFilters.item_function) params.append('item_function', inventoryFilters.item_function);
+      if (inventoryFilters.product_category) params.append('product_category', inventoryFilters.product_category);
+      if (inventoryFilters.search) params.append('search', inventoryFilters.search);
+
+      const res = await api.get(`/inventory/inventory-items/?${params.toString()}`);
+      setInventoryItems(res.data.results || res.data);
+    } catch (error) {
+      console.error('Error fetching inventory items:', error);
+      alert('Fehler beim Laden des Warenlagers');
+    } finally {
+      setLoading(false);
+    }
+  }, [inventoryFilters]);
+
   useEffect(() => {
     fetchSuppliers();
+    fetchProductCategories();
     if (activeView === 'incoming') {
       fetchIncomingGoods();
     } else {
       fetchInventoryItems();
     }
-  }, [activeView]);
+  }, [activeView, fetchSuppliers, fetchProductCategories, fetchIncomingGoods, fetchInventoryItems]);
   
   const fetchSuppliers = async () => {
     try {
@@ -58,13 +112,22 @@ const Inventory = () => {
     }
   };
   
+  const fetchProductCategories = async () => {
+    try {
+      const res = await api.get('/settings/product-categories/?is_active=true');
+      setProductCategories(res.data.results || res.data);
+    } catch (error) {
+      console.error('Error fetching product categories:', error);
+    }
+  };
+  
   const fetchIncomingGoods = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (incomingFilters.supplier) params.append('supplier', incomingFilters.supplier);
       if (incomingFilters.item_function) params.append('item_function', incomingFilters.item_function);
-      if (incomingFilters.item_category) params.append('item_category', incomingFilters.item_category);
+      if (incomingFilters.product_category) params.append('product_category', incomingFilters.product_category);
       if (incomingFilters.search) params.append('search', incomingFilters.search);
       
       const res = await api.get(`/inventory/incoming-goods/?${params.toString()}`);
@@ -84,7 +147,7 @@ const Inventory = () => {
       if (inventoryFilters.status) params.append('status', inventoryFilters.status);
       if (inventoryFilters.supplier) params.append('supplier', inventoryFilters.supplier);
       if (inventoryFilters.item_function) params.append('item_function', inventoryFilters.item_function);
-      if (inventoryFilters.item_category) params.append('item_category', inventoryFilters.item_category);
+      if (inventoryFilters.product_category) params.append('product_category', inventoryFilters.product_category);
       if (inventoryFilters.search) params.append('search', inventoryFilters.search);
       
       const res = await api.get(`/inventory/inventory-items/?${params.toString()}`);
@@ -133,13 +196,20 @@ const Inventory = () => {
     }
   };
   
-  const getCategoryChoices = (itemFunction) => {
-    if (itemFunction === 'TRADING_GOOD' || itemFunction === 'ASSET') {
-      return tradingCategories;
-    } else if (itemFunction === 'MATERIAL') {
-      return msCategories;
-    }
-    return [];
+  const handleEditInventoryItem = (id) => {
+    navigate(`/inventory/warehouse/${id}`);
+  };
+  
+  // Filter categories by item_function
+  const getFilteredCategories = (itemFunction) => {
+    if (!itemFunction) return productCategories;
+    
+    return productCategories.filter(cat => {
+      if (itemFunction === 'TRADING_GOOD') return cat.applies_to_trading_goods;
+      if (itemFunction === 'MATERIAL') return cat.applies_to_material_supplies;
+      if (itemFunction === 'ASSET') return cat.applies_to_trading_goods; // Assets use same categories as trading goods
+      return true;
+    });
   };
   
   return (
@@ -234,13 +304,16 @@ const Inventory = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
-                <input
-                  type="text"
-                  placeholder="Kategorie"
-                  value={incomingFilters.item_category}
-                  onChange={(e) => setIncomingFilters({ ...incomingFilters, item_category: e.target.value })}
+                <select
+                  value={incomingFilters.product_category}
+                  onChange={(e) => setIncomingFilters({ ...incomingFilters, product_category: e.target.value })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
+                >
+                  <option value="">Alle Kategorien</option>
+                  {getFilteredCategories(incomingFilters.item_function).map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-end">
                 <button
@@ -301,9 +374,10 @@ const Inventory = () => {
                       key={item.id}
                       item={item}
                       suppliers={suppliers}
+                      productCategories={productCategories}
                       onUpdate={handleUpdateIncomingGood}
                       onTransfer={handleTransferToInventory}
-                      getCategoryChoices={getCategoryChoices}
+                      getFilteredCategories={getFilteredCategories}
                     />
                   ))
                 )}
@@ -370,13 +444,16 @@ const Inventory = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
-                <input
-                  type="text"
-                  placeholder="Kategorie"
-                  value={inventoryFilters.item_category}
-                  onChange={(e) => setInventoryFilters({ ...inventoryFilters, item_category: e.target.value })}
+                <select
+                  value={inventoryFilters.product_category}
+                  onChange={(e) => setInventoryFilters({ ...inventoryFilters, product_category: e.target.value })}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
+                >
+                  <option value="">Alle Kategorien</option>
+                  {getFilteredCategories(inventoryFilters.item_function).map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-end">
                 <button
@@ -416,18 +493,21 @@ const Inventory = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Wert
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Aktion
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-500">
+                    <td colSpan="8" className="px-6 py-12 text-center text-sm text-gray-500">
                       Lädt...
                     </td>
                   </tr>
                 ) : inventoryItems.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-500">
+                    <td colSpan="8" className="px-6 py-12 text-center text-sm text-gray-500">
                       Keine Lagerartikel vorhanden
                     </td>
                   </tr>
@@ -437,6 +517,7 @@ const Inventory = () => {
                       key={item.id}
                       item={item}
                       onUpdate={handleUpdateInventoryItem}
+                      onEdit={handleEditInventoryItem}
                     />
                   ))
                 )}
@@ -450,11 +531,11 @@ const Inventory = () => {
 };
 
 // Sub-component for Incoming Good Row
-const IncomingGoodRow = ({ item, suppliers, onUpdate, onTransfer, getCategoryChoices }) => {
+const IncomingGoodRow = ({ item, suppliers, productCategories, onUpdate, onTransfer, getFilteredCategories }) => {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
     item_function: item.item_function,
-    item_category: item.item_category,
+    product_category: item.product_category,
     serial_number: item.serial_number
   });
   
@@ -463,9 +544,10 @@ const IncomingGoodRow = ({ item, suppliers, onUpdate, onTransfer, getCategoryCho
     setEditing(false);
   };
   
-  const categoryChoices = getCategoryChoices(editData.item_function);
-  const requiresSerial = editData.item_function === 'TRADING_GOOD' || editData.item_function === 'ASSET' || 
-    (editData.item_function === 'MATERIAL' && !['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF'].includes(editData.item_category));
+  const filteredCategories = getFilteredCategories(editData.item_function);
+  const selectedCategory = productCategories.find(c => c.id === editData.product_category);
+  const requiresSerial = selectedCategory ? selectedCategory.requires_serial_number : 
+    (editData.item_function === 'TRADING_GOOD' || editData.item_function === 'ASSET');
   
   return (
     <tr>
@@ -484,7 +566,7 @@ const IncomingGoodRow = ({ item, suppliers, onUpdate, onTransfer, getCategoryCho
         {editing ? (
           <select
             value={editData.item_function}
-            onChange={(e) => setEditData({ ...editData, item_function: e.target.value, item_category: '' })}
+            onChange={(e) => setEditData({ ...editData, item_function: e.target.value, product_category: '' })}
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
           >
             <option value="TRADING_GOOD">Handelsware</option>
@@ -500,17 +582,17 @@ const IncomingGoodRow = ({ item, suppliers, onUpdate, onTransfer, getCategoryCho
       <td className="px-6 py-4">
         {editing ? (
           <select
-            value={editData.item_category}
-            onChange={(e) => setEditData({ ...editData, item_category: e.target.value })}
+            value={editData.product_category || ''}
+            onChange={(e) => setEditData({ ...editData, product_category: e.target.value ? parseInt(e.target.value) : null })}
             className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
           >
             <option value="">Wählen...</option>
-            {categoryChoices.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
+            {filteredCategories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
         ) : (
-          <span className="text-sm text-gray-900">{item.item_category || '-'}</span>
+          <span className="text-sm text-gray-900">{item.product_category_name || item.item_category || '-'}</span>
         )}
       </td>
       <td className="px-6 py-4">
@@ -539,7 +621,7 @@ const IncomingGoodRow = ({ item, suppliers, onUpdate, onTransfer, getCategoryCho
               onClick={() => {
                 setEditData({
                   item_function: item.item_function,
-                  item_category: item.item_category,
+                  product_category: item.product_category,
                   serial_number: item.serial_number
                 });
                 setEditing(false);
@@ -571,7 +653,7 @@ const IncomingGoodRow = ({ item, suppliers, onUpdate, onTransfer, getCategoryCho
 };
 
 // Sub-component for Inventory Item Row
-const InventoryItemRow = ({ item, onUpdate }) => {
+const InventoryItemRow = ({ item, onUpdate, onEdit }) => {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
     status: item.status
@@ -583,14 +665,16 @@ const InventoryItemRow = ({ item, onUpdate }) => {
   };
   
   return (
-    <tr>
+    <tr className="hover:bg-gray-50">
       <td className="px-6 py-4 text-sm font-medium text-gray-900">
         {item.inventory_number}
       </td>
       <td className="px-6 py-4">
         <div className="text-sm font-medium text-gray-900">{item.name}</div>
-        <div className="text-sm text-gray-500">Visitron: {item.visitron_part_number || '-'}</div>
-        <div className="text-sm text-gray-500">Lieferant: {item.article_number}</div>
+        <div className="text-sm text-gray-500">VS: {item.visitron_part_number || '-'}</div>
+        {item.model_designation && (
+          <div className="text-sm text-gray-500">Modell: {item.model_designation}</div>
+        )}
       </td>
       <td className="px-6 py-4 text-sm text-gray-500">
         {item.supplier_name}
@@ -599,7 +683,7 @@ const InventoryItemRow = ({ item, onUpdate }) => {
         <div className="text-sm text-gray-900">
           {item.item_function === 'TRADING_GOOD' ? 'Handelsware' : item.item_function === 'ASSET' ? 'Asset' : 'Material'}
         </div>
-        <div className="text-sm text-gray-500">{item.item_category}</div>
+        <div className="text-sm text-gray-500">{item.product_category_name || item.item_category}</div>
       </td>
       <td className="px-6 py-4 text-sm">
         {item.serial_number ? (
@@ -631,6 +715,37 @@ const InventoryItemRow = ({ item, onUpdate }) => {
       </td>
       <td className="px-6 py-4 text-sm text-gray-900">
         {item.total_value.toFixed(2)} {item.currency}
+      </td>
+      <td className="px-6 py-4 text-sm">
+        {editing ? (
+          <div className="flex space-x-2">
+            <button
+              onClick={handleSave}
+              className="text-green-600 hover:text-green-900 font-medium"
+            >
+              Speichern
+            </button>
+            <button
+              onClick={() => {
+                setEditData({ status: item.status });
+                setEditing(false);
+              }}
+              className="text-gray-600 hover:text-gray-900"
+            >
+              Abbrechen
+            </button>
+          </div>
+        ) : (
+          <div className="flex space-x-2">
+            <button
+              onClick={() => onEdit(item.id)}
+              className="text-blue-600 hover:text-blue-900 font-medium flex items-center"
+            >
+              <PencilSquareIcon className="h-4 w-4 mr-1" />
+              Bearbeiten
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   );
