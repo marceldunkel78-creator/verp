@@ -31,6 +31,7 @@ const Inventory = () => {
     product_category: '',
     search: ''
   });
+  const [inventorySearched, setInventorySearched] = useState(false);
   
   // Common Data
   const [suppliers, setSuppliers] = useState([]);
@@ -75,6 +76,7 @@ const Inventory = () => {
 
   const fetchInventoryItems = useCallback(async () => {
     setLoading(true);
+    setInventorySearched(true);
     try {
       const params = new URLSearchParams();
       if (inventoryFilters.status) params.append('status', inventoryFilters.status);
@@ -99,9 +101,16 @@ const Inventory = () => {
     if (activeView === 'incoming') {
       fetchIncomingGoods();
     } else {
-      fetchInventoryItems();
+      // Only fetch inventory items automatically when a search term exists.
+      if (inventoryFilters.search) {
+        fetchInventoryItems();
+      } else {
+        // reset list until a search is performed
+        setInventoryItems([]);
+        setInventorySearched(false);
+      }
     }
-  }, [activeView, fetchSuppliers, fetchProductCategories, fetchIncomingGoods, fetchInventoryItems]);
+  }, [activeView, fetchSuppliers, fetchProductCategories, fetchIncomingGoods, fetchInventoryItems, inventoryFilters.search]);
   
   const handleTransferToInventory = async (incomingGoodId) => {
     if (!window.confirm('Möchten Sie diese Position wirklich ins Lager überführen?')) {
@@ -194,7 +203,7 @@ const Inventory = () => {
           >
             <ArchiveBoxIcon className="h-5 w-5 mr-2" />
             Warenlager
-            {inventoryItems.length > 0 && (
+            {inventorySearched && inventoryItems.length > 0 && (
               <span className="ml-2 bg-gray-100 text-gray-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
                 {inventoryItems.length}
               </span>
@@ -448,10 +457,16 @@ const Inventory = () => {
                       Lädt...
                     </td>
                   </tr>
+                ) : !inventorySearched ? (
+                  <tr>
+                    <td colSpan="8" className="px-6 py-12 text-center text-sm text-gray-500">
+                      Starten Sie eine Suche, um Lagerartikel anzuzeigen.
+                    </td>
+                  </tr>
                 ) : inventoryItems.length === 0 ? (
                   <tr>
                     <td colSpan="8" className="px-6 py-12 text-center text-sm text-gray-500">
-                      Keine Lagerartikel vorhanden
+                      Keine Lagerartikel gefunden
                     </td>
                   </tr>
                 ) : (

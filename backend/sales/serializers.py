@@ -56,19 +56,25 @@ class QuotationItemSerializer(serializers.ModelSerializer):
         """Gibt den Namen des Items zurück"""
         if obj.is_group_header and obj.group_name:
             return obj.group_name
-        if obj.item:
-            return obj.item.name
+        try:
+            if obj.item:
+                return obj.item.name
+        except Exception:
+            pass
         return None
     
     def get_item_description(self, obj):
         """Gibt die Beschreibung basierend auf description_type zurück"""
-        if not obj.item:
+        try:
+            if not obj.item:
+                return None
+            
+            if obj.description_type == 'SHORT':
+                return getattr(obj.item, 'short_description', '')
+            else:
+                return getattr(obj.item, 'description', '')
+        except Exception:
             return None
-        
-        if obj.description_type == 'SHORT':
-            return getattr(obj.item, 'short_description', '')
-        else:
-            return getattr(obj.item, 'description', '')
     
     def get_item_article_number(self, obj):
         """Gibt die Artikelnummer des Items zurück"""
@@ -76,8 +82,11 @@ class QuotationItemSerializer(serializers.ModelSerializer):
         if obj.item_article_number:
             return obj.item_article_number
         # Sonst die Artikelnummer vom Item (Visitron priorisiert)
-        if obj.item:
-            return getattr(obj.item, 'visitron_part_number', '') or getattr(obj.item, 'supplier_part_number', '')
+        try:
+            if obj.item:
+                return getattr(obj.item, 'visitron_part_number', '') or getattr(obj.item, 'supplier_part_number', '')
+        except Exception:
+            pass
         return None
     
     def get_group_margin(self, obj):

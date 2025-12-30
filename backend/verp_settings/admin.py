@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import ExchangeRate, CompanySettings, CompanyAddress, CompanyManager, CompanyBankAccount
+from .models import (
+    ExchangeRate, CompanySettings, CompanyAddress, CompanyManager, 
+    CompanyBankAccount, PaymentTerm, DeliveryTerm, WarrantyTerm
+)
 
 
 class CompanyAddressInline(admin.TabularInline):
@@ -54,3 +57,34 @@ class ExchangeRateAdmin(admin.ModelAdmin):
     list_display = ['currency', 'rate_to_eur', 'last_updated']
     search_fields = ['currency']
     readonly_fields = ['last_updated']
+
+
+@admin.register(PaymentTerm)
+class PaymentTermAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_prepayment', 'payment_days', 'discount_percent', 'is_active']
+    list_filter = ['is_active', 'is_prepayment']
+    search_fields = ['name']
+
+
+@admin.register(DeliveryTerm)
+class DeliveryTermAdmin(admin.ModelAdmin):
+    list_display = ['incoterm', 'is_active']
+    list_filter = ['is_active']
+
+
+@admin.register(WarrantyTerm)
+class WarrantyTermAdmin(admin.ModelAdmin):
+    list_display = ['name', 'duration_months', 'is_default', 'is_active']
+    list_filter = ['is_active', 'is_default']
+    search_fields = ['name', 'description']
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'name_en', 'duration_months')
+        }),
+        ('Beschreibung', {
+            'fields': ('description', 'description_en')
+        }),
+        ('Status', {
+            'fields': ('is_active', 'is_default')
+        }),
+    )

@@ -471,4 +471,254 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-# Neue ViewSets temporär deaktiviert
+# ==================== Reisekosten ViewSets ====================
+
+from .models import TravelExpenseReport, TravelExpenseDay, TravelExpenseItem, TravelPerDiemRate
+from .serializers import (
+    TravelExpenseReportSerializer, TravelExpenseReportCreateSerializer,
+    TravelExpenseDaySerializer, TravelExpenseItemSerializer, TravelPerDiemRateSerializer
+)
+
+
+class TravelExpenseReportViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Reisekostenabrechnungen
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return TravelExpenseReport.objects.all()
+        return TravelExpenseReport.objects.filter(user=user)
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return TravelExpenseReportCreateSerializer
+        return TravelExpenseReportSerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def add_day(self, request, pk=None):
+        """Fügt einen Reisetag zur Abrechnung hinzu"""
+        report = self.get_object()
+        if report.status != 'draft':
+            return Response(
+                {'error': 'Nur Entwürfe können bearbeitet werden.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = TravelExpenseDaySerializer(data=request.data)
+        if serializer.is_valid():
+            # Pauschalen automatisch setzen
+            country = serializer.validated_data.get('country', 'Deutschland')
+            rate = TravelPerDiemRate.get_rate_for_country(country, serializer.validated_data['date'])
+            
+            day = serializer.save(
+                report=report,
+                per_diem_full=rate.full_day_rate if rate else 0,
+                per_diem_partial=rate.partial_day_rate if rate else 0,
+                overnight_allowance=rate.overnight_rate if rate else 0
+            )
+            
+            # Automatisch Pauschale anwenden basierend auf Reisezeit
+            if day.travel_hours > 16:
+                day.per_diem_applied = day.per_diem_full
+                day.is_full_day = True
+            else:
+                day.per_diem_applied = day.per_diem_partial
+                day.is_full_day = False
+            day.save()
+            
+            self._update_total(report)
+            return Response(TravelExpenseDaySerializer(day).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def add_expense(self, request, pk=None):
+        """Fügt eine Kostenposition zu einem Reisetag hinzu"""
+        report = self.get_object()
+        if report.status != 'draft':
+            return Response(
+                {'error': 'Nur Entwürfe können bearbeitet werden.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        day_id = request.data.get('day_id')
+        try:
+            day = report.days.get(id=day_id)
+        except TravelExpenseDay.DoesNotExist:
+            return Response({'error': 'Reisetag nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = TravelExpenseItemSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            expense = serializer.save(day=day)
+            self._update_total(report)
+            return Response(TravelExpenseItemSerializer(expense, context={'request': request}).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        """Reicht die Abrechnung ein"""
+        report = self.get_object()
+        if report.status != 'draft':
+            return Response({'error': 'Nur Entwürfe können eingereicht werden.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        report.status = 'submitted'
+        report.save()
+        return Response({'message': 'Abrechnung eingereicht.', 'status': report.status})
+    
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        """Genehmigt die Abrechnung (nur Staff)"""
+        if not request.user.is_staff:
+            return Response({'error': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        report = self.get_object()
+        if report.status != 'submitted':
+            return Response({'error': 'Nur eingereichte Abrechnungen können genehmigt werden.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from django.utils import timezone
+        report.status = 'approved'
+        report.approved_by = request.user
+        report.approved_at = timezone.now()
+        report.save()
+        return Response({'message': 'Abrechnung genehmigt.', 'status': report.status})
+    
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        """Lehnt die Abrechnung ab (nur Staff)"""
+        if not request.user.is_staff:
+            return Response({'error': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        report = self.get_object()
+        if report.status != 'submitted':
+            return Response({'error': 'Nur eingereichte Abrechnungen können abgelehnt werden.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        report.status = 'rejected'
+        report.save()
+        return Response({'message': 'Abrechnung abgelehnt.', 'status': report.status})
+    
+    @action(detail=True, methods=['get'])
+    def generate_pdf(self, request, pk=None):
+        """Generiert das PDF für die Reisekostenabrechnung"""
+        from .travel_expense_pdf import generate_complete_travel_expense_pdf
+        from django.http import FileResponse
+        from django.core.files.base import ContentFile
+        import os
+        
+        report = self.get_object()
+        
+        try:
+            # PDF generieren
+            pdf_buffer = generate_complete_travel_expense_pdf(report)
+            
+            # PDF im Report speichern
+            filename = f"Reisekostenabrechnung_KW{report.calendar_week}_{report.year}.pdf"
+            report.pdf_file.save(filename, ContentFile(pdf_buffer.read()), save=True)
+            
+            # PDF zurückgeben
+            pdf_buffer.seek(0)
+            response = FileResponse(
+                pdf_buffer,
+                content_type='application/pdf',
+                as_attachment=False,
+                filename=filename
+            )
+            return response
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'error': f'Fehler bei der PDF-Generierung: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _update_total(self, report):
+        """Aktualisiert den Gesamtbetrag der Abrechnung"""
+        total = 0
+        for day in report.days.all():
+            total += float(day.per_diem_applied or 0)
+            for expense in day.expenses.all():
+                total += float(expense.amount or 0)
+        report.total_amount = total
+        report.save()
+
+
+class TravelExpenseDayViewSet(viewsets.ModelViewSet):
+    """ViewSet für Reisetage"""
+    serializer_class = TravelExpenseDaySerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return TravelExpenseDay.objects.all()
+        return TravelExpenseDay.objects.filter(report__user=user)
+    
+    def perform_update(self, serializer):
+        """Beim Update: Pauschalen neu berechnen basierend auf travel_hours und country"""
+        instance = serializer.save()
+        
+        # Pauschale für das Land holen
+        rate = TravelPerDiemRate.get_rate_for_country(instance.country, instance.date)
+        if rate:
+            instance.per_diem_full = rate.full_day_rate
+            instance.per_diem_partial = rate.partial_day_rate
+            instance.overnight_allowance = rate.overnight_rate
+        
+        # Angewendete Pauschale basierend auf Reisestunden setzen
+        travel_hours = float(instance.travel_hours or 0)
+        if travel_hours > 8:
+            instance.per_diem_applied = instance.per_diem_full
+            instance.is_full_day = True
+        else:
+            instance.per_diem_applied = instance.per_diem_partial
+            instance.is_full_day = False
+        instance.save()
+        
+        # Gesamtsumme des Reports aktualisieren
+        report = instance.report
+        total = sum(
+            float(d.per_diem_applied or 0) + sum(float(e.amount) for e in d.expenses.all())
+            for d in report.days.all()
+        )
+        report.total_amount = total
+        report.save()
+
+
+class TravelExpenseItemViewSet(viewsets.ModelViewSet):
+    """ViewSet für Reisekostenpositionen"""
+    serializer_class = TravelExpenseItemSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return TravelExpenseItem.objects.all()
+        return TravelExpenseItem.objects.filter(day__report__user=user)
+
+
+class TravelPerDiemRateViewSet(viewsets.ModelViewSet):
+    """ViewSet für Reisekostenpauschalen"""
+    queryset = TravelPerDiemRate.objects.filter(is_active=True)
+    serializer_class = TravelPerDiemRateSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+    
+    @action(detail=False, methods=['get'])
+    def by_country(self, request):
+        """Gibt die Pauschale für ein bestimmtes Land zurück"""
+        country = request.query_params.get('country', 'Deutschland')
+        rate = TravelPerDiemRate.get_rate_for_country(country)
+        if rate:
+            return Response(TravelPerDiemRateSerializer(rate).data)
+        return Response({'error': 'Keine Pauschale gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+

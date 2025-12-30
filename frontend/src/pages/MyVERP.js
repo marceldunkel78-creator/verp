@@ -1,11 +1,35 @@
 import React, { useState, useEffect } from 'react';
-
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon } from '@heroicons/react/24/outline';
 import CalendarMonth from '../components/CalendarMonth';
 
+// Funktion: gibt die ISO-Datumsstrings (YYYY-MM-DD) für eine Kalenderwoche zurück (Mo-So)
+// Berechnung nach ISO 8601: Woche 1 ist die Woche mit dem ersten Donnerstag des Jahres
+const getWeekDates = (year, week) => {
+  // Finde den 4. Januar (immer in KW1)
+  const jan4 = new Date(year, 0, 4);
+  // Berechne den Montag der KW1
+  const dayOfWeek = jan4.getDay() || 7; // Sonntag = 7
+  const mondayOfWeek1 = new Date(jan4);
+  mondayOfWeek1.setDate(jan4.getDate() - dayOfWeek + 1);
+  // Berechne den Montag der gewünschten Woche
+  const targetMonday = new Date(mondayOfWeek1);
+  targetMonday.setDate(mondayOfWeek1.getDate() + (week - 1) * 7);
+  // Erstelle Array mit 7 Tagen (Mo-So)
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(targetMonday);
+    d.setDate(targetMonday.getDate() + i);
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+};
+
 const MyVERP = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'dashboard';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [timeEntries, setTimeEntries] = useState([]);
   const [messages, setMessages] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -15,6 +39,14 @@ const MyVERP = () => {
   const [employeeDetails, setEmployeeDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
+
+  // Update activeTab when URL changes
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchData();
@@ -94,6 +126,7 @@ const MyVERP = () => {
     { id: 'reporting', name: 'Reporting', icon: ChartBarIcon },
     { id: 'reminders', name: 'Erinnerungen', icon: BellIcon },
     { id: 'vacation', name: 'Urlaub', icon: CalendarIcon },
+    { id: 'travel-expenses', name: 'Reisekosten', icon: CalendarIcon },
   ];
 
   if (loading) {
@@ -125,7 +158,10 @@ const MyVERP = () => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setSearchParams({ tab: tab.id });
+                }}
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center ${
                   activeTab === tab.id
                     ? 'border-blue-500 text-blue-600'
@@ -165,6 +201,9 @@ const MyVERP = () => {
         )}
         {activeTab === 'vacation' && (
           <VacationTab vacationRequests={vacationRequests} employeeDetails={employeeDetails} onRefresh={fetchData} errors={errors} />
+        )}
+        {activeTab === 'travel-expenses' && (
+          <TravelExpensesTab onRefresh={fetchData} />
         )}
       </div>
     </div>
@@ -862,9 +901,659 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
   );
 };
 
+// ==================== TravelExpensesTab Component ====================
+const TravelExpensesTab = ({ onRefresh }) => {
+  const [reports, setReports] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [showCreateModal, setShowCreateModal] = React.useState(false);
+  const [selectedReport, setSelectedReport] = React.useState(null);
+  const [perDiemRates, setPerDiemRates] = React.useState([]);
+  const [formData, setFormData] = React.useState({
+    calendar_week: getWeekNumber(new Date()),
+    year: new Date().getFullYear()
+  });
+
+  // Helper function to get week number
+  function getWeekNumber(d) {
+    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  }
+
+  
+
+  React.useEffect(() => {
+    fetchReports();
+    fetchPerDiemRates();
+  }, []);
+
+  const fetchReports = async () => {
+    try {
+      const res = await api.get('/users/travel-expenses/');
+      setReports(res.data.results || res.data || []);
+    } catch (err) {
+      console.error('Fehler beim Laden der Reisekosten:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPerDiemRates = async () => {
+    try {
+      const res = await api.get('/users/travel-per-diem-rates/');
+      setPerDiemRates(res.data.results || res.data || []);
+    } catch (err) {
+      console.error('Fehler beim Laden der Pauschalen:', err);
+    }
+  };
+
+  const handleCreateReport = async (e) => {
+    e.preventDefault();
+    try {
+      const weekDates = getWeekDates(formData.year, formData.calendar_week);
+      const payload = {
+        ...formData,
+        destination: '-',
+        country: 'Deutschland',
+        purpose: '-',
+        start_date: weekDates[0],
+        end_date: weekDates[6]
+      };
+      const res = await api.post('/users/travel-expenses/', payload);
+      setShowCreateModal(false);
+      fetchReports();
+      // Reload complete report data to ensure detail view works correctly
+      const fullReport = await api.get(`/users/travel-expenses/${res.data.id}/`);
+      setSelectedReport(fullReport.data);
+    } catch (err) {
+      console.error('Fehler beim Erstellen:', err);
+      alert(err.response?.data?.detail || 'Fehler beim Erstellen der Abrechnung');
+    }
+  };
+
+  const handleRemoveDay = async (reportId, dayId) => {
+    if (!window.confirm('Reisetag wirklich entfernen?')) return;
+    try {
+      await api.delete(`/users/travel-expense-days/${dayId}/`);
+      // Reload report
+      const res = await api.get(`/users/travel-expenses/${reportId}/`);
+      setSelectedReport(res.data);
+    } catch (err) {
+      console.error('Fehler beim Entfernen des Tages:', err);
+    }
+  };
+
+  const handleAddDay = async (reportId, date) => {
+    try {
+      await api.post(`/users/travel-expenses/${reportId}/add_day/`, {
+        date,
+        location: '',
+        country: 'Deutschland',
+        travel_hours: 8  // Standardwert
+      });
+      // Reload report
+      const res = await api.get(`/users/travel-expenses/${reportId}/`);
+      setSelectedReport(res.data);
+    } catch (err) {
+      console.error('Fehler beim Hinzufügen des Tages:', err);
+    }
+  };
+
+  const handleUpdateDay = async (dayId, updates) => {
+    try {
+      await api.patch(`/users/travel-expense-days/${dayId}/`, updates);
+      // Reload report
+      const res = await api.get(`/users/travel-expenses/${selectedReport.id}/`);
+      setSelectedReport(res.data);
+    } catch (err) {
+      console.error('Fehler beim Aktualisieren des Tages:', err);
+    }
+  };
+
+  const handleAddExpense = async (reportId, dayId, expenseData) => {
+    try {
+      const formData = new FormData();
+      formData.append('day_id', dayId);
+      formData.append('expense_type', expenseData.expense_type);
+      formData.append('description', expenseData.description);
+      formData.append('amount', expenseData.amount);
+      if (expenseData.guest_names) formData.append('guest_names', expenseData.guest_names);
+      if (expenseData.hospitality_reason) formData.append('hospitality_reason', expenseData.hospitality_reason);
+      if (expenseData.receipt) formData.append('receipt', expenseData.receipt);
+      
+      await api.post(`/users/travel-expenses/${reportId}/add_expense/`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      // Reload report
+      const res = await api.get(`/users/travel-expenses/${reportId}/`);
+      setSelectedReport(res.data);
+    } catch (err) {
+      console.error('Fehler beim Hinzufügen der Kosten:', err);
+    }
+  };
+  
+  const handleGeneratePdf = async (reportId) => {
+    try {
+      const response = await api.get(`/users/travel-expenses/${reportId}/generate_pdf/`, {
+        responseType: 'blob'
+      });
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Reisekostenabrechnung_KW${selectedReport.calendar_week}_${selectedReport.year}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Fehler beim Generieren des PDF:', err);
+    }
+  };
+
+  const handleSubmitReport = async (reportId) => {
+    try {
+      await api.post(`/users/travel-expenses/${reportId}/submit/`);
+      fetchReports();
+      setSelectedReport(null);
+    } catch (err) {
+      console.error('Fehler beim Einreichen:', err);
+    }
+  };
+
+  const statusColors = {
+    draft: 'bg-gray-100 text-gray-800',
+    submitted: 'bg-yellow-100 text-yellow-800',
+    approved: 'bg-green-100 text-green-800',
+    rejected: 'bg-red-100 text-red-800'
+  };
+
+  const statusLabels = {
+    draft: 'Entwurf',
+    submitted: 'Eingereicht',
+    approved: 'Genehmigt',
+    rejected: 'Abgelehnt'
+  };
+
+  if (loading) {
+    return <div className="flex justify-center items-center h-32"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;
+  }
+
+  // Detail view for a selected report
+  if (selectedReport) {
+    const weekDates = getWeekDates(selectedReport.year, selectedReport.calendar_week);
+    return (
+      <div>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <button onClick={() => setSelectedReport(null)} className="text-blue-600 hover:underline mb-2">← Zurück zur Übersicht</button>
+            <h2 className="text-lg font-medium text-gray-900">
+              Reisekostenabrechnung KW{selectedReport.calendar_week}/{selectedReport.year}
+            </h2>
+            <p className="text-sm text-gray-500">{selectedReport.destination} - {selectedReport.purpose}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 rounded text-xs ${statusColors[selectedReport.status]}`}>
+              {statusLabels[selectedReport.status]}
+            </span>
+            <button
+              onClick={() => handleGeneratePdf(selectedReport.id)}
+              className="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700"
+            >
+              📄 PDF generieren
+            </button>
+            {selectedReport.status === 'draft' && (
+              <button
+                onClick={() => handleSubmitReport(selectedReport.id)}
+                className="px-3 py-1 bg-green-600 text-white rounded text-sm"
+              >
+                Einreichen
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Week Calendar */}
+        <div className="bg-white shadow rounded-lg p-4 mb-4">
+          <h3 className="text-md font-medium mb-3">Wochenkalender</h3>
+          <div className="grid grid-cols-7 gap-2">
+            {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day, i) => (
+              <div key={day} className="text-center">
+                <div className="text-xs text-gray-500 mb-1">{day}</div>
+                <div className="text-sm font-medium">{weekDates[i]?.slice(8)}</div>
+                {selectedReport.days?.find(d => d.date === weekDates[i]) ? (
+                  <div className="mt-1 p-2 bg-blue-50 rounded text-xs">
+                    <div className="font-medium text-blue-700">
+                      {parseFloat(selectedReport.days.find(d => d.date === weekDates[i]).day_total || 0).toFixed(2)}€
+                    </div>
+                  </div>
+                ) : (
+                  selectedReport.status === 'draft' && (
+                    <button
+                      onClick={() => handleAddDay(selectedReport.id, weekDates[i])}
+                      className="mt-1 w-full p-1 border border-dashed border-gray-300 rounded text-xs text-gray-400 hover:border-blue-400 hover:text-blue-400"
+                    >
+                      + Tag
+                    </button>
+                  )
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Days detail */}
+        {selectedReport.days?.map(day => (
+          <DayExpenseCard
+            key={day.id}
+            day={day}
+            reportId={selectedReport.id}
+            onAddExpense={handleAddExpense}
+            onRemoveDay={handleRemoveDay}
+            onUpdateDay={handleUpdateDay}
+            isDraft={selectedReport.status === 'draft'}
+            perDiemRates={perDiemRates}
+          />
+        ))}
+
+        {/* Summary */}
+        <div className="bg-white shadow rounded-lg p-4 mt-4">
+          <h3 className="text-md font-medium mb-2">Zusammenfassung</h3>
+          <div className="flex justify-between text-lg font-bold">
+            <span>Gesamtbetrag:</span>
+            <span className="text-green-600">{parseFloat(selectedReport.total_amount || 0).toFixed(2)}€</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-medium text-gray-900">Reisekosten</h2>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+        >
+          + Neue Abrechnung
+        </button>
+      </div>
+
+      {/* Reports List */}
+      <div className="bg-white shadow rounded-lg overflow-hidden">
+        {reports.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">Keine Reisekostenabrechnungen vorhanden.</div>
+        ) : (
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">KW/Jahr</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reiseziel</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zeitraum</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Betrag</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {reports.map(report => (
+                <tr key={report.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium">KW{report.calendar_week}/{report.year}</td>
+                  <td className="px-4 py-3 text-sm">{report.destination}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {new Date(report.start_date).toLocaleDateString()} - {new Date(report.end_date).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium">{parseFloat(report.total_amount || 0).toFixed(2)}€</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-1 rounded text-xs ${statusColors[report.status]}`}>
+                      {statusLabels[report.status]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => setSelectedReport(report)}
+                      className="text-blue-600 hover:underline text-sm"
+                    >
+                      Öffnen
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-30" onClick={() => setShowCreateModal(false)}></div>
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-medium mb-4">Neue Reisekostenabrechnung</h3>
+              <form onSubmit={handleCreateReport} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Jahr</label>
+                    <input
+                      type="number"
+                      value={formData.year}
+                      onChange={e => setFormData({ ...formData, year: parseInt(e.target.value) })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Kalenderwoche</label>
+                    <select
+                      value={formData.calendar_week}
+                      onChange={e => setFormData({ ...formData, calendar_week: parseInt(e.target.value) })}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                      required
+                    >
+                      {Array.from({ length: 53 }, (_, i) => {
+                        const weekNum = i + 1;
+                        const dates = getWeekDates(formData.year, weekNum);
+                        const start = new Date(dates[0]);
+                        const end = new Date(dates[6]);
+                        return (
+                          <option key={weekNum} value={weekNum}>
+                            KW {weekNum} ({start.toLocaleDateString('de-DE')} - {end.toLocaleDateString('de-DE')})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Die einzelnen Reisetage, Orte und Reisezeiten können nach dem Erstellen in der Detailansicht eingetragen werden.
+                </p>
+                <div className="flex justify-end space-x-2 pt-4">
+                  <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 border rounded-md">
+                    Abbrechen
+                  </button>
+                  <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md">
+                    Erstellen
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper component for day expense cards
+const DayExpenseCard = ({ day, reportId, onAddExpense, onRemoveDay, onUpdateDay, isDraft, perDiemRates = [] }) => {
+  const [showAddExpense, setShowAddExpense] = React.useState(false);
+  const [isEditingDay, setIsEditingDay] = React.useState(false);
+  const [dayForm, setDayForm] = React.useState({
+    location: day.location || '',
+    country: day.country || 'Deutschland',
+    travel_hours: day.travel_hours || 8
+  });
+  const [expenseForm, setExpenseForm] = React.useState({
+    expense_type: 'transport',
+    description: '',
+    amount: '',
+    guest_names: '',
+    hospitality_reason: '',
+    receipt: null
+  });
+
+  const expenseTypes = [
+    { value: 'transport', label: 'Transport' },
+    { value: 'hotel', label: 'Hotel' },
+    { value: 'parking', label: 'Parken' },
+    { value: 'shipping', label: 'Versand' },
+    { value: 'hospitality', label: 'Bewirtung' },
+    { value: 'other', label: 'Sonstiges' }
+  ];
+
+  const handleSubmitExpense = (e) => {
+    e.preventDefault();
+    onAddExpense(reportId, day.id, {
+      ...expenseForm,
+      amount: parseFloat(expenseForm.amount)
+    });
+    setExpenseForm({ expense_type: 'transport', description: '', amount: '', guest_names: '', hospitality_reason: '', receipt: null });
+    setShowAddExpense(false);
+  };
+
+  const handleSaveDaySettings = () => {
+    onUpdateDay(day.id, {
+      location: dayForm.location,
+      country: dayForm.country,
+      travel_hours: parseFloat(dayForm.travel_hours) || 8
+    });
+    setIsEditingDay(false);
+  };
+
+  // Determine per-diem info text based on travel hours
+  const getPerDiemInfo = () => {
+    const hours = parseFloat(dayForm.travel_hours) || 0;
+    if (hours >= 24) return 'Volle Tagespauschale';
+    if (hours > 8) return 'Volle Tagespauschale (>8h)';
+    return 'Halbe Tagespauschale (≤8h)';
+  };
+
+  return (
+    <div className="bg-white shadow rounded-lg p-4 mb-3">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex-1">
+          <div className="font-medium">{new Date(day.date).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' })}</div>
+          {!isEditingDay ? (
+            <div className="text-sm text-gray-500">
+              {day.location || '(kein Ort)'} ({day.country}) - {day.travel_hours || 0}h Reisezeit
+              {isDraft && (
+                <button 
+                  onClick={() => setIsEditingDay(true)}
+                  className="ml-2 text-blue-600 hover:underline"
+                >
+                  bearbeiten
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2 bg-gray-50 p-3 rounded">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-500">Ort</label>
+                  <input
+                    type="text"
+                    value={dayForm.location}
+                    onChange={e => setDayForm({ ...dayForm, location: e.target.value })}
+                    placeholder="z.B. München"
+                    className="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500">Land</label>
+                  <select
+                    value={dayForm.country}
+                    onChange={e => setDayForm({ ...dayForm, country: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                  >
+                    <option value="Deutschland">Deutschland</option>
+                    {perDiemRates.map(r => (
+                      <option key={r.country} value={r.country}>{r.country}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500">Reisezeit (Stunden)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="24"
+                    value={dayForm.travel_hours}
+                    onChange={e => setDayForm({ ...dayForm, travel_hours: e.target.value })}
+                    className="mt-1 block w-full rounded-md border-gray-300 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">{getPerDiemInfo()}</div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleSaveDaySettings}
+                  className="px-2 py-1 bg-blue-600 text-white rounded text-sm"
+                >
+                  Speichern
+                </button>
+                <button 
+                  onClick={() => {
+                    setDayForm({ location: day.location || '', country: day.country || 'Deutschland', travel_hours: day.travel_hours || 8 });
+                    setIsEditingDay(false);
+                  }}
+                  className="px-2 py-1 text-gray-600 text-sm"
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-start space-x-2">
+          <div className="text-right">
+            <div className="text-sm text-gray-500">Tagespauschale</div>
+            <div className="font-medium text-green-600">{parseFloat(day.per_diem_applied || 0).toFixed(2)}€</div>
+          </div>
+          {isDraft && (
+            <button
+              onClick={() => onRemoveDay(reportId, day.id)}
+              className="text-red-600 hover:text-red-800 text-sm"
+              title="Tag entfernen"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expenses list */}
+      {day.expenses?.length > 0 && (
+        <div className="border-t pt-2 mb-2">
+          {day.expenses.map(exp => (
+            <div key={exp.id} className="flex justify-between items-start text-sm py-1">
+              <div>
+                <span>{exp.expense_type_display}: {exp.description}</span>
+                {exp.receipt_url && (
+                  <a 
+                    href={exp.receipt_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="ml-2 text-blue-600 hover:underline text-xs"
+                  >
+                    📎 Beleg
+                  </a>
+                )}
+              </div>
+              <span className="font-medium">{parseFloat(exp.amount || 0).toFixed(2)}€</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isDraft && (
+        <>
+          {!showAddExpense ? (
+            <button
+              onClick={() => setShowAddExpense(true)}
+              className="text-sm text-blue-600 hover:underline"
+            >
+              + Kosten hinzufügen
+            </button>
+          ) : (
+            <form onSubmit={handleSubmitExpense} className="border-t pt-3 mt-2 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={expenseForm.expense_type}
+                  onChange={e => setExpenseForm({ ...expenseForm, expense_type: e.target.value })}
+                  className="rounded-md border-gray-300 text-sm"
+                >
+                  {expenseTypes.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Betrag €"
+                  value={expenseForm.amount}
+                  onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                  className="rounded-md border-gray-300 text-sm"
+                  required
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Beschreibung"
+                value={expenseForm.description}
+                onChange={e => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                className="w-full rounded-md border-gray-300 text-sm"
+                required
+              />
+              {expenseForm.expense_type === 'hospitality' && (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Gastnamen"
+                    value={expenseForm.guest_names}
+                    onChange={e => setExpenseForm({ ...expenseForm, guest_names: e.target.value })}
+                    className="w-full rounded-md border-gray-300 text-sm"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Bewirtungsgrund"
+                    value={expenseForm.hospitality_reason}
+                    onChange={e => setExpenseForm({ ...expenseForm, hospitality_reason: e.target.value })}
+                    className="w-full rounded-md border-gray-300 text-sm"
+                  />
+                </>
+              )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Beleg (optional, JPG/PDF)</label>
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.pdf"
+                  onChange={e => setExpenseForm({ ...expenseForm, receipt: e.target.files[0] || null })}
+                  className="w-full text-sm text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setShowAddExpense(false)} className="text-sm px-2 py-1">Abbrechen</button>
+                <button type="submit" className="text-sm px-2 py-1 bg-blue-600 text-white rounded">Hinzufügen</button>
+              </div>
+            </form>
+          )}
+        </>
+      )}
+
+      <div className="border-t mt-2 pt-2 flex justify-end font-medium">
+        Tagesgesamt: {parseFloat(day.day_total || 0).toFixed(2)}€
+      </div>
+    </div>
+  );
+};
+
 // PersonalDashboardTab Component - Persönliche Schnellzugriffe
 const PersonalDashboardTab = () => {
   const STORAGE_KEY = 'myverp_dashboard_modules';
+  const MAIN_DASHBOARD_KEY = 'myverp_main_dashboard_widgets';
+  
+  // MyVERP-spezifische Widgets für das Haupt-Dashboard
+  const myverpWidgets = [
+    { id: 'time-tracking', name: 'Zeiterfassung', icon: '⏱️', description: 'Arbeitszeitübersicht' },
+    { id: 'messages', name: 'Nachrichten', icon: '💬', description: 'Ungelesene Nachrichten' },
+    { id: 'reminders', name: 'Erinnerungen', icon: '🔔', description: 'Anstehende Erinnerungen' },
+    { id: 'vacation', name: 'Urlaub', icon: '🏖️', description: 'Urlaubsanträge & Guthaben' },
+    { id: 'travel-expenses', name: 'Reisekosten', icon: '✈️', description: 'Reisekostenabrechnungen' },
+  ];
   
   // Alle verfügbaren Module
   const allModules = [
@@ -897,21 +1586,31 @@ const PersonalDashboardTab = () => {
   
   // Standard-Module die initial aktiviert sind
   const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
+  const defaultMainDashboardWidgets = ['time-tracking', 'messages', 'reminders'];
   
   // Geladene Auswahl aus localStorage
   const loadSavedModules = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
-      }
+      if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn('Fehler beim Laden der gespeicherten Module:', e);
     }
     return defaultModules;
   };
   
+  const loadMainDashboardWidgets = () => {
+    try {
+      const saved = localStorage.getItem(MAIN_DASHBOARD_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Fehler beim Laden der Haupt-Dashboard-Widgets:', e);
+    }
+    return defaultMainDashboardWidgets;
+  };
+  
   const [selectedModules, setSelectedModules] = React.useState(loadSavedModules);
+  const [mainDashboardWidgets, setMainDashboardWidgets] = React.useState(loadMainDashboardWidgets);
   const [showSettings, setShowSettings] = React.useState(false);
   
   // Speichern bei Änderung
@@ -919,12 +1618,26 @@ const PersonalDashboardTab = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedModules));
   }, [selectedModules]);
   
+  React.useEffect(() => {
+    localStorage.setItem(MAIN_DASHBOARD_KEY, JSON.stringify(mainDashboardWidgets));
+  }, [mainDashboardWidgets]);
+  
   const toggleModule = (moduleId) => {
     setSelectedModules(prev => {
       if (prev.includes(moduleId)) {
         return prev.filter(id => id !== moduleId);
       } else {
         return [...prev, moduleId];
+      }
+    });
+  };
+  
+  const toggleMainDashboardWidget = (widgetId) => {
+    setMainDashboardWidgets(prev => {
+      if (prev.includes(widgetId)) {
+        return prev.filter(id => id !== widgetId);
+      } else {
+        return [...prev, widgetId];
       }
     });
   };
@@ -955,74 +1668,153 @@ const PersonalDashboardTab = () => {
         </button>
       </div>
       
-      {/* Schnellzugriff-Kacheln */}
+      {/* MyVERP Quick Links */}
       {!showSettings && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {activeModules.map((module) => {
-            const colorClass = colorClasses[module.category] || 'bg-gray-500 hover:bg-gray-600';
-            return (
-              <a
-                key={module.id}
-                href={module.route}
-                className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
-              >
+        <>
+          <div className="mb-6">
+            <h3 className="text-md font-medium text-gray-700 mb-3">MyVERP Schnellzugriff</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-sky-500 hover:bg-sky-600 text-white p-4 rounded-lg shadow-lg transition-all">
                 <div className="text-center">
-                  <div className="text-3xl mb-2">{module.icon}</div>
-                  <div className="text-lg font-semibold">{module.name}</div>
-                  <div className="text-xs opacity-75">{module.category}</div>
+                  <div className="text-2xl mb-1">⏱️</div>
+                  <div className="text-sm font-semibold">Zeiterfassung</div>
                 </div>
               </a>
-            );
-          })}
-          {activeModules.length === 0 && (
-            <div className="col-span-full text-center text-gray-500 py-8">
-              Keine Module ausgewählt. Klicken Sie auf "Anpassen", um Module hinzuzufügen.
+              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-indigo-500 hover:bg-indigo-600 text-white p-4 rounded-lg shadow-lg transition-all">
+                <div className="text-center">
+                  <div className="text-2xl mb-1">💬</div>
+                  <div className="text-sm font-semibold">Nachrichten</div>
+                </div>
+              </a>
+              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-lg shadow-lg transition-all">
+                <div className="text-center">
+                  <div className="text-2xl mb-1">🔔</div>
+                  <div className="text-sm font-semibold">Erinnerungen</div>
+                </div>
+              </a>
+              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-lg shadow-lg transition-all">
+                <div className="text-center">
+                  <div className="text-2xl mb-1">🏖️</div>
+                  <div className="text-sm font-semibold">Urlaub</div>
+                </div>
+              </a>
+              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-rose-500 hover:bg-rose-600 text-white p-4 rounded-lg shadow-lg transition-all">
+                <div className="text-center">
+                  <div className="text-2xl mb-1">✈️</div>
+                  <div className="text-sm font-semibold">Reisekosten</div>
+                </div>
+              </a>
             </div>
-          )}
-        </div>
+          </div>
+          
+          <div className="mb-6">
+            <h3 className="text-md font-medium text-gray-700 mb-3">Modul-Schnellzugriff</h3>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {activeModules.map((module) => {
+                const colorClass = colorClasses[module.category] || 'bg-gray-500 hover:bg-gray-600';
+                return (
+                  <a
+                    key={module.id}
+                    href={module.route}
+                    className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
+                  >
+                    <div className="text-center">
+                      <div className="text-3xl mb-2">{module.icon}</div>
+                      <div className="text-lg font-semibold">{module.name}</div>
+                      <div className="text-xs opacity-75">{module.category}</div>
+                    </div>
+                  </a>
+                );
+              })}
+              {activeModules.length === 0 && (
+                <div className="col-span-full text-center text-gray-500 py-8">
+                  Keine Module ausgewählt. Klicken Sie auf "Anpassen", um Module hinzuzufügen.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
       
       {/* Einstellungen / Modul-Auswahl */}
       {showSettings && (
         <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Module für Schnellzugriff auswählen</h3>
-          <p className="text-sm text-gray-500 mb-6">
-            Wählen Sie die Module aus, die in Ihrem persönlichen Dashboard angezeigt werden sollen.
-          </p>
-          
-          {categories.map(category => (
-            <div key={category} className="mb-6">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">{category}</h4>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {allModules.filter(m => m.category === category).map(module => (
-                  <label
-                    key={module.id}
-                    className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      selectedModules.includes(module.id)
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedModules.includes(module.id)}
-                      onChange={() => toggleModule(module.id)}
-                      className="sr-only"
-                    />
-                    <span className="text-2xl mr-3">{module.icon}</span>
-                    <span className="text-sm font-medium text-gray-700">{module.name}</span>
-                    {selectedModules.includes(module.id) && (
-                      <span className="ml-auto text-blue-500">✓</span>
-                    )}
-                  </label>
-                ))}
-              </div>
+          {/* Haupt-Dashboard Widget Auswahl */}
+          <div className="mb-8">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Widgets im Haupt-Dashboard</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Wählen Sie die MyVERP-Widgets aus, die auf dem Haupt-Dashboard angezeigt werden sollen.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {myverpWidgets.map(widget => (
+                <label
+                  key={widget.id}
+                  className={`flex flex-col items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                    mainDashboardWidgets.includes(widget.id)
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={mainDashboardWidgets.includes(widget.id)}
+                    onChange={() => toggleMainDashboardWidget(widget.id)}
+                    className="sr-only"
+                  />
+                  <span className="text-2xl mb-2">{widget.icon}</span>
+                  <span className="text-sm font-medium text-gray-700 text-center">{widget.name}</span>
+                  <span className="text-xs text-gray-500 text-center">{widget.description}</span>
+                  {mainDashboardWidgets.includes(widget.id) && (
+                    <span className="mt-2 text-blue-500 text-lg">✓</span>
+                  )}
+                </label>
+              ))}
             </div>
-          ))}
+          </div>
+          
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Module für Schnellzugriff auswählen</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Wählen Sie die Module aus, die in Ihrem persönlichen Dashboard angezeigt werden sollen.
+            </p>
+            
+            {categories.map(category => (
+              <div key={category} className="mb-6">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">{category}</h4>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {allModules.filter(m => m.category === category).map(module => (
+                    <label
+                      key={module.id}
+                      className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                        selectedModules.includes(module.id)
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedModules.includes(module.id)}
+                        onChange={() => toggleModule(module.id)}
+                        className="sr-only"
+                      />
+                      <span className="text-2xl mr-3">{module.icon}</span>
+                      <span className="text-sm font-medium text-gray-700">{module.name}</span>
+                      {selectedModules.includes(module.id) && (
+                        <span className="ml-auto text-blue-500">✓</span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
           
           <div className="flex justify-between items-center mt-6 pt-4 border-t">
             <button
-              onClick={() => setSelectedModules(defaultModules)}
+              onClick={() => {
+                setSelectedModules(defaultModules);
+                setMainDashboardWidgets(defaultMainDashboardWidgets);
+              }}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
               Auf Standard zurücksetzen

@@ -121,6 +121,7 @@ class CustomerAddress(models.Model):
         ('Post', 'Postanschrift'),
         ('Lieferung', 'Lieferadresse'),
         ('Rechnung', 'Rechnungsadresse'),
+        ('Einkauf', 'Einkaufsadresse'),
     ]
     
     customer = models.ForeignKey(

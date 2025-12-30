@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Employee, TimeEntry, VacationRequest, Message, Reminder
+from .models import (
+    Employee, TimeEntry, VacationRequest, Message, Reminder,
+    TravelExpenseReport, TravelExpenseDay, TravelExpenseItem, TravelPerDiemRate
+)
 
 User = get_user_model()
 
@@ -116,6 +119,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     """Serializer für Employee Model (HR-Daten)"""
     signature_image_url = serializers.SerializerMethodField()
+    user_id = serializers.SerializerMethodField()
     
     class Meta:
         model = Employee
@@ -127,9 +131,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'weekly_work_hours', 'work_days',
             'annual_vacation_days', 'vacation_balance',
             'signature_image', 'signature_image_url', 'closing_greeting',
-            'created_at', 'updated_at'
+            'bank_account_holder', 'bank_iban', 'bank_bic', 'bank_name',
+            'created_at', 'updated_at', 'user_id'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id', 'signature_image_url']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id', 'signature_image_url', 'user_id']
     
     def get_signature_image_url(self, obj):
         if obj.signature_image:
@@ -137,6 +142,16 @@ class EmployeeSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.signature_image.url)
             return obj.signature_image.url
+        return None
+
+    def get_user_id(self, obj):
+        # Try to find a linked User for this Employee (User.employee FK)
+        try:
+            user = User.objects.filter(employee=obj).first()
+            if user:
+                return user.id
+        except Exception:
+            return None
         return None
     
     def validate_work_days(self, value):
@@ -261,3 +276,109 @@ class ReminderSerializer(serializers.ModelSerializer):
             'id', 'title', 'description', 'due_date', 'is_completed', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+
+# ==================== Reisekosten Serializers ====================
+
+class TravelExpenseItemSerializer(serializers.ModelSerializer):
+    """Serializer für einzelne Reisekostenpositionen"""
+    expense_type_display = serializers.CharField(source='get_expense_type_display', read_only=True)
+    receipt_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TravelExpenseItem
+        fields = [
+            'id', 'expense_type', 'expense_type_display', 'description', 'amount',
+            'guest_names', 'hospitality_reason', 'receipt', 'receipt_url', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'receipt_url']
+
+    def get_receipt_url(self, obj):
+        if obj.receipt:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.receipt.url)
+            return obj.receipt.url
+        return None
+
+
+class TravelExpenseDaySerializer(serializers.ModelSerializer):
+    """Serializer für Reisetage"""
+    expenses = TravelExpenseItemSerializer(many=True, read_only=True)
+    day_total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TravelExpenseDay
+        fields = [
+            'id', 'date', 'location', 'country', 
+            'per_diem_full', 'per_diem_partial', 'per_diem_applied',
+            'departure_time', 'arrival_time', 'is_full_day', 'travel_hours',
+            'overnight_allowance', 'notes', 'expenses', 'day_total', 'created_at'
+        ]
+        read_only_fields = ['id', 'per_diem_full', 'per_diem_partial', 'created_at']
+
+    def get_day_total(self, obj):
+        """Berechnet die Gesamtkosten für den Tag"""
+        expenses_total = sum(e.amount for e in obj.expenses.all())
+        return float(obj.per_diem_applied or 0) + float(expenses_total)
+
+
+class TravelExpenseReportSerializer(serializers.ModelSerializer):
+    """Serializer für Reisekostenabrechnungen"""
+    days = TravelExpenseDaySerializer(many=True, read_only=True)
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    approved_by_name = serializers.CharField(source='approved_by.get_full_name', read_only=True)
+
+    class Meta:
+        model = TravelExpenseReport
+        fields = [
+            'id', 'user_name', 'username', 'calendar_week', 'year',
+            'destination', 'country', 'purpose', 'start_date', 'end_date',
+            'status', 'status_display', 'total_amount', 'pdf_file',
+            'approved_by', 'approved_by_name', 'approved_at',
+            'days', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'user_name', 'username', 'total_amount', 'pdf_file', 'approved_by', 'approved_at', 'created_at', 'updated_at']
+
+
+class TravelExpenseReportCreateSerializer(serializers.ModelSerializer):
+    """Serializer für das Erstellen von Reisekostenabrechnungen"""
+
+    class Meta:
+        model = TravelExpenseReport
+        fields = [
+            'calendar_week', 'year', 'destination', 'country', 'purpose',
+            'start_date', 'end_date'
+        ]
+
+    def validate(self, attrs):
+        # Prüfen ob bereits eine Abrechnung für diese KW existiert
+        user = self.context['request'].user
+        if TravelExpenseReport.objects.filter(
+            user=user,
+            calendar_week=attrs['calendar_week'],
+            year=attrs['year']
+        ).exists():
+            raise serializers.ValidationError(
+                f"Es existiert bereits eine Reisekostenabrechnung für KW{attrs['calendar_week']}/{attrs['year']}"
+            )
+        return attrs
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class TravelPerDiemRateSerializer(serializers.ModelSerializer):
+    """Serializer für Reisekostenpauschalen"""
+
+    class Meta:
+        model = TravelPerDiemRate
+        fields = [
+            'id', 'country', 'country_code', 'full_day_rate', 'partial_day_rate',
+            'overnight_rate', 'valid_from', 'valid_until', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']

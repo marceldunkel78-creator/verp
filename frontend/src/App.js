@@ -17,6 +17,7 @@ import Customers from './pages/Customers';
 import Quotations from './pages/Quotations';
 import OrderProcessing from './pages/OrderProcessing';
 import SalesOrderForm from './pages/SalesOrderForm';
+import CustomerOrderEdit from './pages/CustomerOrderEdit';
 import QuotationForm from './pages/QuotationForm';
 import QuotationDetail from './pages/QuotationDetail';
 import ExchangeRates from './pages/ExchangeRates';
@@ -112,8 +113,9 @@ function App() {
             <Route path="sales/systems/:id" element={<SystemEdit />} />
             <Route path="sales/quotations" element={<Quotations />} />
             <Route path="sales/order-processing" element={<OrderProcessing />} />
-            <Route path="sales/order-processing/new" element={<SalesOrderForm />} />
-            <Route path="sales/order-processing/:id" element={<SalesOrderForm />} />
+            <Route path="sales/order-processing/new" element={<CustomerOrderEdit />} />
+            <Route path="sales/order-processing/:id" element={<CustomerOrderEdit />} />
+            <Route path="sales/order-processing/:id/edit" element={<CustomerOrderEdit />} />
             <Route path="sales/quotations/new" element={<QuotationForm />} />
             <Route path="sales/quotations/:id" element={<QuotationDetail />} />
             <Route path="sales/quotations/:id/edit" element={<QuotationForm />} />

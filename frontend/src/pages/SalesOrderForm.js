@@ -459,8 +459,10 @@ const SalesOrderForm = () => {
       // Bemerkungen (überschreibt das alte notes)
       if (orderDraft.notes) form.append('notes', orderDraft.notes);
       
-      // Umsatzsteuer-ID
-      if (orderDraft.vat_id) form.append('vat_id', orderDraft.vat_id);
+      // Umsatzsteuer-ID (optional) — sende nur, wenn vorhanden, als `customer_vat_id`
+      if (orderDraft.vat_id && orderDraft.vat_id.toString().trim() !== '') {
+        form.append('customer_vat_id', orderDraft.vat_id.toString().trim());
+      }
       form.append('items', JSON.stringify(itemsPayload));
       if (orderDraft.documentFile) {
         form.append('order_document', orderDraft.documentFile, orderDraft.documentFile.name);

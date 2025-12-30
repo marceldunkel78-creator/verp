@@ -7,14 +7,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
     CompanyManager, CompanyBankAccount, PaymentTerm,
-    DeliveryTerm, DeliveryInstruction, ProductCategory
+    DeliveryTerm, DeliveryInstruction, ProductCategory, WarrantyTerm
 )
 from .serializers import (
     ExchangeRateSerializer, CompanySettingsSerializer,
     CompanySettingsUpdateSerializer, CompanyAddressSerializer,
     CompanyManagerSerializer, CompanyBankAccountSerializer,
     PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer,
-    ProductCategorySerializer
+    ProductCategorySerializer, WarrantyTermSerializer
 )
 
 
@@ -217,3 +217,32 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
             'message': f'{created_count} Kategorien erstellt',
             'total': ProductCategory.objects.count()
         })
+
+
+class WarrantyTermViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Garantiebedingungen
+    """
+    queryset = WarrantyTerm.objects.all()
+    serializer_class = WarrantyTermSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'name_en', 'description']
+    filterset_fields = ['is_active', 'is_default', 'duration_months']
+    ordering = ['duration_months', 'name']
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Gibt nur aktive Garantiebedingungen zurück"""
+        terms = WarrantyTerm.objects.filter(is_active=True)
+        serializer = self.get_serializer(terms, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def default(self, request):
+        """Gibt die Standard-Garantiebedingung zurück"""
+        term = WarrantyTerm.objects.filter(is_default=True, is_active=True).first()
+        if term:
+            serializer = self.get_serializer(term)
+            return Response(serializer.data)
+        return Response({'error': 'Keine Standard-Garantiebedingung definiert'}, status=status.HTTP_404_NOT_FOUND)

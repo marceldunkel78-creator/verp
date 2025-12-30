@@ -4,7 +4,7 @@ from .views import (
     ExchangeRateViewSet, CompanySettingsViewSet,
     CompanyAddressViewSet, CompanyManagerViewSet, CompanyBankAccountViewSet,
     PaymentTermViewSet, DeliveryTermViewSet, DeliveryInstructionViewSet,
-    ProductCategoryViewSet
+    ProductCategoryViewSet, WarrantyTermViewSet
 )
 
 router = DefaultRouter()
@@ -17,6 +17,7 @@ router.register(r'payment-terms', PaymentTermViewSet, basename='payment-term')
 router.register(r'delivery-terms', DeliveryTermViewSet, basename='delivery-term')
 router.register(r'delivery-instructions', DeliveryInstructionViewSet, basename='delivery-instruction')
 router.register(r'product-categories', ProductCategoryViewSet, basename='product-category')
+router.register(r'warranty-terms', WarrantyTermViewSet, basename='warranty-term')
 
 urlpatterns = [
     path('', include(router.urls)),

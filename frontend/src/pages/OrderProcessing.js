@@ -112,14 +112,13 @@ const OrderProcessing = () => {
 
     setLoading(true);
     try {
-      let url = '/orders/orders/';
+      // Use customer-orders endpoint for CustomerOrder model
+      let url = '/customer-orders/customer-orders/';
       const params = new URLSearchParams();
 
       if (useFilters.search) params.append('search', useFilters.search);
       if (useFilters.status) params.append('status', useFilters.status);
       if (useFilters.year) params.append('year', useFilters.year);
-      // Only fetch customer orders (Kundenaufträge), not supplier/online orders
-      params.append('order_type', 'customer_order');
 
       params.append('page', page);
       params.append('page_size', '9');
@@ -173,7 +172,7 @@ const OrderProcessing = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Möchten Sie diesen Auftrag wirklich löschen?')) {
       try {
-        await api.delete(`/orders/orders/${id}/`);
+        await api.delete(`/customer-orders/customer-orders/${id}/`);
         fetchOrders();
       } catch (error) {
         console.error('Fehler beim Löschen:', error);

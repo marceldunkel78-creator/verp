@@ -2,31 +2,162 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 
-const colorClasses = {
-  blue: 'bg-blue-500 hover:bg-blue-600',
-  green: 'bg-green-500 hover:bg-green-600',
-  purple: 'bg-purple-500 hover:bg-purple-600',
-  yellow: 'bg-yellow-500 hover:bg-yellow-600',
-  indigo: 'bg-indigo-500 hover:bg-indigo-600',
-  pink: 'bg-pink-500 hover:bg-pink-600',
-  cyan: 'bg-cyan-500 hover:bg-cyan-600',
-  orange: 'bg-orange-500 hover:bg-orange-600',
-  red: 'bg-red-500 hover:bg-red-600',
-  gray: 'bg-gray-500 hover:bg-gray-600',
-  teal: 'bg-teal-500 hover:bg-teal-600',
-  rose: 'bg-rose-500 hover:bg-rose-600',
-  sky: 'bg-sky-500 hover:bg-sky-600',
-  violet: 'bg-violet-500 hover:bg-violet-600',
-  amber: 'bg-amber-500 hover:bg-amber-600',
+const MAIN_DASHBOARD_KEY = 'myverp_main_dashboard_widgets';
+const MODULE_STORAGE_KEY = 'myverp_dashboard_modules';
+
+// Tab-Mapping für MyVERP Widgets
+const myverpTabMapping = {
+  'time-tracking': 'time-tracking',
+  'messages': 'messages',
+  'reminders': 'reminders',
+  'vacation': 'vacation',
+  'travel-expenses': 'travel-expenses',
 };
+
+// Alle verfügbaren Module (gleiche Definition wie in MyVERP)
+const allModules = [
+  { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb' },
+  { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb' },
+  { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb' },
+  { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung' },
+  { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung' },
+  { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Beschaffung' },
+  { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung' },
+  { id: 'visiview', name: 'VisiView Produkte', route: '/products/visiview', icon: '🔬', category: 'Produkte' },
+  { id: 'vshardware', name: 'VS-Hardware', route: '/products/vs-hardware', icon: '🔧', category: 'Produkte' },
+  { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service' },
+  { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service' },
+  { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager' },
+  { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung' },
+  { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte' },
+  { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System' },
+  { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System' },
+  { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System' },
+  { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'System' },
+];
+
+const categoryColors = {
+  'Vertrieb': 'bg-blue-500 hover:bg-blue-600',
+  'Beschaffung': 'bg-green-500 hover:bg-green-600',
+  'Produkte': 'bg-cyan-500 hover:bg-cyan-600',
+  'Service': 'bg-orange-500 hover:bg-orange-600',
+  'Lager': 'bg-violet-500 hover:bg-violet-600',
+  'Fertigung': 'bg-gray-500 hover:bg-gray-600',
+  'Projekte': 'bg-indigo-500 hover:bg-indigo-600',
+  'System': 'bg-purple-500 hover:bg-purple-600',
+};
+
+const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
 
 const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [myverpSelection, setMyverpSelection] = useState([]);
+  const [myverpData, setMyverpData] = useState({});
+  const [loadingMyVerp, setLoadingMyVerp] = useState(false);
+  const [selectedModules, setSelectedModules] = useState([]);
 
   useEffect(() => {
     fetchDashboardData();
+    loadMyverpSelection();
+    loadModuleSelection();
   }, []);
+
+  const loadModuleSelection = () => {
+    try {
+      const saved = localStorage.getItem(MODULE_STORAGE_KEY);
+      if (saved) {
+        setSelectedModules(JSON.parse(saved));
+      } else {
+        setSelectedModules(defaultModules);
+      }
+    } catch (err) {
+      console.warn('Could not load module selection from localStorage', err);
+      setSelectedModules(defaultModules);
+    }
+  };
+
+  const loadMyverpSelection = async () => {
+    try {
+      const raw = localStorage.getItem(MAIN_DASHBOARD_KEY);
+      if (raw) {
+        const sel = JSON.parse(raw);
+        if (Array.isArray(sel) && sel.length > 0) {
+          setMyverpSelection(sel);
+          fetchMyverpWidgets(sel);
+        }
+      } else {
+        // Default widgets
+        const defaultWidgets = ['time-tracking', 'messages', 'reminders'];
+        setMyverpSelection(defaultWidgets);
+        fetchMyverpWidgets(defaultWidgets);
+      }
+    } catch (err) {
+      console.warn('Could not load MyVERP selection from localStorage', err);
+    }
+  };
+
+  const fetchMyverpWidgets = async (selection) => {
+    if (!selection || selection.length === 0) return;
+    setLoadingMyVerp(true);
+    const collected = {};
+    const promises = [];
+
+    if (selection.includes('time-tracking')) {
+      promises.push(
+        api.get('/users/time-entries/weekly_report/')
+          .then((res) => { collected.timeTracking = res.data; })
+          .catch(() => { collected.timeTracking = null; })
+      );
+    }
+
+    if (selection.includes('messages')) {
+      promises.push(
+        api.get('/users/messages/')
+          .then((res) => { collected.messages = res.data.results || res.data; })
+          .catch(() => { collected.messages = []; })
+      );
+    }
+
+    if (selection.includes('reminders')) {
+      promises.push(
+        api.get('/users/reminders/')
+          .then((res) => { collected.reminders = res.data.results || res.data; })
+          .catch(() => { collected.reminders = []; })
+      );
+    }
+
+    if (selection.includes('vacation')) {
+      promises.push(
+        Promise.all([
+          api.get('/users/vacation-requests/'),
+          api.get('/users/employees/me/').catch(() => ({ data: null }))
+        ]).then(([vacRes, empRes]) => {
+          collected.vacation = {
+            requests: vacRes.data.results || vacRes.data || [],
+            employee: empRes.data
+          };
+        }).catch(() => { collected.vacation = { requests: [], employee: null }; })
+      );
+    }
+
+    if (selection.includes('travel-expenses')) {
+      promises.push(
+        api.get('/users/travel-expenses/')
+          .then((res) => { collected.travelExpenses = res.data.results || res.data || []; })
+          .catch(() => { collected.travelExpenses = []; })
+      );
+    }
+
+    try {
+      await Promise.all(promises);
+      setMyverpData(collected);
+    } catch (err) {
+      console.warn('Fehler beim Laden der MyVERP Widgets', err);
+    } finally {
+      setLoadingMyVerp(false);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -47,112 +178,8 @@ const Dashboard = () => {
     );
   }
 
-  const implementedModules = [
-    // Vertrieb
-    {
-      id: 'customers',
-      name: 'Kunden',
-      route: '/sales/customers',
-      color: 'indigo',
-      icon: '👤'
-    },
-    {
-      id: 'quotations',
-      name: 'Angebote',
-      route: '/sales/quotations',
-      color: 'blue',
-      icon: '📋'
-    },
-    {
-      id: 'orders',
-      name: 'Aufträge',
-      route: '/sales/order-processing',
-      color: 'green',
-      icon: '📑'
-    },
-    // Beschaffung
-    {
-      id: 'procurement',
-      name: 'Beschaffung',
-      route: '/procurement',
-      color: 'blue',
-      icon: '📦'
-    },
-    {
-      id: 'suppliers',
-      name: 'Lieferanten',
-      route: '/procurement/suppliers',
-      color: 'green',
-      icon: '🏢'
-    },
-    {
-      id: 'trading',
-      name: 'Handelsware',
-      route: '/procurement/trading-goods',
-      color: 'orange',
-      icon: '📦'
-    },
-    // Produkte
-    {
-      id: 'visiview',
-      name: 'VisiView Produkte',
-      route: '/products/visiview',
-      color: 'cyan',
-      icon: '🔬'
-    },
-    {
-      id: 'vshardware',
-      name: 'VS-Hardware',
-      route: '/products/vs-hardware',
-      color: 'teal',
-      icon: '🔧'
-    },
-    {
-      id: 'vsservice',
-      name: 'VS-Service',
-      route: '/service/vs-service',
-      color: 'rose',
-      icon: '🛠️'
-    },
-    // Service
-    {
-      id: 'rma',
-      name: 'RMA-Fälle',
-      route: '/service/rma',
-      color: 'amber',
-      icon: '🔄'
-    },
-    // Fertigung
-    {
-      id: 'inventory',
-      name: 'Lagerverwaltung',
-      route: '/inventory',
-      color: 'violet',
-      icon: '📊'
-    },
-    // Einstellungen
-    {
-      id: 'settings',
-      name: 'Einstellungen',
-      route: '/settings',
-      color: 'purple',
-      icon: '⚙️'
-    },
-    {
-      id: 'users',
-      name: 'Benutzer',
-      route: '/settings/users',
-      color: 'indigo',
-      icon: '👥'
-    },
-    {
-      id: 'myverp',
-      name: 'MyVERP',
-      route: '/my-verp',
-      color: 'sky',
-      icon: '🏠'
-    }
-  ];
+  // Aktive Module aus der Benutzerauswahl
+  const activeModules = allModules.filter(m => selectedModules.includes(m.id));
 
   return (
     <div>
@@ -247,7 +274,7 @@ const Dashboard = () => {
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Module</dt>
                   <dd className="text-lg font-semibold text-gray-900">
-                    {implementedModules.length}
+                    {activeModules.length}
                   </dd>
                 </dl>
               </div>
@@ -256,13 +283,111 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Module Grid */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Access</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {implementedModules.map((module) => {
-            const colorClass = colorClasses[module.color] || colorClasses.gray;
+      {/* MyVERP Schnellzugriff */}
+      {myverpSelection.length > 0 && (
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-900">MyVERP Schnellzugriff</h2>
+            <Link to="/myverp" className="text-sm text-blue-600 hover:underline">
+              Anpassen →
+            </Link>
+          </div>
+          {loadingMyVerp ? (
+            <div className="flex items-center justify-center h-24">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {myverpSelection.includes('time-tracking') && (
+                <Link 
+                  to={`/myverp?tab=${myverpTabMapping['time-tracking']}`} 
+                  className="bg-sky-500 hover:bg-sky-600 text-white p-4 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">⏱️</div>
+                    <div className="text-sm font-semibold">Zeiterfassung</div>
+                    <div className="text-xs opacity-75 mt-1">
+                      {myverpData.timeTracking ? `${myverpData.timeTracking.actual_hours ?? 0}h` : '—'}
+                    </div>
+                  </div>
+                </Link>
+              )}
 
+              {myverpSelection.includes('messages') && (
+                <Link 
+                  to={`/myverp?tab=${myverpTabMapping['messages']}`}
+                  className="bg-indigo-500 hover:bg-indigo-600 text-white p-4 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">💬</div>
+                    <div className="text-sm font-semibold">Nachrichten</div>
+                    <div className="text-xs opacity-75 mt-1">
+                      {Array.isArray(myverpData.messages) ? `${myverpData.messages.filter(m => !m.is_read).length} ungelesen` : '—'}
+                    </div>
+                  </div>
+                </Link>
+              )}
+
+              {myverpSelection.includes('reminders') && (
+                <Link 
+                  to={`/myverp?tab=${myverpTabMapping['reminders']}`}
+                  className="bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">🔔</div>
+                    <div className="text-sm font-semibold">Erinnerungen</div>
+                    <div className="text-xs opacity-75 mt-1">
+                      {Array.isArray(myverpData.reminders) ? `${myverpData.reminders.filter(r => !r.is_completed).length} offen` : '—'}
+                    </div>
+                  </div>
+                </Link>
+              )}
+
+              {myverpSelection.includes('vacation') && (
+                <Link 
+                  to={`/myverp?tab=${myverpTabMapping['vacation']}`}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">🏖️</div>
+                    <div className="text-sm font-semibold">Urlaub</div>
+                    <div className="text-xs opacity-75 mt-1">
+                      {myverpData.vacation?.employee?.vacation_balance ?? '—'} Tage
+                    </div>
+                  </div>
+                </Link>
+              )}
+
+              {myverpSelection.includes('travel-expenses') && (
+                <Link 
+                  to={`/myverp?tab=${myverpTabMapping['travel-expenses']}`}
+                  className="bg-rose-500 hover:bg-rose-600 text-white p-4 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105"
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-1">✈️</div>
+                    <div className="text-sm font-semibold">Reisekosten</div>
+                    <div className="text-xs opacity-75 mt-1">
+                      {Array.isArray(myverpData.travelExpenses) ? `${myverpData.travelExpenses.filter(r => r.status === 'draft').length} Entwürfe` : '—'}
+                    </div>
+                  </div>
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modul-Schnellzugriff (aus MyVERP Einstellungen) */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">Modul-Schnellzugriff</h2>
+          <Link to="/myverp?tab=dashboard" className="text-sm text-blue-600 hover:underline">
+            Anpassen →
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {activeModules.map((module) => {
+            const colorClass = categoryColors[module.category] || 'bg-gray-500 hover:bg-gray-600';
             return (
               <Link
                 key={module.id}
@@ -272,10 +397,16 @@ const Dashboard = () => {
                 <div className="text-center">
                   <div className="text-3xl mb-2">{module.icon}</div>
                   <div className="text-lg font-semibold">{module.name}</div>
+                  <div className="text-xs opacity-75">{module.category}</div>
                 </div>
               </Link>
             );
           })}
+          {activeModules.length === 0 && (
+            <div className="col-span-full text-center text-gray-500 py-8 bg-gray-50 rounded-lg">
+              Keine Module ausgewählt. <Link to="/myverp?tab=dashboard" className="text-blue-600 hover:underline">Klicken Sie hier</Link>, um Module hinzuzufügen.
+            </div>
+          )}
         </div>
       </div>
     </div>

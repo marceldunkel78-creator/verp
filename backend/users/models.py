@@ -1,10 +1,34 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from datetime import datetime, timedelta
+import os
 
 
 def default_work_days():
     return ['mon', 'tue', 'wed', 'thu', 'fri']
+
+
+def travel_expense_pdf_path(instance, filename):
+    """Generiert den Pfad für Reisekosten-PDFs"""
+    user = instance.user
+    employee = getattr(user, 'employee', None)
+    if employee:
+        folder_name = f"{employee.first_name}_{employee.last_name}-{employee.employee_id}"
+    else:
+        folder_name = user.username
+    return f"MyVERP/{folder_name}/Reisekosten/{instance.year}/{filename}"
+
+
+def travel_expense_receipt_path(instance, filename):
+    """Generiert den Pfad für Reisekosten-Belege"""
+    report = instance.day.report
+    user = report.user
+    employee = getattr(user, 'employee', None)
+    if employee:
+        folder_name = f"{employee.first_name}_{employee.last_name}-{employee.employee_id}"
+    else:
+        folder_name = user.username
+    return f"MyVERP/{folder_name}/Reisekosten/{report.year}/Belege/{filename}"
 
 
 class User(AbstractUser):
@@ -120,6 +144,32 @@ class Employee(models.Model):
         default='Mit freundlichen Grüßen',
         verbose_name='Grußformel',
         help_text='z.B. "Mit freundlichen Grüßen" oder "Best regards"'
+    )
+    
+    # Bankverbindung für Reisekostenerstattung
+    bank_account_holder = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Kontoinhaber',
+        help_text='Name des Kontoinhabers'
+    )
+    bank_iban = models.CharField(
+        max_length=34,
+        blank=True,
+        verbose_name='IBAN',
+        help_text='Internationale Bankkontonummer'
+    )
+    bank_bic = models.CharField(
+        max_length=11,
+        blank=True,
+        verbose_name='BIC',
+        help_text='Bank Identifier Code'
+    )
+    bank_name = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Bankname',
+        help_text='Name der Bank'
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -291,3 +341,162 @@ class MonthlyWorkSummary(models.Model):
     def __str__(self):
         who = self.employee.employee_id if self.employee else (self.user.get_full_name() if self.user else 'Unknown')
         return f"{who} - {self.month:%Y-%m}"
+
+
+class TravelExpenseReport(models.Model):
+    """
+    Reisekostenabrechnung pro Kalenderwoche
+    """
+    STATUS_CHOICES = [
+        ('draft', 'Entwurf'),
+        ('submitted', 'Eingereicht'),
+        ('approved', 'Genehmigt'),
+        ('rejected', 'Abgelehnt'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='travel_expense_reports')
+    calendar_week = models.PositiveIntegerField(verbose_name='Kalenderwoche')
+    year = models.PositiveIntegerField(verbose_name='Jahr')
+    destination = models.CharField(max_length=200, verbose_name='Reiseziel')
+    country = models.CharField(max_length=100, default='Deutschland', verbose_name='Land')
+    purpose = models.TextField(verbose_name='Reisezweck')
+    start_date = models.DateField(verbose_name='Reisebeginn')
+    end_date = models.DateField(verbose_name='Reiseende')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name='Status')
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Gesamtbetrag')
+    pdf_file = models.FileField(upload_to=travel_expense_pdf_path, blank=True, null=True, verbose_name='PDF-Datei')
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_travel_expenses')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Reisekostenabrechnung'
+        verbose_name_plural = 'Reisekostenabrechnungen'
+        unique_together = ['user', 'calendar_week', 'year']
+        ordering = ['-year', '-calendar_week']
+
+    def __str__(self):
+        return f"{self.user.get_full_name()} - KW{self.calendar_week}/{self.year}"
+
+    def get_upload_path(self):
+        """Returns the path for storing files"""
+        return f"myverp/{self.user.username}/Reisekosten/KW{self.calendar_week}_{self.year}/"
+
+
+class TravelExpenseDay(models.Model):
+    """
+    Einzelner Reisetag mit Pauschalen und Kosten
+    """
+    report = models.ForeignKey(TravelExpenseReport, on_delete=models.CASCADE, related_name='days')
+    date = models.DateField(verbose_name='Datum')
+    location = models.CharField(max_length=200, blank=True, verbose_name='Aufenthaltsort')
+    country = models.CharField(max_length=100, default='Deutschland', verbose_name='Land')
+    
+    # Reisekostenpauschalen (automatisch berechnet)
+    per_diem_full = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='Tagespauschale (Vollständig)')
+    per_diem_partial = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='Tagespauschale (Teil)')
+    per_diem_applied = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='Angewendete Pauschale')
+    
+    # Aufenthaltsdauer
+    departure_time = models.TimeField(null=True, blank=True, verbose_name='Abfahrt')
+    arrival_time = models.TimeField(null=True, blank=True, verbose_name='Ankunft')
+    is_full_day = models.BooleanField(default=True, verbose_name='Ganztags')
+    travel_hours = models.DecimalField(max_digits=4, decimal_places=1, default=0, verbose_name='Reisestunden')
+    
+    # Übernachtungspauschale
+    overnight_allowance = models.DecimalField(max_digits=8, decimal_places=2, default=0, verbose_name='Übernachtungspauschale')
+    
+    notes = models.TextField(blank=True, verbose_name='Notizen')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Reisetag'
+        verbose_name_plural = 'Reisetage'
+        unique_together = ['report', 'date']
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.report} - {self.date}"
+
+
+class TravelExpenseItem(models.Model):
+    """
+    Einzelne Reisekostenposition
+    """
+    EXPENSE_TYPE_CHOICES = [
+        ('transport', 'Transport'),
+        ('hotel', 'Hotel'),
+        ('parking', 'Parken'),
+        ('shipping', 'Versand'),
+        ('hospitality', 'Bewirtung'),
+        ('other', 'Sonstiges'),
+    ]
+
+    day = models.ForeignKey(TravelExpenseDay, on_delete=models.CASCADE, related_name='expenses')
+    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, verbose_name='Kostenart')
+    description = models.CharField(max_length=500, verbose_name='Beschreibung')
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Betrag')
+    
+    # Für Bewirtung
+    guest_names = models.TextField(blank=True, verbose_name='Gastnamen')
+    hospitality_reason = models.TextField(blank=True, verbose_name='Bewirtungsgrund')
+    
+    # Beleg
+    receipt = models.FileField(upload_to=travel_expense_receipt_path, blank=True, null=True, verbose_name='Beleg')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Reisekostenposition'
+        verbose_name_plural = 'Reisekostenpositionen'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.get_expense_type_display()} - {self.amount}€"
+
+
+class TravelPerDiemRate(models.Model):
+    """
+    Reisekostenpauschalen pro Land (aktualisierbar)
+    Basierend auf deutschen Steuerrichtlinien
+    """
+    country = models.CharField(max_length=100, unique=True, verbose_name='Land')
+    country_code = models.CharField(max_length=3, blank=True, verbose_name='Ländercode')
+    full_day_rate = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Tagespauschale (24h)')
+    partial_day_rate = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Tagespauschale (>8h)')
+    overnight_rate = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Übernachtungspauschale')
+    valid_from = models.DateField(verbose_name='Gültig ab')
+    valid_until = models.DateField(null=True, blank=True, verbose_name='Gültig bis')
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Reisekostenpauschale'
+        verbose_name_plural = 'Reisekostenpauschalen'
+        ordering = ['country']
+
+    def __str__(self):
+        return f"{self.country} - {self.full_day_rate}€/Tag"
+
+    @classmethod
+    def get_rate_for_country(cls, country, date=None):
+        """Gibt die aktuell gültige Pauschale für ein Land zurück"""
+        from django.utils import timezone
+        if date is None:
+            date = timezone.now().date()
+        
+        rate = cls.objects.filter(
+            country__iexact=country,
+            is_active=True,
+            valid_from__lte=date
+        ).filter(
+            models.Q(valid_until__isnull=True) | models.Q(valid_until__gte=date)
+        ).first()
+        
+        if not rate:
+            # Fallback auf Deutschland
+            rate = cls.objects.filter(country='Deutschland', is_active=True).first()
+        
+        return rate

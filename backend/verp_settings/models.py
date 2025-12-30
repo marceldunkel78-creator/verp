@@ -583,3 +583,59 @@ class ProductCategory(models.Model):
                 created += 1
         
         return created
+
+
+class WarrantyTerm(models.Model):
+    """
+    Garantiebedingungen für Kundenaufträge
+    """
+    name = models.CharField(
+        max_length=200,
+        unique=True,
+        verbose_name='Bezeichnung',
+        help_text='z.B. "12 Monate Garantie", "24 Monate auf Teile"'
+    )
+    
+    name_en = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Bezeichnung (EN)',
+        help_text='Englische Bezeichnung für internationale Dokumente'
+    )
+    
+    duration_months = models.PositiveIntegerField(
+        default=12,
+        verbose_name='Garantiedauer (Monate)'
+    )
+    
+    description = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung',
+        help_text='Detaillierte Garantiebedingungen'
+    )
+    
+    description_en = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung (EN)',
+        help_text='Englische Beschreibung'
+    )
+    
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    is_default = models.BooleanField(default=False, verbose_name='Standard')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Garantiebedingung'
+        verbose_name_plural = 'Garantiebedingungen'
+        ordering = ['duration_months', 'name']
+    
+    def __str__(self):
+        return f"{self.name} ({self.duration_months} Monate)"
+    
+    def save(self, *args, **kwargs):
+        # Wenn als Standard markiert, alle anderen zurücksetzen
+        if self.is_default:
+            WarrantyTerm.objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
