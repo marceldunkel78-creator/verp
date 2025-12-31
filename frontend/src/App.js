@@ -45,6 +45,8 @@ import ServiceTickets from './pages/ServiceTickets';
 import ServiceTicketEdit from './pages/ServiceTicketEdit';
 import Dealers from './pages/Dealers';
 import DealerEdit from './pages/DealerEdit';
+import PriceLists from './pages/PriceLists';
+import PriceListEdit from './pages/PriceListEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -116,6 +118,9 @@ function App() {
             <Route path="sales/dealers" element={<Dealers />} />
             <Route path="sales/dealers/new" element={<DealerEdit />} />
             <Route path="sales/dealers/:id" element={<DealerEdit />} />
+            <Route path="sales/pricelists" element={<PriceLists />} />
+            <Route path="sales/pricelists/new" element={<PriceListEdit />} />
+            <Route path="sales/pricelists/:id" element={<PriceListEdit />} />
             <Route path="sales/projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectEdit />} />
             <Route path="sales/systems" element={<Systems />} />

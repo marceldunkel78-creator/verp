@@ -7,7 +7,8 @@ import {
   ClipboardDocumentCheckIcon,
   MegaphoneIcon,
   ComputerDesktopIcon,
-  BuildingStorefrontIcon
+  BuildingStorefrontIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
 
 const SalesOrderManagement = () => {
@@ -25,6 +26,14 @@ const SalesOrderManagement = () => {
       description: 'Händlerverwaltung',
       icon: BuildingStorefrontIcon,
       path: '/sales/dealers',
+      color: 'blue',
+      disabled: false
+    },
+    {
+      name: 'Price Lists',
+      description: 'Verkaufs-Preislisten',
+      icon: ClipboardDocumentListIcon,
+      path: '/sales/pricelists',
       color: 'blue',
       disabled: false
     },
