@@ -47,6 +47,8 @@ import Dealers from './pages/Dealers';
 import DealerEdit from './pages/DealerEdit';
 import PriceLists from './pages/PriceLists';
 import PriceListEdit from './pages/PriceListEdit';
+import Loans from './pages/Loans';
+import LoanEdit from './pages/LoanEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -112,6 +114,9 @@ function App() {
             <Route path="procurement/orders/new" element={<OrderFormNew />} />
             <Route path="procurement/orders/:id" element={<OrderDetail />} />
             <Route path="procurement/orders/:id/edit" element={<OrderFormNew />} />
+            <Route path="procurement/loans" element={<Loans />} />
+            <Route path="procurement/loans/new" element={<LoanEdit />} />
+            <Route path="procurement/loans/:id" element={<LoanEdit />} />
             
             {/* Sales/Order Management Submodules */}
             <Route path="sales/customers" element={<Customers />} />

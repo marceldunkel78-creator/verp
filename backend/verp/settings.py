@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'customers',
     'dealers',
     'pricelists',
+    'loans',
     'orders',
     'customer_orders',
     'core',

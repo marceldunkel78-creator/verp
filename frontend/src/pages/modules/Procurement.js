@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { TruckIcon, CubeIcon, ShoppingCartIcon, WrenchScrewdriverIcon, BeakerIcon } from '@heroicons/react/24/outline';
+import { TruckIcon, CubeIcon, ShoppingCartIcon, WrenchScrewdriverIcon, BeakerIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 
 const Procurement = () => {
   const modules = [
@@ -26,7 +26,13 @@ const Procurement = () => {
       color: 'orange',
       disabled: false
     },
-
+    {
+      name: 'Leihungen',
+      description: 'Leihgeräte und -materialien verwalten',
+      icon: ArrowUturnLeftIcon,
+      path: '/procurement/loans',
+      color: 'purple'
+    },
     {
       name: 'M&S',
       description: 'Roh-, Hilfs- und Betriebsstoffe',
