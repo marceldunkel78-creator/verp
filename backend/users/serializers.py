@@ -261,12 +261,41 @@ class VacationRequestSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+    recipient_name = serializers.SerializerMethodField()
+    
     class Meta:
         model = Message
         fields = [
-            'id', 'title', 'content', 'is_read', 'created_at'
+            'id', 'sender', 'sender_name', 'user', 'recipient_name',
+            'title', 'content', 'message_type', 'is_read',
+            'is_deleted_by_sender', 'is_deleted_by_recipient',
+            'related_ticket', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'sender_name', 'recipient_name']
+    
+    def get_sender_name(self, obj):
+        if obj.sender:
+            return f"{obj.sender.first_name} {obj.sender.last_name}".strip() or obj.sender.username
+        return 'System'
+    
+    def get_recipient_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+
+
+class MessageCreateSerializer(serializers.ModelSerializer):
+    """Serializer für das Erstellen von Nachrichten"""
+    class Meta:
+        model = Message
+        fields = ['user', 'title', 'content']
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['sender'] = request.user if request else None
+        validated_data['message_type'] = 'user'
+        return super().create(validated_data)
 
 
 class ReminderSerializer(serializers.ModelSerializer):

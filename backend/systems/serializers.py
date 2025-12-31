@@ -55,13 +55,16 @@ class SystemListSerializer(serializers.ModelSerializer):
     component_count = serializers.SerializerMethodField()
     photo_count = serializers.SerializerMethodField()
     primary_photo_url = serializers.SerializerMethodField()
+    service_ticket_count = serializers.SerializerMethodField()
+    project_count = serializers.SerializerMethodField()
     
     class Meta:
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
-            'status', 'status_display', 'location', 'installation_date',
-            'component_count', 'photo_count', 'primary_photo_url', 'created_at'
+            'description', 'status', 'status_display', 'location', 'installation_date',
+            'component_count', 'photo_count', 'primary_photo_url', 
+            'service_ticket_count', 'project_count', 'created_at'
         ]
     
     def get_component_count(self, obj):
@@ -69,6 +72,22 @@ class SystemListSerializer(serializers.ModelSerializer):
     
     def get_photo_count(self, obj):
         return obj.photos.count()
+    
+    def get_service_ticket_count(self, obj):
+        from service.models import ServiceTicket
+        from django.db.models import Q
+        return ServiceTicket.objects.filter(
+            Q(linked_system=obj) |
+            Q(customer=obj.customer, description__icontains=obj.system_number)
+        ).distinct().count()
+    
+    def get_project_count(self, obj):
+        from projects.models import Project
+        from django.db.models import Q
+        return Project.objects.filter(
+            Q(linked_system=obj) |
+            Q(customer=obj.customer, description__icontains=obj.system_number)
+        ).distinct().count()
     
     def get_primary_photo_url(self, obj):
         request = self.context.get('request')

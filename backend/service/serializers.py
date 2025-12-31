@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import VSService, VSServicePrice, ServiceTicket, RMACase
+from .models import VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, TicketChangeLog
 
 
 class VSServicePriceSerializer(serializers.ModelSerializer):
@@ -101,18 +101,25 @@ class VSServiceCreateUpdateSerializer(serializers.ModelSerializer):
 
 class ServiceTicketListSerializer(serializers.ModelSerializer):
     """Serializer für Service Ticket Liste"""
-    customer_name = serializers.CharField(source='customer.__str__', read_only=True)
+    customer_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    billing_display = serializers.CharField(source='get_billing_display', read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
+    is_open = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = ServiceTicket
         fields = [
             'id', 'ticket_number', 'title', 'customer', 'customer_name',
-            'status', 'status_display', 'priority', 'priority_display',
-            'assigned_to', 'assigned_to_name', 'created_at', 'updated_at'
+            'status', 'status_display', 'billing', 'billing_display',
+            'assigned_to', 'assigned_to_name', 'is_open',
+            'created_at', 'updated_at'
         ]
+    
+    def get_customer_name(self, obj):
+        if obj.customer:
+            return str(obj.customer)
+        return None
     
     def get_assigned_to_name(self, obj):
         if obj.assigned_to:
@@ -120,24 +127,73 @@ class ServiceTicketListSerializer(serializers.ModelSerializer):
         return None
 
 
+class TicketCommentSerializer(serializers.ModelSerializer):
+    """Serializer für Ticket Kommentare"""
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TicketComment
+        fields = ['id', 'comment', 'created_by', 'created_by_name', 'created_at']
+        read_only_fields = ['id', 'created_at', 'created_by', 'created_by_name']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
+class TicketChangeLogSerializer(serializers.ModelSerializer):
+    """Serializer für Ticket Änderungsprotokoll"""
+    changed_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TicketChangeLog
+        fields = ['id', 'field_name', 'old_value', 'new_value', 'changed_by', 'changed_by_name', 'changed_at']
+        read_only_fields = ['id', 'changed_at', 'changed_by', 'changed_by_name']
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip() or obj.changed_by.username
+        return None
+
+
 class ServiceTicketDetailSerializer(serializers.ModelSerializer):
     """Detaillierter Serializer für Service Tickets"""
-    customer_name = serializers.CharField(source='customer.__str__', read_only=True)
+    customer_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    billing_display = serializers.CharField(source='get_billing_display', read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    linked_rma_number = serializers.SerializerMethodField()
+    linked_system_name = serializers.SerializerMethodField()
+    comments = TicketCommentSerializer(many=True, read_only=True)
+    change_logs = TicketChangeLogSerializer(many=True, read_only=True)
+    watcher_ids = serializers.PrimaryKeyRelatedField(
+        source='watchers',
+        many=True,
+        read_only=True
+    )
+    is_open = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = ServiceTicket
         fields = [
             'id', 'ticket_number', 'title', 'description',
-            'customer', 'customer_name',
-            'status', 'status_display', 'priority', 'priority_display',
+            'customer', 'customer_name', 'contact_email',
+            'status', 'status_display', 'billing', 'billing_display',
             'assigned_to', 'assigned_to_name',
+            'linked_rma', 'linked_rma_number', 'linked_visiview_ticket', 'linked_system', 'linked_system_name',
+            'watchers', 'watcher_ids',
+            'comments', 'change_logs',
+            'is_open',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['ticket_number', 'created_at', 'updated_at']
+        read_only_fields = ['ticket_number', 'created_at', 'updated_at', 'comments', 'change_logs']
+    
+    def get_customer_name(self, obj):
+        if obj.customer:
+            return str(obj.customer)
+        return None
     
     def get_assigned_to_name(self, obj):
         if obj.assigned_to:
@@ -148,6 +204,33 @@ class ServiceTicketDetailSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+    
+    def get_linked_rma_number(self, obj):
+        if obj.linked_rma:
+            return obj.linked_rma.rma_number
+        return None
+
+    def get_linked_system_name(self, obj):
+        if obj.linked_system:
+            # Prefer system number + name when available
+            if getattr(obj.linked_system, 'system_number', None):
+                return f"{obj.linked_system.system_number} - {obj.linked_system.system_name}"
+            return getattr(obj.linked_system, 'system_name', None)
+        return None
+
+
+class ServiceTicketCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer für Erstellen/Aktualisieren von Service Tickets"""
+    
+    class Meta:
+        model = ServiceTicket
+        fields = [
+            'id', 'ticket_number', 'title', 'description',
+            'customer', 'contact_email', 'status', 'billing',
+            'assigned_to', 'linked_rma', 'linked_visiview_ticket', 'linked_system',
+            'watchers'
+        ]
+        read_only_fields = ['id', 'ticket_number']
 
 
 class RMACaseListSerializer(serializers.ModelSerializer):

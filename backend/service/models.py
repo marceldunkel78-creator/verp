@@ -2,7 +2,9 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from customers.models import Customer
+from django.utils import timezone
 import re
+import json
 
 User = get_user_model()
 
@@ -212,21 +214,21 @@ class VSServicePrice(models.Model):
 
 class ServiceTicket(models.Model):
     """
-    Service Tickets - Für zukünftige Verwendung (Upcoming)
+    Service Tickets - Für Serviceanfragen von Kunden und Dealern
     """
     STATUS_CHOICES = [
-        ('OPEN', 'Offen'),
-        ('IN_PROGRESS', 'In Bearbeitung'),
-        ('WAITING', 'Wartend'),
-        ('RESOLVED', 'Gelöst'),
-        ('CLOSED', 'Geschlossen'),
+        ('new', 'Neu'),
+        ('assigned', 'Zugewiesen'),
+        ('waiting_customer', 'Warten Kunde'),
+        ('waiting_thirdparty', 'Warten Third-Party'),
+        ('no_solution', 'Keine Lösung'),
+        ('resolved', 'Gelöst'),
     ]
     
-    PRIORITY_CHOICES = [
-        ('LOW', 'Niedrig'),
-        ('MEDIUM', 'Mittel'),
-        ('HIGH', 'Hoch'),
-        ('CRITICAL', 'Kritisch'),
+    BILLING_CHOICES = [
+        ('invoice', 'Rechnung'),
+        ('warranty', 'Garantie'),
+        ('maintenance', 'Maintenance'),
     ]
     
     ticket_number = models.CharField(
@@ -238,7 +240,7 @@ class ServiceTicket(models.Model):
         verbose_name='Ticket-Nummer'
     )
     
-    title = models.CharField(max_length=200, verbose_name='Titel')
+    title = models.CharField(max_length=200, verbose_name='Thema/Titel')
     description = models.TextField(blank=True, verbose_name='Beschreibung')
     
     customer = models.ForeignKey(
@@ -247,21 +249,27 @@ class ServiceTicket(models.Model):
         null=True,
         blank=True,
         related_name='service_tickets',
-        verbose_name='Kunde'
+        verbose_name='Kunde/Dealer'
+    )
+    
+    contact_email = models.EmailField(
+        blank=True,
+        verbose_name='E-Mail',
+        help_text='Kontakt-E-Mail für dieses Ticket'
     )
     
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='OPEN',
+        default='new',
         verbose_name='Status'
     )
     
-    priority = models.CharField(
+    billing = models.CharField(
         max_length=20,
-        choices=PRIORITY_CHOICES,
-        default='MEDIUM',
-        verbose_name='Priorität'
+        choices=BILLING_CHOICES,
+        blank=True,
+        verbose_name='Abrechnung'
     )
     
     assigned_to = models.ForeignKey(
@@ -271,6 +279,40 @@ class ServiceTicket(models.Model):
         blank=True,
         related_name='assigned_tickets',
         verbose_name='Zugewiesen an'
+    )
+    
+    # Verknüpfungen zu RMA und VisiView
+    linked_rma = models.ForeignKey(
+        'RMACase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='linked_tickets',
+        verbose_name='Verknüpfte RMA'
+    )
+    
+    linked_system = models.ForeignKey(
+        'systems.System',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='linked_system_tickets',
+        verbose_name='Verknüpftes System'
+    )
+    
+    linked_visiview_ticket = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='VisiView Ticket',
+        help_text='Verknüpftes VisiView-Ticket'
+    )
+    
+    # Beobachter (ManyToMany für Checkboxen)
+    watchers = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='watched_tickets',
+        verbose_name='Beobachter'
     )
     
     created_by = models.ForeignKey(
@@ -286,10 +328,15 @@ class ServiceTicket(models.Model):
     class Meta:
         verbose_name = 'Service Ticket'
         verbose_name_plural = 'Service Tickets'
-        ordering = ['-created_at']
+        ordering = ['-updated_at']
     
     def __str__(self):
         return f"{self.ticket_number} - {self.title}" if self.ticket_number else self.title
+    
+    @property
+    def is_open(self):
+        """Gibt zurück ob das Ticket offen ist"""
+        return self.status not in ['no_solution', 'resolved']
     
     def save(self, *args, **kwargs):
         if not self.ticket_number:
@@ -319,6 +366,66 @@ class ServiceTicket(models.Model):
         
         next_number = max(numeric_numbers) + 1
         return f'TKT-{next_number:05d}'
+
+
+class TicketComment(models.Model):
+    """
+    Kommentare zu Service-Tickets
+    """
+    ticket = models.ForeignKey(
+        ServiceTicket,
+        on_delete=models.CASCADE,
+        related_name='comments',
+        verbose_name='Ticket'
+    )
+    comment = models.TextField(verbose_name='Kommentar')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='ticket_comments',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    
+    class Meta:
+        verbose_name = 'Ticket Kommentar'
+        verbose_name_plural = 'Ticket Kommentare'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Kommentar von {self.created_by} am {self.created_at}"
+
+
+class TicketChangeLog(models.Model):
+    """
+    Änderungsprotokoll für Service-Tickets
+    """
+    ticket = models.ForeignKey(
+        ServiceTicket,
+        on_delete=models.CASCADE,
+        related_name='change_logs',
+        verbose_name='Ticket'
+    )
+    field_name = models.CharField(max_length=100, verbose_name='Geändertes Feld')
+    old_value = models.TextField(blank=True, verbose_name='Alter Wert')
+    new_value = models.TextField(blank=True, verbose_name='Neuer Wert')
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='ticket_changes',
+        verbose_name='Geändert von'
+    )
+    changed_at = models.DateTimeField(auto_now_add=True, verbose_name='Geändert am')
+    
+    class Meta:
+        verbose_name = 'Ticket Änderung'
+        verbose_name_plural = 'Ticket Änderungen'
+        ordering = ['-changed_at']
+    
+    def __str__(self):
+        return f"{self.field_name} geändert von {self.changed_by} am {self.changed_at}"
 
 
 class RMACase(models.Model):

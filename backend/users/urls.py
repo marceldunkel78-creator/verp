@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     UserViewSet, EmployeeViewSet, TimeEntryViewSet, VacationRequestViewSet,
-    TravelExpenseReportViewSet, TravelExpenseDayViewSet, TravelExpenseItemViewSet, TravelPerDiemRateViewSet
+    TravelExpenseReportViewSet, TravelExpenseDayViewSet, TravelExpenseItemViewSet, TravelPerDiemRateViewSet,
+    MessageViewSet, ReminderViewSet
 )
 
 router = DefaultRouter()
@@ -10,6 +11,9 @@ router = DefaultRouter()
 router.register(r'employees', EmployeeViewSet, basename='employee')
 router.register(r'time-entries', TimeEntryViewSet, basename='time-entry')
 router.register(r'vacation-requests', VacationRequestViewSet, basename='vacation-request')
+# Nachrichten und Erinnerungen
+router.register(r'messages', MessageViewSet, basename='message')
+router.register(r'reminders', ReminderViewSet, basename='reminder')
 # Reisekosten
 router.register(r'travel-expenses', TravelExpenseReportViewSet, basename='travel-expense')
 router.register(r'travel-expense-days', TravelExpenseDayViewSet, basename='travel-expense-day')

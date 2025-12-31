@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon, BuildingOfficeIcon, BeakerIcon, WrenchScrewdriverIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 
 const CustomerModal = ({ customer, onClose, onSuccess }) => {
   const isEditing = !!customer;
+  const navigate = useNavigate();
   
   const [formData, setFormData] = useState({
     salutation: '',
@@ -21,6 +23,11 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
   const [saving, setSaving] = useState(false);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState(0);
 
+  // Related data for existing customers
+  const [customerSystems, setCustomerSystems] = useState([]);
+  const [customerProjects, setCustomerProjects] = useState([]);
+  const [customerTickets, setCustomerTickets] = useState([]);
+
   useEffect(() => {
     if (customer) {
       setFormData({
@@ -35,8 +42,26 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
       setAddresses(customer.addresses || []);
       setPhones(customer.phones || []);
       setEmails(customer.emails || []);
+      
+      // Load related data for existing customers
+      loadRelatedData(customer.id);
     }
   }, [customer]);
+
+  const loadRelatedData = async (customerId) => {
+    try {
+      const [systemsRes, projectsRes, ticketsRes] = await Promise.all([
+        api.get(`/customers/customers/${customerId}/systems/`),
+        api.get(`/customers/customers/${customerId}/projects/`),
+        api.get(`/customers/customers/${customerId}/tickets/`)
+      ]);
+      setCustomerSystems(systemsRes.data || []);
+      setCustomerProjects(projectsRes.data || []);
+      setCustomerTickets(ticketsRes.data || []);
+    } catch (error) {
+      console.error('Error loading related data:', error);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -683,6 +708,146 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
               </div>
             ))}
           </div>
+
+          {/* Verknüpfte Systeme, Projekte, Tickets - nur bei bestehenden Kunden */}
+          {isEditing && (
+            <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Systeme */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold flex items-center">
+                    <BuildingOfficeIcon className="h-5 w-5 mr-2 text-blue-600" />
+                    Systeme ({customerSystems.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigate(`/sales/systems?customer=${customer.id}`);
+                    }}
+                    className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    <PlusIcon className="h-3 w-3 mr-1" />
+                    Neu
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {customerSystems.length === 0 ? (
+                    <p className="text-sm text-gray-500">Keine Systeme vorhanden</p>
+                  ) : (
+                    customerSystems.map(sys => (
+                      <div key={sys.id} className="flex justify-between items-center text-sm bg-gray-50 rounded p-2">
+                        <div>
+                          <span className="font-medium">{sys.system_number}</span>
+                          <span className="text-gray-500 ml-2">{sys.system_name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            navigate(`/sales/systems/${sys.id}`);
+                          }}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Projekte */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold flex items-center">
+                    <BeakerIcon className="h-5 w-5 mr-2 text-green-600" />
+                    Projekte ({customerProjects.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigate(`/projects?customer=${customer.id}`);
+                    }}
+                    className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded text-white bg-green-600 hover:bg-green-700"
+                  >
+                    <PlusIcon className="h-3 w-3 mr-1" />
+                    Neu
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {customerProjects.length === 0 ? (
+                    <p className="text-sm text-gray-500">Keine Projekte vorhanden</p>
+                  ) : (
+                    customerProjects.map(proj => (
+                      <div key={proj.id} className="flex justify-between items-center text-sm bg-gray-50 rounded p-2">
+                        <div>
+                          <span className="font-medium">{proj.project_number}</span>
+                          <span className="text-gray-500 ml-2">{proj.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            navigate(`/projects/${proj.id}`);
+                          }}
+                          className="text-green-600 hover:text-green-800"
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Offene Service-Tickets */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold flex items-center">
+                    <WrenchScrewdriverIcon className="h-5 w-5 mr-2 text-orange-600" />
+                    Offene Tickets ({customerTickets.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      navigate(`/service/tickets/new?customer=${customer.id}`);
+                    }}
+                    className="inline-flex items-center px-2 py-1 text-xs border border-transparent rounded text-white bg-orange-600 hover:bg-orange-700"
+                  >
+                    <PlusIcon className="h-3 w-3 mr-1" />
+                    Neu
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {customerTickets.length === 0 ? (
+                    <p className="text-sm text-gray-500">Keine offenen Tickets</p>
+                  ) : (
+                    customerTickets.map(ticket => (
+                      <div key={ticket.id} className="flex justify-between items-center text-sm bg-gray-50 rounded p-2">
+                        <div>
+                          <span className="font-medium">{ticket.ticket_number}</span>
+                          <span className="text-gray-500 ml-2 truncate max-w-[120px] inline-block align-bottom">{ticket.title}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            navigate(`/service/tickets/${ticket.id}`);
+                          }}
+                          className="text-orange-600 hover:text-orange-800"
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Notizen */}
           <div className="mb-8">

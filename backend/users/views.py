@@ -4,13 +4,15 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from .serializers import (
     UserSerializer, UserCreateSerializer, 
     UserUpdateSerializer, ChangePasswordSerializer, EmployeeSerializer
 )
 from .serializers import TimeEntrySerializer, VacationRequestSerializer
+from .serializers import MessageSerializer, MessageCreateSerializer, ReminderSerializer
 from .models import Employee
-from .models import TimeEntry, VacationRequest
+from .models import TimeEntry, VacationRequest, Message, Reminder
 from .serializers import TimeEntrySerializer
 
 User = get_user_model()
@@ -721,4 +723,122 @@ class TravelPerDiemRateViewSet(viewsets.ModelViewSet):
         if rate:
             return Response(TravelPerDiemRateSerializer(rate).data)
         return Response({'error': 'Keine Pauschale gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class MessageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Nachrichten (Posteingang/Postausgang)
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return MessageCreateSerializer
+        return MessageSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        view_type = self.request.query_params.get('view', 'inbox')
+        
+        if view_type == 'outbox':
+            # Gesendete Nachrichten
+            return Message.objects.filter(
+                sender=user,
+                is_deleted_by_sender=False
+            )
+        else:
+            # Empfangene Nachrichten (Posteingang)
+            return Message.objects.filter(
+                user=user,
+                is_deleted_by_recipient=False
+            )
+    
+    def perform_create(self, serializer):
+        serializer.save(sender=self.request.user, message_type='user')
+    
+    @action(detail=False, methods=['get'])
+    def inbox(self, request):
+        """Posteingang - empfangene Nachrichten"""
+        messages = Message.objects.filter(
+            user=request.user,
+            is_deleted_by_recipient=False
+        ).order_by('-created_at')
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def outbox(self, request):
+        """Postausgang - gesendete Nachrichten"""
+        messages = Message.objects.filter(
+            sender=request.user,
+            is_deleted_by_sender=False
+        ).order_by('-created_at')
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Gibt die Anzahl der ungelesenen Nachrichten zurück"""
+        count = Message.objects.filter(
+            user=request.user,
+            is_read=False,
+            is_deleted_by_recipient=False
+        ).count()
+        return Response({'unread_count': count})
+    
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        """Markiert eine Nachricht als gelesen"""
+        message = self.get_object()
+        if message.user != request.user:
+            return Response({'error': 'Keine Berechtigung'}, status=status.HTTP_403_FORBIDDEN)
+        message.is_read = True
+        message.save()
+        return Response({'status': 'success'})
+    
+    @action(detail=True, methods=['post'])
+    def mark_unread(self, request, pk=None):
+        """Markiert eine Nachricht als ungelesen"""
+        message = self.get_object()
+        if message.user != request.user:
+            return Response({'error': 'Keine Berechtigung'}, status=status.HTTP_403_FORBIDDEN)
+        message.is_read = False
+        message.save()
+        return Response({'status': 'success'})
+    
+    @action(detail=True, methods=['post'])
+    def delete_message(self, request, pk=None):
+        """Löscht eine Nachricht (soft delete)"""
+        message = self.get_object()
+        if message.user == request.user:
+            message.is_deleted_by_recipient = True
+            message.save()
+        elif message.sender == request.user:
+            message.is_deleted_by_sender = True
+            message.save()
+        else:
+            return Response({'error': 'Keine Berechtigung'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'status': 'success'})
+
+
+class ReminderViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Erinnerungen
+    """
+    serializer_class = ReminderSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Reminder.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def toggle_complete(self, request, pk=None):
+        """Wechselt den Erledigt-Status"""
+        reminder = self.get_object()
+        reminder.is_completed = not reminder.is_completed
+        reminder.save()
+        return Response({'status': 'success', 'is_completed': reminder.is_completed})
 

@@ -59,17 +59,63 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def systems(self, request, pk=None):
         """Hole alle Systeme eines Kunden"""
         customer = self.get_object()
-        systems = customer.systems.filter(is_active=True)
+        # system_records is the related_name from systems.System model
+        if hasattr(customer, 'system_records'):
+            systems = customer.system_records.all()
+        else:
+            systems = []
         data = [
             {
                 'id': sys.id,
                 'system_number': sys.system_number,
-                'name': sys.name,
-                'system_type': sys.system_type,
-                'description': sys.description,
+                'system_name': sys.system_name,
+                'status': sys.status,
+                'location': sys.location,
                 'installation_date': sys.installation_date,
             }
             for sys in systems
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=['get'])
+    def projects(self, request, pk=None):
+        """Hole alle Projekte eines Kunden"""
+        customer = self.get_object()
+        if hasattr(customer, 'projects'):
+            projects = customer.projects.all()
+        else:
+            projects = []
+        data = [
+            {
+                'id': proj.id,
+                'project_number': getattr(proj, 'project_number', None),
+                'name': getattr(proj, 'name', ''),
+                'status': getattr(proj, 'status', ''),
+                'start_date': getattr(proj, 'start_date', None),
+                'end_date': getattr(proj, 'end_date', None),
+            }
+            for proj in projects
+        ]
+        return Response(data)
+
+    @action(detail=True, methods=['get'])
+    def tickets(self, request, pk=None):
+        """Hole alle offenen Service-Tickets eines Kunden"""
+        customer = self.get_object()
+        if hasattr(customer, 'service_tickets'):
+            tickets = customer.service_tickets.exclude(status__in=['resolved', 'no_solution'])
+        else:
+            tickets = []
+        data = [
+            {
+                'id': t.id,
+                'ticket_number': t.ticket_number,
+                'title': t.title,
+                'status': t.status,
+                'status_display': t.get_status_display(),
+                'created_at': t.created_at,
+            }
+            for t in tickets
         ]
         return Response(data)
 

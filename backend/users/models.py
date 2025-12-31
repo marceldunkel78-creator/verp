@@ -281,12 +281,48 @@ class VacationRequest(models.Model):
 
 class Message(models.Model):
     """
-    Persönliche Nachrichten für User
+    Persönliche Nachrichten für User - mit Sender/Empfänger für Posteingang/-ausgang
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='messages')
-    title = models.CharField(max_length=200, verbose_name='Titel')
+    MESSAGE_TYPE_CHOICES = [
+        ('user', 'Benutzer'),
+        ('system', 'System'),
+        ('ticket', 'Ticket-Benachrichtigung'),
+    ]
+    
+    sender = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='sent_messages',
+        verbose_name='Absender'
+    )
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='messages',
+        verbose_name='Empfänger'
+    )
+    title = models.CharField(max_length=200, verbose_name='Betreff')
     content = models.TextField(verbose_name='Inhalt')
+    message_type = models.CharField(
+        max_length=20,
+        choices=MESSAGE_TYPE_CHOICES,
+        default='user',
+        verbose_name='Nachrichtentyp'
+    )
     is_read = models.BooleanField(default=False, verbose_name='Gelesen')
+    is_deleted_by_sender = models.BooleanField(default=False, verbose_name='Vom Sender gelöscht')
+    is_deleted_by_recipient = models.BooleanField(default=False, verbose_name='Vom Empfänger gelöscht')
+    # Optionale Verknüpfung mit einem Service-Ticket
+    related_ticket = models.ForeignKey(
+        'service.ServiceTicket',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='notifications',
+        verbose_name='Verknüpftes Ticket'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -295,7 +331,7 @@ class Message(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.title}"
+        return f"{self.sender or 'System'} -> {self.user.get_full_name()}: {self.title}"
 
 
 class Reminder(models.Model):

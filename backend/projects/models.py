@@ -52,6 +52,16 @@ class Project(models.Model):
         related_name='projects',
         verbose_name='Systeme'
     )
+    
+    # Direkte Verknüpfung zu System (aus systems app)
+    linked_system = models.ForeignKey(
+        'systems.System',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='projects',
+        verbose_name='Verknüpftes System'
+    )
 
     description = models.TextField(
         blank=True,

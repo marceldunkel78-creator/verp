@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
   PlusIcon,
@@ -9,11 +9,15 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
-  SparklesIcon
+  SparklesIcon,
+  CubeIcon,
+  WrenchScrewdriverIcon,
+  FolderIcon
 } from '@heroicons/react/24/outline';
 
 const Systems = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +39,18 @@ const Systems = () => {
   const [starNameSuggestions, setStarNameSuggestions] = useState([]);
   const [showStarSearch, setShowStarSearch] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+
+  // Check for customer URL parameter on mount
+  useEffect(() => {
+    const urlCustomerId = searchParams.get('customer');
+    if (urlCustomerId) {
+      // Pre-fill customer and open create modal
+      setNewSystem(prev => ({ ...prev, customer: urlCustomerId }));
+      setShowCreateModal(true);
+      // Fetch customers to populate the dropdown
+      fetchCustomers();
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchSystems();
@@ -220,7 +236,7 @@ const Systems = () => {
         </div>
       </form>
 
-      {/* Systems Table */}
+      {/* Systems Grid (Kachelansicht) */}
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -228,81 +244,61 @@ const Systems = () => {
         </div>
       ) : (
         <>
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Systemnummer
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Systemname
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Kunde
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Standort
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Installation
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aktionen
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {systems.map((system) => (
-                  <tr key={system.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/sales/systems/${system.id}`)}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="font-medium">{system.system_name}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {system.customer_name || system.customer_display}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                      {system.location || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
-                        {getStatusLabel(system.status)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-500">
-                      {system.installation_date
-                        ? new Date(system.installation_date).toLocaleDateString('de-DE')
-                        : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/sales/systems/${system.id}`);
-                        }}
-                        className="text-blue-600 hover:text-blue-800"
-                        title="Bearbeiten"
-                      >
-                        <PencilIcon className="h-5 w-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {systems.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                <ComputerDesktopIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>Keine Systeme gefunden</p>
-              </div>
-            )}
-          </div>
+          {systems.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <ComputerDesktopIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>Keine Systeme gefunden</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {systems.map((system) => (
+                <div
+                  key={system.id}
+                  onClick={() => navigate(`/sales/systems/${system.id}`)}
+                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                >
+                  {/* Header mit Systemnummer und Status */}
+                  <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
+                    <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
+                      {getStatusLabel(system.status)}
+                    </span>
+                  </div>
+                  
+                  {/* Inhalt */}
+                  <div className="p-4">
+                    <h3 className="font-semibold text-lg mb-1 truncate" title={system.system_name}>
+                      {system.system_name}
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-2 truncate" title={system.customer_name}>
+                      {system.customer_name || 'Kein Kunde'}
+                    </p>
+                    {system.description && (
+                      <p className="text-sm text-gray-500 line-clamp-2 mb-3" title={system.description}>
+                        {system.description}
+                      </p>
+                    )}
+                    
+                    {/* Counts */}
+                    <div className="flex items-center gap-4 pt-3 border-t">
+                      <div className="flex items-center gap-1" title="Komponenten">
+                        <CubeIcon className="h-4 w-4 text-purple-500" />
+                        <span className="text-sm font-medium">{system.component_count || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-1" title="Service-Tickets">
+                        <WrenchScrewdriverIcon className="h-4 w-4 text-orange-500" />
+                        <span className="text-sm font-medium">{system.service_ticket_count || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-1" title="Projekte">
+                        <FolderIcon className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm font-medium">{system.project_count || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

@@ -7,7 +7,7 @@ import storage from '../utils/sessionStore';
 import { 
   PlusIcon, PencilIcon, TrashIcon, UserIcon,
   PhoneIcon, EnvelopeIcon, GlobeAltIcon,
-  BuildingOfficeIcon, BeakerIcon, AcademicCapIcon
+  BuildingOfficeIcon, WrenchScrewdriverIcon, BeakerIcon
 } from '@heroicons/react/24/outline';
 const Customers = () => {
 
@@ -421,17 +421,17 @@ const Customers = () => {
               {/* Future Modules Placeholder */}
               <div className="mt-4 pt-4 border-t">
                 <div className="flex justify-between text-xs text-gray-500">
-                  <span className="flex items-center">
+                  <span className="flex items-center" title="Systeme">
                     <BuildingOfficeIcon className="h-4 w-4 mr-1" />
-                    Systems
+                    <span className="font-semibold text-blue-600">{customer.system_count || 0}</span>
                   </span>
-                  <span className="flex items-center">
+                  <span className="flex items-center" title="Offene Service-Tickets">
+                    <WrenchScrewdriverIcon className="h-4 w-4 mr-1" />
+                    <span className="font-semibold text-orange-600">{customer.open_ticket_count || 0}</span>
+                  </span>
+                  <span className="flex items-center" title="Projekte">
                     <BeakerIcon className="h-4 w-4 mr-1" />
-                    Service
-                  </span>
-                  <span className="flex items-center">
-                    <AcademicCapIcon className="h-4 w-4 mr-1" />
-                    Projects
+                    <span className="font-semibold text-green-600">{customer.project_count || 0}</span>
                   </span>
                 </div>
               </div>

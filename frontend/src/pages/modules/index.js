@@ -131,19 +131,20 @@ export const Service = () => (
           </div>
         </div>
       </Link>
-      <div
-        className="bg-white rounded-lg shadow p-6 opacity-60 cursor-not-allowed"
+      <Link
+        to="/service/tickets"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
       >
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-gray-100 rounded-lg">
-            <DocumentTextIcon className="h-8 w-8 text-gray-400" />
+          <div className="p-3 bg-blue-100 rounded-lg">
+            <DocumentTextIcon className="h-8 w-8 text-blue-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-500">Service-Tickets</h3>
-            <p className="text-sm text-gray-400">Demnächst verfügbar</p>
+            <h3 className="font-semibold text-gray-900">Service-Tickets</h3>
+            <p className="text-sm text-gray-500">Anfragen & Support</p>
           </div>
         </div>
-      </div>
+      </Link>
       <Link
         to="/service/rma"
         className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"

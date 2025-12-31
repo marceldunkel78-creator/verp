@@ -41,6 +41,8 @@ import VSServiceProducts from './pages/VSServiceProducts';
 import VSServiceProductEdit from './pages/VSServiceProductEdit';
 import RMACases from './pages/RMACases';
 import RMACaseEdit from './pages/RMACaseEdit';
+import ServiceTickets from './pages/ServiceTickets';
+import ServiceTicketEdit from './pages/ServiceTicketEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -87,6 +89,8 @@ function App() {
             <Route path="service" element={<Service />} />
             <Route path="service/vs-service" element={<VSServiceProducts />} />
             <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />
+            <Route path="service/tickets" element={<ServiceTickets />} />
+            <Route path="service/tickets/:id" element={<ServiceTicketEdit />} />
             <Route path="service/rma" element={<RMACases />} />
             <Route path="service/rma/:id" element={<RMACaseEdit />} />
             <Route path="bi" element={<BusinessIntelligence />} />

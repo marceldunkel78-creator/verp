@@ -8,18 +8,25 @@ class ProjectListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source='customer.__str__', read_only=True)
     systems_count = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    linked_system_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
         fields = [
             'id', 'project_number', 'name', 'customer', 'customer_name',
             'description', 'status', 'status_display', 'systems_count',
+            'linked_system', 'linked_system_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['project_number', 'created_at', 'updated_at']
 
     def get_systems_count(self, obj):
         return obj.systems.count()
+    
+    def get_linked_system_name(self, obj):
+        if obj.linked_system:
+            return f"{obj.linked_system.system_number} - {obj.linked_system.system_name}"
+        return None
 
 
 class ProjectDetailSerializer(serializers.ModelSerializer):
@@ -29,13 +36,15 @@ class ProjectDetailSerializer(serializers.ModelSerializer):
     systems_data = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.__str__', read_only=True)
+    linked_system_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Project
         fields = [
             'id', 'project_number', 'name', 'customer', 'customer_name',
             'customer_number', 'systems', 'systems_data', 'description',
-            'status', 'status_display', 'created_by', 'created_by_name',
+            'status', 'status_display', 'linked_system', 'linked_system_name',
+            'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['project_number', 'created_by', 'created_at', 'updated_at']
@@ -52,6 +61,11 @@ class ProjectDetailSerializer(serializers.ModelSerializer):
             }
             for sys in systems
         ]
+    
+    def get_linked_system_name(self, obj):
+        if obj.linked_system:
+            return f"{obj.linked_system.system_number} - {obj.linked_system.system_name}"
+        return None
 
 
 class ProjectCreateSerializer(serializers.ModelSerializer):
@@ -59,7 +73,7 @@ class ProjectCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ['name', 'customer', 'systems', 'description']
+        fields = ['name', 'customer', 'systems', 'linked_system', 'description']
 
     def validate_customer(self, value):
         """Prüfe, ob Kunde existiert und aktiv ist"""

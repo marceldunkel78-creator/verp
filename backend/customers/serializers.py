@@ -40,6 +40,9 @@ class CustomerListSerializer(serializers.ModelSerializer):
     language_display = serializers.CharField(source='get_language_display', read_only=True)
     primary_email = serializers.SerializerMethodField()
     primary_phone = serializers.SerializerMethodField()
+    system_count = serializers.SerializerMethodField()
+    project_count = serializers.SerializerMethodField()
+    open_ticket_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Customer
@@ -47,6 +50,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
             'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
             'primary_email', 'primary_phone', 'is_active',
+            'system_count', 'project_count', 'open_ticket_count',
             'created_at', 'updated_at'
         ]
     
@@ -60,6 +64,22 @@ class CustomerListSerializer(serializers.ModelSerializer):
     def get_primary_phone(self, obj):
         primary = obj.phones.filter(is_primary=True).first()
         return primary.phone_number if primary else None
+
+    def get_system_count(self, obj):
+        # system_records is the related_name from systems.System
+        if hasattr(obj, 'system_records'):
+            return obj.system_records.count()
+        return 0
+
+    def get_project_count(self, obj):
+        if hasattr(obj, 'projects'):
+            return obj.projects.count()
+        return 0
+
+    def get_open_ticket_count(self, obj):
+        if hasattr(obj, 'service_tickets'):
+            return obj.service_tickets.exclude(status__in=['resolved', 'no_solution']).count()
+        return 0
 
 
 class CustomerDetailSerializer(serializers.ModelSerializer):

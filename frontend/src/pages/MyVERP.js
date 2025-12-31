@@ -516,37 +516,320 @@ const TimeTrackingTab = ({ timeEntries, weeklyReport, monthlyReport, onRefresh, 
   );
 };
 
-// Placeholder components for other tabs
-const MessagesTab = ({ messages, onRefresh, errors }) => (
-  <div>
-    <h2 className="text-lg font-medium text-gray-900 mb-4">Nachrichtencenter</h2>
-    {errors?.messages && (
-      <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.messages}</div>
-    )}
-    <div className="bg-white shadow overflow-hidden sm:rounded-md">
-      {messages.length === 0 ? (
-        <div className="p-6 text-center text-sm text-gray-500">Keine Nachrichten vorhanden.</div>
-      ) : (
-        <ul className="divide-y divide-gray-200">
-          {messages.map((message) => (
-            <li key={message.id} className="px-6 py-4">
-              <div className="flex items-center justify-between">
+// Enhanced MessagesTab with Inbox/Outbox
+const MessagesTab = ({ messages: initialMessages, onRefresh, errors }) => {
+  const [view, setView] = useState('inbox'); // 'inbox' or 'outbox'
+  const [messages, setMessages] = useState(initialMessages || []);
+  const [loading, setLoading] = useState(false);
+  const [showCompose, setShowCompose] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [newMessage, setNewMessage] = useState({ user: '', title: '', content: '' });
+  const [sending, setSending] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+
+  useEffect(() => {
+    fetchMessages();
+    fetchUsers();
+  }, [view]);
+
+  const fetchMessages = async () => {
+    setLoading(true);
+    try {
+      const endpoint = view === 'inbox' ? '/users/messages/inbox/' : '/users/messages/outbox/';
+      const response = await api.get(endpoint);
+      setMessages(response.data || []);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const response = await api.get('/users/');
+      setUsers(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const handleMarkRead = async (messageId) => {
+    try {
+      await api.post(`/users/messages/${messageId}/mark_read/`);
+      fetchMessages();
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+    }
+  };
+
+  const handleMarkUnread = async (messageId) => {
+    try {
+      await api.post(`/users/messages/${messageId}/mark_unread/`);
+      fetchMessages();
+    } catch (error) {
+      console.error('Error marking message as unread:', error);
+    }
+  };
+
+  const handleDelete = async (messageId) => {
+    if (!window.confirm('Nachricht wirklich löschen?')) return;
+    try {
+      await api.post(`/users/messages/${messageId}/delete_message/`);
+      setSelectedMessage(null);
+      fetchMessages();
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!newMessage.user || !newMessage.title.trim()) return;
+    
+    setSending(true);
+    try {
+      await api.post('/users/messages/', newMessage);
+      setShowCompose(false);
+      setNewMessage({ user: '', title: '', content: '' });
+      if (view === 'outbox') fetchMessages();
+      alert('Nachricht gesendet!');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Fehler beim Senden der Nachricht');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-medium text-gray-900">Nachrichtencenter</h2>
+        <button
+          onClick={() => setShowCompose(true)}
+          className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+        >
+          <ChatBubbleLeftIcon className="h-4 w-4 mr-2" />
+          Neue Nachricht
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-4">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setView('inbox')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              view === 'inbox'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Posteingang
+          </button>
+          <button
+            onClick={() => setView('outbox')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              view === 'outbox'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Postausgang
+          </button>
+        </nav>
+      </div>
+
+      {errors?.messages && (
+        <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.messages}</div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Message List */}
+        <div className="lg:col-span-1 bg-white shadow rounded-lg overflow-hidden">
+          {loading ? (
+            <div className="p-6 text-center">
+              <ClockIcon className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-500">
+              {view === 'inbox' ? 'Keine empfangenen Nachrichten' : 'Keine gesendeten Nachrichten'}
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+              {messages.map((message) => (
+                <li
+                  key={message.id}
+                  onClick={() => setSelectedMessage(message)}
+                  className={`px-4 py-3 cursor-pointer hover:bg-gray-50 ${
+                    selectedMessage?.id === message.id ? 'bg-blue-50' : ''
+                  } ${!message.is_read && view === 'inbox' ? 'bg-blue-25' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm ${!message.is_read && view === 'inbox' ? 'font-bold' : 'font-medium'} text-gray-900 truncate`}>
+                        {message.title}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {view === 'inbox' ? `Von: ${message.sender_name}` : `An: ${message.recipient_name}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center ml-2">
+                      <span className="text-xs text-gray-400">{formatDate(message.created_at).split(',')[0]}</span>
+                      {!message.is_read && view === 'inbox' && (
+                        <span className="ml-2 inline-block w-2 h-2 bg-blue-600 rounded-full"></span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Message Detail */}
+        <div className="lg:col-span-2 bg-white shadow rounded-lg p-6">
+          {selectedMessage ? (
+            <div>
+              <div className="flex justify-between items-start mb-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{message.title}</p>
-                  <p className="text-sm text-gray-500">{message.content}</p>
+                  <h3 className="text-lg font-medium text-gray-900">{selectedMessage.title}</h3>
+                  <p className="text-sm text-gray-500">
+                    {view === 'inbox' ? `Von: ${selectedMessage.sender_name}` : `An: ${selectedMessage.recipient_name}`}
+                    {' • '}
+                    {formatDate(selectedMessage.created_at)}
+                  </p>
+                  {selectedMessage.message_type === 'ticket' && selectedMessage.related_ticket && (
+                    <a
+                      href={`/service/tickets/${selectedMessage.related_ticket}`}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      → Zum Ticket
+                    </a>
+                  )}
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">{new Date(message.created_at).toLocaleDateString()}</p>
-                  {!message.is_read && <span className="inline-block w-2 h-2 bg-blue-600 rounded-full"></span>}
+                <div className="flex gap-2">
+                  {view === 'inbox' && (
+                    <>
+                      {selectedMessage.is_read ? (
+                        <button
+                          onClick={() => handleMarkUnread(selectedMessage.id)}
+                          className="text-sm text-gray-600 hover:text-gray-800"
+                        >
+                          Als ungelesen
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleMarkRead(selectedMessage.id)}
+                          className="text-sm text-gray-600 hover:text-gray-800"
+                        >
+                          Als gelesen
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button
+                    onClick={() => handleDelete(selectedMessage.id)}
+                    className="text-sm text-red-600 hover:text-red-800"
+                  >
+                    Löschen
+                  </button>
                 </div>
               </div>
-            </li>
-          ))}
-        </ul>
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedMessage.content}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 py-12">
+              Wählen Sie eine Nachricht aus der Liste
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Compose Modal */}
+      {showCompose && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowCompose(false)}></div>
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Neue Nachricht</h3>
+              <form onSubmit={handleSendMessage}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Empfänger</label>
+                    <select
+                      value={newMessage.user}
+                      onChange={(e) => setNewMessage(prev => ({ ...prev, user: e.target.value }))}
+                      required
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    >
+                      <option value="">-- Auswählen --</option>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.first_name} {u.last_name} ({u.username})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Betreff</label>
+                    <input
+                      type="text"
+                      value={newMessage.title}
+                      onChange={(e) => setNewMessage(prev => ({ ...prev, title: e.target.value }))}
+                      required
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Nachricht</label>
+                    <textarea
+                      value={newMessage.content}
+                      onChange={(e) => setNewMessage(prev => ({ ...prev, content: e.target.value }))}
+                      rows={5}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCompose(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {sending ? 'Senden...' : 'Senden'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
     </div>
-  </div>
-);
+  );
+};
 
 const ReportingTab = ({ weeklyReport, monthlyReport, errors }) => (
   <div>

@@ -84,7 +84,8 @@ class SystemViewSet(viewsets.ModelViewSet):
         projects = Project.objects.filter(
             Q(systems__system_number=system.system_number) |
             Q(systems__name__icontains=system.system_name) |
-            Q(description__icontains=system.system_number)
+            Q(description__icontains=system.system_number) |
+            Q(linked_system=system)
         ).distinct().values('id', 'project_number', 'name', 'status', 'created_at')[:20]
         
         # Customer Orders für diesen Kunden (später: direkte Verknüpfung)
@@ -104,6 +105,73 @@ class SystemViewSet(viewsets.ModelViewSet):
             'service_tickets': [],  # Noch zu erstellen
             'visiview_tickets': [],  # Noch zu erstellen
         })
+    
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        """Gibt die komplette Historie eines Systems zurück (Projekte, Aufträge, Bestellungen, Tickets)"""
+        system = self.get_object()
+        
+        # Projekte mit diesem System
+        from projects.models import Project
+        projects = Project.objects.filter(
+            Q(linked_system=system) |
+            Q(customer=system.customer, description__icontains=system.system_number)
+        ).distinct().values('id', 'project_number', 'name', 'status', 'created_at')[:50]
+        
+        # Kundenaufträge (Customer Orders)
+        from customer_orders.models import CustomerOrder
+        customer_orders = CustomerOrder.objects.filter(
+            Q(customer=system.customer)
+        ).order_by('-created_at').values('id', 'order_number', 'status', 'order_date', 'created_at')[:50]
+        
+        # Einkaufsbestellungen (Orders)
+        from orders.models import Order
+        # Orders related to this system via inventory items
+        orders = Order.objects.filter(
+            Q(inventory_items__system=system) |
+            Q(inventory_items__system_number=system.system_number)
+        ).distinct().order_by('-created_at').values('id', 'order_number', 'status', 'order_date', 'confirmed_total', 'created_at')[:50]
+        
+        # Service Tickets
+        from service.models import ServiceTicket
+        service_tickets = ServiceTicket.objects.filter(
+            Q(linked_system=system) |
+            Q(customer=system.customer, description__icontains=system.system_number)
+        ).distinct().order_by('-created_at').values('id', 'ticket_number', 'title', 'status', 'priority', 'created_at')[:50]
+        
+        return Response({
+            'projects': list(projects),
+            'customer_orders': list(customer_orders),
+            'orders': list(orders),
+            'service_tickets': list(service_tickets),
+        })
+    
+    @action(detail=True, methods=['get'])
+    def customer_inventory(self, request, pk=None):
+        """Gibt alle Warenlager-Items des Kunden für dieses System zurück"""
+        system = self.get_object()
+        
+        from inventory.models import InventoryItem
+        items = InventoryItem.objects.filter(
+            customer=system.customer,
+            status='AUF_LAGER'
+        ).select_related('product_category').order_by('name')
+        
+        data = []
+        for item in items:
+            data.append({
+                'id': item.id,
+                'inventory_number': item.inventory_number,
+                'name': item.name,
+                'serial_number': item.serial_number,
+                'article_number': item.article_number,
+                'product_category': item.product_category.code if item.product_category else None,
+                'product_category_name': item.product_category.name if item.product_category else item.item_category,
+                'manufacturer': getattr(item, 'manufacturer', ''),
+                'description': item.description,
+            })
+        
+        return Response(data)
 
 
 class SystemComponentViewSet(viewsets.ModelViewSet):

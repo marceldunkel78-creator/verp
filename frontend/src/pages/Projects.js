@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 
 const Projects = () => {
+  const [searchParams] = useSearchParams();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,8 +16,27 @@ const Projects = () => {
     name: '',
     customer: '',
     systems: [],
+    linked_system: '',
     description: ''
   });
+
+  // Check for customer URL parameter on mount
+  useEffect(() => {
+    const urlCustomerId = searchParams.get('customer');
+    const urlSystemId = searchParams.get('system');
+    if (urlCustomerId) {
+      // Pre-fill customer and open create modal
+      setSelectedCustomer(urlCustomerId);
+      setNewProject(prev => ({ 
+        ...prev, 
+        customer: urlCustomerId,
+        linked_system: urlSystemId || ''
+      }));
+      setShowCreateModal(true);
+      // Fetch systems for this customer
+      fetchCustomerSystems(urlCustomerId);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchProjects();
@@ -279,7 +300,7 @@ const Projects = () => {
                   type="button"
                   onClick={() => {
                     setShowCreateModal(false);
-                    setNewProject({ name: '', customer: '', systems: [], description: '' });
+                    setNewProject({ name: '', customer: '', systems: [], linked_system: '', description: '' });
                     setSelectedCustomer('');
                     setCustomerSystems([]);
                   }}
