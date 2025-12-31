@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
   ArrowLeftIcon,
@@ -16,19 +16,26 @@ import {
   ArrowsPointingOutIcon,
   SparklesIcon,
   CheckIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ClockIcon,
+  WrenchScrewdriverIcon,
+  FolderIcon,
+  ShoppingCartIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },
   { id: 'components', name: 'Komponenten', icon: CubeIcon },
   { id: 'photos', name: 'Fotos', icon: PhotoIcon },
+  { id: 'history', name: 'Historie', icon: ClockIcon },
   { id: 'related', name: 'Verknüpfungen', icon: LinkIcon }
 ];
 
 const SystemEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('basic');
   const [system, setSystem] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -36,10 +43,13 @@ const SystemEdit = () => {
   const [hasChanges, setHasChanges] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
   
+  // Get customer from URL params (for pre-filled customer from CustomerModal)
+  const urlCustomerId = searchParams.get('customer');
+  
   // Basic Info State
   const [formData, setFormData] = useState({
     system_name: '',
-    customer: '',
+    customer: urlCustomerId || '',
     description: '',
     status: 'active',
     location: '',
@@ -67,6 +77,21 @@ const SystemEdit = () => {
     customer_orders: [],
     orders: []
   });
+  
+  // History State (for Historie tab)
+  const [historyData, setHistoryData] = useState({
+    projects: [],
+    customer_orders: [],
+    orders: [],
+    service_tickets: []
+  });
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
+  // Customer inventory for component modal
+  const [customerInventory, setCustomerInventory] = useState([]);
+  
+  // Product categories for component modal
+  const [productCategories, setProductCategories] = useState([]);
 
   // Star name search
   const [starNameSearch, setStarNameSearch] = useState('');
@@ -78,6 +103,13 @@ const SystemEdit = () => {
       fetchCustomers();
     }
   }, [id]);
+
+  // Load history when tab is selected
+  useEffect(() => {
+    if (activeTab === 'history' && id && !historyData.projects?.length && !historyLoading) {
+      fetchHistory();
+    }
+  }, [activeTab, id]);
 
   const fetchSystem = async () => {
     setLoading(true);
@@ -123,6 +155,36 @@ const SystemEdit = () => {
       setRelatedItems(response.data);
     } catch (error) {
       console.error('Error fetching related items:', error);
+    }
+  };
+
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await api.get(`/systems/systems/${id}/history/`);
+      setHistoryData(response.data);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+  
+  const fetchCustomerInventory = async () => {
+    try {
+      const response = await api.get(`/systems/systems/${id}/customer_inventory/`);
+      setCustomerInventory(response.data);
+    } catch (error) {
+      console.error('Error fetching customer inventory:', error);
+    }
+  };
+  
+  const fetchProductCategories = async () => {
+    try {
+      const response = await api.get('/settings/product-categories/');
+      setProductCategories(response.data.results || response.data);
+    } catch (error) {
+      console.error('Error fetching product categories:', error);
     }
   };
 
@@ -193,6 +255,14 @@ const SystemEdit = () => {
     setShowComponentModal(true);
     if (inventoryItems.length === 0) {
       fetchInventoryItems();
+    }
+    // Fetch customer-specific inventory
+    if (customerInventory.length === 0) {
+      fetchCustomerInventory();
+    }
+    // Fetch product categories
+    if (productCategories.length === 0) {
+      fetchProductCategories();
     }
   };
 
@@ -694,6 +764,196 @@ const SystemEdit = () => {
           </div>
         )}
 
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div>
+            {/* Header mit Neues Projekt Button */}
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-medium">System-Historie</h3>
+              <button
+                onClick={() => navigate(`/sales/projects?customer=${formData.customer}&system=${id}`)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Neues Projekt erstellen
+              </button>
+            </div>
+            
+            {!historyData.projects?.length && !historyData.customer_orders?.length && 
+             !historyData.orders?.length && !historyData.service_tickets?.length && !historyLoading ? (
+              <div className="text-center py-8">
+                <button
+                  onClick={fetchHistory}
+                  className="text-blue-600 hover:underline"
+                >
+                  Historie laden
+                </button>
+              </div>
+            ) : historyLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Projekte */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-blue-50 px-4 py-3 flex items-center gap-2">
+                    <FolderIcon className="h-5 w-5 text-blue-600" />
+                    <h4 className="font-medium text-blue-800">Projekte ({historyData.projects?.length || 0})</h4>
+                  </div>
+                  {historyData.projects?.length > 0 ? (
+                    <div className="divide-y">
+                      {historyData.projects.map(project => (
+                        <a
+                          key={project.id}
+                          href={`/projects/${project.id}`}
+                          className="block px-4 py-3 hover:bg-gray-50"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-mono text-blue-600">{project.project_number}</span>
+                              <span className="ml-2">{project.name}</span>
+                            </div>
+                            <span className="text-sm text-gray-500">{project.status}</span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-4 py-3 text-gray-500">Keine Projekte</p>
+                  )}
+                </div>
+
+                {/* Kundenaufträge */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-green-50 px-4 py-3 flex items-center gap-2">
+                    <ShoppingCartIcon className="h-5 w-5 text-green-600" />
+                    <h4 className="font-medium text-green-800">Kundenaufträge ({historyData.customer_orders?.length || 0})</h4>
+                  </div>
+                  {historyData.customer_orders?.length > 0 ? (
+                    <div className="divide-y">
+                      {historyData.customer_orders.map(order => (
+                        <a
+                          key={order.id}
+                          href={`/sales/order-processing/${order.id}`}
+                          className="block px-4 py-3 hover:bg-gray-50"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-mono text-green-600">{order.order_number}</span>
+                              {order.order_date && (
+                                <span className="ml-2 text-sm text-gray-500">
+                                  {new Date(order.order_date).toLocaleDateString('de-DE')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {order.total && (
+                                <span className="text-sm font-medium">
+                                  {parseFloat(order.total).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                </span>
+                              )}
+                              <span className="text-sm text-gray-500">{order.status}</span>
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-4 py-3 text-gray-500">Keine Kundenaufträge</p>
+                  )}
+                </div>
+
+                {/* Bestellungen (Einkauf) */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-purple-50 px-4 py-3 flex items-center gap-2">
+                    <TruckIcon className="h-5 w-5 text-purple-600" />
+                    <h4 className="font-medium text-purple-800">Bestellungen ({historyData.orders?.length || 0})</h4>
+                  </div>
+                  {historyData.orders?.length > 0 ? (
+                    <div className="divide-y">
+                      {historyData.orders.map(order => (
+                        <a
+                          key={order.id}
+                          href={`/procurement/orders/${order.id}`}
+                          className="block px-4 py-3 hover:bg-gray-50"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-mono text-purple-600">{order.order_number}</span>
+                              {order.order_date && (
+                                <span className="ml-2 text-sm text-gray-500">
+                                  {new Date(order.order_date).toLocaleDateString('de-DE')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {order.total_amount && (
+                                <span className="text-sm font-medium">
+                                  {parseFloat(order.total_amount).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                                </span>
+                              )}
+                              <span className="text-sm text-gray-500">{order.status}</span>
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-4 py-3 text-gray-500">Keine Bestellungen</p>
+                  )}
+                </div>
+
+                {/* Service-Tickets */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-orange-50 px-4 py-3 flex items-center gap-2">
+                    <WrenchScrewdriverIcon className="h-5 w-5 text-orange-600" />
+                    <h4 className="font-medium text-orange-800">Service-Tickets ({historyData.service_tickets?.length || 0})</h4>
+                  </div>
+                  {historyData.service_tickets?.length > 0 ? (
+                    <div className="divide-y">
+                      {historyData.service_tickets.map(ticket => (
+                        <a
+                          key={ticket.id}
+                          href={`/service/tickets/${ticket.id}`}
+                          className="block px-4 py-3 hover:bg-gray-50"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-mono text-orange-600">{ticket.ticket_number}</span>
+                              <span className="ml-2">{ticket.title}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                ticket.priority === 'high' || ticket.priority === 'urgent' 
+                                  ? 'bg-red-100 text-red-700' 
+                                  : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {ticket.priority}
+                              </span>
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                ticket.status === 'closed' || ticket.status === 'resolved'
+                                  ? 'bg-green-100 text-green-700'
+                                  : ticket.status === 'open' || ticket.status === 'new'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {ticket.status}
+                              </span>
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-4 py-3 text-gray-500">Keine Service-Tickets</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Related Items Tab */}
         {activeTab === 'related' && (
           <div className="space-y-6">
@@ -776,7 +1036,7 @@ const SystemEdit = () => {
             {/* Future: VisiView Licenses, Service Tickets */}
             <div className="border-t pt-6">
               <p className="text-sm text-gray-500">
-                VisiView-Lizenzen und Service-Tickets werden in zukünftigen Versionen hinzugefügt.
+                VisiView-Lizenzen und Service-Tickets finden Sie im Historie-Tab.
               </p>
             </div>
           </div>
@@ -818,51 +1078,75 @@ const SystemEdit = () => {
 
                 {editingComponent.component_type === 'inventory' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Artikel aus Warenlager</label>
-                    <select
-                      value={editingComponent.inventory_item || ''}
-                      onChange={(e) => {
-                        const item = inventoryItems.find(i => i.id === parseInt(e.target.value));
-                        setEditingComponent(prev => ({
-                          ...prev,
-                          inventory_item: e.target.value,
-                          name: item?.name || prev.name,
-                          description: item?.description || prev.description,
-                          manufacturer: item?.manufacturer || prev.manufacturer,
-                          serial_number: item?.serial_number || prev.serial_number
-                        }));
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">Artikel auswählen...</option>
-                      {inventoryItems.map(item => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} {item.serial_number && `(${item.serial_number})`}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Artikel aus Warenlager des Kunden
+                    </label>
+                    {customerInventory.length > 0 ? (
+                      <select
+                        value={editingComponent.inventory_item || ''}
+                        onChange={(e) => {
+                          const item = customerInventory.find(i => i.id === parseInt(e.target.value));
+                          setEditingComponent(prev => ({
+                            ...prev,
+                            inventory_item: e.target.value,
+                            name: item?.name || prev.name,
+                            description: item?.description || prev.description,
+                            manufacturer: item?.manufacturer || prev.manufacturer,
+                            serial_number: item?.serial_number || prev.serial_number,
+                            category: item?.product_category || prev.category
+                          }));
+                        }}
+                        className="w-full px-3 py-2 border rounded-lg"
+                      >
+                        <option value="">Artikel auswählen...</option>
+                        {customerInventory.map(item => (
+                          <option key={item.id} value={item.id}>
+                            {item.inventory_number} - {item.name} {item.serial_number && `(SN: ${item.serial_number})`}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-500 py-2">
+                        Keine Warenlager-Artikel für diesen Kunden verfügbar.
+                      </p>
+                    )}
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Kategorie</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
                   <select
                     value={editingComponent.category}
                     onChange={(e) => setEditingComponent(prev => ({ ...prev, category: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
-                    <option value="microscope">Mikroskop</option>
-                    <option value="camera">Kamera</option>
-                    <option value="laser">Laser</option>
-                    <option value="filter">Filter</option>
-                    <option value="objective">Objektiv</option>
-                    <option value="stage">Tisch</option>
-                    <option value="incubator">Inkubator</option>
-                    <option value="controller">Controller</option>
-                    <option value="computer">Computer</option>
-                    <option value="software">Software</option>
-                    <option value="accessory">Zubehör</option>
-                    <option value="other">Sonstiges</option>
+                    {productCategories.length > 0 ? (
+                      productCategories.map(cat => (
+                        <option key={cat.id} value={cat.code}>
+                          {cat.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="MIKROSKOP">Mikroskop</option>
+                        <option value="KAMERA">Kamera</option>
+                        <option value="LASER">Laser</option>
+                        <option value="FILTER">Filter</option>
+                        <option value="FILTERRAD">Filterrad</option>
+                        <option value="OBJECTIVE">Objektiv</option>
+                        <option value="SCANNINGTISCH">Scanningtisch</option>
+                        <option value="INKUBATION">Inkubation</option>
+                        <option value="LED">LED</option>
+                        <option value="CONFOCAL">Confocal</option>
+                        <option value="VIRTEX">ViRTEx</option>
+                        <option value="FRAP">FRAP</option>
+                        <option value="ORBITAL">Orbital</option>
+                        <option value="VISIVIEW">VisiView</option>
+                        <option value="PC">PC</option>
+                        <option value="SOFTWARE">Software</option>
+                        <option value="SONSTIGES">Sonstiges</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
