@@ -43,6 +43,8 @@ import RMACases from './pages/RMACases';
 import RMACaseEdit from './pages/RMACaseEdit';
 import ServiceTickets from './pages/ServiceTickets';
 import ServiceTicketEdit from './pages/ServiceTicketEdit';
+import Dealers from './pages/Dealers';
+import DealerEdit from './pages/DealerEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -111,6 +113,9 @@ function App() {
             
             {/* Sales/Order Management Submodules */}
             <Route path="sales/customers" element={<Customers />} />
+            <Route path="sales/dealers" element={<Dealers />} />
+            <Route path="sales/dealers/new" element={<DealerEdit />} />
+            <Route path="sales/dealers/:id" element={<DealerEdit />} />
             <Route path="sales/projects" element={<Projects />} />
             <Route path="projects/:id" element={<ProjectEdit />} />
             <Route path="sales/systems" element={<Systems />} />

@@ -217,3 +217,18 @@ def company_upload_path(instance, filename):
     """
     safe_filename = _sanitize_path_component(filename)
     return f"company/{safe_filename}"
+
+
+def dealer_upload_path(instance, filename):
+    """
+    Upload-Pfad: /Dealers/Händlernummer/filename
+    Für Händler-Dokumente, Verträge, Preislisten etc.
+    """
+    # Check if instance has dealer attribute (for related models like DealerDocument)
+    dealer = getattr(instance, 'dealer', instance)
+    dealer_number = _sanitize_path_component(getattr(dealer, 'dealer_number', ''))
+    safe_filename = _sanitize_path_component(filename)
+    
+    if dealer_number:
+        return f"Dealers/{dealer_number}/{safe_filename}"
+    return f"Dealers/unknown/{safe_filename}"

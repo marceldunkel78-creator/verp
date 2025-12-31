@@ -6,7 +6,8 @@ import {
   DocumentTextIcon, 
   ClipboardDocumentCheckIcon,
   MegaphoneIcon,
-  ComputerDesktopIcon 
+  ComputerDesktopIcon,
+  BuildingStorefrontIcon
 } from '@heroicons/react/24/outline';
 
 const SalesOrderManagement = () => {
@@ -16,6 +17,14 @@ const SalesOrderManagement = () => {
       description: 'Kundendatenverwaltung',
       icon: UserIcon,
       path: '/sales/customers',
+      color: 'blue',
+      disabled: false
+    },
+    {
+      name: 'Dealers',
+      description: 'Händlerverwaltung',
+      icon: BuildingStorefrontIcon,
+      path: '/sales/dealers',
       color: 'blue',
       disabled: false
     },
