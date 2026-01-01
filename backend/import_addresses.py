@@ -97,6 +97,16 @@ def clean_string(value):
     return str(value).strip()
 
 
+def truncate_field(value, max_length):
+    """Kürzt einen String auf die maximale Länge"""
+    if not value:
+        return value
+    value_str = str(value)
+    if len(value_str) > max_length:
+        return value_str[:max_length]
+    return value_str
+
+
 def parse_bool(value):
     """Konvertiert WAHR/FALSCH zu Boolean"""
     if not value:
@@ -249,19 +259,20 @@ class AddressImporter:
             if self.address_exists(customer, street, postal_code, city):
                 return None
         
+        # Truncate fields to database limits
         address = CustomerAddress(
             customer=customer,
             address_type='Office',
             is_active=True,
-            university=clean_string(row.get('Firma/Uni', '')),
-            institute=clean_string(row.get('Institut', '')),
-            department=clean_string(row.get('Lehrstuhl', '')),
-            street=street or '-',  # Pflichtfeld
-            house_number=house_number,
-            postal_code=postal_code or '-',  # Pflichtfeld
-            city=city or '-',  # Pflichtfeld
+            university=truncate_field(clean_string(row.get('Firma/Uni', '')), 200),
+            institute=truncate_field(clean_string(row.get('Institut', '')), 200),
+            department=truncate_field(clean_string(row.get('Lehrstuhl', '')), 200),
+            street=truncate_field(street or '-', 200),  # Pflichtfeld
+            house_number=truncate_field(house_number, 20),
+            postal_code=truncate_field(postal_code or '-', 20),  # Pflichtfeld
+            city=truncate_field(city or '-', 100),  # Pflichtfeld
             country=country_code,
-            directions=clean_string(row.get('Anfahrt', '')),
+            directions=clean_string(row.get('Anfahrt', '')),  # TextField, no limit
         )
         
         if not self.dry_run:
@@ -280,12 +291,12 @@ class AddressImporter:
             phone = CustomerPhone(
                 customer=customer,
                 phone_type='Büro',
-                phone_number=phone1,
+                phone_number=truncate_field(phone1, 50),
                 is_primary=True
             )
             if not self.dry_run:
                 # Prüfe ob bereits vorhanden
-                if not CustomerPhone.objects.filter(customer=customer, phone_number=phone1).exists():
+                if not CustomerPhone.objects.filter(customer=customer, phone_number=truncate_field(phone1, 50)).exists():
                     phone.save()
                     phones_created.append(phone)
                     self.stats['phones_created'] += 1
@@ -299,11 +310,11 @@ class AddressImporter:
             phone = CustomerPhone(
                 customer=customer,
                 phone_type='Mobil',
-                phone_number=phone2,
+                phone_number=truncate_field(phone2, 50),
                 is_primary=False
             )
             if not self.dry_run:
-                if not CustomerPhone.objects.filter(customer=customer, phone_number=phone2).exists():
+                if not CustomerPhone.objects.filter(customer=customer, phone_number=truncate_field(phone2, 50)).exists():
                     phone.save()
                     phones_created.append(phone)
                     self.stats['phones_created'] += 1
@@ -317,11 +328,11 @@ class AddressImporter:
             phone = CustomerPhone(
                 customer=customer,
                 phone_type='Lab',
-                phone_number=phone3,
+                phone_number=truncate_field(phone3, 50),
                 is_primary=False
             )
             if not self.dry_run:
-                if not CustomerPhone.objects.filter(customer=customer, phone_number=phone3).exists():
+                if not CustomerPhone.objects.filter(customer=customer, phone_number=truncate_field(phone3, 50)).exists():
                     phone.save()
                     phones_created.append(phone)
                     self.stats['phones_created'] += 1
@@ -399,24 +410,20 @@ class AddressImporter:
             self.stats['skipped_empty'] += 1
             return
         
-        try:
-            country_code = get_country_code(row.get('Land', ''))
-            
-            # Kunde holen oder erstellen
-            customer, is_new = self.get_or_create_customer(first_name, last_name, country_code)
-            
-            # Adresse erstellen
-            self.create_address(customer, row)
-            
-            # Telefonnummern erstellen (nur bei neuem Kunden oder wenn noch keine vorhanden)
-            if is_new:
-                self.create_phones(customer, row)
-            
-            # E-Mail erstellen
-            self.create_email(customer, row)
-            
-        except Exception as e:
-            self.stats['errors'].append(f"Zeile {row_num}: {str(e)}")
+        country_code = get_country_code(row.get('Land', ''))
+        
+        # Kunde holen oder erstellen
+        customer, is_new = self.get_or_create_customer(first_name, last_name, country_code)
+        
+        # Adresse erstellen
+        self.create_address(customer, row)
+        
+        # Telefonnummern erstellen (nur bei neuem Kunden oder wenn noch keine vorhanden)
+        if is_new:
+            self.create_phones(customer, row)
+        
+        # E-Mail erstellen
+        self.create_email(customer, row)
     
     def run(self):
         """Führt den Import aus"""
@@ -446,17 +453,26 @@ class AddressImporter:
                     print(f"  Encoding: {encoding}")
                     print(f"  Spalten: {reader.fieldnames}\n")
                     
-                    with transaction.atomic():
-                        for row_num, row in enumerate(reader, start=2):
-                            self.process_row(row, row_num)
-                            
-                            # Progress alle 1000 Zeilen
-                            if row_num % 1000 == 0:
-                                print(f"  Verarbeitet: {row_num} Zeilen...")
+                    # Process each row in its own transaction to prevent cascade failures
+                    for row_num, row in enumerate(reader, start=2):
+                        try:
+                            with transaction.atomic():
+                                self.process_row(row, row_num)
+                                
+                                if self.dry_run:
+                                    # Rollback bei Dry-Run
+                                    transaction.set_rollback(True)
+                        except Exception as e:
+                            # Log error and continue with next row
+                            error_msg = str(e)
+                            # Shorten long error messages
+                            if len(error_msg) > 100:
+                                error_msg = error_msg[:100] + '...'
+                            self.stats['errors'].append(f"Zeile {row_num}: {error_msg}")
                         
-                        if self.dry_run:
-                            # Rollback bei Dry-Run
-                            transaction.set_rollback(True)
+                        # Progress alle 1000 Zeilen
+                        if row_num % 1000 == 0:
+                            print(f"  Verarbeitet: {row_num} Zeilen...")
                     
                     break  # Erfolgreich gelesen
                     
@@ -478,7 +494,7 @@ class AddressImporter:
         print(f"Übersprungen (veraltet): {self.stats['skipped_outdated']:>8}")
         print(f"Übersprungen (kein Name):{self.stats['skipped_no_name']:>8}")
         print(f"Übersprungen (leer):     {self.stats['skipped_empty']:>8}")
-        print(f"{'─'*60}")
+        print(f"{'-'*60}")
         print(f"Kunden erstellt:         {self.stats['customers_created']:>8}")
         print(f"Kunden aktualisiert:     {self.stats['customers_updated']:>8}")
         print(f"Adressen erstellt:       {self.stats['addresses_created']:>8}")
@@ -494,7 +510,7 @@ class AddressImporter:
                 print(f"  ... und {len(self.stats['errors']) - 20} weitere")
         
         if self.dry_run:
-            print("\n⚠️  DRY-RUN: Keine Daten wurden gespeichert!")
+            print("\n[!] DRY-RUN: Keine Daten wurden gespeichert!")
             print("    Für echten Import: python import_addresses.py --live")
 
 
