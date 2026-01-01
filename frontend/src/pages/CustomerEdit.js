@@ -64,7 +64,11 @@ const CustomerEdit = () => {
         is_reference: customer.is_reference || false,
         responsible_user: customer.responsible_user || null
       });
-      setAddresses(customer.addresses || []);
+      setAddresses((customer.addresses || []).map(a => ({
+        ...a,
+        latitude: a.latitude !== null && a.latitude !== undefined ? parseFloat(a.latitude) : null,
+        longitude: a.longitude !== null && a.longitude !== undefined ? parseFloat(a.longitude) : null
+      })));
       setPhones(customer.phones || []);
       setEmails(customer.emails || []);
       
@@ -214,9 +218,18 @@ const CustomerEdit = () => {
     } else {
       newAddresses[index] = { ...newAddresses[index], [field]: value };
     }
-
-    console.log('Address updated', index, field, newAddresses[index]);
     setAddresses(newAddresses);
+  };
+
+  // Update both coordinates at once to avoid race condition
+  const updateAddressCoordinates = (index, lat, lng) => {
+    setAddresses(prev => {
+      const newAddresses = [...prev];
+      const latVal = (lat === null || lat === '' || lat === undefined) ? null : Number(parseFloat(lat).toFixed(6));
+      const lngVal = (lng === null || lng === '' || lng === undefined) ? null : Number(parseFloat(lng).toFixed(6));
+      newAddresses[index] = { ...newAddresses[index], latitude: latVal, longitude: lngVal };
+      return newAddresses;
+    });
   };
 
   // Phone management
@@ -849,8 +862,7 @@ const CustomerEdit = () => {
                             longitude={selectedAddress?.longitude}
                             address={selectedAddress}
                             onPositionChange={(lat, lng) => {
-                              updateAddress(selectedAddressIndex, 'latitude', lat);
-                              updateAddress(selectedAddressIndex, 'longitude', lng);
+                              updateAddressCoordinates(selectedAddressIndex, lat, lng);
                             }}
                             editable={true}
                             height="500px"

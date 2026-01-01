@@ -46,9 +46,11 @@ const AddressMap = ({
   console.log('AddressMap rendered with:', { latitude, longitude, address });
 
   useEffect(() => {
-    if (latitude && longitude) {
+    const latPresent = latitude !== null && latitude !== undefined;
+    const lonPresent = longitude !== null && longitude !== undefined;
+    if (latPresent && lonPresent) {
       setPosition([parseFloat(latitude), parseFloat(longitude)]);
-    } else if (address && !latitude && !longitude) {
+    } else if (address && !latPresent && !lonPresent) {
       // Auto-Geocoding wenn Adresse vorhanden aber keine Koordinaten
       geocodeAddress(address);
     }
