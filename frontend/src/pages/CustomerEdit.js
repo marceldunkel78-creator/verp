@@ -147,12 +147,15 @@ const CustomerEdit = () => {
           }))
       };
 
+      console.log('Submitting customer addresses:', submitData.addresses);
+      let response;
       if (isEditing) {
-        await api.put(`/customers/customers/${id}/`, submitData);
+        response = await api.put(`/customers/customers/${id}/`, submitData);
       } else {
-        await api.post('/customers/customers/', submitData);
+        response = await api.post('/customers/customers/', submitData);
       }
 
+      console.log('Save response:', response && response.data);
       navigate('/sales/customers');
     } catch (error) {
       console.error('Error saving customer:', error);
@@ -194,7 +197,19 @@ const CustomerEdit = () => {
 
   const updateAddress = (index, field, value) => {
     const newAddresses = [...addresses];
-    newAddresses[index] = { ...newAddresses[index], [field]: value };
+    // Normalize lat/lng to numbers with 6 decimals
+    if (field === 'latitude' || field === 'longitude') {
+      if (value === null || value === '' || value === undefined) {
+        newAddresses[index] = { ...newAddresses[index], [field]: null };
+      } else {
+        const num = typeof value === 'number' ? value : parseFloat(value);
+        newAddresses[index] = { ...newAddresses[index], [field]: Number(num.toFixed(6)) };
+      }
+    } else {
+      newAddresses[index] = { ...newAddresses[index], [field]: value };
+    }
+
+    console.log('Address updated', index, field, newAddresses[index]);
     setAddresses(newAddresses);
   };
 

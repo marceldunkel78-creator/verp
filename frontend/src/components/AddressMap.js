@@ -67,10 +67,12 @@ const AddressMap = ({
       const data = await response.json();
       
       if (data && data.length > 0) {
-        const newPosition = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        const newPosition = [lat, lon];
         setPosition(newPosition);
         if (onPositionChange) {
-          onPositionChange(data[0].lat, data[0].lon);
+          onPositionChange(lat, lon);
         }
       }
     } catch (error) {
