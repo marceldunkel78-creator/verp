@@ -4,6 +4,7 @@ import api from '../services/api';
 import {
   PlusIcon,
   PencilIcon,
+  TrashIcon,
   MagnifyingGlassIcon,
   ComputerDesktopIcon,
   ChevronLeftIcon,
@@ -180,6 +181,22 @@ const Systems = () => {
     return labels[status] || status;
   };
 
+  const handleEdit = (systemId) => {
+    navigate(`/sales/systems/${systemId}`);
+  };
+
+  const handleDelete = async (systemId, systemName) => {
+    if (window.confirm(`Möchten Sie das System "${systemName || systemId}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+      try {
+        await api.delete(`/systems/systems/${systemId}/`);
+        setSystems(systems.filter(s => s.id !== systemId));
+      } catch (error) {
+        console.error('Error deleting system:', error);
+        alert('Fehler beim Löschen des Systems. Möglicherweise ist es mit anderen Daten verknüpft.');
+      }
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
@@ -251,12 +268,12 @@ const Systems = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {systems.map((system) => (
-                <div
-                  key={system.id}
-                  onClick={() => navigate(`/sales/systems/${system.id}`)}
-                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
-                >
+                {systems.map((system) => (
+                  <div
+                    key={system.id}
+                    onClick={() => navigate(`/sales/systems/${system.id}`)}
+                    className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                  >
                   {/* Header mit Systemnummer und Status */}
                   <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
                     <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
@@ -293,6 +310,24 @@ const Systems = () => {
                         <FolderIcon className="h-4 w-4 text-blue-500" />
                         <span className="text-sm font-medium">{system.project_count || 0}</span>
                       </div>
+                    </div>
+                    
+                    {/* Actions (Edit / Delete) */}
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleEdit(system.id); }}
+                        className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200"
+                      >
+                        <PencilIcon className="h-4 w-4 mr-1" />
+                        Bearbeiten
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(system.id, system.system_name); }}
+                        className="flex items-center px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200"
+                      >
+                        <TrashIcon className="h-4 w-4 mr-1" />
+                        Löschen
+                      </button>
                     </div>
                   </div>
                 </div>
