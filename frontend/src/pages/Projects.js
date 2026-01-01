@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { TrashIcon, PencilIcon, UserIcon, CpuChipIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 
 const Projects = () => {
@@ -107,6 +108,18 @@ const Projects = () => {
     window.location.href = `/sales/projects/${projectId}`;
   };
 
+  const handleDelete = async (projectId, projectName) => {
+    if (window.confirm(`Möchten Sie das Projekt "${projectName}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+      try {
+        await api.delete(`/projects/projects/${projectId}/`);
+        setProjects(projects.filter(project => project.id !== projectId));
+      } catch (error) {
+        console.error('Error deleting project:', error);
+        alert('Fehler beim Löschen des Projekts. Möglicherweise ist das Projekt mit anderen Daten verknüpft.');
+      }
+    }
+  };
+
   const getStatusColor = (status) => {
     const colors = {
       'NEU': 'bg-green-100 text-green-800',
@@ -173,49 +186,84 @@ const Projects = () => {
       {loading ? (
         <div className="text-center py-8">Laden...</div>
       ) : (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Projektnummer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kunde</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Systeme</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Erstellt am</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredProjects.map(project => (
-                <tr key={project.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap font-medium">{project.project_number}</td>
-                  <td className="px-6 py-4">{project.name || '-'}</td>
-                  <td className="px-6 py-4">{project.customer_name}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(project.status)}`}>
-                      {project.status_display}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">{project.systems_count || 0}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {new Date(project.created_at).toLocaleDateString('de-DE')}
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => handleEdit(project.id)}
-                      className="text-blue-600 hover:text-blue-800 mr-3"
-                    >
-                      Bearbeiten
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredProjects.length === 0 && (
-            <div className="text-center py-8 text-gray-500">Keine Projekte gefunden</div>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProjects.map(project => (
+            <div key={project.id} className="bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow duration-200">
+              {/* Project Header */}
+              <div className="p-6 border-b border-gray-100">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {project.project_number}
+                    </h3>
+                    <p className="text-gray-600 text-sm">
+                      {project.name || 'Kein Name vergeben'}
+                    </p>
+                  </div>
+                  <span className={`px-2 py-1 text-xs rounded-full whitespace-nowrap ${getStatusColor(project.status)}`}>
+                    {project.status_display}
+                  </span>
+                </div>
+              </div>
+
+              {/* Project Details */}
+              <div className="p-6 space-y-3">
+                <div className="flex items-center text-sm text-gray-600">
+                  <UserIcon className="h-4 w-4 mr-2 text-gray-400" />
+                  <span>{project.customer_name}</span>
+                </div>
+                
+                <div className="flex items-center text-sm text-gray-600">
+                  <CpuChipIcon className="h-4 w-4 mr-2 text-gray-400" />
+                  <span>{project.systems_count || 0} System(e)</span>
+                </div>
+
+                <div className="flex items-center text-sm text-gray-600">
+                  <CalendarIcon className="h-4 w-4 mr-2 text-gray-400" />
+                  <span>Erstellt: {new Date(project.created_at).toLocaleDateString('de-DE')}</span>
+                </div>
+
+                {project.description && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-sm text-gray-600 line-clamp-3">
+                      {project.description}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
+                <button
+                  onClick={() => handleEdit(project.id)}
+                  className="flex items-center px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200"
+                >
+                  <PencilIcon className="h-4 w-4 mr-1" />
+                  Bearbeiten
+                </button>
+                <button
+                  onClick={() => handleDelete(project.id, project.project_number)}
+                  className="flex items-center px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200"
+                >
+                  <TrashIcon className="h-4 w-4 mr-1" />
+                  Löschen
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No Projects Found */}
+      {!loading && filteredProjects.length === 0 && (
+        <div className="text-center py-12">
+          <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+            <CpuChipIcon className="h-12 w-12 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-1">Keine Projekte gefunden</h3>
+          <p className="text-gray-600">
+            {searchTerm || statusFilter ? 'Versuchen Sie andere Suchkriterien.' : 'Erstellen Sie Ihr erstes Projekt.'}
+          </p>
         </div>
       )}
 
