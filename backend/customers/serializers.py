@@ -160,22 +160,44 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         
-        # Update Addresses
+        # Update Addresses - preserve existing if they have IDs
         if addresses_data is not None:
-            instance.addresses.all().delete()
+            # Track which IDs we're keeping
+            incoming_ids = [addr.get('id') for addr in addresses_data if addr.get('id')]
+            # Delete addresses not in incoming data
+            instance.addresses.exclude(id__in=incoming_ids).delete()
+            
             for address_data in addresses_data:
-                CustomerAddress.objects.create(customer=instance, **address_data)
+                address_id = address_data.pop('id', None)
+                if address_id:
+                    # Update existing address
+                    CustomerAddress.objects.filter(id=address_id, customer=instance).update(**address_data)
+                else:
+                    # Create new address
+                    CustomerAddress.objects.create(customer=instance, **address_data)
         
-        # Update Phones
+        # Update Phones - preserve existing if they have IDs
         if phones_data is not None:
-            instance.phones.all().delete()
+            incoming_ids = [phone.get('id') for phone in phones_data if phone.get('id')]
+            instance.phones.exclude(id__in=incoming_ids).delete()
+            
             for phone_data in phones_data:
-                CustomerPhone.objects.create(customer=instance, **phone_data)
+                phone_id = phone_data.pop('id', None)
+                if phone_id:
+                    CustomerPhone.objects.filter(id=phone_id, customer=instance).update(**phone_data)
+                else:
+                    CustomerPhone.objects.create(customer=instance, **phone_data)
         
-        # Update Emails
+        # Update Emails - preserve existing if they have IDs
         if emails_data is not None:
-            instance.emails.all().delete()
+            incoming_ids = [email.get('id') for email in emails_data if email.get('id')]
+            instance.emails.exclude(id__in=incoming_ids).delete()
+            
             for email_data in emails_data:
-                CustomerEmail.objects.create(customer=instance, **email_data)
+                email_id = email_data.pop('id', None)
+                if email_id:
+                    CustomerEmail.objects.filter(id=email_id, customer=instance).update(**email_data)
+                else:
+                    CustomerEmail.objects.create(customer=instance, **email_data)
         
         return instance

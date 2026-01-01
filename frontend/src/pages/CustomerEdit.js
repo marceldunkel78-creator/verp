@@ -114,6 +114,7 @@ const CustomerEdit = () => {
         addresses: addresses
           .filter(addr => addr.street && addr.postal_code && addr.city)
           .map(addr => ({
+            ...(addr.id && { id: addr.id }), // Include ID if exists for updates
             address_type: addr.address_type,
             is_active: addr.is_active !== undefined ? addr.is_active : true,
             university: addr.university || '',
@@ -133,6 +134,7 @@ const CustomerEdit = () => {
         phones: phones
           .filter(phone => phone.phone_number && phone.phone_number.trim() !== '')
           .map(phone => ({
+            ...(phone.id && { id: phone.id }),
             phone_type: phone.phone_type,
             phone_number: phone.phone_number,
             is_primary: phone.is_primary || false
@@ -140,6 +142,7 @@ const CustomerEdit = () => {
         emails: emails
           .filter(email => email.email && email.email.trim() !== '')
           .map(email => ({
+            ...(email.id && { id: email.id }),
             email: email.email,
             is_primary: email.is_primary || false,
             newsletter_consent: email.newsletter_consent || false,
@@ -151,12 +154,15 @@ const CustomerEdit = () => {
       let response;
       if (isEditing) {
         response = await api.put(`/customers/customers/${id}/`, submitData);
+        console.log('Save response:', response && response.data);
+        // Reload customer data after update
+        loadCustomer();
       } else {
         response = await api.post('/customers/customers/', submitData);
+        console.log('Save response:', response && response.data);
+        // Navigate to list only after creating new customer
+        navigate('/sales/customers');
       }
-
-      console.log('Save response:', response && response.data);
-      navigate('/sales/customers');
     } catch (error) {
       console.error('Error saving customer:', error);
       alert('Fehler beim Speichern: ' + (error.response?.data?.detail || error.message));

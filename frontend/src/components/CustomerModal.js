@@ -74,6 +74,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
         addresses: addresses
           .filter(addr => addr.street && addr.postal_code && addr.city) // Nur vollständige Adressen
           .map(addr => ({
+            ...(addr.id && { id: addr.id }), // Include ID if exists for updates
             address_type: addr.address_type,
             is_active: addr.is_active !== undefined ? addr.is_active : true,
             university: addr.university || '',
@@ -93,6 +94,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
         phones: phones
           .filter(phone => phone.phone_number && phone.phone_number.trim() !== '') // Nur Telefonnummern mit Werten
           .map(phone => ({
+            ...(phone.id && { id: phone.id }),
             phone_type: phone.phone_type,
             phone_number: phone.phone_number,
             is_primary: phone.is_primary || false
@@ -100,6 +102,7 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
         emails: emails
           .filter(email => email.email && email.email.trim() !== '') // Nur E-Mails mit Werten
           .map(email => ({
+            ...(email.id && { id: email.id }),
             email: email.email,
             is_primary: email.is_primary || false,
             newsletter_consent: email.newsletter_consent || false,
