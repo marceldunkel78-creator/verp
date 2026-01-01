@@ -30,6 +30,7 @@ const allModules = [
   { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager' },
   { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung' },
   { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte' },
+  { id: 'documents', name: 'Dokumente', route: '/documents', icon: '📄', category: 'System' },
   { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System' },
   { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System' },
   { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System' },

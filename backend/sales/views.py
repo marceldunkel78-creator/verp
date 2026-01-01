@@ -30,13 +30,18 @@ class QuotationViewSet(viewsets.ModelViewSet):
     ordering = ['-date']
     
     def get_queryset(self):
-        """Custom queryset mit Jahresfilterung"""
+        """Custom queryset mit Jahresfilterung und exclude_ordered"""
         queryset = super().get_queryset()
         
         # Jahresfilter
         year = self.request.query_params.get('year', None)
         if year:
             queryset = queryset.filter(date__year=year)
+        
+        # Exclude ordered quotations (für Auftragsauswahl)
+        exclude_ordered = self.request.query_params.get('exclude_ordered', None)
+        if exclude_ordered and exclude_ordered.lower() in ['true', '1', 'yes']:
+            queryset = queryset.exclude(status='ORDERED')
         
         return queryset
     
@@ -278,16 +283,36 @@ class QuotationViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def duplicate(self, request, pk=None):
         """
-        Dupliziert ein Angebot
+        Dupliziert ein Angebot mit allen Items
         """
-        original = self.get_object()
+        from datetime import timedelta
         
-        # Erstelle Kopie
+        original = self.get_object()
+        original_items = list(original.items.all())
+        
+        # Erstelle Kopie des Angebots
         original.pk = None
+        original.id = None
         original.quotation_number = None
         original.status = 'DRAFT'
+        original.date = None  # Wird automatisch beim Speichern gesetzt
+        
+        # Verlängere Gültigkeit um 30 Tage
+        if original.valid_until:
+            original.valid_until = original.valid_until + timedelta(days=30)
+        
+        # Setze created_by
         original.created_by = request.user
+        original.pdf_file = None  # Kein PDF für Kopie
+        
         original.save()
+        
+        # Kopiere alle Items
+        for item in original_items:
+            item.pk = None
+            item.id = None
+            item.quotation = original
+            item.save()
         
         serializer = QuotationDetailSerializer(original)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

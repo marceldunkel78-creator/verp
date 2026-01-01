@@ -56,9 +56,38 @@ class Customer(models.Model):
         verbose_name='Sprache'
     )
     
+    # Marketing/Werbung
+    ADVERTISING_STATUS_CHOICES = [
+        ('neu', 'Neu'),
+        ('zugestimmt', 'Zugestimmt'),
+        ('abgelehnt', 'Abgelehnt'),
+    ]
+    
+    advertising_status = models.CharField(
+        max_length=20,
+        choices=ADVERTISING_STATUS_CHOICES,
+        default='neu',
+        verbose_name='Werbestatus',
+        help_text='Status für Werbung/Newsletter'
+    )
+    
     # Metadaten
+    description = models.TextField(blank=True, verbose_name='Beschreibung')
     notes = models.TextField(blank=True, verbose_name='Notizen')
     is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    is_reference = models.BooleanField(
+        default=False,
+        verbose_name='Referenzkunde',
+        help_text='Kunde ist als Referenz geeignet'
+    )
+    responsible_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='responsible_for_customers',
+        verbose_name='Zuständiger Mitarbeiter'
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

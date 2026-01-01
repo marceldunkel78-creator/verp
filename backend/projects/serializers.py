@@ -16,6 +16,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
             'id', 'project_number', 'name', 'customer', 'customer_name',
             'description', 'status', 'status_display', 'systems_count',
             'linked_system', 'linked_system_name',
+            'forecast_quarter', 'forecast_revenue', 'forecast_probability',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['project_number', 'created_at', 'updated_at']
@@ -44,6 +45,7 @@ class ProjectDetailSerializer(serializers.ModelSerializer):
             'id', 'project_number', 'name', 'customer', 'customer_name',
             'customer_number', 'systems', 'systems_data', 'description',
             'status', 'status_display', 'linked_system', 'linked_system_name',
+            'forecast_quarter', 'forecast_revenue', 'forecast_probability',
             'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
@@ -73,7 +75,10 @@ class ProjectCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ['name', 'customer', 'systems', 'linked_system', 'description']
+        fields = [
+            'name', 'customer', 'systems', 'linked_system', 'description', 'status',
+            'forecast_quarter', 'forecast_revenue', 'forecast_probability'
+        ]
 
     def validate_customer(self, value):
         """Prüfe, ob Kunde existiert und aktiv ist"""

@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import storage from '../utils/sessionStore';
 import { 
   PlusIcon, EyeIcon, PencilIcon, TrashIcon, 
-  DocumentArrowDownIcon, DocumentIcon, DocumentTextIcon,
+  DocumentArrowDownIcon, DocumentIcon, DocumentTextIcon, DocumentDuplicateIcon,
   UserIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon
 } from '@heroicons/react/24/outline';
 
@@ -250,6 +250,21 @@ const Quotations = () => {
       alert('Fehler beim Anzeigen des PDFs');
     }
   };
+
+  const handleDuplicate = async (quotationId) => {
+    if (!window.confirm('Möchten Sie dieses Angebot wirklich kopieren? Die Gültigkeit wird automatisch um 30 Tage verlängert.')) {
+      return;
+    }
+    
+    try {
+      await api.post(`/sales/quotations/${quotationId}/duplicate/`);
+      alert('Angebot erfolgreich kopiert');
+      fetchQuotations(); // Refresh the list
+    } catch (error) {
+      console.error('Fehler beim Kopieren des Angebots:', error);
+      alert('Fehler beim Kopieren des Angebots');
+    }
+  };
   
   const getStatusBadge = (status, statusDisplay) => {
     const colors = {
@@ -471,6 +486,15 @@ const Quotations = () => {
                       >
                         <DocumentArrowDownIcon className="h-5 w-5" />
                       </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => handleDuplicate(quotation.id)}
+                          className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded"
+                          title="Angebot kopieren"
+                        >
+                          <DocumentDuplicateIcon className="h-5 w-5" />
+                        </button>
+                      )}
                       <Link
                         to={`/sales/quotations/${quotation.id}`}
                         className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"

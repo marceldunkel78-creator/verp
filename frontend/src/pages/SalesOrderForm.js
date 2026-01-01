@@ -277,7 +277,7 @@ const SalesOrderForm = () => {
     const totalPrice = quantity * priceAfterDiscount;
     const totalPurchaseCost = quantity * purchasePrice;
     const margin = totalPrice - totalPurchaseCost;
-    const marginPercent = totalPurchaseCost > 0 ? (margin / totalPurchaseCost * 100) : 0;
+    const marginPercent = totalPrice > 0 ? (margin / totalPrice * 100) : 0;
     
     return {
       totalPrice: totalPrice,
@@ -298,7 +298,7 @@ const SalesOrderForm = () => {
     });
     
     const totalMargin = totalPrice - totalPurchaseCost;
-    const totalMarginPercent = totalPurchaseCost > 0 ? (totalMargin / totalPurchaseCost * 100) : 0;
+    const totalMarginPercent = totalPrice > 0 ? (totalMargin / totalPrice * 100) : 0;
     
     return {
       totalPrice: totalPrice,

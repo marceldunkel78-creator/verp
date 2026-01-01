@@ -7,6 +7,22 @@ const ProjectEdit = () => {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('basisinformationen');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedProject, setEditedProject] = useState({});
+
+  const statusOptions = [
+    { value: 'NEU', label: 'Neu' },
+    { value: 'IN_BEARBEITUNG', label: 'In Bearbeitung' },
+    { value: 'ANGEBOT_ERSTELLT', label: 'Angebot erstellt' },
+    { value: 'DEMO_GEPLANT', label: 'Demo geplant' },
+    { value: 'AUSSCHREIBUNG', label: 'Ausschreibung' },
+    { value: 'AUFTRAG_ERTEILT', label: 'Auftrag erteilt' },
+    { value: 'IN_FERTIGUNG', label: 'In Fertigung' },
+    { value: 'LIEFERUNG', label: 'Lieferung' },
+    { value: 'INSTALLATION', label: 'Installation' },
+    { value: 'ABGESCHLOSSEN', label: 'Abgeschlossen' },
+    { value: 'STORNIERT', label: 'Storniert' }
+  ];
 
   const tabs = [
     { id: 'basisinformationen', label: 'Basisinformationen' },
@@ -29,11 +45,46 @@ const ProjectEdit = () => {
       setLoading(true);
       const response = await api.get(`/projects/projects/${id}/`);
       setProject(response.data);
+      setEditedProject(response.data);
     } catch (error) {
       console.error('Error fetching project:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditedProject(project);
+  };
+
+  const handleSave = async () => {
+    try {
+      const response = await api.patch(`/projects/projects/${id}/`, {
+        status: editedProject.status,
+        forecast_quarter: editedProject.forecast_quarter,
+        forecast_revenue: editedProject.forecast_revenue,
+        forecast_probability: editedProject.forecast_probability
+      });
+      setProject(response.data);
+      setEditedProject(response.data);
+      setIsEditing(false);
+      alert('Projekt erfolgreich aktualisiert');
+    } catch (error) {
+      console.error('Error updating project:', error);
+      alert('Fehler beim Aktualisieren des Projekts');
+    }
+  };
+
+  const handleInputChange = (field, value) => {
+    setEditedProject(prev => ({
+      ...prev,
+      [field]: value
+    }));
   };
 
   const getStatusColor = (status) => {
@@ -122,7 +173,32 @@ const ProjectEdit = () => {
         <div className="p-6">
           {activeTab === 'basisinformationen' && (
             <div>
-              <h2 className="text-xl font-bold mb-4">Basisinformationen</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Basisinformationen</h2>
+                {!isEditing ? (
+                  <button
+                    onClick={handleEdit}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Bearbeiten
+                  </button>
+                ) : (
+                  <div className="space-x-2">
+                    <button
+                      onClick={handleSave}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Speichern
+                    </button>
+                    <button
+                      onClick={handleCancel}
+                      className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Projektnummer</label>
@@ -130,7 +206,21 @@ const ProjectEdit = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <p className="text-gray-900">{project.status_display}</p>
+                  {isEditing ? (
+                    <select
+                      value={editedProject.status || ''}
+                      onChange={(e) => handleInputChange('status', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                    >
+                      {statusOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-gray-900">{project.status_display}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Kunde</label>
@@ -163,6 +253,86 @@ const ProjectEdit = () => {
                   <div className="col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
                     <p className="text-gray-900 whitespace-pre-wrap">{project.description}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Forecast Abschnitt */}
+              <div className="mt-8 pt-8 border-t border-gray-200">
+                <h3 className="text-lg font-semibold mb-4 text-blue-600">📊 Forecast / Prognose</h3>
+                <div className="grid grid-cols-3 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Erwartetes Quartal/Jahr
+                    </label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editedProject.forecast_quarter || ''}
+                        onChange={(e) => handleInputChange('forecast_quarter', e.target.value)}
+                        placeholder="z.B. Q2 2026"
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                      />
+                    ) : (
+                      <p className="text-gray-900">{project.forecast_quarter || '-'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Erwarteter Umsatz (€)
+                    </label>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editedProject.forecast_revenue || ''}
+                        onChange={(e) => handleInputChange('forecast_revenue', e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                      />
+                    ) : (
+                      <p className="text-gray-900">
+                        {project.forecast_revenue 
+                          ? Number(project.forecast_revenue).toLocaleString('de-DE', {
+                              style: 'currency',
+                              currency: 'EUR'
+                            })
+                          : '-'}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Wahrscheinlichkeit (%)
+                    </label>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={editedProject.forecast_probability || ''}
+                        onChange={(e) => handleInputChange('forecast_probability', e.target.value)}
+                        placeholder="0-100"
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                      />
+                    ) : (
+                      <p className="text-gray-900">
+                        {project.forecast_probability !== null && project.forecast_probability !== undefined
+                          ? `${project.forecast_probability}%`
+                          : '-'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {!isEditing && project.forecast_revenue && project.forecast_probability && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-gray-700">
+                      <span className="font-semibold">Gewichteter Forecast:</span>{' '}
+                      {(Number(project.forecast_revenue) * Number(project.forecast_probability) / 100).toLocaleString('de-DE', {
+                        style: 'currency',
+                        currency: 'EUR'
+                      })}
+                    </p>
                   </div>
                 )}
               </div>

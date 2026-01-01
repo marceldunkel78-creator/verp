@@ -75,6 +75,30 @@ class Project(models.Model):
         verbose_name='Status'
     )
 
+    # Forecast Felder
+    forecast_quarter = models.CharField(
+        max_length=10,
+        blank=True,
+        verbose_name='Forecast Quartal',
+        help_text='z.B. Q1 2026'
+    )
+    
+    forecast_revenue = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Erwarteter Umsatz',
+        help_text='Erwarteter Auftragsumsatz'
+    )
+    
+    forecast_probability = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Wahrscheinlichkeit (%)',
+        help_text='Wahrscheinlichkeit des Auftragseingangs (0-100%)'
+    )
+
     # Metadaten
     created_by = models.ForeignKey(
         User,

@@ -1,0 +1,42 @@
+/* Leaflet Map Container */
+.leaflet-container {
+  font-family: inherit;
+}
+
+/* Fix für Leaflet Marker Icons */
+.leaflet-default-icon-path {
+  background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+}
+
+/* Responsive Map */
+.leaflet-container {
+  z-index: 1;
+}
+
+/* Popup Styling */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+.leaflet-popup-content {
+  margin: 12px 16px;
+  font-size: 14px;
+}
+
+/* Zoom Control */
+.leaflet-control-zoom {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  font-size: 18px;
+}
+
+/* Attribution */
+.leaflet-control-attribution {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 2px 5px;
+  border-radius: 4px;
+}

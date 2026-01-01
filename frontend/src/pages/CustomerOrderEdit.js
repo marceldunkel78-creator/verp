@@ -135,6 +135,111 @@ const CustomerOrderEdit = () => {
     loadLookupData();
   }, [id]);
 
+  // Auto-load quotation when creating new order from quotation
+  useEffect(() => {
+    const fromQuotationId = searchParams.get('from_quotation');
+    if (!isEditMode && fromQuotationId) {
+      // Automatically load the quotation
+      const loadQuotationFromParam = async () => {
+        try {
+          const response = await api.get(`/sales/quotations/${fromQuotationId}/`);
+          const quotation = response.data;
+          setSelectedQuotation(quotation);
+          
+          // Update order with quotation data
+          const orderItems = (quotation.items || []).map((item, idx) => {
+            // Calculate position display
+            let positionDisplay;
+            if (item.is_group_header || !item.group_id) {
+              positionDisplay = String(item.position || idx + 1);
+            } else {
+              // Group member - find parent position
+              const headerItem = quotation.items.find(i => i.is_group_header && i.group_id === item.group_id);
+              const headerPosition = headerItem?.position || Math.floor((idx + 1) / 10);
+              const groupMembers = quotation.items.filter((i, index) => 
+                index < idx && i.group_id === item.group_id && !i.is_group_header
+              );
+              const subPosition = groupMembers.length + 1;
+              positionDisplay = `${headerPosition}.${String(subPosition).padStart(2, '0')}`;
+            }
+
+            return {
+              position: item.position || idx + 1,
+              position_display: positionDisplay,
+              article_number: item.item_article_number || '',
+              name: item.item_name || item.group_name || '',
+              description: item.item_description || item.custom_description || '',
+              quantity: item.quantity || 1,
+              unit: item.unit || 'Stk',
+              purchase_price: item.purchase_price || 0,
+              list_price: item.unit_price || item.sale_price || 0,
+              discount_percent: item.discount_percent || 0,
+              final_price: item.unit_price || item.sale_price || 0,
+              currency: 'EUR',
+              quotation_position: item.position || idx + 1,
+              is_group_header: item.is_group_header || false,
+              group_id: item.group_id || '',
+              quantity_ordered: item.quantity || 1,
+              quantity_delivered: 0,
+              quantity_invoiced: 0
+            };
+          });
+
+          // Add delivery costs as separate line item if present
+          if (quotation.delivery_cost && parseFloat(quotation.delivery_cost) > 0) {
+            const maxPosition = orderItems.length > 0 
+              ? Math.max(...orderItems.map(i => i.position || 0))
+              : 0;
+            
+            orderItems.push({
+              position: maxPosition + 1,
+              position_display: String(maxPosition + 1),
+              article_number: '',
+              name: 'Lieferkosten',
+              description: 'Lieferkosten aus Angebot',
+              quantity: 1,
+              unit: 'Stk',
+              purchase_price: 0,
+              list_price: parseFloat(quotation.delivery_cost),
+              discount_percent: 0,
+              final_price: parseFloat(quotation.delivery_cost),
+              currency: 'EUR',
+              quotation_position: maxPosition + 1,
+              is_group_header: false,
+              group_id: '',
+              quantity_ordered: 1,
+              quantity_delivered: 0,
+              quantity_invoiced: 0
+            });
+          }
+
+          setOrder(prev => ({
+            ...prev,
+            quotation: quotation.id,
+            customer: quotation.customer,
+            payment_term: quotation.payment_term || '',
+            delivery_term: quotation.delivery_term || '',
+            project_reference: quotation.project_reference || '',
+            system_reference: quotation.system_reference || '',
+            tax_rate: quotation.tax_rate?.toString() || '19.00',
+            items: orderItems
+          }));
+
+          // Load customer details
+          if (quotation.customer) {
+            const custRes = await api.get(`/customers/customers/${quotation.customer}/`);
+            setSelectedCustomer(custRes.data);
+          }
+        } catch (error) {
+          console.error('Error loading quotation:', error);
+          setError('Fehler beim Laden des Angebots');
+        }
+      };
+      
+      loadQuotationFromParam();
+    }
+  }, [searchParams, isEditMode]);
+
   // Update URL when tab changes
   useEffect(() => {
     setSearchParams({ tab: activeTab });
@@ -215,6 +320,7 @@ const CustomerOrderEdit = () => {
     try {
       const params = new URLSearchParams();
       params.append('search', quotationSearch);
+      params.append('exclude_ordered', 'true'); // Exclude quotations with status ORDERED
       const response = await api.get(`/sales/quotations/?${params.toString()}`);
       const data = response.data.results || response.data || [];
       setQuotations(data);
@@ -998,7 +1104,7 @@ const CustomerOrderEdit = () => {
                       const purchasePrice = parseFloat(item.purchase_price) || 0;
                       const totalCost = quantity * purchasePrice;
                       const margin = totalPrice - totalCost;
-                      const marginPercent = totalCost > 0 ? (margin / totalCost * 100) : 0;
+                      const marginPercent = totalPrice > 0 ? (margin / totalPrice * 100) : 0;
 
                       return (
                         <tr key={index} className="hover:bg-gray-50">

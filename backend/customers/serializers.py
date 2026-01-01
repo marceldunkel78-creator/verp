@@ -38,6 +38,8 @@ class CustomerListSerializer(serializers.ModelSerializer):
     """Serializer für Kundenliste (reduzierte Daten)"""
     full_name = serializers.SerializerMethodField()
     language_display = serializers.CharField(source='get_language_display', read_only=True)
+    advertising_status_display = serializers.CharField(source='get_advertising_status_display', read_only=True)
+    responsible_user_name = serializers.CharField(source='responsible_user.get_full_name', read_only=True)
     primary_email = serializers.SerializerMethodField()
     primary_phone = serializers.SerializerMethodField()
     system_count = serializers.SerializerMethodField()
@@ -49,6 +51,8 @@ class CustomerListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
+            'advertising_status', 'advertising_status_display',
+            'is_reference', 'responsible_user', 'responsible_user_name',
             'primary_email', 'primary_phone', 'is_active',
             'system_count', 'project_count', 'open_ticket_count',
             'created_at', 'updated_at'
@@ -86,16 +90,20 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     """Serializer für Kundendetails (alle Daten)"""
     full_name = serializers.SerializerMethodField()
     language_display = serializers.CharField(source='get_language_display', read_only=True)
+    advertising_status_display = serializers.CharField(source='get_advertising_status_display', read_only=True)
     addresses = CustomerAddressSerializer(many=True, read_only=True)
     phones = CustomerPhoneSerializer(many=True, read_only=True)
     emails = CustomerEmailSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    responsible_user_name = serializers.CharField(source='responsible_user.get_full_name', read_only=True)
     
     class Meta:
         model = Customer
         fields = [
             'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
+            'advertising_status', 'advertising_status_display',
+            'description', 'is_reference', 'responsible_user', 'responsible_user_name',
             'addresses', 'phones', 'emails',
             'notes', 'is_active',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
@@ -116,6 +124,7 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
         model = Customer
         fields = [
             'salutation', 'title', 'first_name', 'last_name', 'language',
+            'advertising_status', 'description', 'is_reference', 'responsible_user',
             'addresses', 'phones', 'emails',
             'notes', 'is_active'
         ]

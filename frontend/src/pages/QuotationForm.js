@@ -688,6 +688,40 @@ setCustomerAddresses(customer.addresses || []);
         }
       });
 
+      // If system price is used, recalculate unit_price proportionally for all system price items
+      const systemPrice = parseFloat(prev.system_price) || 0;
+      const hasSystemPriceItems = updatedItems.some(item => item.uses_system_price);
+      
+      if (systemPrice > 0 && hasSystemPriceItems) {
+        // Calculate total purchase cost of all system price items
+        const totalPurchaseCost = updatedItems.reduce((sum, item) => {
+          if (item.uses_system_price) {
+            const quantity = parseFloat(item.quantity) || 0;
+            const purchasePrice = parseFloat(item.purchase_price) || 0;
+            return sum + (quantity * purchasePrice);
+          }
+          return sum;
+        }, 0);
+        
+        // Distribute system price proportionally based on purchase cost
+        if (totalPurchaseCost > 0) {
+          updatedItems.forEach(item => {
+            if (item.uses_system_price) {
+              const quantity = parseFloat(item.quantity) || 1;
+              const purchasePrice = parseFloat(item.purchase_price) || 0;
+              const itemPurchaseCost = quantity * purchasePrice;
+              const proportion = itemPurchaseCost / totalPurchaseCost;
+              const allocatedSystemPrice = systemPrice * proportion;
+              
+              // Calculate unit price from allocated system price and round to 2 decimals
+              const rawUnitPrice = quantity > 0 ? allocatedSystemPrice / quantity : 0;
+              // Round to 2 decimal places
+              item.unit_price = Number(rawUnitPrice.toFixed(2));
+            }
+          });
+        }
+      }
+
       return {
         ...prev,
         items: updatedItems
@@ -927,7 +961,7 @@ setCustomerAddresses(customer.addresses || []);
         total: systemPrice + tax,
         purchaseCost: purchaseCost,
         margin: systemPrice - purchaseCost,
-        marginPercent: purchaseCost > 0 ? ((systemPrice - purchaseCost) / purchaseCost * 100) : 0
+        marginPercent: systemPrice > 0 ? ((systemPrice - purchaseCost) / systemPrice * 100) : 0
       };
     }
     
@@ -942,7 +976,7 @@ setCustomerAddresses(customer.addresses || []);
         total: salePrice + tax,
         purchaseCost: purchaseCost,
         margin: salePrice - purchaseCost,
-        marginPercent: purchaseCost > 0 ? ((salePrice - purchaseCost) / purchaseCost * 100) : 0
+        marginPercent: salePrice > 0 ? ((salePrice - purchaseCost) / salePrice * 100) : 0
       };
     }
     
@@ -958,7 +992,7 @@ setCustomerAddresses(customer.addresses || []);
       total: subtotal + tax,
       purchaseCost: purchaseCost,
       margin: subtotal - purchaseCost,
-      marginPercent: purchaseCost > 0 ? ((subtotal - purchaseCost) / purchaseCost * 100) : 0
+      marginPercent: subtotal > 0 ? ((subtotal - purchaseCost) / subtotal * 100) : 0
     };
   };
 
@@ -1065,7 +1099,7 @@ setCustomerAddresses(customer.addresses || []);
     totalGross = netWithDelivery + totalTax;
     
     const totalMargin = totalNet - totalPurchaseCost;
-    const totalMarginPercent = totalPurchaseCost > 0 ? (totalMargin / totalPurchaseCost * 100) : 0;
+    const totalMarginPercent = totalNet > 0 ? (totalMargin / totalNet * 100) : 0;
     
     return { 
       totalNet, 
@@ -2189,20 +2223,19 @@ setCustomerAddresses(customer.addresses || []);
                 Alle Informationen werden automatisch übernommen.
               </p>
               
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-medium text-gray-900 mb-2">Übernommene Daten:</h3>
-                <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-                  <li>Kunde und Adressdaten</li>
-                  <li>Alle Angebotspositionen</li>
-                  <li>Preise und Konditionen</li>
-                  <li>Lieferbedingungen</li>
-                </ul>
-              </div>
+              {formData.status === 'ORDERED' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-blue-800">
+                    Dieses Angebot wurde bereits in einen Auftrag umgewandelt.
+                  </p>
+                </div>
+              )}
               
               <button
                 type="button"
                 onClick={() => navigate(`/sales/order-processing/new?from_quotation=${id}`)}
-                className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                disabled={formData.status === 'ORDERED'}
+                className="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
               >
                 <ShoppingCartIcon className="h-5 w-5 mr-2" />
                 Neuen Auftrag anlegen

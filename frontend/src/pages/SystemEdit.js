@@ -805,10 +805,10 @@ const SystemEdit = () => {
                     <div className="divide-y">
                       {historyData.projects.map(project => (
                         <a
-                          key={project.id}
-                          href={`/projects/${project.id}`}
-                          className="block px-4 py-3 hover:bg-gray-50"
-                        >
+                            key={project.id}
+                            href={`/sales/projects/${project.id}`}
+                            className="block px-4 py-3 hover:bg-gray-50"
+                          >
                           <div className="flex justify-between items-center">
                             <div>
                               <span className="font-mono text-blue-600">{project.project_number}</span>
@@ -965,7 +965,7 @@ const SystemEdit = () => {
                   {relatedItems.projects.map(project => (
                     <a
                       key={project.id}
-                      href={`/projects/${project.id}`}
+                      href={`/sales/projects/${project.id}`}
                       className="block p-3 border rounded-lg hover:bg-gray-50"
                     >
                       <div className="flex justify-between items-center">

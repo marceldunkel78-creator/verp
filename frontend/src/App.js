@@ -14,6 +14,7 @@ import Orders from './pages/Orders';
 import OrderFormNew from './pages/OrderFormNew';
 import OrderDetail from './pages/OrderDetail';
 import Customers from './pages/Customers';
+import CustomerEdit from './pages/CustomerEdit';
 import Quotations from './pages/Quotations';
 import OrderProcessing from './pages/OrderProcessing';
 import SalesOrderForm from './pages/SalesOrderForm';
@@ -49,6 +50,7 @@ import PriceLists from './pages/PriceLists';
 import PriceListEdit from './pages/PriceListEdit';
 import Loans from './pages/Loans';
 import LoanEdit from './pages/LoanEdit';
+import Documents from './pages/Documents';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -61,8 +63,7 @@ import {
   Manufacturing,
   VisiView,
   Service,
-  BusinessIntelligence,
-  DocumentManagement
+  BusinessIntelligence
 } from './pages/modules';
 
 function App() {
@@ -100,7 +101,7 @@ function App() {
             <Route path="service/rma" element={<RMACases />} />
             <Route path="service/rma/:id" element={<RMACaseEdit />} />
             <Route path="bi" element={<BusinessIntelligence />} />
-            <Route path="documents" element={<DocumentManagement />} />
+            <Route path="documents" element={<Documents />} />
             <Route path="settings" element={<Settings />} />
             
             {/* Procurement Submodules */}
@@ -120,6 +121,8 @@ function App() {
             
             {/* Sales/Order Management Submodules */}
             <Route path="sales/customers" element={<Customers />} />
+            <Route path="sales/customers/new" element={<CustomerEdit />} />
+            <Route path="sales/customers/:id" element={<CustomerEdit />} />
             <Route path="sales/dealers" element={<Dealers />} />
             <Route path="sales/dealers/new" element={<DealerEdit />} />
             <Route path="sales/dealers/:id" element={<DealerEdit />} />
@@ -127,7 +130,7 @@ function App() {
             <Route path="sales/pricelists/new" element={<PriceListEdit />} />
             <Route path="sales/pricelists/:id" element={<PriceListEdit />} />
             <Route path="sales/projects" element={<Projects />} />
-            <Route path="projects/:id" element={<ProjectEdit />} />
+            <Route path="sales/projects/:id" element={<ProjectEdit />} />
             <Route path="sales/systems" element={<Systems />} />
             <Route path="sales/systems/:id" element={<SystemEdit />} />
             <Route path="sales/quotations" element={<Quotations />} />

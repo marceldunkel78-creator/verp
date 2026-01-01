@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 /* eslint-disable react-hooks/exhaustive-deps */
 import api from '../services/api';
-import CustomerModal from '../components/CustomerModal';
 import storage from '../utils/sessionStore';
 import { 
   PlusIcon, PencilIcon, TrashIcon, UserIcon,
@@ -10,11 +9,9 @@ import {
   BuildingOfficeIcon, WrenchScrewdriverIcon, BeakerIcon
 } from '@heroicons/react/24/outline';
 const Customers = () => {
-
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasSearched, setHasSearched] = useState(false);
@@ -190,26 +187,6 @@ const Customers = () => {
     try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
   };
 
-  const openCreateModal = () => {
-    setSelectedCustomer(null);
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = async (customer) => {
-    try {
-      const response = await api.get(`/customers/customers/${customer.id}/`);
-      setSelectedCustomer(response.data);
-      setIsModalOpen(true);
-    } catch (error) {
-      console.error('Fehler beim Laden des Kunden:', error);
-    }
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedCustomer(null);
-  };
-
   const handleDelete = async (customerId) => {
     if (!window.confirm('Möchten Sie diesen Kunden wirklich löschen?')) return;
     
@@ -244,7 +221,7 @@ const Customers = () => {
           </p>
         </div>
         <button
-          onClick={openCreateModal}
+          onClick={() => navigate('/sales/customers/new')}
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
@@ -388,7 +365,7 @@ const Customers = () => {
                 </div>
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => openEditModal(customer)}
+                    onClick={() => navigate(`/sales/customers/${customer.id}`)}
                     className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
                   >
                     <PencilIcon className="h-5 w-5" />
@@ -473,18 +450,6 @@ const Customers = () => {
             </div>
           )}
         </>
-      )}
-
-      {/* Modal */}
-      {isModalOpen && (
-        <CustomerModal
-          customer={selectedCustomer}
-          onClose={closeModal}
-          onSuccess={() => {
-            closeModal();
-            fetchCustomers();
-          }}
-        />
       )}
     </div>
   );

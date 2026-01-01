@@ -96,7 +96,7 @@ const Projects = () => {
       const response = await api.post('/projects/projects/', newProject);
       setShowCreateModal(false);
       // Navigiere zur Edit-Seite des neuen Projekts
-      window.location.href = `/projects/${response.data.id}`;
+      window.location.href = `/sales/projects/${response.data.id}`;
     } catch (error) {
       console.error('Error creating project:', error);
       alert('Fehler beim Erstellen des Projekts.');
@@ -104,7 +104,7 @@ const Projects = () => {
   };
 
   const handleEdit = (projectId) => {
-    window.location.href = `/projects/${projectId}`;
+    window.location.href = `/sales/projects/${projectId}`;
   };
 
   const getStatusColor = (status) => {
