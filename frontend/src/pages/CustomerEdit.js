@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
-import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon, BuildingOfficeIcon, BeakerIcon, WrenchScrewdriverIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon, UserIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon, BuildingOfficeIcon, BeakerIcon, WrenchScrewdriverIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon, UserIcon, KeyIcon } from '@heroicons/react/24/outline';
 import AddressMap from '../components/AddressMap';
 
 const CustomerEdit = () => {
@@ -37,6 +37,7 @@ const CustomerEdit = () => {
   const [customerProjects, setCustomerProjects] = useState([]);
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerQuotations, setCustomerQuotations] = useState([]);
+  const [customerLicenses, setCustomerLicenses] = useState([]);
 
   useEffect(() => {
     loadUsers();
@@ -93,16 +94,18 @@ const CustomerEdit = () => {
 
   const loadRelatedData = async (customerId) => {
     try {
-      const [systemsRes, projectsRes, ordersRes, quotationsRes] = await Promise.all([
+      const [systemsRes, projectsRes, ordersRes, quotationsRes, licensesRes] = await Promise.all([
         api.get(`/customers/customers/${customerId}/systems/`).catch(() => ({ data: [] })),
         api.get(`/customers/customers/${customerId}/projects/`).catch(() => ({ data: [] })),
         api.get(`/customer-orders/customer-orders/?customer=${customerId}`).catch(() => ({ data: { results: [] } })),
-        api.get(`/sales/quotations/?customer=${customerId}`).catch(() => ({ data: { results: [] } }))
+        api.get(`/sales/quotations/?customer=${customerId}`).catch(() => ({ data: { results: [] } })),
+        api.get(`/visiview/licenses/?customer=${customerId}`).catch(() => ({ data: { results: [] } }))
       ]);
       setCustomerSystems(systemsRes.data || []);
       setCustomerProjects(projectsRes.data || []);
       setCustomerOrders(ordersRes.data?.results || ordersRes.data || []);
       setCustomerQuotations(quotationsRes.data?.results || quotationsRes.data || []);
+      setCustomerLicenses(licensesRes.data?.results || licensesRes.data || []);
     } catch (error) {
       console.error('Error loading related data:', error);
     }
@@ -271,7 +274,8 @@ const CustomerEdit = () => {
       { id: 'systems', label: 'Systeme', icon: BuildingOfficeIcon, count: customerSystems.length },
       { id: 'projects', label: 'Projekte', icon: BeakerIcon, count: customerProjects.length },
       { id: 'orders', label: 'Aufträge', icon: DocumentTextIcon, count: customerOrders.length },
-      { id: 'quotations', label: 'Angebote', icon: DocumentTextIcon, count: customerQuotations.length }
+      { id: 'quotations', label: 'Angebote', icon: DocumentTextIcon, count: customerQuotations.length },
+      { id: 'visiview', label: 'VisiView', icon: KeyIcon, count: customerLicenses.length }
     ] : [])
   ];
 
@@ -1030,6 +1034,58 @@ const CustomerEdit = () => {
                           type="button"
                           onClick={() => navigate(`/sales/quotations/${quot.id}`)}
                           className="text-yellow-600 hover:text-yellow-800"
+                        >
+                          <ArrowTopRightOnSquareIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* VisiView Lizenzen Tab */}
+            {activeTab === 'visiview' && isEditing && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold">VisiView Lizenzen ({customerLicenses.length})</h3>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/visiview/licenses/new?customer=${id}`)}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm rounded-md text-white bg-purple-600 hover:bg-purple-700"
+                  >
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    Neue Lizenz
+                  </button>
+                </div>
+                {customerLicenses.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">Keine VisiView Lizenzen vorhanden</p>
+                ) : (
+                  <div className="space-y-2">
+                    {customerLicenses.map(license => (
+                      <div key={license.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-medium text-purple-700">{license.serial_number}</span>
+                            {license.is_active ? (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800">Aktiv</span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-800">Inaktiv</span>
+                            )}
+                            {license.is_maintenance_valid && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-800">Wartung</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {license.options_count || 0} Optionen
+                            {license.version && ` • Version ${license.version}`}
+                            {license.delivery_date && ` • Ausgeliefert: ${new Date(license.delivery_date).toLocaleDateString('de-DE')}`}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/visiview/licenses/${license.id}`)}
+                          className="text-purple-600 hover:text-purple-800"
                         >
                           <ArrowTopRightOnSquareIcon className="h-5 w-5" />
                         </button>

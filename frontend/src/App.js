@@ -38,6 +38,8 @@ import ProductionOrders from './pages/ProductionOrders';
 import InventoryItemEdit from './pages/InventoryItemEdit';
 import VisiViewProducts from './pages/VisiViewProducts';
 import VisiViewProductEdit from './pages/VisiViewProductEdit';
+import VisiViewLicenses from './pages/VisiViewLicenses';
+import VisiViewLicenseEdit from './pages/VisiViewLicenseEdit';
 import VSServiceProducts from './pages/VSServiceProducts';
 import VSServiceProductEdit from './pages/VSServiceProductEdit';
 import RMACases from './pages/RMACases';
@@ -51,6 +53,7 @@ import PriceListEdit from './pages/PriceListEdit';
 import Loans from './pages/Loans';
 import LoanEdit from './pages/LoanEdit';
 import Documents from './pages/Documents';
+import BackupRestore from './pages/BackupRestore';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -93,6 +96,9 @@ function App() {
             <Route path="visiview" element={<VisiView />} />
             <Route path="visiview/products" element={<VisiViewProducts />} />
             <Route path="visiview/products/:id" element={<VisiViewProductEdit />} />
+            <Route path="visiview/licenses" element={<VisiViewLicenses />} />
+            <Route path="visiview/licenses/new" element={<VisiViewLicenseEdit />} />
+            <Route path="visiview/licenses/:id" element={<VisiViewLicenseEdit />} />
             <Route path="service" element={<Service />} />
             <Route path="service/vs-service" element={<VSServiceProducts />} />
             <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />
@@ -149,6 +155,7 @@ function App() {
             <Route path="settings/currency-exchange-rates" element={<ExchangeRates />} />
             <Route path="settings/company-info" element={<CompanyInfo />} />
             <Route path="settings/payment-delivery" element={<PaymentDeliverySettings />} />
+            <Route path="settings/backup-restore" element={<BackupRestore />} />
             
             {/* Legacy redirects for backward compatibility */}
             <Route path="users" element={<Navigate to="/settings/users" replace />} />

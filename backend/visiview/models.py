@@ -218,3 +218,301 @@ class VisiViewProductPrice(models.Model):
                     raise ValidationError(
                         f'Überlappung mit bestehendem Preis ({price.valid_from} - {price.valid_until})'
                     )
+
+
+class VisiViewOption(models.Model):
+    """
+    VisiView Optionen - verfügbare Software-Optionen für Lizenzen
+    Basiert auf Options.txt
+    """
+    bit_position = models.IntegerField(
+        unique=True,
+        verbose_name='Bit-Position',
+        help_text='Position im Options-Bitfeld (0-63)'
+    )
+    name = models.CharField(max_length=100, verbose_name='Optionsname')
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Listenpreis (EUR)'
+    )
+    description = models.TextField(blank=True, verbose_name='Beschreibung')
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    
+    class Meta:
+        verbose_name = 'VisiView Option'
+        verbose_name_plural = 'VisiView Optionen'
+        ordering = ['bit_position']
+    
+    def __str__(self):
+        return f"{self.bit_position}: {self.name}"
+
+
+class VisiViewLicense(models.Model):
+    """
+    VisiView Lizenzen - Dongle-basierte Software-Lizenzen
+    """
+    LICENSE_STATUS_CHOICES = [
+        ('active', 'Aktiv'),
+        ('demo', 'Demo'),
+        ('loaner', 'Leihgerät'),
+        ('returned', 'Zurückgegeben'),
+        ('cancelled', 'Storniert'),
+        ('defect', 'Defekt'),
+        ('lost', 'Verloren'),
+    ]
+    
+    # Identifikation
+    license_number = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name='Lizenznummer',
+        help_text='Automatisch generiert: L-00001'
+    )
+    serial_number = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name='Seriennummer (Dongle)',
+        help_text='Dongle-Seriennummer'
+    )
+    internal_serial = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Interne Seriennummer',
+        help_text='Interne Dongle-ID (z.B. 0x7)'
+    )
+    
+    # Kundenverknüpfung
+    customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visiview_licenses',
+        verbose_name='Kunde'
+    )
+    customer_name_legacy = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Kundenname (Import)',
+        help_text='Importierter Kundenname vor Verknüpfung'
+    )
+    customer_address_legacy = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name='Kundenadresse (Import)',
+        help_text='Importierte Adresse vor Verknüpfung'
+    )
+    
+    # Distributor
+    distributor = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Distributor'
+    )
+    
+    # Software-Version
+    version = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Version'
+    )
+    
+    # Optionen als Bitfeld (64-bit)
+    options_bitmask = models.BigIntegerField(
+        default=0,
+        verbose_name='Optionen (Bitmaske)',
+        help_text='Bitfeld für freigeschaltete Optionen'
+    )
+    options_upper_32bit = models.IntegerField(
+        default=0,
+        verbose_name='Optionen (Upper 32-bit)',
+        help_text='Obere 32-bit für Optionen 32-63'
+    )
+    
+    # Daten
+    delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Lieferdatum'
+    )
+    expire_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Ablaufdatum'
+    )
+    maintenance_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Wartung bis'
+    )
+    
+    # Bestellung
+    purchase_order = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bestellnummer'
+    )
+    
+    # Status-Flags
+    status = models.CharField(
+        max_length=20,
+        choices=LICENSE_STATUS_CHOICES,
+        default='active',
+        verbose_name='Status'
+    )
+    is_demo = models.BooleanField(default=False, verbose_name='Demo')
+    is_loaner = models.BooleanField(default=False, verbose_name='Leihgerät')
+    is_defect = models.BooleanField(default=False, verbose_name='Defekt')
+    is_returned = models.BooleanField(default=False, verbose_name='Zurückgegeben')
+    is_cancelled = models.BooleanField(default=False, verbose_name='Storniert')
+    is_lost = models.BooleanField(default=False, verbose_name='Verloren')
+    is_outdated = models.BooleanField(default=False, verbose_name='Veraltet')
+    
+    return_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Rückgabedatum'
+    )
+    
+    # Demo-Optionen
+    demo_options = models.BigIntegerField(
+        default=0,
+        verbose_name='Demo-Optionen'
+    )
+    demo_options_expire_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Demo-Optionen Ablauf'
+    )
+    
+    # Dongle-Info
+    dongle_batch_id = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Dongle Batch ID'
+    )
+    dongle_version = models.IntegerField(
+        default=1,
+        verbose_name='Dongle Version'
+    )
+    dongle_mod_count = models.IntegerField(
+        default=0,
+        verbose_name='Dongle Änderungszähler'
+    )
+    
+    # Support
+    support_end = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Support Ende'
+    )
+    support_warning = models.BooleanField(
+        default=False,
+        verbose_name='Support-Warnung'
+    )
+    
+    # Notizen
+    info = models.TextField(blank=True, verbose_name='Info/Notizen')
+    todo = models.TextField(blank=True, verbose_name='To-Do')
+    
+    # Legacy-Import-ID
+    legacy_id = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Legacy ID',
+        help_text='Original-ID aus CSV-Import'
+    )
+    
+    # Metadaten
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visiview_licenses_created',
+        verbose_name='Erstellt von'
+    )
+    
+    class Meta:
+        verbose_name = 'VisiView Lizenz'
+        verbose_name_plural = 'VisiView Lizenzen'
+        ordering = ['-serial_number']
+    
+    def __str__(self):
+        if self.customer:
+            return f"{self.license_number} ({self.serial_number}) - {self.customer}"
+        return f"{self.license_number} ({self.serial_number}) - {self.customer_name_legacy}"
+    
+    def save(self, *args, **kwargs):
+        if not self.license_number:
+            self.license_number = self._generate_license_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_license_number():
+        """Generiert die nächste freie Lizenznummer im Format L-00001"""
+        existing_numbers = VisiViewLicense.objects.filter(
+            license_number__isnull=False
+        ).values_list('license_number', flat=True)
+        
+        if not existing_numbers:
+            return 'L-00001'
+        
+        numeric_numbers = []
+        for num in existing_numbers:
+            try:
+                numeric_part = int(num.split('-')[1])
+                numeric_numbers.append(numeric_part)
+            except (ValueError, IndexError):
+                continue
+        
+        if not numeric_numbers:
+            return 'L-00001'
+        
+        next_number = max(numeric_numbers) + 1
+        return f'L-{next_number:05d}'
+    
+    def get_active_options(self):
+        """Gibt eine Liste der aktiven Optionen zurück"""
+        options = []
+        # Lower 32-bit
+        for i in range(32):
+            if self.options_bitmask & (1 << i):
+                try:
+                    option = VisiViewOption.objects.get(bit_position=i)
+                    options.append(option)
+                except VisiViewOption.DoesNotExist:
+                    pass
+        # Upper 32-bit
+        for i in range(32):
+            if self.options_upper_32bit & (1 << i):
+                try:
+                    option = VisiViewOption.objects.get(bit_position=i + 32)
+                    options.append(option)
+                except VisiViewOption.DoesNotExist:
+                    pass
+        return options
+    
+    def has_option(self, bit_position):
+        """Prüft ob eine bestimmte Option aktiv ist"""
+        if bit_position < 32:
+            return bool(self.options_bitmask & (1 << bit_position))
+        else:
+            return bool(self.options_upper_32bit & (1 << (bit_position - 32)))
+    
+    def set_option(self, bit_position, enabled=True):
+        """Aktiviert oder deaktiviert eine Option"""
+        if bit_position < 32:
+            if enabled:
+                self.options_bitmask |= (1 << bit_position)
+            else:
+                self.options_bitmask &= ~(1 << bit_position)
+        else:
+            if enabled:
+                self.options_upper_32bit |= (1 << (bit_position - 32))
+            else:
+                self.options_upper_32bit &= ~(1 << (bit_position - 32))

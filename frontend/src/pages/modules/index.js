@@ -80,19 +80,20 @@ export const VisiView = () => (
           </div>
         </div>
       </Link>
-      <div
-        className="bg-white rounded-lg shadow p-6 opacity-60 cursor-not-allowed"
+      <Link
+        to="/visiview/licenses"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
       >
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-gray-100 rounded-lg">
-            <KeyIcon className="h-8 w-8 text-gray-400" />
+          <div className="p-3 bg-purple-100 rounded-lg">
+            <KeyIcon className="h-8 w-8 text-purple-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-500">Lizenzverwaltung</h3>
-            <p className="text-sm text-gray-400">Demnächst verfügbar</p>
+            <h3 className="font-semibold text-gray-900">Lizenzverwaltung</h3>
+            <p className="text-sm text-gray-500">VisiView Lizenzen verwalten</p>
           </div>
         </div>
-      </div>
+      </Link>
       <div
         className="bg-white rounded-lg shadow p-6 opacity-60 cursor-not-allowed"
       >
