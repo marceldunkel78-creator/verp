@@ -89,3 +89,17 @@ python manage.py runserver
 # Frontend (Terminal 2)
 cd frontend
 npm start
+
+
+# Ins Backend-Verzeichnis wechseln
+cd backend
+
+# DRY-RUN (Vorschau ohne Änderungen)
+python import_addresses.py
+
+# ECHTER IMPORT (importiert ~7.500 Kunden mit Adressen, Telefonnummern, E-Mails)
+python import_addresses.py --live
+
+# Hinweis: Der Import filtert automatisch Lieferanten und veraltete Adressen aus.
+# Bei identischen Namen werden mehrere Adressen dem selben Kunden zugeordnet.
+# Felder die zu lang sind werden automatisch gekürzt (Stadt: 100, Straße: 200, Tel: 50 Zeichen)
