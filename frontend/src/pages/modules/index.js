@@ -11,7 +11,8 @@ import {
   TicketIcon,
   WrenchScrewdriverIcon,
   ArrowPathIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  CodeBracketIcon
 } from '@heroicons/react/24/outline';
 
 export const InventoryManagement = () => <InventoryManagementModule />;
@@ -94,19 +95,34 @@ export const VisiView = () => (
           </div>
         </div>
       </Link>
-      <div
-        className="bg-white rounded-lg shadow p-6 opacity-60 cursor-not-allowed"
+      <Link
+        to="/visiview/tickets"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
       >
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-gray-100 rounded-lg">
-            <TicketIcon className="h-8 w-8 text-gray-400" />
+          <div className="p-3 bg-indigo-100 rounded-lg">
+            <TicketIcon className="h-8 w-8 text-indigo-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-500">Ticket-System</h3>
-            <p className="text-sm text-gray-400">Bugs & Feature Requests</p>
+            <h3 className="font-semibold text-gray-900">Ticket-System</h3>
+            <p className="text-sm text-gray-500">Bugs & Feature Requests</p>
           </div>
         </div>
-      </div>
+      </Link>
+      <Link
+        to="/visiview/macros"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-cyan-100 rounded-lg">
+            <CodeBracketIcon className="h-8 w-8 text-cyan-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Macros</h3>
+            <p className="text-sm text-gray-500">Python Macros verwalten</p>
+          </div>
+        </div>
+      </Link>
     </div>
   </div>
 );

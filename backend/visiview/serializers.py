@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption
+from .models import (
+    VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
+    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog
+)
 
 User = get_user_model()
 
@@ -291,3 +294,310 @@ class CustomerVisiViewLicenseSerializer(serializers.ModelSerializer):
     
     def get_status_display(self, obj):
         return obj.get_status_display()
+
+
+# ============================================================
+# VisiView Tickets
+# ============================================================
+
+class VisiViewTicketCommentSerializer(serializers.ModelSerializer):
+    """Serializer für Ticket Kommentare"""
+    created_by_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewTicketComment
+        fields = [
+            'id', 'ticket', 'comment', 'is_imported',
+            'created_by', 'created_by_name', 'created_by_display',
+            'created_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'created_by']
+    
+    def get_created_by_display(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return obj.created_by_name or 'Unbekannt'
+
+
+class VisiViewTicketChangeLogSerializer(serializers.ModelSerializer):
+    """Serializer für Ticket Änderungsprotokoll"""
+    changed_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewTicketChangeLog
+        fields = [
+            'id', 'ticket', 'field_name', 'old_value', 'new_value',
+            'changed_by', 'changed_by_name', 'changed_at'
+        ]
+        read_only_fields = ['id', 'changed_at']
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip() or obj.changed_by.username
+        return None
+
+
+class VisiViewTicketListSerializer(serializers.ModelSerializer):
+    """Serializer für VisiView Ticket Liste"""
+    subject = serializers.CharField(source='title', read_only=True)  # Alias für Frontend-Kompatibilität
+    tracker_display = serializers.CharField(source='get_tracker_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    assigned_to_display = serializers.SerializerMethodField()
+    is_open = serializers.BooleanField(read_only=True)
+    comment_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewTicket
+        fields = [
+            'id', 'ticket_number', 'tracker', 'tracker_display',
+            'title', 'subject', 'status', 'status_display',
+            'priority', 'priority_display',
+            'category', 'category_display',
+            'author', 'assigned_to', 'assigned_to_name', 'assigned_to_display',
+            'target_version', 'affected_version',
+            'percent_done', 'is_open', 'is_private',
+            'customers', 'comment_count',
+            'created_at', 'updated_at', 'imported_created_at', 'imported_updated_at'
+        ]
+    
+    def get_assigned_to_display(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
+        return obj.assigned_to_name or None
+    
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+
+class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
+    """Detaillierter Serializer für VisiView Ticket"""
+    tracker_display = serializers.CharField(source='get_tracker_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    assigned_to_display = serializers.SerializerMethodField()
+    author_user_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    is_open = serializers.BooleanField(read_only=True)
+    comments = VisiViewTicketCommentSerializer(many=True, read_only=True)
+    change_logs = VisiViewTicketChangeLogSerializer(many=True, read_only=True)
+    parent_ticket_display = serializers.SerializerMethodField()
+    child_tickets = serializers.SerializerMethodField()
+    watchers_list = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewTicket
+        fields = [
+            'id', 'ticket_number', 'tracker', 'tracker_display',
+            'parent_ticket', 'parent_ticket_display', 'child_tickets',
+            'title', 'description',
+            'status', 'status_display',
+            'priority', 'priority_display',
+            'category', 'category_display',
+            'author', 'author_user', 'author_user_name',
+            'assigned_to', 'assigned_to_name', 'assigned_to_display',
+            'last_changed_by',
+            'target_version', 'affected_version', 'visiview_id',
+            'start_date', 'due_date',
+            'estimated_hours', 'total_estimated_hours', 'spent_hours',
+            'percent_done',
+            'customers', 'attachments', 'related_tickets',
+            'is_private', 'add_to_worklist', 'rank',
+            'is_open',
+            'created_at', 'updated_at', 'closed_at',
+            'imported_created_at', 'imported_updated_at',
+            'created_by', 'created_by_name',
+            'watchers', 'watchers_list',
+            'comments', 'change_logs'
+        ]
+    
+    def get_assigned_to_display(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
+        return obj.assigned_to_name or None
+    
+    def get_author_user_name(self, obj):
+        if obj.author_user:
+            return f"{obj.author_user.first_name} {obj.author_user.last_name}".strip() or obj.author_user.username
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_parent_ticket_display(self, obj):
+        if obj.parent_ticket:
+            return f"#{obj.parent_ticket.ticket_number} - {obj.parent_ticket.title}"
+        return None
+    
+    def get_child_tickets(self, obj):
+        children = obj.child_tickets.all()
+        return [
+            {
+                'id': child.id,
+                'ticket_number': child.ticket_number,
+                'title': child.title,
+                'status': child.status,
+                'status_display': child.get_status_display()
+            }
+            for child in children
+        ]
+    
+    def get_watchers_list(self, obj):
+        return [
+            {
+                'id': user.id,
+                'name': f"{user.first_name} {user.last_name}".strip() or user.username
+            }
+            for user in obj.watchers.all()
+        ]
+
+
+class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer für Erstellen/Aktualisieren von VisiView Tickets"""
+    
+    class Meta:
+        model = VisiViewTicket
+        fields = [
+            'id', 'ticket_number', 'tracker', 'parent_ticket',
+            'title', 'description',
+            'status', 'priority', 'category',
+            'author', 'author_user', 'assigned_to', 'assigned_to_name',
+            'target_version', 'affected_version', 'visiview_id',
+            'start_date', 'due_date',
+            'estimated_hours', 'total_estimated_hours', 'spent_hours',
+            'percent_done',
+            'customers', 'attachments', 'related_tickets',
+            'is_private', 'add_to_worklist', 'rank',
+            'closed_at'
+        ]
+        read_only_fields = ['id']
+    
+    def validate_ticket_number(self, value):
+        """Prüft ob die Ticket-Nummer bereits existiert"""
+        instance = self.instance
+        if VisiViewTicket.objects.filter(ticket_number=value).exclude(pk=instance.pk if instance else None).exists():
+            raise serializers.ValidationError('Diese Ticket-Nummer existiert bereits.')
+        return value
+
+
+# ==================== VisiView Macro Serializers ====================
+
+from .models import VisiViewMacro, VisiViewMacroExampleImage, VisiViewMacroChangeLog
+
+
+class VisiViewMacroExampleImageSerializer(serializers.ModelSerializer):
+    """Serializer für Macro Beispielbilder"""
+    
+    class Meta:
+        model = VisiViewMacroExampleImage
+        fields = ['id', 'macro', 'image', 'description', 'uploaded_at']
+        read_only_fields = ['uploaded_at']
+
+
+class VisiViewMacroChangeLogSerializer(serializers.ModelSerializer):
+    """Serializer für Macro Änderungsprotokoll"""
+    changed_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewMacroChangeLog
+        fields = ['id', 'macro', 'version', 'description', 'changed_by', 'changed_by_name', 'changed_at']
+        read_only_fields = ['changed_at', 'changed_by']
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip() or obj.changed_by.username
+        return None
+
+
+class VisiViewMacroListSerializer(serializers.ModelSerializer):
+    """Serializer für Macro-Liste (kompakt)"""
+    author_user_name = serializers.SerializerMethodField()
+    dependency_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewMacro
+        fields = [
+            'id', 'macro_id', 'title', 'author', 'author_user', 'author_user_name',
+            'visiview_version', 'category', 'keywords', 'status',
+            'dependency_count', 'created_at', 'updated_at'
+        ]
+    
+    def get_author_user_name(self, obj):
+        if obj.author_user:
+            return f"{obj.author_user.first_name} {obj.author_user.last_name}".strip() or obj.author_user.username
+        return None
+    
+    def get_dependency_count(self, obj):
+        return obj.dependencies.count()
+
+
+class VisiViewMacroDetailSerializer(serializers.ModelSerializer):
+    """Serializer für Macro-Details (vollständig)"""
+    author_user_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    example_images = VisiViewMacroExampleImageSerializer(many=True, read_only=True)
+    change_logs = VisiViewMacroChangeLogSerializer(many=True, read_only=True)
+    dependencies_list = serializers.SerializerMethodField()
+    dependent_macros_list = serializers.SerializerMethodField()
+    filename = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = VisiViewMacro
+        fields = [
+            'id', 'macro_id', 'title', 'author', 'author_user', 'author_user_name',
+            'visiview_version', 'purpose', 'usage', 'code',
+            'keywords', 'category', 'status', 'changelog',
+            'dependencies', 'dependencies_list', 'dependent_macros_list',
+            'original_filename', 'filename',
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'example_images', 'change_logs'
+        ]
+    
+    def get_author_user_name(self, obj):
+        if obj.author_user:
+            return f"{obj.author_user.first_name} {obj.author_user.last_name}".strip() or obj.author_user.username
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_dependencies_list(self, obj):
+        return [
+            {
+                'id': dep.id,
+                'macro_id': dep.macro_id,
+                'title': dep.title
+            }
+            for dep in obj.dependencies.all()
+        ]
+    
+    def get_dependent_macros_list(self, obj):
+        """Macros die von diesem Macro abhängig sind"""
+        return [
+            {
+                'id': dep.id,
+                'macro_id': dep.macro_id,
+                'title': dep.title
+            }
+            for dep in obj.dependent_macros.all()
+        ]
+
+
+class VisiViewMacroCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer für Erstellen/Aktualisieren von Macros"""
+    
+    class Meta:
+        model = VisiViewMacro
+        fields = [
+            'id', 'macro_id', 'title', 'author', 'author_user',
+            'visiview_version', 'purpose', 'usage', 'code',
+            'keywords', 'category', 'status', 'changelog',
+            'dependencies', 'original_filename'
+        ]
+        read_only_fields = ['id', 'macro_id']

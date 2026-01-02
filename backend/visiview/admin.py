@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption
+from .models import (
+    VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
+    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog
+)
 
 
 class VisiViewProductPriceInline(admin.TabularInline):
@@ -112,3 +115,120 @@ class VisiViewLicenseAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+# ============================================================
+# VisiView Tickets Admin
+# ============================================================
+
+class VisiViewTicketCommentInline(admin.TabularInline):
+    model = VisiViewTicketComment
+    extra = 0
+    fields = ['comment', 'created_by_name', 'created_by', 'created_at', 'is_imported']
+    readonly_fields = ['created_at']
+    ordering = ['-created_at']
+
+
+class VisiViewTicketChangeLogInline(admin.TabularInline):
+    model = VisiViewTicketChangeLog
+    extra = 0
+    fields = ['field_name', 'old_value', 'new_value', 'changed_by', 'changed_at']
+    readonly_fields = ['field_name', 'old_value', 'new_value', 'changed_by', 'changed_at']
+    ordering = ['-changed_at']
+    can_delete = False
+    
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(VisiViewTicket)
+class VisiViewTicketAdmin(admin.ModelAdmin):
+    list_display = [
+        'ticket_number', 'tracker', 'title', 'status', 'priority',
+        'category', 'assigned_to_display', 'target_version', 'percent_done',
+        'updated_at'
+    ]
+    list_filter = ['tracker', 'status', 'priority', 'category', 'is_private', 'assigned_to']
+    search_fields = ['ticket_number', 'title', 'description', 'author', 'customers']
+    readonly_fields = ['created_at', 'updated_at', 'imported_created_at', 'imported_updated_at']
+    raw_id_fields = ['parent_ticket', 'author_user', 'assigned_to', 'created_by']
+    filter_horizontal = ['watchers']
+    date_hierarchy = 'created_at'
+    inlines = [VisiViewTicketCommentInline, VisiViewTicketChangeLogInline]
+    
+    fieldsets = (
+        ('Ticket-Identifikation', {
+            'fields': ('ticket_number', 'tracker', 'parent_ticket')
+        }),
+        ('Inhalt', {
+            'fields': ('title', 'description')
+        }),
+        ('Status & Priorität', {
+            'fields': ('status', 'priority', 'category', 'percent_done')
+        }),
+        ('Personen', {
+            'fields': ('author', 'author_user', 'assigned_to', 'assigned_to_name', 'last_changed_by', 'watchers')
+        }),
+        ('Versionen', {
+            'fields': ('target_version', 'affected_version', 'visiview_id')
+        }),
+        ('Zeitplanung', {
+            'fields': ('start_date', 'due_date', 'estimated_hours', 'total_estimated_hours', 'spent_hours')
+        }),
+        ('Kunden & Verknüpfungen', {
+            'fields': ('customers', 'attachments', 'related_tickets')
+        }),
+        ('Flags', {
+            'fields': ('is_private', 'add_to_worklist', 'rank'),
+            'classes': ('collapse',)
+        }),
+        ('Zeitstempel', {
+            'fields': ('created_at', 'updated_at', 'closed_at', 'imported_created_at', 'imported_updated_at'),
+            'classes': ('collapse',)
+        }),
+        ('Metadaten', {
+            'fields': ('created_by',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def assigned_to_display(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
+        return obj.assigned_to_name or '-'
+    assigned_to_display.short_description = 'Zugewiesen an'
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(VisiViewTicketComment)
+class VisiViewTicketCommentAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'created_by_display', 'created_at', 'is_imported']
+    list_filter = ['is_imported', 'created_at']
+    search_fields = ['ticket__ticket_number', 'comment', 'created_by_name']
+    raw_id_fields = ['ticket', 'created_by']
+    readonly_fields = ['created_at']
+    
+    def created_by_display(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return obj.created_by_name or 'Unbekannt'
+    created_by_display.short_description = 'Erstellt von'
+
+
+@admin.register(VisiViewTicketChangeLog)
+class VisiViewTicketChangeLogAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'field_name', 'changed_by', 'changed_at']
+    list_filter = ['field_name', 'changed_at']
+    search_fields = ['ticket__ticket_number', 'field_name', 'old_value', 'new_value']
+    raw_id_fields = ['ticket', 'changed_by']
+    readonly_fields = ['ticket', 'field_name', 'old_value', 'new_value', 'changed_by', 'changed_at']
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        return False

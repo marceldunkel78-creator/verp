@@ -40,6 +40,10 @@ import VisiViewProducts from './pages/VisiViewProducts';
 import VisiViewProductEdit from './pages/VisiViewProductEdit';
 import VisiViewLicenses from './pages/VisiViewLicenses';
 import VisiViewLicenseEdit from './pages/VisiViewLicenseEdit';
+import VisiViewTickets from './pages/VisiViewTickets';
+import VisiViewTicketEdit from './pages/VisiViewTicketEdit';
+import VisiViewMacros from './pages/VisiViewMacros';
+import VisiViewMacroEdit from './pages/VisiViewMacroEdit';
 import VSServiceProducts from './pages/VSServiceProducts';
 import VSServiceProductEdit from './pages/VSServiceProductEdit';
 import RMACases from './pages/RMACases';
@@ -99,6 +103,10 @@ function App() {
             <Route path="visiview/licenses" element={<VisiViewLicenses />} />
             <Route path="visiview/licenses/new" element={<VisiViewLicenseEdit />} />
             <Route path="visiview/licenses/:id" element={<VisiViewLicenseEdit />} />
+            <Route path="visiview/tickets" element={<VisiViewTickets />} />
+            <Route path="visiview/tickets/:id" element={<VisiViewTicketEdit />} />
+            <Route path="visiview/macros" element={<VisiViewMacros />} />
+            <Route path="visiview/macros/:id" element={<VisiViewMacroEdit />} />
             <Route path="service" element={<Service />} />
             <Route path="service/vs-service" element={<VSServiceProducts />} />
             <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />
