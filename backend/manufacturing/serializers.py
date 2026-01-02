@@ -172,12 +172,14 @@ class VSHardwareListSerializer(serializers.ModelSerializer):
     current_purchase_price = serializers.SerializerMethodField()
     current_sales_price = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
     
     class Meta:
         model = VSHardware
         fields = [
             'id', 'part_number', 'name', 'model_designation',
             'description', 'description_en',
+            'product_category', 'product_category_name',
             'unit', 'is_active',
             'current_purchase_price', 'current_sales_price',
             'created_at', 'created_by_name'
@@ -212,6 +214,7 @@ class VSHardwareDetailSerializer(serializers.ModelSerializer):
     draft_manual_url = serializers.SerializerMethodField()
     release_manual_name = serializers.SerializerMethodField()
     draft_manual_name = serializers.SerializerMethodField()
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
     
     class Meta:
         model = VSHardware
@@ -219,6 +222,7 @@ class VSHardwareDetailSerializer(serializers.ModelSerializer):
             'id', 'part_number', 'name', 'model_designation', 'description', 'description_en',
             'release_manual', 'release_manual_url', 'release_manual_name',
             'draft_manual', 'draft_manual_url', 'draft_manual_name',
+            'product_category', 'product_category_name',
             'unit', 'is_active',
             'current_purchase_price', 'current_sales_price',
             'prices', 'material_items', 'cost_calculations', 'documents',

@@ -38,6 +38,9 @@ const CustomerEdit = () => {
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerQuotations, setCustomerQuotations] = useState([]);
   const [customerLicenses, setCustomerLicenses] = useState([]);
+  const [customerLicensesPage, setCustomerLicensesPage] = useState(1);
+  const [customerLicensesPageSize] = useState(9);
+  const [customerLicensesTotal, setCustomerLicensesTotal] = useState(0);
 
   useEffect(() => {
     loadUsers();
@@ -45,6 +48,14 @@ const CustomerEdit = () => {
       loadCustomer();
     }
   }, [id]);
+
+  // Refetch customer's licenses when the page changes
+  useEffect(() => {
+    if (isEditing) {
+      fetchCustomerLicenses(id, customerLicensesPage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerLicensesPage]);
 
   const loadCustomer = async () => {
     try {
@@ -92,25 +103,43 @@ const CustomerEdit = () => {
     }
   };
 
+  const fetchCustomerLicenses = async (customerId, page = 1) => {
+    try {
+      const params = new URLSearchParams();
+      params.append('customer', customerId);
+      params.append('page_size', String(customerLicensesPageSize));
+      params.append('page', String(page));
+      const resp = await api.get(`/visiview/licenses/?${params.toString()}`).catch(() => ({ data: { results: [], count: 0 } }));
+      if (resp.data && resp.data.results) {
+        setCustomerLicenses(resp.data.results || []);
+        setCustomerLicensesTotal(resp.data.count || resp.data.results.length);
+      } else {
+        setCustomerLicenses(resp.data || []);
+        setCustomerLicensesTotal((resp.data && resp.data.length) ? resp.data.length : 0);
+      }
+    } catch (error) {
+      console.error('Error fetching customer licenses:', error);
+    }
+  };
+
   const loadRelatedData = async (customerId) => {
     try {
-      const [systemsRes, projectsRes, ordersRes, quotationsRes, licensesRes] = await Promise.all([
+      const [systemsRes, projectsRes, ordersRes, quotationsRes] = await Promise.all([
         api.get(`/customers/customers/${customerId}/systems/`).catch(() => ({ data: [] })),
         api.get(`/customers/customers/${customerId}/projects/`).catch(() => ({ data: [] })),
         api.get(`/customer-orders/customer-orders/?customer=${customerId}`).catch(() => ({ data: { results: [] } })),
-        api.get(`/sales/quotations/?customer=${customerId}`).catch(() => ({ data: { results: [] } })),
-        api.get(`/visiview/licenses/?customer=${customerId}`).catch(() => ({ data: { results: [] } }))
+        api.get(`/sales/quotations/?customer=${customerId}`).catch(() => ({ data: { results: [] } }))
       ]);
       setCustomerSystems(systemsRes.data || []);
       setCustomerProjects(projectsRes.data || []);
       setCustomerOrders(ordersRes.data?.results || ordersRes.data || []);
       setCustomerQuotations(quotationsRes.data?.results || quotationsRes.data || []);
-      setCustomerLicenses(licensesRes.data?.results || licensesRes.data || []);
+      // Load first page of licenses
+      fetchCustomerLicenses(customerId, 1);
     } catch (error) {
       console.error('Error loading related data:', error);
     }
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -275,7 +304,7 @@ const CustomerEdit = () => {
       { id: 'projects', label: 'Projekte', icon: BeakerIcon, count: customerProjects.length },
       { id: 'orders', label: 'Aufträge', icon: DocumentTextIcon, count: customerOrders.length },
       { id: 'quotations', label: 'Angebote', icon: DocumentTextIcon, count: customerQuotations.length },
-      { id: 'visiview', label: 'VisiView', icon: KeyIcon, count: customerLicenses.length }
+      { id: 'visiview', label: 'VisiView', icon: KeyIcon, count: customerLicensesTotal }
     ] : [])
   ];
 
@@ -1048,7 +1077,7 @@ const CustomerEdit = () => {
             {activeTab === 'visiview' && isEditing && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold">VisiView Lizenzen ({customerLicenses.length})</h3>
+                  <h3 className="text-lg font-semibold">VisiView Lizenzen ({customerLicensesTotal})</h3>
                   <button
                     type="button"
                     onClick={() => navigate(`/visiview/licenses/new?customer=${id}`)}
@@ -1091,6 +1120,63 @@ const CustomerEdit = () => {
                         </button>
                       </div>
                     ))}
+
+                    {/* Pagination for customer licenses */}
+                    {customerLicensesTotal > customerLicensesPageSize && (
+                      (() => {
+                        const totalPages = Math.ceil(customerLicensesTotal / customerLicensesPageSize);
+                        const start = Math.max(1, customerLicensesPage - 2);
+                        const end = Math.min(totalPages, customerLicensesPage + 2);
+                        const pages = [];
+                        for (let p = start; p <= end; p++) pages.push(p);
+
+                        return (
+                          <div className="mt-4 flex justify-center items-center space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => setCustomerLicensesPage(prev => Math.max(1, prev - 1))}
+                              disabled={customerLicensesPage === 1}
+                              className={`px-3 py-1 rounded ${customerLicensesPage === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                            >
+                              Zurück
+                            </button>
+
+                            {start > 1 && (
+                              <button type="button" onClick={() => setCustomerLicensesPage(1)} className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100">1</button>
+                            )}
+
+                            {start > 2 && <span className="px-2">…</span>}
+
+                            {pages.map(p => (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setCustomerLicensesPage(p)}
+                                className={`px-3 py-1 rounded ${p === customerLicensesPage ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                              >
+                                {p}
+                              </button>
+                            ))}
+
+                            {end < totalPages - 1 && <span className="px-2">…</span>}
+
+                            {end < totalPages && (
+                              <button type="button" onClick={() => setCustomerLicensesPage(totalPages)} className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100">{totalPages}</button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setCustomerLicensesPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={customerLicensesPage === totalPages}
+                              className={`px-3 py-1 rounded ${customerLicensesPage === totalPages ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+                            >
+                              Weiter
+                            </button>
+                          </div>
+                        );
+                      })()
+                    )}
+
                   </div>
                 )}
               </div>

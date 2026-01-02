@@ -33,11 +33,13 @@ class VSServiceListSerializer(serializers.ModelSerializer):
     """Serializer für VS-Service Liste mit aktuellen Preisen"""
     current_purchase_price = serializers.SerializerMethodField()
     current_sales_price = serializers.SerializerMethodField()
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
     
     class Meta:
         model = VSService
         fields = [
             'id', 'article_number', 'name', 'short_description',
+            'product_category', 'product_category_name',
             'unit', 'is_active',
             'current_purchase_price', 'current_sales_price',
             'created_at', 'updated_at'
@@ -58,6 +60,7 @@ class VSServiceDetailSerializer(serializers.ModelSerializer):
     current_purchase_price = serializers.SerializerMethodField()
     current_list_price = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
     
     class Meta:
         model = VSService
@@ -65,6 +68,7 @@ class VSServiceDetailSerializer(serializers.ModelSerializer):
             'id', 'article_number', 'name',
             'short_description', 'short_description_en',
             'description', 'description_en',
+            'product_category', 'product_category_name',
             'unit', 'is_active',
             'prices', 'current_purchase_price', 'current_list_price',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
@@ -94,6 +98,7 @@ class VSServiceCreateUpdateSerializer(serializers.ModelSerializer):
             'id', 'article_number',
             'name', 'short_description', 'short_description_en',
             'description', 'description_en',
+            'product_category',
             'unit', 'is_active'
         ]
         read_only_fields = ['id', 'article_number']

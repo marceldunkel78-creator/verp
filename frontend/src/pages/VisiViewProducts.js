@@ -9,7 +9,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 
 const VisiViewProducts = () => {
@@ -60,6 +61,31 @@ const VisiViewProducts = () => {
     e.preventDefault();
     setCurrentPage(1);
     fetchProducts();
+  };
+
+  const handleCopy = async (e, product) => {
+    e.stopPropagation();
+    
+    if (!window.confirm(`Möchten Sie eine Kopie von "${product.name}" erstellen?`)) {
+      return;
+    }
+    
+    try {
+      const copyData = {
+        name: `${product.name} (Kopie)`,
+        description: product.description,
+        product_category: product.product_category,
+        unit: product.unit,
+        is_active: product.is_active
+      };
+      
+      const response = await api.post('/visiview/products/', copyData);
+      alert(`Kopie erstellt: ${response.data.article_number}`);
+      fetchProducts();
+    } catch (error) {
+      console.error('Fehler beim Kopieren:', error);
+      alert('Fehler beim Erstellen der Kopie: ' + (error.response?.data?.detail || error.message));
+    }
   };
 
   const handleCreateProduct = async (e) => {
@@ -145,69 +171,90 @@ const VisiViewProducts = () => {
             <p>Keine VisiView Produkte gefunden</p>
           </div>
         ) : (
-          <table className="min-w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Artikelnr.
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Kategorie
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  EK
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  LP
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Aktionen
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {products.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                    {product.article_number}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+            {products.map((product) => (
+              <div
+                key={product.id}
+                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow duration-200 overflow-hidden"
+              >
+                <div className="p-4">
+                  {/* Header mit Artikelnr und Status */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                        Artikelnr.
+                      </div>
+                      <div className="font-bold text-lg text-blue-600 font-mono">
+                        {product.article_number}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        product.is_active
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {product.is_active ? 'Aktiv' : 'Inaktiv'}
+                    </span>
+                  </div>
+
+                  {/* Produktname */}
+                  <h3 className="text-base font-semibold text-gray-900 mb-3 line-clamp-2" title={product.name}>
                     {product.name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.product_category_name || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                    {formatCurrency(product.current_purchase_price)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                    {formatCurrency(product.current_list_price)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    {product.is_active ? (
-                      <CheckCircleIcon className="h-5 w-5 text-green-500 inline" />
-                    ) : (
-                      <XCircleIcon className="h-5 w-5 text-red-500 inline" />
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                  </h3>
+
+                  {/* Kategorie */}
+                  {product.product_category_name && (
+                    <div className="flex items-center text-sm mb-4">
+                      <span className="text-gray-500 w-24 flex-shrink-0">Kategorie:</span>
+                      <span className="text-gray-900 truncate" title={product.product_category_name}>
+                        {product.product_category_name}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Preisinformationen */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">
+                        EK-Preis
+                      </div>
+                      <div className="text-lg font-bold text-blue-900">
+                        {formatCurrency(product.current_purchase_price)}
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-2">
+                      <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">
+                        Listenpreis
+                      </div>
+                      <div className="text-lg font-bold text-purple-900">
+                        {formatCurrency(product.current_list_price)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Aktionen */}
+                  <div className="flex gap-2">
                     <button
                       onClick={() => navigate(`/visiview/products/${product.id}`)}
-                      className="text-blue-600 hover:text-blue-900"
+                      className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
-                      <PencilIcon className="h-5 w-5 inline" />
+                      <PencilIcon className="h-4 w-4 mr-1" />
+                      Bearbeiten
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <button
+                      onClick={(e) => handleCopy(e, product)}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      title="Kopie erstellen"
+                    >
+                      <DocumentDuplicateIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
         
         {/* Pagination */}

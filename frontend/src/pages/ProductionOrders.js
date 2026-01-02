@@ -39,6 +39,11 @@ const ProductionOrders = () => {
   const [ordersFilter, setOrdersFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   
+  // VSHardware create modal
+  const [vsList, setVsList] = useState([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newOrderData, setNewOrderData] = useState({ vs_hardware: '', quantity: 1, notes: '' });
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -93,6 +98,41 @@ const ProductionOrders = () => {
       console.error('Error fetching orders:', error);
     } finally {
       setOrdersLoading(false);
+    }
+  };
+
+  const fetchVSHardware = async () => {
+    try {
+      const res = await api.get('/manufacturing/vs-hardware/?is_active=true&page_size=100');
+      // API may return paginated results
+      const data = res.data.results || res.data;
+      setVsList(data);
+    } catch (error) {
+      console.error('Error fetching VSHardware:', error);
+    }
+  };
+
+  const handleCreateOrder = async () => {
+    if (!newOrderData.vs_hardware) {
+      alert('Bitte VS-Hardware auswählen');
+      return;
+    }
+    if (!newOrderData.quantity || newOrderData.quantity < 1) {
+      alert('Bitte Menge >= 1 angeben');
+      return;
+    }
+
+    try {
+      await api.post('/manufacturing/production-orders/', newOrderData);
+      alert('Fertigungsauftrag erstellt');
+      setShowCreateModal(false);
+      setNewOrderData({ vs_hardware: '', quantity: 1, notes: '' });
+      // Refresh lists
+      fetchOrders();
+      fetchInbox();
+    } catch (error) {
+      console.error('Error creating production order:', error);
+      alert('Fehler beim Erstellen: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -219,7 +259,7 @@ const ProductionOrders = () => {
       {activeTab === 'inbox' && (
         <div className="bg-white rounded-lg shadow">
           {/* Filter */}
-          <div className="p-4 border-b">
+          <div className="p-4 border-b flex items-center justify-between">
             <div className="flex gap-2">
               {['all', 'pending', 'accepted', 'rejected'].map(filter => (
                 <button
@@ -235,7 +275,69 @@ const ProductionOrders = () => {
                 </button>
               ))}
             </div>
+            <div>
+              <button
+                onClick={() => { setShowCreateModal(true); fetchVSHardware(); }}
+                className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm"
+              >
+                Neuer Fertigungsauftrag
+              </button>
+            </div>
           </div>
+
+          {/* Create Order Modal */}
+          {showCreateModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowCreateModal(false)} />
+              <div className="bg-white rounded-lg shadow-lg z-10 w-full max-w-md p-6">
+                <h3 className="text-lg font-medium mb-4">Neuer Fertigungsauftrag</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">VS-Hardware</label>
+                    <select
+                      value={newOrderData.vs_hardware}
+                      onChange={(e) => setNewOrderData({ ...newOrderData, vs_hardware: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      <option value="">Auswählen...</option>
+                      {vsList.map(v => (
+                        <option key={v.id} value={v.id}>{v.part_number} - {v.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Menge</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newOrderData.quantity}
+                      onChange={(e) => setNewOrderData({ ...newOrderData, quantity: parseInt(e.target.value || '1') })}
+                      className="w-full border rounded px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Notizen (optional)</label>
+                    <textarea
+                      value={newOrderData.notes}
+                      onChange={(e) => setNewOrderData({ ...newOrderData, notes: e.target.value })}
+                      className="w-full border rounded px-3 py-2"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <button
+                      onClick={() => setShowCreateModal(false)}
+                      className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
+                    >Abbrechen</button>
+                    <button
+                      onClick={handleCreateOrder}
+                      className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+                    >Erstellen</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Inbox List */}
           {inboxLoading ? (
@@ -296,6 +398,9 @@ const ProductionOrders = () => {
                   </div>
                 </div>
               ))}
+
+              {/* Modal moved above */}
+
             </div>
           )}
         </div>

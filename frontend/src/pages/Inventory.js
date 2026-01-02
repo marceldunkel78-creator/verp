@@ -148,6 +148,19 @@ const Inventory = () => {
     }
   };
   
+  const handleDeleteInventoryItem = async (id) => {
+    if (!window.confirm('Möchten Sie diesen Lagerartikel wirklich löschen?')) return;
+    try {
+      await api.delete(`/inventory/inventory-items/${id}/`);
+      fetchInventoryItems();
+      alert('Lagerartikel wurde gelöscht');
+    } catch (error) {
+      console.error('Error deleting inventory item:', error);
+      const errMsg = error.response?.data?.detail || error.response?.data?.error || 'Fehler beim Löschen';
+      alert(errMsg);
+    }
+  };
+  
   const handleEditInventoryItem = (id) => {
     navigate(`/inventory/warehouse/${id}`);
   };
@@ -476,6 +489,7 @@ const Inventory = () => {
                       item={item}
                       onUpdate={handleUpdateInventoryItem}
                       onEdit={handleEditInventoryItem}
+                      onDelete={handleDeleteInventoryItem}
                     />
                   ))
                 )}
@@ -611,7 +625,7 @@ const IncomingGoodRow = ({ item, suppliers, productCategories, onUpdate, onTrans
 };
 
 // Sub-component for Inventory Item Row
-const InventoryItemRow = ({ item, onUpdate, onEdit }) => {
+const InventoryItemRow = ({ item, onUpdate, onEdit, onDelete }) => {
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
     status: item.status
@@ -701,6 +715,12 @@ const InventoryItemRow = ({ item, onUpdate, onEdit }) => {
             >
               <PencilSquareIcon className="h-4 w-4 mr-1" />
               Bearbeiten
+            </button>
+            <button
+              onClick={() => onDelete?.(item.id)}
+              className="text-red-600 hover:text-red-900 font-medium"
+            >
+              Löschen
             </button>
           </div>
         )}

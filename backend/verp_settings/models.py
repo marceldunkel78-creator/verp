@@ -450,6 +450,7 @@ class ProductCategory(models.Model):
         ('BETRIEBSSTOFF', 'Betriebsstoff'),
         ('SOFTWARE', 'Software'),
         ('SERVICE', 'Service'),
+        ('DIENSTLEISTUNG', 'Dienstleistung'),
         ('SONSTIGES', 'Sonstiges'),
     ]
     

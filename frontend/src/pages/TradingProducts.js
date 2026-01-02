@@ -471,101 +471,101 @@ const TradingProducts = () => {
       </div>
 
       {/* Produktliste */}
-      <div className="bg-white shadow overflow-hidden rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Visitron-Nr.
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Lieferant
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kategorie
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Einkaufspreis
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Preisgültigkeit bis
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktionen
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {products.map((product) => (
-              <tr key={product.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {product.visitron_part_number}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {product.name}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {product.supplier_name || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {product.category_display || '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue-900">
-                  {Number(product.purchase_price_eur).toFixed(2)} EUR
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="flex flex-col">
-                    <span>
-                      Bis: {product.price_valid_until 
-                        ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
-                        : 'unbeschränkt'}
-                    </span>
-                    {!isPriceValid(product) && (
-                      <span className="text-red-600 text-xs">Ungültig</span>
-                    )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {products.map((product) => (
+          <div
+            key={product.id}
+            className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow duration-200 overflow-hidden"
+          >
+            <div className="p-4">
+              {/* Header mit VS-Nr und Status */}
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex-1">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                    VS-Nr.
                   </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      product.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {product.is_active ? 'Aktiv' : 'Inaktiv'}
+                  <div className="font-bold text-lg text-gray-900">
+                    {product.visitron_part_number}
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                    product.is_active
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}
+                >
+                  {product.is_active ? 'Aktiv' : 'Inaktiv'}
+                </span>
+              </div>
+
+              {/* Produktname */}
+              <h3 className="text-base font-semibold text-gray-900 mb-3 line-clamp-2" title={product.name}>
+                {product.name}
+              </h3>
+
+              {/* Lieferant und Kategorie */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center text-sm">
+                  <span className="text-gray-500 w-24 flex-shrink-0">Lieferant:</span>
+                  <span className="text-gray-900 font-medium truncate" title={product.supplier_name}>
+                    {product.supplier_name || '-'}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  {canWrite && (
-                    <>
-                      <button
-                        onClick={() => navigate(`/procurement/trading-goods/${product.id}`)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                        title="Bearbeiten"
-                      >
-                        <PencilIcon className="h-5 w-5 inline" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Löschen"
-                      >
-                        <TrashIcon className="h-5 w-5 inline" />
-                      </button>
-                    </>
+                </div>
+                <div className="flex items-center text-sm">
+                  <span className="text-gray-500 w-24 flex-shrink-0">Kategorie:</span>
+                  <span className="text-gray-900 truncate" title={product.category_display}>
+                    {product.category_display || '-'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Preisinformationen */}
+              <div className="bg-blue-50 rounded-lg p-3 mb-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-600 uppercase tracking-wide">
+                    Einkaufspreis
+                  </span>
+                  {!isPriceValid(product) && (
+                    <span className="text-xs text-red-600 font-semibold">
+                      Ungültig
+                    </span>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+                <div className="text-2xl font-bold text-blue-900">
+                  {Number(product.purchase_price_eur).toFixed(2)} €
+                </div>
+                <div className="text-xs text-gray-600 mt-1">
+                  Gültig bis:{' '}
+                  {product.price_valid_until 
+                    ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
+                    : 'unbegrenzt'}
+                </div>
+              </div>
+
+              {/* Aktionen */}
+              {canWrite && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => navigate(`/procurement/trading-goods/${product.id}`)}
+                    className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    title="Bearbeiten"
+                  >
+                    <PencilIcon className="h-4 w-4 mr-1" />
+                    Bearbeiten
+                  </button>
+                  <button
+                    onClick={() => handleDelete(product.id)}
+                    className="inline-flex items-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    title="Löschen"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
       {!hasSearched && (

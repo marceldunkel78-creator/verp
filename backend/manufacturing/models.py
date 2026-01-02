@@ -65,6 +65,16 @@ class VSHardware(models.Model):
         help_text='English description for international quotations'
     )
     
+    # Warenkategorie
+    product_category = models.ForeignKey(
+        'verp_settings.ProductCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vshardware_products',
+        verbose_name='Warenkategorie'
+    )
+    
     # Handbücher
     release_manual = models.FileField(
         upload_to=vsh_manual_upload_path,

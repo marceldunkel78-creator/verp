@@ -101,6 +101,21 @@ const VisiViewProductEdit = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!window.confirm(`Möchten Sie dieses Produkt wirklich löschen?\n\n${product.name}\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`)) {
+      return;
+    }
+    
+    try {
+      await api.delete(`/visiview/products/${id}/`);
+      alert('Produkt erfolgreich gelöscht');
+      navigate('/visiview/products');
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      alert('Fehler beim Löschen des Produkts: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
   const formatCurrency = (value) => {
     if (value === null || value === undefined) return '-';
     return new Intl.NumberFormat('de-DE', {
@@ -215,6 +230,15 @@ const VisiViewProductEdit = () => {
                 }
                 {saveMessage.text}
               </div>
+            )}
+            {id && (
+              <button
+                onClick={handleDelete}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                <TrashIcon className="h-5 w-5" />
+                Löschen
+              </button>
             )}
             <button
               onClick={handleSave}

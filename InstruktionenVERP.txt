@@ -103,3 +103,15 @@ python import_addresses.py --live
 # Hinweis: Der Import filtert automatisch Lieferanten und veraltete Adressen aus.
 # Bei identischen Namen werden mehrere Adressen dem selben Kunden zugeordnet.
 # Felder die zu lang sind werden automatisch gekürzt (Stadt: 100, Straße: 200, Tel: 50 Zeichen)
+
+cd backend
+python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv"        # Dry-run
+python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv" --live # Live-Import
+
+cd backend
+python import_visiview_macros.py --dry-run
+python import_visiview_macros.py
+
+Next steps: run a dry-run first:
+python backend/delete_supplier_and_incoming.py --number 104
+If output looks correct, run with --yes to perform deletion.

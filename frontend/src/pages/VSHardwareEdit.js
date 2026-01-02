@@ -49,6 +49,7 @@ const VSHardwareEdit = () => {
     name: '',
     model_designation: '',
     description: '',
+    product_category: null,
     unit: 'Stück',
     is_active: true
   });
@@ -72,12 +73,25 @@ const VSHardwareEdit = () => {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [editingDocument, setEditingDocument] = useState(null);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  
+  // Product Categories
+  const [productCategories, setProductCategories] = useState([]);
 
   useEffect(() => {
     if (id) {
       fetchProduct();
     }
+    fetchProductCategories();
   }, [id]);
+
+  const fetchProductCategories = async () => {
+    try {
+      const response = await api.get('/settings/product-categories/?is_active=true');
+      setProductCategories(response.data.results || response.data);
+    } catch (error) {
+      console.error('Error fetching product categories:', error);
+    }
+  };
 
   const fetchProduct = async () => {
     setLoading(true);
@@ -89,6 +103,7 @@ const VSHardwareEdit = () => {
         name: data.name || '',
         model_designation: data.model_designation || '',
         description: data.description || '',
+        product_category: data.product_category || null,
         unit: data.unit || 'Stück',
         is_active: data.is_active !== false
       });
@@ -121,6 +136,21 @@ const VSHardwareEdit = () => {
       setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Möchten Sie dieses Produkt wirklich löschen?\n\n${product.name}\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`)) {
+      return;
+    }
+    
+    try {
+      await api.delete(`/manufacturing/vs-hardware/${id}/`);
+      alert('Produkt erfolgreich gelöscht');
+      navigate('/manufacturing/vs-hardware');
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      alert('Fehler beim Löschen des Produkts: ' + (error.response?.data?.detail || error.message));
     }
   };
 
@@ -429,6 +459,15 @@ const VSHardwareEdit = () => {
               {saveMessage.text}
             </span>
           )}
+          {id && (
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              <TrashIcon className="h-5 w-5" />
+              Löschen
+            </button>
+          )}
           <button
             onClick={handleSave}
             disabled={saving || !hasChanges}
@@ -502,6 +541,21 @@ const VSHardwareEdit = () => {
                     onChange={(e) => handleInputChange('unit', e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
                   />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Warenkategorie
+                  </label>
+                  <select
+                    value={formData.product_category || ''}
+                    onChange={(e) => handleInputChange('product_category', e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Wählen...</option>
+                    {productCategories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -50,6 +50,16 @@ class VSService(models.Model):
         help_text='English description for international quotations'
     )
     
+    # Warenkategorie
+    product_category = models.ForeignKey(
+        'verp_settings.ProductCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vsservice_products',
+        verbose_name='Warenkategorie'
+    )
+    
     # Einheit und Status
     unit = models.CharField(max_length=50, default='Stück', verbose_name='Einheit')
     is_active = models.BooleanField(default=True, verbose_name='Aktiv')

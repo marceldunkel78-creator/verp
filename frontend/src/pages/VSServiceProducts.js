@@ -9,7 +9,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 
 const VSServiceProducts = () => {
@@ -60,6 +61,32 @@ const VSServiceProducts = () => {
     e.preventDefault();
     setCurrentPage(1);
     fetchProducts();
+  };
+
+  const handleCopy = async (e, product) => {
+    e.stopPropagation();
+    
+    if (!window.confirm(`Möchten Sie eine Kopie von "${product.name}" erstellen?`)) {
+      return;
+    }
+    
+    try {
+      const copyData = {
+        name: `${product.name} (Kopie)`,
+        short_description: product.short_description,
+        description: product.description,
+        product_category: product.product_category,
+        unit: product.unit,
+        is_active: product.is_active
+      };
+      
+      const response = await api.post('/service/vs-service/', copyData);
+      alert(`Kopie erstellt: ${response.data.article_number}`);
+      fetchProducts();
+    } catch (error) {
+      console.error('Fehler beim Kopieren:', error);
+      alert('Fehler beim Erstellen der Kopie: ' + (error.response?.data?.detail || error.message));
+    }
   };
 
   const handleCreateProduct = async (e) => {
@@ -133,98 +160,101 @@ const VSServiceProducts = () => {
         </div>
       </div>
 
-      {/* Products Table */}
+      {/* Products Grid */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Artikelnummer
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kurzbeschreibung
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                EK-Preis
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                VK-Preis
-              </th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktionen
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                  Laden...
-                </td>
-              </tr>
-            ) : products.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                  Keine Service-Produkte gefunden
-                </td>
-              </tr>
-            ) : (
-              products.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <WrenchScrewdriverIcon className="h-5 w-5 text-green-500 mr-2" />
-                      <span className="font-mono text-sm font-medium text-gray-900">
+        {loading ? (
+          <div className="p-8 text-center text-gray-500">Laden...</div>
+        ) : products.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <WrenchScrewdriverIcon className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+            <p>Keine Service-Produkte gefunden</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+            {products.map((product) => (
+              <div
+                key={product.id}
+                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow duration-200 overflow-hidden border border-gray-200"
+              >
+                <div className="p-4">
+                  {/* Header mit Artikelnr und Status */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <WrenchScrewdriverIcon className="h-4 w-4 text-green-500" />
+                        <div className="text-xs text-gray-500 uppercase tracking-wide">
+                          Artikelnr.
+                        </div>
+                      </div>
+                      <div className="font-bold text-lg text-gray-900 font-mono">
                         {product.article_number}
-                      </span>
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{product.name}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-500 truncate max-w-xs">
-                      {product.short_description || '-'}
+                    <span
+                      className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        product.is_active
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {product.is_active ? 'Aktiv' : 'Inaktiv'}
+                    </span>
+                  </div>
+
+                  {/* Produktname */}
+                  <h3 className="text-base font-semibold text-gray-900 mb-3 line-clamp-2" title={product.name}>
+                    {product.name}
+                  </h3>
+
+                  {/* Kurzbeschreibung */}
+                  {product.short_description && (
+                    <p className="text-sm text-gray-500 mb-4 line-clamp-3" title={product.short_description}>
+                      {product.short_description}
+                    </p>
+                  )}
+
+                  {/* Preisinformationen */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">
+                        EK-Preis
+                      </div>
+                      <div className="text-lg font-bold text-blue-900">
+                        {formatCurrency(product.current_purchase_price)}
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
-                    {formatCurrency(product.current_purchase_price)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-gray-900">
-                    {formatCurrency(product.current_sales_price)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    {product.is_active ? (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <CheckCircleIcon className="h-4 w-4 mr-1" />
-                        Aktiv
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        <XCircleIcon className="h-4 w-4 mr-1" />
-                        Inaktiv
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="bg-green-50 rounded-lg p-2">
+                      <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">
+                        VK-Preis
+                      </div>
+                      <div className="text-lg font-bold text-green-900">
+                        {formatCurrency(product.current_sales_price)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Aktionen */}
+                  <div className="flex gap-2">
                     <button
                       onClick={() => navigate(`/service/vs-service/${product.id}`)}
-                      className="text-green-600 hover:text-green-900"
+                      className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-green-300 rounded-md shadow-sm text-sm font-medium text-green-700 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                     >
-                      <PencilIcon className="h-5 w-5" />
+                      <PencilIcon className="h-4 w-4 mr-1" />
+                      Bearbeiten
                     </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    <button
+                      onClick={(e) => handleCopy(e, product)}
+                      className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      title="Kopie erstellen"
+                    >
+                      <DocumentDuplicateIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (

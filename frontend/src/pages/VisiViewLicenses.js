@@ -21,21 +21,33 @@ const VisiViewLicenses = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [showOutdated, setShowOutdated] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(9); // show up to 9 tiles per page
+  const [totalCount, setTotalCount] = useState(0);
 
   // Don't load licenses on mount - only when user searches
   // useEffect removed
 
-  const fetchLicenses = async (searchQuery = '') => {
+  const fetchLicenses = async (searchQuery = '', pageNumber = 1) => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
       if (!showOutdated) params.append('is_outdated', 'false');
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
-      params.append('page_size', '1000');
-      
+      params.append('page_size', String(pageSize));
+      params.append('page', String(pageNumber));
+
       const response = await api.get(`/visiview/licenses/?${params.toString()}`);
-      setLicenses(response.data.results || response.data);
+      // DRF style paginated response: { count, next, previous, results }
+      if (response.data && response.data.results) {
+        setLicenses(response.data.results);
+        setTotalCount(response.data.count || response.data.results.length);
+      } else {
+        // Fallback if API returns non-paginated list
+        setLicenses(response.data || []);
+        setTotalCount((response.data && response.data.length) ? response.data.length : 0);
+      }
       setHasSearched(true);
     } catch (error) {
       console.error('Error fetching licenses:', error);
@@ -44,16 +56,31 @@ const VisiViewLicenses = () => {
     }
   };
 
+  // Refetch when page changes (but only after an initial search)
+  useEffect(() => {
+    if (hasSearched) {
+      fetchLicenses(searchTerm, page);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchLicenses(searchTerm);
+    setPage(1);
+    fetchLicenses(searchTerm, 1);
   };
 
   const handleDelete = async (licenseId, licenseNumber) => {
     if (window.confirm(`Möchten Sie die Lizenz "${licenseNumber}" wirklich löschen?`)) {
       try {
         await api.delete(`/visiview/licenses/${licenseId}/`);
-        setLicenses(licenses.filter(l => l.id !== licenseId));
+        const filtered = licenses.filter(l => l.id !== licenseId);
+        setLicenses(filtered);
+        setTotalCount(prev => Math.max(0, prev - 1));
+        // If this page became empty after deletion, go back one page
+        if (filtered.length === 0 && page > 1) {
+          setPage(prev => prev - 1);
+        }
       } catch (error) {
         console.error('Error deleting license:', error);
         alert('Fehler beim Löschen der Lizenz.');
@@ -75,6 +102,17 @@ const VisiViewLicenses = () => {
   };
 
   // No client-side filtering needed anymore - server handles search
+
+  // Pagination helpers (computed outside JSX to avoid IIFEs in render)
+  const totalPages = totalCount ? Math.ceil(totalCount / pageSize) : 0;
+  let paginationStart = 1;
+  let paginationEnd = 1;
+  let paginationPages = [];
+  if (totalPages > 0) {
+    paginationStart = Math.max(1, page - 2);
+    paginationEnd = Math.min(totalPages, page + 2);
+    for (let p = paginationStart; p <= paginationEnd; p++) paginationPages.push(p);
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -153,7 +191,7 @@ const VisiViewLicenses = () => {
       {hasSearched && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-indigo-600">{licenses.length}</div>
+            <div className="text-2xl font-bold text-indigo-600">{totalCount}</div>
             <div className="text-sm text-gray-600">Gefunden</div>
           </div>
           <div className="bg-white p-4 rounded-lg shadow">
@@ -195,7 +233,8 @@ const VisiViewLicenses = () => {
           <p>Keine Lizenzen gefunden</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {licenses.map((license) => (
             <div
               key={license.id}
@@ -285,6 +324,50 @@ const VisiViewLicenses = () => {
             </div>
           ))}
         </div>
+
+        {/* Pagination */}
+        {totalCount > pageSize && (
+          <div className="mt-6 flex justify-center items-center space-x-2">
+            <button
+              onClick={() => setPage(prev => Math.max(1, prev - 1))}
+              disabled={page === 1}
+              className={`px-3 py-1 rounded ${page === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              Zurück
+            </button>
+
+            {paginationStart > 1 && (
+              <button onClick={() => setPage(1)} className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100">1</button>
+            )}
+
+            {paginationStart > 2 && <span className="px-2">…</span>}
+
+            {paginationPages.map(p => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`px-3 py-1 rounded ${p === page ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+              >
+                {p}
+              </button>
+            ))}
+
+            {paginationEnd < totalPages - 1 && <span className="px-2">…</span>}
+
+            {paginationEnd < totalPages && (
+              <button onClick={() => setPage(totalPages)} className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100">{totalPages}</button>
+            )}
+
+            <button
+              onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={page === totalPages}
+              className={`px-3 py-1 rounded ${page === totalPages ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            >
+              Weiter
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
