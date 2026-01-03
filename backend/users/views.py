@@ -10,9 +10,9 @@ from .serializers import (
     UserUpdateSerializer, ChangePasswordSerializer, EmployeeSerializer
 )
 from .serializers import TimeEntrySerializer, VacationRequestSerializer
-from .serializers import MessageSerializer, MessageCreateSerializer, ReminderSerializer
+from .serializers import MessageSerializer, MessageCreateSerializer, ReminderSerializer, NotificationSerializer
 from .models import Employee
-from .models import TimeEntry, VacationRequest, Message, Reminder
+from .models import TimeEntry, VacationRequest, Message, Reminder, Notification
 from .serializers import TimeEntrySerializer
 
 User = get_user_model()
@@ -829,7 +829,19 @@ class ReminderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return Reminder.objects.filter(user=self.request.user)
+        queryset = Reminder.objects.filter(user=self.request.user)
+        
+        # Filter für heute fällige Erinnerungen
+        if self.request.query_params.get('due_today') == 'true':
+            from django.utils import timezone
+            today = timezone.now().date()
+            queryset = queryset.filter(due_date=today, is_completed=False, is_dismissed=False)
+        
+        # Filter für offene Erinnerungen
+        if self.request.query_params.get('open') == 'true':
+            queryset = queryset.filter(is_completed=False)
+        
+        return queryset
     
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -841,4 +853,63 @@ class ReminderViewSet(viewsets.ModelViewSet):
         reminder.is_completed = not reminder.is_completed
         reminder.save()
         return Response({'status': 'success', 'is_completed': reminder.is_completed})
+    
+    @action(detail=True, methods=['post'])
+    def dismiss(self, request, pk=None):
+        """Blendet die Erinnerung aus (wird nicht mehr im Modal angezeigt)"""
+        reminder = self.get_object()
+        reminder.is_dismissed = True
+        reminder.save()
+        return Response({'status': 'success'})
+    
+    @action(detail=False, methods=['get'])
+    def due_today(self, request):
+        """Gibt alle heute fälligen, nicht erledigten und nicht ausgeblendeten Erinnerungen zurück"""
+        from django.utils import timezone
+        today = timezone.now().date()
+        reminders = Reminder.objects.filter(
+            user=request.user,
+            due_date__lte=today,
+            is_completed=False,
+            is_dismissed=False
+        )
+        serializer = self.get_serializer(reminders, many=True)
+        return Response(serializer.data)
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Mitteilungen (Mitteilungscenter)
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Gibt die Anzahl der ungelesenen Mitteilungen zurück"""
+        count = Notification.objects.filter(user=request.user, is_read=False).count()
+        return Response({'unread_count': count})
+    
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        """Markiert eine Mitteilung als gelesen"""
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response({'status': 'success'})
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        """Markiert alle Mitteilungen als gelesen"""
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({'status': 'success'})
+    
+    @action(detail=False, methods=['delete'])
+    def delete_all_read(self, request):
+        """Löscht alle gelesenen Mitteilungen"""
+        Notification.objects.filter(user=request.user, is_read=True).delete()
+        return Response({'status': 'success'})
 

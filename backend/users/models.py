@@ -536,3 +536,116 @@ class TravelPerDiemRate(models.Model):
             rate = cls.objects.filter(country='Deutschland', is_active=True).first()
         
         return rate
+
+
+class Reminder(models.Model):
+    """
+    Erinnerungen für Benutzer
+    Zeigt Aufgaben mit Fälligkeitsdatum im MyVERP-Dashboard an
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='reminders',
+        verbose_name='Benutzer'
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name='Titel'
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung'
+    )
+    due_date = models.DateField(
+        verbose_name='Fälligkeitsdatum'
+    )
+    is_completed = models.BooleanField(
+        default=False,
+        verbose_name='Erledigt'
+    )
+    is_dismissed = models.BooleanField(
+        default=False,
+        verbose_name='Ausgeblendet',
+        help_text='Vom Benutzer ausgeblendet, wird nicht mehr im Modal angezeigt'
+    )
+    # Optionale Verknüpfung zu anderen Objekten
+    related_object_type = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Verknüpfter Objekttyp',
+        help_text='z.B. "loan", "quotation", "order"'
+    )
+    related_object_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Verknüpfte Objekt-ID'
+    )
+    related_url = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name='Verknüpfte URL',
+        help_text='URL zum verknüpften Objekt'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    class Meta:
+        verbose_name = 'Erinnerung'
+        verbose_name_plural = 'Erinnerungen'
+        ordering = ['due_date', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.due_date}"
+
+
+class Notification(models.Model):
+    """
+    Mitteilungen für Benutzer (Mitteilungscenter)
+    """
+    NOTIFICATION_TYPES = [
+        ('info', 'Information'),
+        ('warning', 'Warnung'),
+        ('success', 'Erfolg'),
+        ('loan', 'Leihung'),
+        ('order', 'Bestellung'),
+        ('quotation', 'Angebot'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        verbose_name='Benutzer'
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name='Titel'
+    )
+    message = models.TextField(
+        verbose_name='Nachricht'
+    )
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPES,
+        default='info',
+        verbose_name='Typ'
+    )
+    is_read = models.BooleanField(
+        default=False,
+        verbose_name='Gelesen'
+    )
+    related_url = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name='Verknüpfte URL'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        verbose_name = 'Mitteilung'
+        verbose_name_plural = 'Mitteilungen'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.user.username}"

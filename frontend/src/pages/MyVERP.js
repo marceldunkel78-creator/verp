@@ -868,36 +868,251 @@ const ReportingTab = ({ weeklyReport, monthlyReport, errors }) => (
   </div>
 );
 
-const RemindersTab = ({ reminders, onRefresh, errors }) => (
-  <div>
-    <h2 className="text-lg font-medium text-gray-900 mb-4">Erinnerungen</h2>
-    {errors?.reminders && (
-      <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.reminders}</div>
-    )}
-    <div className="bg-white shadow overflow-hidden sm:rounded-md">
-      {reminders.length === 0 ? (
-        <div className="p-6 text-center text-sm text-gray-500">Keine Erinnerungen vorhanden.</div>
-      ) : (
-        <ul className="divide-y divide-gray-200">
-          {reminders.map((reminder) => (
-            <li key={reminder.id} className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{reminder.title}</p>
-                  <p className="text-sm text-gray-500">{reminder.description}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">{new Date(reminder.due_date).toLocaleString()}</p>
-                  {reminder.is_completed && <span className="text-green-600">✓ Erledigt</span>}
-                </div>
+const RemindersTab = ({ reminders, onRefresh, errors }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [editingReminder, setEditingReminder] = useState(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    due_date: new Date().toISOString().split('T')[0]
+  });
+
+  const openNewModal = () => {
+    setEditingReminder(null);
+    setFormData({
+      title: '',
+      description: '',
+      due_date: new Date().toISOString().split('T')[0]
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (reminder) => {
+    setEditingReminder(reminder);
+    setFormData({
+      title: reminder.title || '',
+      description: reminder.description || '',
+      due_date: reminder.due_date ? reminder.due_date.split('T')[0] : new Date().toISOString().split('T')[0]
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingReminder) {
+        await api.patch(`/users/reminders/${editingReminder.id}/`, formData);
+      } else {
+        await api.post('/users/reminders/', formData);
+      }
+      setShowModal(false);
+      onRefresh();
+    } catch (error) {
+      console.error('Fehler beim Speichern:', error);
+      alert('Fehler beim Speichern der Erinnerung');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Erinnerung wirklich löschen?')) return;
+    try {
+      await api.delete(`/users/reminders/${id}/`);
+      onRefresh();
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+    }
+  };
+
+  const handleToggleComplete = async (id, isCompleted) => {
+    try {
+      await api.post(`/users/reminders/${id}/toggle_complete/`);
+      onRefresh();
+    } catch (error) {
+      console.error('Fehler beim Ändern des Status:', error);
+    }
+  };
+
+  const handleDismiss = async (id) => {
+    try {
+      await api.post(`/users/reminders/${id}/dismiss/`);
+      onRefresh();
+    } catch (error) {
+      console.error('Fehler beim Ausblenden:', error);
+    }
+  };
+
+  // Sortiere nach Datum, nicht erledigte zuerst
+  const sortedReminders = [...reminders]
+    .filter(r => !r.is_dismissed)
+    .sort((a, b) => {
+      if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
+      return new Date(a.due_date) - new Date(b.due_date);
+    });
+
+  const isOverdue = (dueDate) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dueDate < today;
+  };
+
+  const isDueToday = (dueDate) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dueDate.startsWith(today);
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-medium text-gray-900">Erinnerungen</h2>
+        <button
+          onClick={openNewModal}
+          className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
+        >
+          <BellIcon className="h-5 w-5 mr-2" />
+          Neue Erinnerung
+        </button>
+      </div>
+      
+      {errors?.reminders && (
+        <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.reminders}</div>
+      )}
+      
+      <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        {sortedReminders.length === 0 ? (
+          <div className="p-6 text-center text-sm text-gray-500">Keine Erinnerungen vorhanden.</div>
+        ) : (
+          <ul className="divide-y divide-gray-200">
+            {sortedReminders.map((reminder) => {
+              const overdue = !reminder.is_completed && isOverdue(reminder.due_date);
+              const dueToday = !reminder.is_completed && isDueToday(reminder.due_date);
+              return (
+                <li key={reminder.id} className={`px-6 py-4 ${reminder.is_completed ? 'bg-gray-50' : overdue ? 'bg-red-50' : dueToday ? 'bg-yellow-50' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleToggleComplete(reminder.id, reminder.is_completed)}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                          reminder.is_completed 
+                            ? 'bg-green-500 border-green-500 text-white' 
+                            : 'border-gray-300 hover:border-blue-500'
+                        }`}
+                      >
+                        {reminder.is_completed && '✓'}
+                      </button>
+                      <div className={reminder.is_completed ? 'opacity-50' : ''}>
+                        <p className={`text-sm font-medium ${reminder.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                          {reminder.title}
+                        </p>
+                        {reminder.description && (
+                          <p className="text-sm text-gray-500">{reminder.description}</p>
+                        )}
+                        {reminder.related_url && (
+                          <a href={reminder.related_url} className="text-xs text-blue-600 hover:underline">
+                            → Zum verknüpften Element
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className={`text-xs ${overdue ? 'text-red-600 font-medium' : dueToday ? 'text-yellow-600 font-medium' : 'text-gray-500'}`}>
+                          {overdue ? '⚠️ Überfällig: ' : dueToday ? '📅 Heute: ' : ''}
+                          {new Date(reminder.due_date).toLocaleDateString('de-DE')}
+                        </p>
+                        {reminder.related_object_type && (
+                          <p className="text-xs text-gray-400">{reminder.related_object_type}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => openEditModal(reminder)}
+                          className="p-1 text-gray-400 hover:text-blue-600"
+                          title="Bearbeiten"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => handleDismiss(reminder.id)}
+                          className="p-1 text-gray-400 hover:text-yellow-600"
+                          title="Ausblenden"
+                        >
+                          👁️‍🗨️
+                        </button>
+                        <button
+                          onClick={() => handleDelete(reminder.id)}
+                          className="p-1 text-gray-400 hover:text-red-600"
+                          title="Löschen"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* Modal für Neue/Bearbeiten Erinnerung */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              {editingReminder ? 'Erinnerung bearbeiten' : 'Neue Erinnerung'}
+            </h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Titel *</label>
+                <input
+                  type="text"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                />
               </div>
-            </li>
-          ))}
-        </ul>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fälligkeitsdatum *</label>
+                <input
+                  type="date"
+                  value={formData.due_date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Speichern
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
-  </div>
-);
+  );
+};
 
 const getBavarianHolidays = (year) => {
   const a = year % 19;

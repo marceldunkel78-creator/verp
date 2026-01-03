@@ -51,22 +51,27 @@ class ReturnNoteDocTemplate(BaseDocTemplate):
         loan_return = self.loan_return
         
         # === HEADER ===
-        if company and company.document_header:
+        page_num = canvas.getPageNumber()
+        
+        # Logo (nur auf Seite 1, rechts oben)
+        if page_num == 1 and company and company.document_header:
             try:
                 logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
                 if os.path.exists(logo_path):
+                    # Logo rechts oben, kleinere Größe: 5cm breit, 1.5cm hoch
+                    logo_x = width - 7*cm
+                    logo_y = height - 2.5*cm
                     try:
                         img = ImageReader(logo_path)
-                        canvas.drawImage(img, 2*cm, height - 2.5*cm, width=17*cm, height=2*cm, 
+                        canvas.drawImage(img, logo_x, logo_y, width=5*cm, height=1.5*cm, 
                                         preserveAspectRatio=True, anchor='nw', mask='auto')
                     except Exception:
-                        canvas.drawImage(logo_path, 2*cm, height - 2.5*cm, width=17*cm, height=2*cm, 
+                        canvas.drawImage(logo_path, logo_x, logo_y, width=5*cm, height=1.5*cm, 
                                         preserveAspectRatio=True, anchor='nw')
             except Exception as e:
                 print(f"Error loading header logo: {e}")
         
         # Seitenzahl (ab Seite 2)
-        page_num = canvas.getPageNumber()
         if page_num > 1:
             canvas.setFont('Helvetica', 8)
             canvas.setFillColor(colors.grey)
@@ -136,7 +141,7 @@ def generate_return_note_pdf(loan_return):
         'Title',
         parent=styles['Heading1'],
         fontSize=16,
-        textColor=colors.HexColor('#0066cc'),
+        textColor=colors.HexColor('#cc0066'),
         spaceAfter=6
     )
     
@@ -220,7 +225,7 @@ def generate_return_note_pdf(loan_return):
     table = Table(table_data, colWidths=[1.2*cm, 2.5*cm, 6*cm, 1.5*cm, 1.5*cm, 4*cm])
     table.setStyle(TableStyle([
         # Header
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066cc')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#cc0066')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
@@ -243,7 +248,7 @@ def generate_return_note_pdf(loan_return):
         
         # Grid
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dddddd')),
-        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#0066cc')),
+        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#cc0066')),
     ]))
     
     elements.append(table)

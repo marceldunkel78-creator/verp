@@ -4,6 +4,7 @@ from .models import (
     LoanItemPhoto, LoanReturn, LoanReturnItem
 )
 from suppliers.models import Supplier
+from users.serializers import EmployeeSerializer
 
 
 class LoanItemPhotoSerializer(serializers.ModelSerializer):
@@ -147,13 +148,16 @@ class LoanListSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
+    responsible_employee_display = serializers.CharField(
+        source='responsible_employee.full_name', read_only=True, allow_null=True
+    )
     
     class Meta:
         model = Loan
         fields = [
             'id', 'loan_number', 'supplier', 'supplier_name',
             'status', 'status_display', 'request_date', 'return_deadline',
-            'items_count', 'created_at'
+            'items_count', 'created_at', 'responsible_employee', 'responsible_employee_display'
         ]
     
     def get_items_count(self, obj):
@@ -169,6 +173,8 @@ class LoanDetailSerializer(serializers.ModelSerializer):
     returns = LoanReturnSerializer(many=True, read_only=True)
     created_by_display = serializers.CharField(source='created_by.get_full_name', read_only=True)
     updated_by_display = serializers.CharField(source='updated_by.get_full_name', read_only=True)
+    responsible_employee_detail = EmployeeSerializer(source='responsible_employee', read_only=True)
+    observers_detail = EmployeeSerializer(source='observers', many=True, read_only=True)
     
     class Meta:
         model = Loan
@@ -178,6 +184,8 @@ class LoanDetailSerializer(serializers.ModelSerializer):
             'return_address_name', 'return_address_street', 'return_address_house_number',
             'return_address_postal_code', 'return_address_city', 'return_address_country',
             'supplier_reference', 'notes',
+            'responsible_employee', 'responsible_employee_detail',
+            'observers', 'observers_detail',
             'items', 'receipt', 'returns',
             'created_at', 'updated_at', 'created_by', 'created_by_display',
             'updated_by', 'updated_by_display'
@@ -203,6 +211,15 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
     items = LoanItemNestedSerializer(many=True, required=False)
     # make return_deadline optional at serializer level
     return_deadline = serializers.DateField(required=False, allow_null=True)
+    # observers als Liste von IDs
+    from django.db.models import Q
+    from users.models import Employee  # lokal import, App ist geladen
+    # Employee considered active if HR status is 'aktiv' or linked User is active
+    observers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Employee.objects.filter(Q(employment_status='aktiv') | Q(users__is_active=True)).distinct(),
+        required=False
+    )
     
     class Meta:
         model = Loan
@@ -210,12 +227,22 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
             'supplier', 'status', 'request_date', 'return_deadline',
             'return_address_name', 'return_address_street', 'return_address_house_number',
             'return_address_postal_code', 'return_address_city', 'return_address_country',
-            'supplier_reference', 'notes', 'items'
+            'supplier_reference', 'notes', 'items',
+            'responsible_employee', 'observers'
         ]
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # no-op: observers queryset is defined on the field itself
     
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
+        observers_data = validated_data.pop('observers', [])
         loan = Loan.objects.create(**validated_data)
+        
+        # set observers if provided
+        if observers_data:
+            loan.observers.set(observers_data)
         
         for idx, item_data in enumerate(items_data, 1):
             # ensure we don't pass 'position' or 'loan' twice
@@ -227,12 +254,17 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', None)
+        observers_data = validated_data.pop('observers', None)
         
         # Update loan fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
+        # Update observers if provided (explicit set)
+        if observers_data is not None:
+            instance.observers.set(observers_data)
+
         # Update items if provided
         if items_data is not None:
             # Get existing item IDs

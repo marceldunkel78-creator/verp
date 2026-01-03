@@ -24,6 +24,47 @@ from django.conf import settings
 import os
 
 
+def _product_display_name(product, lang='DE'):
+    """Return a sensible display name for various product-like objects.
+    Supports objects with `name`, `name_en`, `title`, `title_en`, or falls
+    back to str(product).
+    """
+    if not product:
+        return '-'
+
+    # Prefer `name` fields
+    name = getattr(product, 'name', None)
+    name_en = getattr(product, 'name_en', None)
+    if lang == 'EN' and name_en:
+        return name_en
+    if name:
+        return name
+
+    # Fallback to `title` (ProductCollection uses `title`)
+    title = getattr(product, 'title', None)
+    title_en = getattr(product, 'title_en', None)
+    if lang == 'EN' and title_en:
+        return title_en
+    if title:
+        return title
+
+    # Last resort
+    try:
+        return str(product)
+    except Exception:
+        return '-'
+
+
+def _product_description_snippet(product, lang='DE', length=150):
+    if not product:
+        return ''
+    if lang == 'EN':
+        desc = getattr(product, 'short_description_en', None) or getattr(product, 'description_en', None) or getattr(product, 'short_description', None) or getattr(product, 'description', None) or ''
+    else:
+        desc = getattr(product, 'short_description', None) or getattr(product, 'description', None) or ''
+    return (desc[:length] + ('...' if len(desc) > length else '')) if desc else ''
+
+
 class QuotationDocTemplate(BaseDocTemplate):
     """
     Custom DocTemplate für Angebote mit Header und Footer auf jeder Seite
@@ -59,24 +100,27 @@ class QuotationDocTemplate(BaseDocTemplate):
         quotation = self.quotation
         
         # === HEADER ===
-        # Logo (wenn vorhanden)
-        if company and company.document_header:
+        page_num = canvas.getPageNumber()
+        
+        # Logo (nur auf Seite 1, rechts oben)
+        if page_num == 1 and company and company.document_header:
             try:
                 logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
                 if os.path.exists(logo_path):
-                    # Logo so breit wie die Tabelle (17cm)
-                    # Use ImageReader and mask='auto' to preserve PNG transparency instead of turning alpha to black
+                    # Logo rechts oben, kleinere Größe: 5cm breit, 1.5cm hoch
+                    logo_x = width - 7*cm  # 2cm Rand rechts
+                    logo_y = height - 2.5*cm
+                    # Use ImageReader and mask='auto' to preserve PNG transparency
                     try:
                         img = ImageReader(logo_path)
-                        canvas.drawImage(img, 2*cm, height - 2.5*cm, width=17*cm, height=2*cm, preserveAspectRatio=True, anchor='nw', mask='auto')
+                        canvas.drawImage(img, logo_x, logo_y, width=5*cm, height=1.5*cm, preserveAspectRatio=True, anchor='nw', mask='auto')
                     except Exception:
                         # Fallback to direct path if ImageReader fails
-                        canvas.drawImage(logo_path, 2*cm, height - 2.5*cm, width=17*cm, height=2*cm, preserveAspectRatio=True, anchor='nw')
+                        canvas.drawImage(logo_path, logo_x, logo_y, width=5*cm, height=1.5*cm, preserveAspectRatio=True, anchor='nw')
             except Exception as e:
                 print(f"Error loading header logo: {e}")
         
         # Seitenzahl und Angebotsnummer (ab Seite 2)
-        page_num = canvas.getPageNumber()
         if page_num > 1:
             canvas.setFont('Helvetica', 8)
             canvas.setFillColor(colors.grey)
@@ -325,19 +369,30 @@ def generate_quotation_pdf(quotation):
         elements.append(Spacer(1, 0.5*cm))
     
     # === POSITIONEN TABELLE ===
+    # Zwei-Zeilen-Layout: Zeile 1 = Position-Daten, Zeile 2 = Beschreibung (volle Breite)
     position_labels = {
-        'DE': ['Pos.', 'Art.-Nr.', 'Artikel', 'Beschreibung', 'Menge', 'Einzelpreis', 'Rabatt', 'Gesamt'],
-        'EN': ['Pos.', 'Art. No.', 'Article', 'Description', 'Quantity', 'Unit Price', 'Discount', 'Total']
+        'DE': ['Pos.', 'Art.-Nr.', 'Artikel', 'Menge', 'Einzelpreis', 'Rabatt', 'Gesamt'],
+        'EN': ['Pos.', 'Art. No.', 'Article', 'Qty', 'Unit Price', 'Discount', 'Total']
     }
     
     table_data = [position_labels[lang]]
+    description_rows = []  # Track which rows are description rows for styling
+    row_index = 1  # Start after header
     
     # Positionen hinzufügen
     for item in quotation.items.all().order_by('position'):
         # Artikelnummer
         article_number = item.item_article_number or ''
         if not article_number and item.item:
-            article_number = getattr(item.item, 'visitron_part_number', '') or getattr(item.item, 'supplier_part_number', '') or getattr(item.item, 'part_number', '') or getattr(item.item, 'article_number', '') or ''
+            # Include collection_number for ProductCollection objects
+            article_number = (
+                getattr(item.item, 'visitron_part_number', '')
+                or getattr(item.item, 'supplier_part_number', '')
+                or getattr(item.item, 'part_number', '')
+                or getattr(item.item, 'article_number', '')
+                or getattr(item.item, 'collection_number', '')
+                or ''
+            )
         
         # Handle Gruppen-Header
         if item.is_group_header:
@@ -352,22 +407,19 @@ def generate_quotation_pdf(quotation):
             # Gruppenmitglied - keine Position, eingerückt
             position_str = ""
             prefix = "    "  # Eingerückt
-            item_name = prefix + (item.item.name if item.item else '-')
-            
+            item_name = prefix + (_product_display_name(item.item, lang) if item.item else '-')
+
             # Beschreibung - bevorzuge custom_description
             if item.custom_description:
                 description = item.custom_description
             elif item.item:
-                if item.description_type == 'SHORT':
-                    description = getattr(item.item, 'short_description', '') or ''
-                else:
-                    description = getattr(item.item, 'description', '') or ''
+                description = _product_description_snippet(item.item, lang, length=500)
             else:
                 description = ''
-            
+
             quantity_str = f"{item.quantity:.2f}"
             show_prices = quotation.show_group_item_prices
-            
+
             if show_prices:
                 unit_price_str = f"€ {item.unit_price:,.2f}"
                 discount_str = f"{item.discount_percent:.1f}%" if item.discount_percent > 0 else '-'
@@ -379,45 +431,53 @@ def generate_quotation_pdf(quotation):
         else:
             # Einzelposition
             position_str = str(item.position)
-            item_name = item.item.name if item.item else '-'
-            
+            item_name = _product_display_name(item.item, lang) if item.item else '-'
+
             # Beschreibung - bevorzuge custom_description
             if item.custom_description:
                 description = item.custom_description
             elif item.item:
-                if item.description_type == 'SHORT':
-                    description = getattr(item.item, 'short_description', '') or ''
-                else:
-                    description = getattr(item.item, 'description', '') or ''
+                description = _product_description_snippet(item.item, lang, length=500)
             else:
                 description = ''
-            
+
             quantity_str = f"{item.quantity:.2f}"
-            
+
             if item.uses_system_price and quotation.system_price:
                 unit_price_str = "Systempreis"
                 discount_str = "-"
-                subtotal_str = f"€ {quotation.system_price:,.2f}"
+                subtotal_str = "Systempreis"
             else:
                 unit_price_str = f"€ {item.unit_price:,.2f}"
                 discount_str = f"{item.discount_percent:.1f}%" if item.discount_percent > 0 else '-'
                 subtotal_str = f"€ {item.subtotal:,.2f}"
         
+        # Zeile 1: Positionsdaten (ohne Beschreibung)
         table_data.append([
             position_str,
-            article_number[:15] if article_number else '',  # Kürze Artikelnummer
+            article_number[:20] if article_number else '',
             Paragraph(item_name, small_style),
-            Paragraph(description[:150] if description else '', small_style),  # Kürze lange Beschreibungen
             quantity_str,
             unit_price_str,
             discount_str,
             subtotal_str
         ])
+        row_index += 1
+        
+        # Zeile 2: Beschreibung (volle Breite über alle Spalten)
+        if description:
+            # Beschreibung als Paragraph mit voller Breite
+            desc_paragraph = Paragraph(description, small_style)
+            table_data.append([desc_paragraph, '', '', '', '', '', ''])
+            description_rows.append(row_index)
+            row_index += 1
     
-    # Tabelle erstellen
-    col_widths = [1*cm, 2*cm, 3*cm, 4*cm, 1.5*cm, 2*cm, 1.5*cm, 2*cm]
+    # Tabelle erstellen - 7 Spalten ohne Beschreibungsspalte
+    col_widths = [1*cm, 2.5*cm, 5*cm, 1.5*cm, 2*cm, 1.5*cm, 2.5*cm]
     items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    items_table.setStyle(TableStyle([
+    
+    # Basis-Style
+    table_style = [
         # Header
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ff0099')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
@@ -431,22 +491,38 @@ def generate_quotation_pdf(quotation):
         ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
         ('FONTSIZE', (0,1), (-1,-1), 7),
         ('ALIGN', (0,1), (0,-1), 'CENTER'),
+        ('ALIGN', (3,1), (3,-1), 'RIGHT'),
         ('ALIGN', (4,1), (4,-1), 'RIGHT'),
-        ('ALIGN', (5,1), (5,-1), 'RIGHT'),
-        ('ALIGN', (6,1), (6,-1), 'CENTER'),
-        ('ALIGN', (7,1), (7,-1), 'RIGHT'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (5,1), (5,-1), 'CENTER'),
+        ('ALIGN', (6,1), (6,-1), 'RIGHT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
         
         # Grid
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8f9fa')]),
+        ('GRID', (0,0), (-1,0), 0.5, colors.grey),  # Header grid
         
         # Padding
         ('LEFTPADDING', (0,0), (-1,-1), 4),
         ('RIGHTPADDING', (0,0), (-1,-1), 4),
         ('TOPPADDING', (0,1), (-1,-1), 3),
         ('BOTTOMPADDING', (0,1), (-1,-1), 3),
-    ]))
+    ]
+    
+    # Beschreibungszeilen: Zellen zusammenführen (volle Breite)
+    for desc_row in description_rows:
+        table_style.append(('SPAN', (0, desc_row), (-1, desc_row)))
+        table_style.append(('BACKGROUND', (0, desc_row), (-1, desc_row), colors.HexColor('#f0f0f0')))
+        table_style.append(('LEFTPADDING', (0, desc_row), (-1, desc_row), 12))
+        table_style.append(('TOPPADDING', (0, desc_row), (-1, desc_row), 2))
+        table_style.append(('BOTTOMPADDING', (0, desc_row), (-1, desc_row), 4))
+    
+    # Datenzeilen (nicht-Beschreibung) mit seitlichem Rahmen
+    for i in range(1, row_index):
+        if i not in description_rows:
+            table_style.append(('BOX', (0, i), (-1, i), 0.5, colors.grey))
+            # Leichte Trennlinien zwischen Spalten
+            table_style.append(('LINEAFTER', (0, i), (-2, i), 0.25, colors.lightgrey))
+    
+    items_table.setStyle(TableStyle(table_style))
     
     elements.append(items_table)
     elements.append(Spacer(1, 0.5*cm))
@@ -478,28 +554,63 @@ def generate_quotation_pdf(quotation):
     
     # === SUMMEN ===
     from decimal import Decimal
-    total_net = Decimal('0.00')
-    total_tax = Decimal('0.00')
-    total_gross = Decimal('0.00')
-    
-    for item in quotation.items.all():
-        if item.is_group_header or not item.group_id:
-            total_net += item.subtotal
-            total_tax += item.tax_amount
-            total_gross += item.total
-    
+
+    # Consider only visible items (group headers and items without group_id)
+    visible_items = [it for it in quotation.items.all() if (it.is_group_header or not it.group_id)]
+
+    # Gesamt-EK
+    total_purchase = sum((it.total_purchase_cost or Decimal('0.00')) for it in visible_items)
+
+    # Detect if any visible item uses the system price
+    uses_system = any(getattr(it, 'uses_system_price', False) and quotation.system_price for it in visible_items)
+    system_price_value = (quotation.system_price or Decimal('0.00')) if uses_system else Decimal('0.00')
+
+    # Sum VKs of items NOT using system price
+    other_total_vk = sum((it.subtotal for it in visible_items if not (getattr(it, 'uses_system_price', False) and quotation.system_price)), Decimal('0.00'))
+
+    # Gesamt-VK netto = other_total_vk + system_price_value
+    total_net = other_total_vk + system_price_value
+
+    # Margenberechnung
+    margin_absolute = total_net - total_purchase
+    margin_percent = (margin_absolute / total_purchase * Decimal('100')) if total_purchase != 0 else Decimal('0.00')
+
+    # Lieferkosten
+    delivery_cost = quotation.delivery_cost or Decimal('0.00')
+
+    # Zwischensumme vor MwSt
+    subtotal_before_tax = total_net + delivery_cost
+
+    # MwSt
+    total_tax = (subtotal_before_tax * (quotation.tax_rate / Decimal('100'))) if quotation.tax_enabled else Decimal('0.00')
+
+    # Gesamtsumme brutto
+    total_gross = subtotal_before_tax + total_tax
+
     sum_labels = {
-        'DE': ['Nettosumme:', 'MwSt:', 'Gesamtsumme:'],
-        'EN': ['Net total:', 'VAT:', 'Total:']
+        'DE': ['Gesamt-EK:', 'Systempreis:', 'Summe übrige Pos.', 'Zwischensumme (netto):', 'Marge (abs):', 'Marge (%):', 'Lieferkosten:', 'Gesamtsumme (netto):', 'MwSt:', 'Gesamtsumme (brutto):'],
+        'EN': ['Total purchase cost:', 'System price:', 'Sum of other items', 'Subtotal (net):', 'Margin (abs):', 'Margin (%):', 'Delivery cost:', 'Total (net):', 'VAT:', 'Total (gross):']
     }
-    
-    sum_data = [
-        ['', sum_labels[lang][0], f"€ {total_net:,.2f}"],
-        ['', sum_labels[lang][1], f"€ {total_tax:,.2f}"],
-        ['', sum_labels[lang][2], f"€ {total_gross:,.2f}"],
-    ]
-    
-    sum_table = Table(sum_data, colWidths=[11*cm, 3.5*cm, 2.5*cm])
+
+    # Build rows for the offer PDF (do not show EK and margins in the offer)
+    rows = []
+    # If system price is present, show it
+    if uses_system:
+        rows.append(['', sum_labels[lang][1], f"€ {system_price_value:,.2f}"])
+
+    # Sum of other positions
+    rows.append(['', sum_labels[lang][2], f"€ {other_total_vk:,.2f}"])
+
+    # Zwischensumme (netto)
+    rows.append(['', sum_labels[lang][3], f"€ {total_net:,.2f}"])
+
+    # Delivery, subtotal, tax, total (with renamed labels)
+    rows.append(['', sum_labels[lang][6], f"€ {delivery_cost:,.2f}"])
+    rows.append(['', sum_labels[lang][7], f"€ {subtotal_before_tax:,.2f}"])
+    rows.append(['', sum_labels[lang][8], f"€ {total_tax:,.2f}"])
+    rows.append(['', sum_labels[lang][9], f"€ {total_gross:,.2f}"])
+
+    sum_table = Table(rows, colWidths=[11*cm, 3.5*cm, 2.5*cm])
     sum_table.setStyle(TableStyle([
         ('ALIGN', (1,0), (1,-1), 'RIGHT'),
         ('ALIGN', (2,0), (2,-1), 'RIGHT'),
@@ -508,7 +619,7 @@ def generate_quotation_pdf(quotation):
         ('LINEABOVE', (1,-1), (2,-1), 2, colors.HexColor('#ff0099')),
         ('TOPPADDING', (0,-1), (-1,-1), 6),
     ]))
-    
+
     elements.append(sum_table)
     elements.append(Spacer(1, 0.5*cm))
     

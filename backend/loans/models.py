@@ -122,6 +122,24 @@ class Loan(models.Model):
         verbose_name='Notizen'
     )
     
+    # Zuständiger Mitarbeiter
+    responsible_employee = models.ForeignKey(
+        'users.Employee',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='responsible_loans',
+        verbose_name='Zuständiger Mitarbeiter'
+    )
+    
+    # Beobachter (mehrere Mitarbeiter)
+    observers = models.ManyToManyField(
+        'users.Employee',
+        blank=True,
+        related_name='observed_loans',
+        verbose_name='Beobachter'
+    )
+    
     # Metadaten
     created_by = models.ForeignKey(
         User,

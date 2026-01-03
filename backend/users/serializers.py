@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Employee, TimeEntry, VacationRequest, Message, Reminder,
+    Employee, TimeEntry, VacationRequest, Message, Reminder, Notification,
     TravelExpenseReport, TravelExpenseDay, TravelExpenseItem, TravelPerDiemRate
 )
 
@@ -302,7 +302,20 @@ class ReminderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reminder
         fields = [
-            'id', 'title', 'description', 'due_date', 'is_completed', 'created_at'
+            'id', 'title', 'description', 'due_date', 'is_completed', 'is_dismissed',
+            'related_object_type', 'related_object_id', 'related_url', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    notification_type_display = serializers.CharField(source='get_notification_type_display', read_only=True)
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'title', 'message', 'notification_type', 'notification_type_display',
+            'is_read', 'related_url', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
 

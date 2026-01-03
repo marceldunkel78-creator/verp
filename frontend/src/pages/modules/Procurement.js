@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { TruckIcon, CubeIcon, ShoppingCartIcon, WrenchScrewdriverIcon, BeakerIcon, ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
+import { TruckIcon, CubeIcon, ShoppingCartIcon, WrenchScrewdriverIcon, BeakerIcon, ArrowUturnLeftIcon, RectangleStackIcon } from '@heroicons/react/24/outline';
 
 const Procurement = () => {
   const modules = [
@@ -16,6 +16,13 @@ const Procurement = () => {
       description: 'Handelswaren und Preislisten',
       icon: CubeIcon,
       path: '/procurement/trading-goods',
+      color: 'orange'
+    },
+    {
+      name: 'Warensammlungen',
+      description: 'Produktbündel für Angebote verwalten',
+      icon: RectangleStackIcon,
+      path: '/procurement/product-collections',
       color: 'orange'
     },
     {

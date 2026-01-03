@@ -48,6 +48,8 @@ import VSServiceProducts from './pages/VSServiceProducts';
 import VSServiceProductEdit from './pages/VSServiceProductEdit';
 import RMACases from './pages/RMACases';
 import RMACaseEdit from './pages/RMACaseEdit';
+import ProductCollections from './pages/ProductCollections';
+import ProductCollectionEdit from './pages/ProductCollectionEdit';
 import ServiceTickets from './pages/ServiceTickets';
 import ServiceTicketEdit from './pages/ServiceTicketEdit';
 import Dealers from './pages/Dealers';
@@ -132,6 +134,9 @@ function App() {
             <Route path="procurement/loans" element={<Loans />} />
             <Route path="procurement/loans/new" element={<LoanEdit />} />
             <Route path="procurement/loans/:id" element={<LoanEdit />} />
+            <Route path="procurement/product-collections" element={<ProductCollections />} />
+            <Route path="procurement/product-collections/new" element={<ProductCollectionEdit />} />
+            <Route path="procurement/product-collections/:id" element={<ProductCollectionEdit />} />
             
             {/* Sales/Order Management Submodules */}
             <Route path="sales/customers" element={<Customers />} />

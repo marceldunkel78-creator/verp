@@ -27,6 +27,9 @@ from .serializers import (
 
 class VisiViewProductViewSet(viewsets.ModelViewSet):
     """ViewSet für VisiView Produkte"""
+    # Pagination für infinite scroll
+    from verp.pagination import InfinitePagination
+    pagination_class = InfinitePagination
     queryset = VisiViewProduct.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]

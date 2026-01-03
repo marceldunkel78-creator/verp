@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
-import { ArrowLeftIcon, PlusIcon, TrashIcon, DocumentArrowDownIcon, DocumentIcon, ChevronDownIcon, ChevronUpIcon, ArrowUpIcon, ArrowDownIcon, UserIcon, ClipboardDocumentListIcon, CogIcon, DocumentTextIcon, ShoppingCartIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlusIcon, TrashIcon, DocumentArrowDownIcon, DocumentIcon, ChevronDownIcon, ChevronUpIcon, ArrowUpIcon, ArrowDownIcon, UserIcon, ClipboardDocumentListIcon, CogIcon, DocumentTextIcon, ShoppingCartIcon, RectangleStackIcon } from '@heroicons/react/24/outline';
 
 const QuotationForm = () => {
   const navigate = useNavigate();
@@ -16,6 +16,7 @@ const QuotationForm = () => {
   const [visiviewProducts, setVisiviewProducts] = useState([]);
   const [vsHardwareProducts, setVsHardwareProducts] = useState([]);
   const [vsServiceProducts, setVsServiceProducts] = useState([]);
+  const [productCollections, setProductCollections] = useState([]);
   const [paymentTerms, setPaymentTerms] = useState([]);
   const [deliveryTerms, setDeliveryTerms] = useState([]);
   const [users, setUsers] = useState([]);
@@ -32,6 +33,53 @@ const QuotationForm = () => {
   
   // Product filter for item selection
   const [productFilter, setProductFilter] = useState('');
+  
+  // Product browser/selector for Tab 2
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [productGroupFilter, setProductGroupFilter] = useState('all'); // 'all', 'TRADING_GOODS', 'VS_SERVICE', 'VISIVIEW', 'VS_HARDWARE', 'COLLECTIONS'
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [suppliers, setSuppliers] = useState([]);
+  const [categories, setCategories] = useState([]);
+
+  // Infinite scroll states per product type
+  const [tradingResults, setTradingResults] = useState([]);
+  const [tradingPage, setTradingPage] = useState(1);
+  const [tradingHasMore, setTradingHasMore] = useState(true);
+  const [tradingLoading, setTradingLoading] = useState(false);
+  const [tradingTotal, setTradingTotal] = useState(0);
+
+  const [visiviewResults, setVisiviewResults] = useState([]);
+  const [visiviewPage, setVisiviewPage] = useState(1);
+  const [visiviewHasMore, setVisiviewHasMore] = useState(true);
+  const [visiviewLoading, setVisiviewLoading] = useState(false);
+  const [visiviewTotal, setVisiviewTotal] = useState(0);
+
+  const [vsHardwareResults, setVsHardwareResults] = useState([]);
+  const [vsHardwarePage, setVsHardwarePage] = useState(1);
+  const [vsHardwareHasMore, setVsHardwareHasMore] = useState(true);
+  const [vsHardwareLoading, setVsHardwareLoading] = useState(false);
+  const [vsHardwareTotal, setVsHardwareTotal] = useState(0);
+
+  const [vsServiceResults, setVsServiceResults] = useState([]);
+  const [vsServicePage, setVsServicePage] = useState(1);
+  const [vsServiceHasMore, setVsServiceHasMore] = useState(true);
+  const [vsServiceLoading, setVsServiceLoading] = useState(false);
+  const [vsServiceTotal, setVsServiceTotal] = useState(0);
+
+  const [collectionResults, setCollectionResults] = useState([]);
+  const [collectionPage, setCollectionPage] = useState(1);
+  const [collectionHasMore, setCollectionHasMore] = useState(true);
+  const [collectionLoading, setCollectionLoading] = useState(false);
+  const [collectionTotal, setCollectionTotal] = useState(0);
+
+  const productListRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+
+  // Aggregated state helpers for product list UI (used in multiple places)
+  const anyHasMore = tradingHasMore || visiviewHasMore || vsHardwareHasMore || vsServiceHasMore || collectionHasMore;
+  const anyLoading = tradingLoading || visiviewLoading || vsHardwareLoading || vsServiceLoading || collectionLoading;
+  const totalResultsCount = tradingTotal + visiviewTotal + vsHardwareTotal + vsServiceTotal + collectionTotal;
   
   // Tab configuration
   const tabs = [
@@ -206,28 +254,50 @@ const QuotationForm = () => {
 
   const fetchInitialData = async () => {
     try {
-      const [tradingRes, visiviewRes, vsHardwareRes, vsServiceRes, paymentRes, deliveryTermsRes, usersRes, projectsRes, systemsRes, currentUserRes] = await Promise.all([
+      const [tradingRes, visiviewRes, vsHardwareRes, vsServiceRes, collectionsRes, paymentRes, deliveryTermsRes, usersRes, projectsRes, systemsRes, currentUserRes, suppliersRes, categoriesRes] = await Promise.all([
         api.get('/suppliers/products/'),
         api.get('/visiview/products/?is_active=true'),
         api.get('/manufacturing/vs-hardware/?is_active=true'),
         api.get('/service/vs-service/?is_active=true'),
+        api.get('/procurement/product-collections/?is_active=true'),
         api.get('/settings/payment-terms/'),
         api.get('/settings/delivery-terms/'),
         api.get('/users/'),
         api.get('/projects/projects/?is_active=true'),
         api.get('/systems/systems/?is_active=true'),
-        api.get('/users/me/')
+        api.get('/users/me/'),
+        api.get('/suppliers/suppliers/?is_active=true'),
+        api.get('/settings/product-categories/')
       ]);
       
-      setTradingProducts(tradingRes.data.results || tradingRes.data || []);
-      setVisiviewProducts(visiviewRes.data.results || visiviewRes.data || []);
-      setVsHardwareProducts(vsHardwareRes.data.results || vsHardwareRes.data || []);
-      setVsServiceProducts(vsServiceRes.data.results || vsServiceRes.data || []);
+      // Set initial paginated results and meta for infinite scroll
+      setTradingResults(tradingRes.data.results || tradingRes.data || []);
+      setTradingHasMore(Boolean(tradingRes.data.next));
+      setTradingPage(1);
+
+      setVisiviewResults(visiviewRes.data.results || visiviewRes.data || []);
+      setVisiviewHasMore(Boolean(visiviewRes.data.next));
+      setVisiviewPage(1);
+
+      setVsHardwareResults(vsHardwareRes.data.results || vsHardwareRes.data || []);
+      setVsHardwareHasMore(Boolean(vsHardwareRes.data.next));
+      setVsHardwarePage(1);
+
+      setVsServiceResults(vsServiceRes.data.results || vsServiceRes.data || []);
+      setVsServiceHasMore(Boolean(vsServiceRes.data.next));
+      setVsServicePage(1);
+
+      setCollectionResults(collectionsRes.data.results || collectionsRes.data || []);
+      setCollectionHasMore(Boolean(collectionsRes.data.next));
+      setCollectionPage(1);
+
       setPaymentTerms(paymentRes.data.results || paymentRes.data || []);
       setDeliveryTerms(deliveryTermsRes.data.results || deliveryTermsRes.data || []);
       setUsers(usersRes.data.results || usersRes.data || []);
       setProjects(projectsRes.data.results || projectsRes.data || []);
       setSystems(systemsRes.data.results || systemsRes.data || []);
+      setSuppliers(suppliersRes.data.results || suppliersRes.data || []);
+      setCategories(categoriesRes.data.results || categoriesRes.data || []);
       
       const user = currentUserRes.data;
       // Set default user for new quotations
@@ -266,6 +336,202 @@ const QuotationForm = () => {
     setCustomerSearchTerm('');
   };
 
+  // --- Infinite scroll product fetch helpers ---
+  const buildParamsForType = (type, page = 1) => {
+    const params = { page };
+    if (productSearchTerm) params.search = productSearchTerm;
+    // Filters
+    if (type === 'tp') {
+      if (supplierFilter) params.supplier = supplierFilter;
+      if (categoryFilter) {
+        // ProductCategory entries come from /settings/product-categories/ and have {id, code, name}
+        // TradingProduct.category is a CharField using CATEGORY_CHOICES (codes like 'SOFTWARE' etc.)
+        // Map selected category id -> category.code when filtering trading products.
+        const selectedCat = categories.find(c => String(c.id) === String(categoryFilter));
+        if (selectedCat && selectedCat.code) {
+          params.category = selectedCat.code;
+        } else {
+          params.category = categoryFilter; // fallback in case of unexpected shape
+        }
+      }
+      params.is_active = true;
+    }
+    if (type === 'vv') params.is_active = true;
+    if (type === 'vs') params.is_active = true;
+    if (type === 'vss') params.is_active = true;
+    if (type === 'pc') params.is_active = true;
+    return params;
+  };
+
+  const fetchProductsPage = async (type, page = 1, reset = false, countOnly = false) => {
+    // type: 'tp'|'vv'|'vs'|'vss'|'pc'
+    try {
+      if (type === 'tp') setTradingLoading(true);
+      if (type === 'vv') setVisiviewLoading(true);
+      if (type === 'vs') setVsHardwareLoading(true);
+      if (type === 'vss') setVsServiceLoading(true);
+      if (type === 'pc') setCollectionLoading(true);
+
+      let url = '/';
+      if (type === 'tp') url = '/suppliers/products/';
+      if (type === 'vv') url = '/visiview/products/';
+      if (type === 'vs') url = '/manufacturing/vs-hardware/';
+      if (type === 'vss') url = '/service/vs-service/';
+      if (type === 'pc') url = '/procurement/product-collections/';
+
+      const params = buildParamsForType(type, page);
+      if (countOnly) params.page_size = 1;
+
+      const response = await api.get(url, { params });
+      const data = response.data;
+
+      // If API provides count, set the total counts
+      if (data && typeof data.count !== 'undefined') {
+        if (type === 'tp') setTradingTotal(data.count);
+        if (type === 'vv') setVisiviewTotal(data.count);
+        if (type === 'vs') setVsHardwareTotal(data.count);
+        if (type === 'vss') setVsServiceTotal(data.count);
+        if (type === 'pc') setCollectionTotal(data.count);
+      }
+
+      const results = data.results || data || [];
+      const next = data.next;
+
+      if (!countOnly) {
+        if (type === 'tp') {
+          setTradingResults(prev => reset ? results : [...prev, ...results]);
+          setTradingPage(page);
+          setTradingHasMore(Boolean(next));
+        }
+        if (type === 'vv') {
+          setVisiviewResults(prev => reset ? results : [...prev, ...results]);
+          setVisiviewPage(page);
+          setVisiviewHasMore(Boolean(next));
+        }
+        if (type === 'vs') {
+          setVsHardwareResults(prev => reset ? results : [...prev, ...results]);
+          setVsHardwarePage(page);
+          setVsHardwareHasMore(Boolean(next));
+        }
+        if (type === 'vss') {
+          setVsServiceResults(prev => reset ? results : [...prev, ...results]);
+          setVsServicePage(page);
+          setVsServiceHasMore(Boolean(next));
+        }
+        if (type === 'pc') {
+          setCollectionResults(prev => reset ? results : [...prev, ...results]);
+          setCollectionPage(page);
+          setCollectionHasMore(Boolean(next));
+        }
+      }
+    } catch (err) {
+      console.error('Produktliste laden fehlgeschlagen:', err);
+    } finally {
+      if (type === 'tp') setTradingLoading(false);
+      if (type === 'vv') setVisiviewLoading(false);
+      if (type === 'vs') setVsHardwareLoading(false);
+      if (type === 'vss') setVsServiceLoading(false);
+      if (type === 'pc') setCollectionLoading(false);
+    }
+  };
+
+  const resetProductsForType = (type) => {
+    if (type === 'tp') { setTradingResults([]); setTradingPage(1); setTradingHasMore(true); }
+    if (type === 'vv') { setVisiviewResults([]); setVisiviewPage(1); setVisiviewHasMore(true); }
+    if (type === 'vs') { setVsHardwareResults([]); setVsHardwarePage(1); setVsHardwareHasMore(true); }
+    if (type === 'vss') { setVsServiceResults([]); setVsServicePage(1); setVsServiceHasMore(true); }
+    if (type === 'pc') { setCollectionResults([]); setCollectionPage(1); setCollectionHasMore(true); }
+  };
+
+  const resetAllProductLists = () => {
+    resetProductsForType('tp');
+    resetProductsForType('vv');
+    resetProductsForType('vs');
+    resetProductsForType('vss');
+    resetProductsForType('pc');
+  };
+
+  // Fetch next page when scrolling in "all" mode: pick types in order and load one page from the first that has more
+  const fetchNextForAll = async () => {
+    if (tradingHasMore && !tradingLoading) await fetchProductsPage('tp', tradingPage + 1);
+    else if (visiviewHasMore && !visiviewLoading) await fetchProductsPage('vv', visiviewPage + 1);
+    else if (vsHardwareHasMore && !vsHardwareLoading) await fetchProductsPage('vs', vsHardwarePage + 1);
+    else if (vsServiceHasMore && !vsServiceLoading) await fetchProductsPage('vss', vsServicePage + 1);
+    else if (collectionHasMore && !collectionLoading) await fetchProductsPage('pc', collectionPage + 1);
+  };
+
+  // Debounced effect: when search/filter changes, reset and load first pages
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      if (productGroupFilter === 'all') {
+        resetAllProductLists();
+        // fetch first pages for all types in parallel
+        fetchProductsPage('tp', 1, true);
+        fetchProductsPage('vv', 1, true);
+        fetchProductsPage('vs', 1, true);
+        fetchProductsPage('vss', 1, true);
+        fetchProductsPage('pc', 1, true);
+      } else {
+        // If a specific group is selected, fetch its first page and only fetch the counts for the others
+        if (productGroupFilter === 'TRADING_GOODS') {
+          resetProductsForType('tp'); fetchProductsPage('tp', 1, true);
+          // update counts for others
+          fetchProductsPage('vv', 1, false, true);
+          fetchProductsPage('vs', 1, false, true);
+          fetchProductsPage('vss', 1, false, true);
+          fetchProductsPage('pc', 1, false, true);
+        } else if (productGroupFilter === 'VISIVIEW') {
+          resetProductsForType('vv'); fetchProductsPage('vv', 1, true);
+          fetchProductsPage('tp', 1, false, true);
+          fetchProductsPage('vs', 1, false, true);
+          fetchProductsPage('vss', 1, false, true);
+          fetchProductsPage('pc', 1, false, true);
+        } else if (productGroupFilter === 'VS_HARDWARE') {
+          resetProductsForType('vs'); fetchProductsPage('vs', 1, true);
+          fetchProductsPage('tp', 1, false, true);
+          fetchProductsPage('vv', 1, false, true);
+          fetchProductsPage('vss', 1, false, true);
+          fetchProductsPage('pc', 1, false, true);
+        } else if (productGroupFilter === 'VS_SERVICE') {
+          resetProductsForType('vss'); fetchProductsPage('vss', 1, true);
+          fetchProductsPage('tp', 1, false, true);
+          fetchProductsPage('vv', 1, false, true);
+          fetchProductsPage('vs', 1, false, true);
+          fetchProductsPage('pc', 1, false, true);
+        } else if (productGroupFilter === 'COLLECTIONS') {
+          resetProductsForType('pc'); fetchProductsPage('pc', 1, true);
+          fetchProductsPage('tp', 1, false, true);
+          fetchProductsPage('vv', 1, false, true);
+          fetchProductsPage('vs', 1, false, true);
+          fetchProductsPage('vss', 1, false, true);
+        }
+      }
+    }, 350);
+
+    return () => clearTimeout(searchDebounceRef.current);
+  }, [productSearchTerm, productGroupFilter, supplierFilter, categoryFilter]);
+
+  const handleProductListScroll = (e) => {
+    const el = e.target;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
+      // near bottom
+      if (productGroupFilter === 'all') {
+        fetchNextForAll();
+      } else if (productGroupFilter === 'TRADING_GOODS' && tradingHasMore && !tradingLoading) {
+        fetchProductsPage('tp', tradingPage + 1);
+      } else if (productGroupFilter === 'VISIVIEW' && visiviewHasMore && !visiviewLoading) {
+        fetchProductsPage('vv', visiviewPage + 1);
+      } else if (productGroupFilter === 'VS_HARDWARE' && vsHardwareHasMore && !vsHardwareLoading) {
+        fetchProductsPage('vs', vsHardwarePage + 1);
+      } else if (productGroupFilter === 'VS_SERVICE' && vsServiceHasMore && !vsServiceLoading) {
+        fetchProductsPage('vss', vsServicePage + 1);
+      } else if (productGroupFilter === 'COLLECTIONS' && collectionHasMore && !collectionLoading) {
+        fetchProductsPage('pc', collectionPage + 1);
+      }
+    }
+  };
+
   const fetchQuotation = async () => {
     setLoading(true);
     try {
@@ -276,15 +542,41 @@ const QuotationForm = () => {
       const mappedItems = (quotation.items || []).map(item => {
         // Bestimme object_id Format für das Frontend
         let frontendObjectId = null;
+        let productName = item.name || '';
+        
         if (item.object_id && item.content_type_data) {
-          if (item.content_type_data.model === 'tradingproduct') {
+          const model = item.content_type_data.model;
+          if (model === 'tradingproduct') {
             frontendObjectId = `tp-${item.object_id}`;
-          } else if (item.content_type_data.model === 'visiviewproduct') {
+            // Finde das Produkt und erstelle product_name
+            const product = tradingProducts.find(p => p.id === item.object_id);
+            if (product) {
+              productName = `${product.visitron_part_number || ''} - ${product.name || ''}`.trim();
+            }
+          } else if (model === 'visiviewproduct') {
             frontendObjectId = `vv-${item.object_id}`;
-          } else if (item.content_type_data.model === 'vshardware') {
+            const product = visiviewProducts.find(p => p.id === item.object_id);
+            if (product) {
+              productName = `${product.article_number || ''} - ${product.name || ''}`.trim();
+            }
+          } else if (model === 'vshardware') {
             frontendObjectId = `vs-${item.object_id}`;
-          } else if (item.content_type_data.model === 'vsservice') {
+            const product = vsHardwareProducts.find(p => p.id === item.object_id);
+            if (product) {
+              productName = `${product.part_number || ''} - ${product.name || ''}`.trim();
+            }
+          } else if (model === 'vsservice') {
             frontendObjectId = `vss-${item.object_id}`;
+            const product = vsServiceProducts.find(p => p.id === item.object_id);
+            if (product) {
+              productName = `${product.article_number || ''} - ${product.name || ''}`.trim();
+            }
+          } else if (model === 'productcollection') {
+            frontendObjectId = `pc-${item.object_id}`;
+            const collection = productCollections.find(p => p.id === item.object_id);
+            if (collection) {
+              productName = `${collection.collection_number || ''} - ${collection.title || ''}`.trim();
+            }
           }
         }
         
@@ -293,6 +585,7 @@ const QuotationForm = () => {
           content_type: item.content_type_data || item.content_type,
           object_id: frontendObjectId,
           actual_object_id: item.object_id,
+          product_name: productName,
           group_id: item.group_id || null,
           group_name: item.group_name || '',
           is_group_header: item.is_group_header || false,
@@ -418,6 +711,93 @@ setCustomerAddresses(customer.addresses || []);
     }
   };
 
+  const handleAddProductAsItem = (product, productType) => {
+    // Fügt ein Produkt als neue Position hinzu
+    const newItem = {
+      content_type: '',
+      object_id: '',
+      position: formData.items.length + 1,
+      description_type: 'SHORT',
+      uses_system_price: false,
+      quantity: 1,
+      unit_price: 0,
+      purchase_price: 0,
+      sale_price: null,
+      discount_percent: 0,
+      tax_rate: formData.tax_rate || 19,
+      notes: '',
+      custom_description: '',
+      product_name: '',
+      group_id: null,
+      group_name: '',
+      is_group_header: false
+    };
+
+    // Parse Produkt-Daten basierend auf productType
+    const [prefix, numericId] = [`${productType}`, product.id];
+    newItem.object_id = `${prefix}-${numericId}`;
+    newItem.actual_object_id = numericId;
+
+    if (productType === 'tp') {
+      // Trading Product
+      newItem.content_type = { app_label: 'suppliers', model: 'tradingproduct' };
+      newItem.unit_price = product.visitron_list_price || product.calculate_visitron_list_price || 0;
+      newItem.purchase_price = product.purchase_price_eur || product.calculate_purchase_price || 0;
+      newItem.product_name = `${product.visitron_part_number || ''} - ${product.name || ''}`.trim();
+      const isEnglish = formData.language === 'EN';
+      newItem.custom_description = isEnglish 
+        ? (product.short_description_en || product.short_description || '')
+        : (product.short_description || '');
+    } else if (productType === 'vv') {
+      // VisiView
+      newItem.content_type = { app_label: 'visiview', model: 'visiviewproduct' };
+      newItem.unit_price = product.current_list_price || 0;
+      newItem.purchase_price = product.current_purchase_price || 0;
+      newItem.product_name = `${product.article_number || ''} - ${product.name || ''}`.trim();
+      const isEnglish = formData.language === 'EN';
+      newItem.custom_description = isEnglish 
+        ? (product.description_en || product.description || '')
+        : (product.description || '');
+    } else if (productType === 'vs') {
+      // VS-Hardware
+      newItem.content_type = { app_label: 'manufacturing', model: 'vshardware' };
+      newItem.unit_price = product.current_sales_price || 0;
+      newItem.purchase_price = product.current_purchase_price || 0;
+      newItem.product_name = `${product.part_number || ''} - ${product.name || ''}`.trim();
+      const isEnglish = formData.language === 'EN';
+      newItem.custom_description = isEnglish 
+        ? (product.description_en || product.description || '')
+        : (product.description || '');
+    } else if (productType === 'vss') {
+      // VS-Service
+      newItem.content_type = { app_label: 'service', model: 'vsservice' };
+      newItem.unit_price = product.current_list_price || product.current_sales_price || 0;
+      newItem.purchase_price = product.current_purchase_price || 0;
+      newItem.product_name = `${product.article_number || ''} - ${product.name || ''}`.trim();
+      const isEnglish = formData.language === 'EN';
+      newItem.custom_description = isEnglish 
+        ? (product.short_description_en || product.short_description || '')
+        : (product.short_description || '');
+    } else if (productType === 'pc') {
+      // Product Collection
+      newItem.content_type = { app_label: 'procurement', model: 'productcollection' };
+      newItem.unit_price = product.total_list_price || 0;
+      newItem.purchase_price = product.total_purchase_price || 0;
+      newItem.is_product_collection = true;
+      newItem.product_name = `${product.collection_number || ''} - ${product.title || ''}`.trim();
+      const isEnglish = formData.language === 'EN';
+      newItem.custom_description = isEnglish 
+        ? (product.quotation_text_short_en || product.quotation_text_short || product.short_description_en || product.short_description || '')
+        : (product.quotation_text_short || product.short_description || '');
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      items: updatePositionNumbers([...prev.items, newItem])
+    }));
+    setHasUnsavedChanges(true);
+  };
+
   const handleAddItem = () => {
     setFormData(prev => {
       const newItems = [...prev.items, {
@@ -447,25 +827,26 @@ setCustomerAddresses(customer.addresses || []);
   };
 
   const handleAddItemGroup = () => {
-    const groupId = `group_${Date.now()}`;
+    // Neue Version: Fügt eine leere Position hinzu, die aus der Warensammlungs-Datenbank befüllt werden soll
     setFormData(prev => {
       const newItems = [...prev.items, {
-        content_type: null,
-        object_id: null,
+        content_type: '',
+        object_id: '',
         position: prev.items.length + 1,
-        description_type: 'SHORT',
+        description_type: 'LONG', // Warensammlungen haben typischerweise längere Beschreibungen
         uses_system_price: false,
         quantity: 1,
         unit_price: 0,
         purchase_price: 0,
-        sale_price: 0,
+        sale_price: null,
         discount_percent: 0,
         tax_rate: prev.tax_rate || 19,
         notes: '',
         custom_description: '',
-        group_id: groupId,
-        group_name: 'Neue Warensammlung',
-        is_group_header: true
+        group_id: null,
+        group_name: '',
+        is_group_header: false,
+        is_product_collection: true // Marker für Warensammlungs-Position
       }];
       return {
         ...prev,
@@ -596,6 +977,29 @@ setCustomerAddresses(customer.addresses || []);
                   updatedItem.custom_description = isEnglish 
                     ? (selectedProduct.description_en || selectedProduct.description || '')
                     : (selectedProduct.description || '');
+                }
+              }
+            } else if (productType === 'pc') {
+              // Product Collection (Warensammlung)
+              const selectedCollection = productCollections.find(p => p.id === numericId);
+              if (selectedCollection) {
+                updatedItem.unit_price = selectedCollection.total_list_price || 0;
+                updatedItem.purchase_price = selectedCollection.total_purchase_price || 0;
+                updatedItem.content_type = { app_label: 'procurement', model: 'productcollection' };
+                updatedItem.actual_object_id = numericId;
+                updatedItem.is_product_collection = true;
+                
+                // Lade Beschreibung basierend auf Sprache und Beschreibungstyp
+                const isEnglish = prev.language === 'EN';
+                const isShort = updatedItem.description_type === 'SHORT';
+                if (isShort) {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedCollection.quotation_text_short_en || selectedCollection.quotation_text_short || selectedCollection.short_description_en || selectedCollection.short_description || '')
+                    : (selectedCollection.quotation_text_short || selectedCollection.short_description || '');
+                } else {
+                  updatedItem.custom_description = isEnglish 
+                    ? (selectedCollection.quotation_text_long_en || selectedCollection.quotation_text_long || selectedCollection.description_en || selectedCollection.description || '')
+                    : (selectedCollection.quotation_text_long || selectedCollection.description || '');
                 }
               }
             }
@@ -941,27 +1345,44 @@ setCustomerAddresses(customer.addresses || []);
     }
   };
 
+  // Summe der Einkaufs-Kosten für alle Positionen, die Systempreis verwenden (sichtbare Positionen)
+  const getTotalSystemPurchaseCost = () => {
+    return formData.items.reduce((sum, itm) => {
+      if (!(itm.is_group_header || !itm.group_id)) return sum; // only visible positions
+      if (!itm.uses_system_price) return sum;
+      if (itm.is_group_header && itm.group_id) {
+        return sum + getGroupPurchaseCost(itm.group_id);
+      }
+      const q = parseFloat(itm.quantity) || 0;
+      const pp = parseFloat(itm.purchase_price) || 0;
+      return sum + (q * pp);
+    }, 0);
+  };
+
   const calculateItemTotal = (item) => {
     const quantity = parseFloat(item.quantity) || 0;
     const unitPrice = parseFloat(item.unit_price) || 0;
     const discount = parseFloat(item.discount_percent) || 0;
     const taxRate = parseFloat(item.tax_rate) || 0;
     const systemPrice = parseFloat(formData.system_price) || 0;
-    
+
     // Wenn Position Systempreis verwendet (normale Position oder Gruppe)
     if (item.uses_system_price && systemPrice > 0) {
       const purchaseCost = item.is_group_header 
         ? getGroupPurchaseCost(item.group_id)
         : quantity * (parseFloat(item.purchase_price) || 0);
-      
-      const tax = systemPrice * (taxRate / 100);
+
+      const totalSysPurchaseCost = getTotalSystemPurchaseCost();
+      const allocatedSubtotal = (totalSysPurchaseCost > 0) ? (systemPrice * (purchaseCost / totalSysPurchaseCost)) : 0;
+      const tax = allocatedSubtotal * (taxRate / 100);
+
       return {
-        subtotal: systemPrice,
+        subtotal: allocatedSubtotal,
         tax: tax,
-        total: systemPrice + tax,
+        total: allocatedSubtotal + tax,
         purchaseCost: purchaseCost,
-        margin: systemPrice - purchaseCost,
-        marginPercent: systemPrice > 0 ? ((systemPrice - purchaseCost) / systemPrice * 100) : 0
+        margin: allocatedSubtotal - purchaseCost,
+        marginPercent: allocatedSubtotal > 0 ? ((allocatedSubtotal - purchaseCost) / allocatedSubtotal * 100) : 0
       };
     }
     
@@ -1024,21 +1445,25 @@ setCustomerAddresses(customer.addresses || []);
     if (!groupHeader.is_group_header) {
       return { absolute: 0, percent: 0, totalCost: 0 };
     }
-    
-    // Wenn Systempreis verwendet wird
+
     const systemPrice = parseFloat(formData.system_price) || 0;
-    const salePrice = groupHeader.uses_system_price && systemPrice > 0
-      ? systemPrice
-      : parseFloat(groupHeader.sale_price) || 0;
-    
+
+    // If group uses system price, compute allocated salePrice for the group
+    let salePrice = parseFloat(groupHeader.sale_price) || 0;
+    if (groupHeader.uses_system_price && systemPrice > 0) {
+      const totalSysPurchaseCost = getTotalSystemPurchaseCost();
+      const groupCost = getGroupPurchaseCost(groupHeader.group_id);
+      salePrice = totalSysPurchaseCost > 0 ? (systemPrice * (groupCost / totalSysPurchaseCost)) : 0;
+    }
+
     if (!salePrice) {
       return { absolute: 0, percent: 0, totalCost: 0 };
     }
-    
+
     const totalCost = getGroupPurchaseCost(groupHeader.group_id);
     const margin = salePrice - totalCost;
     const marginPercent = totalCost > 0 ? (margin / totalCost * 100) : 0;
-    
+
     return {
       absolute: margin,
       percent: marginPercent,
@@ -1058,21 +1483,26 @@ setCustomerAddresses(customer.addresses || []);
     formData.items.forEach(item => {
       // Gruppen-Header oder Einzelpositionen zählen
       if (item.is_group_header || !item.group_id) {
-        // Prüfe ob diese Position Systempreis verwendet
+          // Prüfe ob diese Position Systempreis verwendet
         if (item.uses_system_price && systemPrice > 0) {
-          // Systempreis nur einmal hinzufügen
-          if (!systemPriceUsed) {
-            totalNet += systemPrice;
-            systemPriceUsed = true;
-          }
+          // Verteile Systempreis anteilig nach Einkaufskosten
+          const totalSysPurchaseCost = formData.items.reduce((sum, itm) => {
+            if (!(itm.is_group_header || !itm.group_id)) return sum;
+            if (!itm.uses_system_price) return sum;
+            if (itm.is_group_header && itm.group_id) return sum + getGroupPurchaseCost(itm.group_id);
+            return sum + ((parseFloat(itm.quantity) || 0) * (parseFloat(itm.purchase_price) || 0));
+          }, 0);
+
+          const itemPurchaseCost = item.is_group_header && item.group_id
+            ? getGroupPurchaseCost(item.group_id)
+            : (parseFloat(item.quantity) || 0) * (parseFloat(item.purchase_price) || 0);
+
+          const allocatedSubtotal = totalSysPurchaseCost > 0 ? (systemPrice * (itemPurchaseCost / totalSysPurchaseCost)) : 0;
+
+          totalNet += allocatedSubtotal;
+
           // Einkaufskosten trotzdem zählen
-          if (item.is_group_header && item.group_id) {
-            totalPurchaseCost += getGroupPurchaseCost(item.group_id);
-          } else {
-            const quantity = parseFloat(item.quantity) || 0;
-            const purchasePrice = parseFloat(item.purchase_price) || 0;
-            totalPurchaseCost += quantity * purchasePrice;
-          }
+          totalPurchaseCost += itemPurchaseCost;
         } else {
           // Normale Berechnung für Positionen ohne Systempreis
           const itemTotals = calculateItemTotal(item);
@@ -1459,29 +1889,179 @@ setCustomerAddresses(customer.addresses || []);
         {/* TAB 2: Positionen */}
         {activeTab === 2 && (
           <>
-        {/* Angebotspositionen */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Angebotspositionen</h2>
-            <div className="flex space-x-2">
-              <button
-                type="button"
-                onClick={handleAddItem}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+        {/* Produktauswahl und Angebotspositionen */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Linke Spalte: Produktsuche & -auswahl */}
+          <div className="lg:col-span-1">
+            <div className="bg-white shadow rounded-lg p-6 sticky top-4">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Produktauswahl</h2>
+              
+              {/* Suchfeld */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Suche</label>
+                <input
+                  type="text"
+                  placeholder="Artikelnummer oder Name..."
+                  value={productSearchTerm}
+                  onChange={(e) => setProductSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              {/* Filter: Produktgruppe */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produktgruppe</label>
+                <select
+                  value={productGroupFilter}
+                  onChange={(e) => setProductGroupFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="all">Alle</option>
+                  <option value="TRADING_GOODS">Trading Goods</option>
+                  <option value="VS_SERVICE">VS-Service</option>
+                  <option value="VISIVIEW">VisiView</option>
+                  <option value="VS_HARDWARE">VS-Hardware</option>
+                  <option value="COLLECTIONS">Warensammlungen</option>
+                </select>
+              </div>
+
+              {/* Filter: Lieferant (nur bei Trading Goods) */}
+              {productGroupFilter === 'TRADING_GOODS' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant</label>
+                  <select
+                    value={supplierFilter}
+                    onChange={(e) => setSupplierFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Alle Lieferanten</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.supplier_number} - {supplier.company_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Filter: Kategorie */}
+              {(productGroupFilter === 'TRADING_GOODS' || productGroupFilter === 'all') && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kategorie</label>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">Alle Kategorien</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Produktliste mit Plus-Icon (infinite scroll) */}
+              <div
+                ref={productListRef}
+                onScroll={handleProductListScroll}
+                className="mt-4 max-h-96 overflow-y-auto border border-gray-200 rounded-lg"
               >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Neue Ware hinzufügen
-              </button>
-              <button
-                type="button"
-                onClick={handleAddItemGroup}
-                className="inline-flex items-center px-3 py-2 border border-green-300 shadow-sm text-sm leading-4 font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Neue Warensammlung hinzufügen
-              </button>
+                <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50 text-xs text-gray-600">
+                  <div className="flex space-x-4">
+                    <div>Trading: {tradingTotal} {tradingLoading && <span className="ml-1">Lädt…</span>}</div>
+                    <div>VisiView: {visiviewTotal} {visiviewLoading && <span className="ml-1">Lädt…</span>}</div>
+                    <div>VS-Hardware: {vsHardwareTotal} {vsHardwareLoading && <span className="ml-1">Lädt…</span>}</div>
+                    <div>VS-Service: {vsServiceTotal} {vsServiceLoading && <span className="ml-1">Lädt…</span>}</div>
+                    <div>Warens.: {collectionTotal} {collectionLoading && <span className="ml-1">Lädt…</span>}</div>
+                  </div>
+                  <div className="text-gray-500">{totalResultsCount} Ergebnisse {anyLoading && <span className="ml-2 text-sm">Lädt…</span>}</div>
+                </div>
+
+                {(() => {
+                  let displayProducts = [];
+
+                  if (productGroupFilter === 'TRADING_GOODS') {
+                    displayProducts = tradingResults.map(p => ({ ...p, _type: 'tp', _label: 'Trading' }));
+                  } else if (productGroupFilter === 'VISIVIEW') {
+                    displayProducts = visiviewResults.map(p => ({ ...p, _type: 'vv', _label: 'VisiView' }));
+                  } else if (productGroupFilter === 'VS_HARDWARE') {
+                    displayProducts = vsHardwareResults.map(p => ({ ...p, _type: 'vs', _label: 'VS-Hardware' }));
+                  } else if (productGroupFilter === 'VS_SERVICE') {
+                    displayProducts = vsServiceResults.map(p => ({ ...p, _type: 'vss', _label: 'VS-Service' }));
+                  } else if (productGroupFilter === 'COLLECTIONS') {
+                    displayProducts = collectionResults.map(p => ({ ...p, _type: 'pc', _label: 'Warensammlung' }));
+                  } else {
+                    displayProducts = [
+                      ...tradingResults.map(p => ({ ...p, _type: 'tp', _label: 'Trading' })),
+                      ...visiviewResults.map(p => ({ ...p, _type: 'vv', _label: 'VisiView' })),
+                      ...vsHardwareResults.map(p => ({ ...p, _type: 'vs', _label: 'VS-Hardware' })),
+                      ...vsServiceResults.map(p => ({ ...p, _type: 'vss', _label: 'VS-Service' })),
+                      ...collectionResults.map(p => ({ ...p, _type: 'pc', _label: 'Warensammlung' })),
+                    ];
+
+                    // Deduplicate combined list (prefer first occurrence)
+                    const seen = new Set();
+                    displayProducts = displayProducts.filter(p => {
+                      const key = `${p._type}-${p.id}`;
+                      if (seen.has(key)) return false;
+                      seen.add(key);
+                      return true;
+                    });
+                  }
+
+                  if (!displayProducts || displayProducts.length === 0) {
+                    return anyLoading ? (
+                      <div className="p-4 text-center text-gray-500 text-sm">Lade Produkte...</div>
+                    ) : (
+                      <div className="p-4 text-center text-gray-500 text-sm">Keine Produkte gefunden</div>
+                    );
+                  }
+
+                  return displayProducts.map((product, idx) => {
+                    const articleNum = product.visitron_part_number || product.product_number || product.part_number || product.article_number || product.collection_number || '-';
+                    const name = product.name || product.title || '-';
+
+                    return (
+                      <div key={`${product._type}-${product.id}-${idx}`} className="flex items-center justify-between p-2 hover:bg-gray-50 border-b last:border-b-0">                        
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-gray-500">{product._label}</div>
+                          <div className="text-sm font-medium text-gray-900 truncate">{articleNum}</div>
+                          <div className="text-xs text-gray-600 truncate">{name}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddProductAsItem(product, product._type)}
+                          className="ml-2 p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded"
+                          title="Als Position hinzufügen"
+                        >
+                          <PlusIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    );
+                  });
+                })()}
+
+                {/* Lade-Indikator / Load more hint */}
+                {(tradingLoading || visiviewLoading || vsHardwareLoading || vsServiceLoading || collectionLoading) && (
+                  <div className="p-3 text-center text-gray-600 text-sm">Lade mehr Produkte…</div>
+                )}
+
+                {/* Wenn alle geladen sind und keine weiteren Seiten vorhanden */}
+                {(!anyHasMore && totalResultsCount > 0) && (
+                  <div className="p-2 text-center text-xs text-gray-400">Keine weiteren Produkte</div>
+                )}
+
+              </div>
             </div>
           </div>
+
+          {/* Rechte Spalte: Angebotspositionen */}
+          <div className="lg:col-span-2">
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Angebotspositionen</h2>
 
           {formData.items.length === 0 ? (
             <p className="text-gray-500 text-center py-4">Keine Positionen vorhanden</p>
@@ -1654,10 +2234,10 @@ setCustomerAddresses(customer.addresses || []);
                                 <span className="text-gray-600">Gesamt-VK:</span>
                                 <span className="ml-2 font-medium">
                                   € {item.uses_system_price 
-                                    ? (parseFloat(formData.system_price) || 0).toFixed(2)
+                                    ? (calculateItemTotal(item).subtotal || 0).toFixed(2)
                                     : (parseFloat(item.sale_price) || 0).toFixed(2)
                                   }
-                                  {item.uses_system_price && <span className="text-xs text-blue-600 ml-1">(Systempreis)</span>}
+                                  {item.uses_system_price && <span className="text-xs text-blue-600 ml-1">(Systempreis-Anteil)</span>}
                                 </span>
                               </div>
                               <div>
@@ -1684,93 +2264,10 @@ setCustomerAddresses(customer.addresses || []);
                       /* Normale Position oder Gruppenmitglied */
                       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                         <div className="md:col-span-3">
-                          <label className="block text-sm font-medium text-gray-700">Produkt/Anlage *</label>
-                          {/* Product Filter */}
-                          <input
-                            type="text"
-                            placeholder="Filter: Artikelnummer oder Name..."
-                            value={productFilter}
-                            onChange={(e) => setProductFilter(e.target.value)}
-                            className="mt-1 mb-1 block w-full border border-gray-200 rounded-md shadow-sm py-1 px-2 text-xs focus:outline-none focus:ring-green-500 focus:border-green-500 bg-gray-50"
-                          />
-                          <select
-                            required
-                            value={item.object_id || ''}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              handleItemChange(index, 'object_id', value);
-                            }}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                          >
-                            <option value="">Auswählen...</option>
-                            <optgroup label="🛒 Trading Products (Handelswaren)">
-                              {tradingProducts
-                                .filter(p => {
-                                  if (!productFilter) return true;
-                                  const search = productFilter.toLowerCase();
-                                  return (
-                                    (p.visitron_part_number || '').toLowerCase().includes(search) ||
-                                    (p.name || '').toLowerCase().includes(search) ||
-                                    (p.supplier_part_number || '').toLowerCase().includes(search)
-                                  );
-                                })
-                                .map(product => (
-                                <option key={`tp-${product.id}`} value={`tp-${product.id}`}>
-                                  {product.visitron_part_number} - {product.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="💻 VisiView Software">
-                              {visiviewProducts
-                                .filter(p => {
-                                  if (!productFilter) return true;
-                                  const search = productFilter.toLowerCase();
-                                  return (
-                                    (p.article_number || '').toLowerCase().includes(search) ||
-                                    (p.name || '').toLowerCase().includes(search)
-                                  );
-                                })
-                                .map(product => (
-                                <option key={`vv-${product.id}`} value={`vv-${product.id}`}>
-                                  {product.article_number} - {product.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="🔧 VS-Hardware (Eigenprodukte)">
-                              {vsHardwareProducts
-                                .filter(p => {
-                                  if (!productFilter) return true;
-                                  const search = productFilter.toLowerCase();
-                                  return (
-                                    (p.part_number || '').toLowerCase().includes(search) ||
-                                    (p.name || '').toLowerCase().includes(search) ||
-                                    (p.model_designation || '').toLowerCase().includes(search)
-                                  );
-                                })
-                                .map(product => (
-                                <option key={`vs-${product.id}`} value={`vs-${product.id}`}>
-                                  {product.part_number} - {product.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="🛠️ VS-Service (Dienstleistungen)">
-                              {vsServiceProducts
-                                .filter(p => {
-                                  if (!productFilter) return true;
-                                  const search = productFilter.toLowerCase();
-                                  return (
-                                    (p.article_number || '').toLowerCase().includes(search) ||
-                                    (p.name || '').toLowerCase().includes(search) ||
-                                    (p.short_description || '').toLowerCase().includes(search)
-                                  );
-                                })
-                                .map(product => (
-                                <option key={`vss-${product.id}`} value={`vss-${product.id}`}>
-                                  {product.article_number} - {product.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          </select>
+                          <label className="block text-sm font-medium text-gray-700">Produkt</label>
+                          <div className="mt-1 block w-full border border-gray-200 rounded-md shadow-sm py-2 px-3 bg-gray-50 text-sm text-gray-900">
+                            {item.item_name || item.product_name || item.name || 'Kein Produkt ausgewählt'}
+                          </div>
                         </div>
 
                         <div>
@@ -1800,15 +2297,19 @@ setCustomerAddresses(customer.addresses || []);
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700">VK-Preis €</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            required
-                            value={item.unit_price}
-                            onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
-                          />
+                          {item.uses_system_price && formData.system_price ? (
+                            <div className="mt-1 block w-full border border-gray-200 rounded-md shadow-sm py-2 px-3 bg-gray-50 text-sm text-gray-900">Systempreis</div>
+                          ) : (
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              required
+                              value={item.unit_price}
+                              onChange={(e) => handleItemChange(index, 'unit_price', parseFloat(e.target.value) || 0)}
+                              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500 text-sm"
+                            />
+                          )}
                         </div>
 
                         <div>
@@ -1878,7 +2379,7 @@ setCustomerAddresses(customer.addresses || []);
                             </div>
                             <div>
                               <span className="text-gray-600">Gesamt-VK:</span>
-                              <span className="ml-2 font-medium">€ {itemTotals.subtotal.toFixed(2)}</span>
+                              <span className="ml-2 font-medium">{item.uses_system_price && formData.system_price ? 'Systempreis' : `€ ${itemTotals.subtotal.toFixed(2)}`}</span>
                             </div>
                             <div>
                               <span className="text-gray-600">Marge:</span>
@@ -1945,44 +2446,80 @@ setCustomerAddresses(customer.addresses || []);
             <div className="mt-6 border-t pt-4">
               <div className="flex justify-end">
                 <div className="w-96 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Gesamt-EK:</span>
-                    <span className="font-medium text-blue-900">€ {totals.totalPurchaseCost.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Gesamt-VK (Netto):</span>
-                    <span className="font-medium">€ {totals.totalNet.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm border-t pt-2">
-                    <span className={`font-bold ${totals.totalMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      Gesamtmarge:
-                    </span>
-                    <span className={`font-bold ${totals.totalMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      € {totals.totalMargin.toFixed(2)} ({totals.totalMarginPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                  {totals.deliveryCost > 0 && (
-                    <div className="flex justify-between text-sm border-t pt-2">
-                      <span className="text-gray-600">Lieferkosten:</span>
-                      <span className="font-medium">€ {totals.deliveryCost.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Zwischensumme:</span>
-                    <span className="font-medium">€ {totals.netWithDelivery.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">MwSt ({formData.tax_rate}%):</span>
-                    <span className="font-medium">€ {totals.totalTax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold border-t pt-2 border-gray-800">
-                    <span>Gesamtsumme:</span>
-                    <span>€ {totals.totalGross.toFixed(2)}</span>
-                  </div>
+                  {/* Detailed calculation block for Tab 2 (includes EK, Systempreis, Summe übrige Pos., Margen) */}
+                  {/* Compute detailed values */}
+                  {(() => {
+                    const visible = formData.items.filter(it => it.is_group_header || !it.group_id);
+                    const totalPurchase = totals.totalPurchaseCost;
+                    const usesSystem = visible.some(it => it.uses_system_price && formData.system_price);
+                    const systemPriceVal = usesSystem ? parseFloat(formData.system_price || 0) : 0;
+                    const otherTotalVK = visible.reduce((s, it) => {
+                      if (it.uses_system_price && formData.system_price) return s;
+                      const calc = calculateItemTotal(it);
+                      return s + (calc.subtotal || 0);
+                    }, 0);
+                    const totalNet = otherTotalVK + systemPriceVal;
+                    const marginAbs = totalNet - totalPurchase;
+                    const marginPct = totalPurchase !== 0 ? (marginAbs / totalPurchase * 100) : 0;
+                    const delivery = totals.deliveryCost;
+                    const subtotalBeforeTax = totalNet + delivery;
+                    const tax = formData.tax_enabled ? (subtotalBeforeTax * (parseFloat(formData.tax_rate) / 100)) : 0;
+                    const gross = subtotalBeforeTax + tax;
+
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Gesamt-EK:</span>
+                          <span className="font-medium text-blue-900">€ {totalPurchase.toFixed(2)}</span>
+                        </div>
+                        {usesSystem && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Systempreis:</span>
+                            <span className="font-medium">€ {systemPriceVal.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Summe übrige Pos.:</span>
+                          <span className="font-medium">€ {otherTotalVK.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Gesamt-VK netto des Angebots:</span>
+                          <span className="font-medium">€ {totalNet.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm border-t pt-2">
+                          <span className={`font-bold ${marginAbs >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            Marge:
+                          </span>
+                          <span className={`font-bold ${marginAbs >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            € {marginAbs.toFixed(2)} ({marginPct.toFixed(1)}%)
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Lieferkosten:</span>
+                          <span className="font-medium">€ {delivery.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Zwischensumme:</span>
+                          <span className="font-medium">€ {subtotalBeforeTax.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">MwSt ({formData.tax_rate}%):</span>
+                          <span className="font-medium">€ {tax.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-lg font-bold border-t pt-2 border-gray-800">
+                          <span>Gesamtsumme (brutto):</span>
+                          <span>€ {gross.toFixed(2)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+
                 </div>
               </div>
             </div>
           )}
+        </div>
+        </div>
         </div>
 
         {/* Interne Notizen in Tab 2 */}
@@ -1996,7 +2533,7 @@ setCustomerAddresses(customer.addresses || []);
             placeholder="Interne Notizen (erscheinen nicht im Angebot)"
           />
         </div>
-        </>
+          </>
         )}
 
         {/* TAB 3: Konditionen */}

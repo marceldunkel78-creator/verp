@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     UserViewSet, EmployeeViewSet, TimeEntryViewSet, VacationRequestViewSet,
     TravelExpenseReportViewSet, TravelExpenseDayViewSet, TravelExpenseItemViewSet, TravelPerDiemRateViewSet,
-    MessageViewSet, ReminderViewSet
+    MessageViewSet, ReminderViewSet, NotificationViewSet
 )
 
 router = DefaultRouter()
@@ -14,6 +14,7 @@ router.register(r'vacation-requests', VacationRequestViewSet, basename='vacation
 # Nachrichten und Erinnerungen
 router.register(r'messages', MessageViewSet, basename='message')
 router.register(r'reminders', ReminderViewSet, basename='reminder')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 # Reisekosten
 router.register(r'travel-expenses', TravelExpenseReportViewSet, basename='travel-expense')
 router.register(r'travel-expense-days', TravelExpenseDayViewSet, basename='travel-expense-day')

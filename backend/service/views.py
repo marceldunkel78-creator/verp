@@ -20,6 +20,9 @@ class VSServiceViewSet(viewsets.ModelViewSet):
     """
     ViewSet für VS-Service Produkte
     """
+    # Pagination für infinite scroll
+    from verp.pagination import InfinitePagination
+    pagination_class = InfinitePagination
     queryset = VSService.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

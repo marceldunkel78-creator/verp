@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import DueRemindersModal from './DueRemindersModal';
 import {
   Bars3Icon,
   XMarkIcon,
@@ -22,8 +23,21 @@ import {
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showRemindersModal, setShowRemindersModal] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
+
+  // Zeige Erinnerungs-Modal beim ersten Laden (Login)
+  useEffect(() => {
+    // Prüfe ob das Modal heute bereits angezeigt wurde
+    const today = new Date().toISOString().split('T')[0];
+    const lastShown = sessionStorage.getItem('reminders_modal_shown_date');
+    
+    if (lastShown !== today && user) {
+      setShowRemindersModal(true);
+      sessionStorage.setItem('reminders_modal_shown_date', today);
+    }
+  }, [user]);
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
@@ -49,6 +63,11 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Due Reminders Modal */}
+      {showRemindersModal && (
+        <DueRemindersModal onClose={() => setShowRemindersModal(false)} />
+      )}
+      
       {/* Mobile Sidebar */}
       <div className={`fixed inset-0 z-40 lg:hidden ${sidebarOpen ? '' : 'hidden'}`}>
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />

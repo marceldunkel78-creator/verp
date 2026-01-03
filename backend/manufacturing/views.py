@@ -26,6 +26,9 @@ from .serializers import (
 
 class VSHardwareViewSet(viewsets.ModelViewSet):
     """ViewSet für VS-Hardware Produkte"""
+    # Pagination für infinite scroll
+    from verp.pagination import InfinitePagination
+    pagination_class = InfinitePagination
     queryset = VSHardware.objects.all()
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]

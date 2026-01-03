@@ -58,7 +58,15 @@ class QuotationItemSerializer(serializers.ModelSerializer):
             return obj.group_name
         try:
             if obj.item:
-                return obj.item.name
+                # Prefer common name fields, fall back to title or str()
+                name = getattr(obj.item, 'name', None) or getattr(obj.item, 'name_en', None)
+                if name:
+                    return name
+                title = getattr(obj.item, 'title', None) or getattr(obj.item, 'title_en', None)
+                if title:
+                    return title
+                # Last resort
+                return str(obj.item)
         except Exception:
             pass
         return None
@@ -287,31 +295,64 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
     def get_total_net(self, obj):
         """Gesamtsumme netto - nur Gruppen-Header und Einzelpositionen"""
         from decimal import Decimal
+
+        items = [it for it in obj.items.all() if (it.is_group_header or not it.group_id)]
         total = Decimal('0.00')
-        for item in obj.items.all():
-            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
-            if item.is_group_header or not item.group_id:
-                total += item.subtotal
+
+        # Detect items using system price
+        uses_system = any(getattr(it, 'uses_system_price', False) and obj.system_price for it in items)
+
+        # Sum subtotals for items not using system price
+        for it in items:
+            if getattr(it, 'uses_system_price', False) and obj.system_price:
+                continue
+            total += it.subtotal
+
+        # If any item uses system price, add the quotation.system_price once
+        if uses_system:
+            total += (obj.system_price or Decimal('0.00'))
+
         return float(total)
     
     def get_total_tax(self, obj):
         """Gesamtsumme MwSt - nur Gruppen-Header und Einzelpositionen"""
         from decimal import Decimal
-        total = Decimal('0.00')
-        for item in obj.items.all():
-            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
-            if item.is_group_header or not item.group_id:
-                total += item.tax_amount
-        return float(total)
+
+        items = [it for it in obj.items.all() if (it.is_group_header or not it.group_id)]
+        total_tax = Decimal('0.00')
+
+        # Sum tax for items not using system price
+        for it in items:
+            if getattr(it, 'uses_system_price', False) and obj.system_price:
+                continue
+            total_tax += it.tax_amount
+
+        # If any item uses system price, compute tax on the system price once
+        if any(getattr(it, 'uses_system_price', False) and obj.system_price for it in items):
+            if obj.tax_enabled:
+                total_tax += (obj.system_price or Decimal('0.00')) * (obj.tax_rate / Decimal('100'))
+
+        return float(total_tax)
     
     def get_total_gross(self, obj):
         """Gesamtsumme brutto - nur Gruppen-Header und Einzelpositionen"""
         from decimal import Decimal
+
+        items = [it for it in obj.items.all() if (it.is_group_header or not it.group_id)]
         total = Decimal('0.00')
-        for item in obj.items.all():
-            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
-            if item.is_group_header or not item.group_id:
-                total += item.total
+
+        # Sum totals for items not using system price
+        for it in items:
+            if getattr(it, 'uses_system_price', False) and obj.system_price:
+                continue
+            total += it.total
+
+        # If any item uses system price, add system price + tax once
+        if any(getattr(it, 'uses_system_price', False) and obj.system_price for it in items):
+            sys_price = obj.system_price or Decimal('0.00')
+            sys_tax = sys_price * (obj.tax_rate / Decimal('100')) if obj.tax_enabled else Decimal('0.00')
+            total += sys_price + sys_tax
+
         return float(total)
     
     def get_created_by_name(self, obj):

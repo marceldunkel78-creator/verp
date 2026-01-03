@@ -13,6 +13,7 @@ function LoanEdit() {
     const [loading, setLoading] = useState(!isNew);
     const [saving, setSaving] = useState(false);
     const [suppliers, setSuppliers] = useState([]);
+    const [employees, setEmployees] = useState([]);
     
     const [loan, setLoan] = useState({
         supplier: '',
@@ -29,7 +30,9 @@ function LoanEdit() {
         notes: '',
         items: [],
         receipt: null,
-        returns: []
+        returns: [],
+        responsible_employee: '',
+        observers: []
     });
     
     const [newItem, setNewItem] = useState({
@@ -53,6 +56,7 @@ function LoanEdit() {
 
     useEffect(() => {
         loadSuppliers();
+        loadEmployees();
         // Only load loan when a valid id is present and it's not the 'new' route
         if (id && id !== 'new') {
             loadLoan();
@@ -67,6 +71,16 @@ function LoanEdit() {
             setSuppliers(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error loading suppliers:', error);
+        }
+    };
+
+    const loadEmployees = async () => {
+        try {
+            const response = await api.get('/users/employees/?is_active=true&page_size=500');
+            const data = response.data && (response.data.results || response.data);
+            setEmployees(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Error loading employees:', error);
         }
     };
 
@@ -520,6 +534,27 @@ function LoanEdit() {
                                 )}
                             </div>
 
+                            {/* Zuständiger Mitarbeiter */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Zuständiger Mitarbeiter
+                                    </label>
+                                    <select
+                                        value={loan.responsible_employee || ''}
+                                        onChange={(e) => setLoan(prev => ({ ...prev, responsible_employee: e.target.value ? parseInt(e.target.value) : null }))}
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option value="">-- Mitarbeiter wählen --</option>
+                                        {employees.map(emp => (
+                                            <option key={emp.id} value={emp.id}>
+                                                {emp.first_name} {emp.last_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
                             {/* Return Address */}
                             <div>
                                 <h3 className="text-lg font-medium text-gray-800 mb-3">Rücksendeadresse</h3>
@@ -682,6 +717,46 @@ function LoanEdit() {
                                             ))}
                                         </tbody>
                                     </table>
+                                )}
+                            </div>
+
+                            {/* Beobachter */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Beobachter (werden bei Änderungen benachrichtigt)
+                                </label>
+                                <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                                    {employees.map(emp => {
+                                        const isSelected = Array.isArray(loan.observers) && loan.observers.includes(emp.id);
+                                        return (
+                                            <label key={emp.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={(e) => {
+                                                        setLoan(prev => {
+                                                            const currentObservers = Array.isArray(prev.observers) ? prev.observers : [];
+                                                            if (e.target.checked) {
+                                                                return { ...prev, observers: [...currentObservers, emp.id] };
+                                                            } else {
+                                                                return { ...prev, observers: currentObservers.filter(id => id !== emp.id) };
+                                                            }
+                                                        });
+                                                    }}
+                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">{emp.first_name} {emp.last_name}</span>
+                                            </label>
+                                        );
+                                    })}
+                                    {employees.length === 0 && (
+                                        <p className="text-sm text-gray-500 italic">Keine Mitarbeiter verfügbar</p>
+                                    )}
+                                </div>
+                                {Array.isArray(loan.observers) && loan.observers.length > 0 && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {loan.observers.length} Beobachter ausgewählt
+                                    </p>
                                 )}
                             </div>
 

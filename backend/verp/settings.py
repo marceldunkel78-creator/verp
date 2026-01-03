@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'manufacturing',
     'visiview',
     'service',
+    'procurement',
 ]
 
 MIDDLEWARE = [
@@ -200,6 +201,12 @@ if DEBUG:
 else:
     # In production, rely on explicit CORS_ALLOWED_ORIGINS above
     CORS_ALLOW_ALL_ORIGINS = False
+
+# Optional: Übersetzungs-API Konfiguration (z.B. LibreTranslate compatible endpoint)
+# Set `TRANSLATION_API_URL` to the API endpoint (e.g. https://libretranslate.com/translate)
+# Optionally set `TRANSLATION_API_KEY` if your provider requires authentication.
+TRANSLATION_API_URL = config('TRANSLATION_API_URL', default=None)
+TRANSLATION_API_KEY = config('TRANSLATION_API_KEY', default=None)
 
 # Security-related settings (sane defaults; override via environment variables)
 if DEBUG:

@@ -19,6 +19,67 @@ from .serializers import (
     LoanReturnItemSerializer
 )
 from .pdf_generator import generate_return_note_pdf
+from users.models import Notification, Reminder
+
+
+def create_loan_notifications(loan, is_new=False):
+    """Erstellt Benachrichtigungen für zuständigen Mitarbeiter und Beobachter"""
+    action_text = "erstellt" if is_new else "aktualisiert"
+    # use existing notification type values defined in users.models.Notification.NOTIFICATION_TYPES
+    notification_type = 'loan'
+    
+    # Sammle alle zu benachrichtigenden User
+    users_to_notify = set()
+    
+    # Zuständiger Mitarbeiter
+    if loan.responsible_employee:
+        # User ist über das reverse-relationship `users` auf `Employee` erreichbar
+        rep_user = loan.responsible_employee.users.filter(is_active=True).first()
+        if rep_user:
+            users_to_notify.add(rep_user)
+    
+    # Beobachter
+    for observer in loan.observers.all():
+        # Jeder Beobachter kann 0..n User haben; benachrichtige alle aktiven
+        for u in observer.users.filter(is_active=True):
+            users_to_notify.add(u)
+    
+    # Erstelle Benachrichtigungen
+    for user in users_to_notify:
+            Notification.objects.create(
+            user=user,
+            title=f"Leihung {loan.loan_number} {action_text}",
+            message=f"Leihung {loan.loan_number} von {loan.supplier.company_name if loan.supplier else 'Unbekannt'} wurde {action_text}.",
+            notification_type=notification_type,
+            related_url=f"/procurement/loans/{loan.id}"
+        )
+
+
+def create_loan_reminder(loan):
+    """Erstellt eine Erinnerung für das Rückgabedatum"""
+    if not loan.return_deadline or not loan.responsible_employee:
+        return
+    # finde den zugehörigen User über Employee.users
+    responsible_user = loan.responsible_employee.users.filter(is_active=True).first()
+    if not responsible_user:
+        return
+    
+    # Lösche bestehende Erinnerungen für diese Leihung
+    Reminder.objects.filter(
+        related_object_type='loan',
+        related_object_id=loan.id
+    ).delete()
+    
+    # Erstelle neue Erinnerung
+    Reminder.objects.create(
+        user=responsible_user,
+        title=f"Leihung {loan.loan_number} zurückgeben",
+        description=f"Die Leihung {loan.loan_number} von {loan.supplier.company_name if loan.supplier else 'Unbekannt'} muss bis {loan.return_deadline.strftime('%d.%m.%Y')} zurückgegeben werden.",
+        due_date=loan.return_deadline,
+        related_object_type='loan',
+        related_object_id=loan.id,
+        related_url=f"/procurement/loans/{loan.id}"
+    )
 
 
 class LoanViewSet(viewsets.ModelViewSet):
@@ -84,10 +145,16 @@ class LoanViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        loan = serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        # Benachrichtigungen und Erinnerungen erstellen
+        create_loan_notifications(loan, is_new=True)
+        create_loan_reminder(loan)
     
     def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+        loan = serializer.save(updated_by=self.request.user)
+        # Benachrichtigungen und Erinnerungen aktualisieren
+        create_loan_notifications(loan, is_new=False)
+        create_loan_reminder(loan)
     
     @action(detail=True, methods=['get'])
     def items(self, request, pk=None):

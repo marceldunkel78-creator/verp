@@ -32,8 +32,9 @@ def render_order_pdf_bytes(order):
 
     if company.document_header:
         try:
-            img = Image(company.document_header.path, width=15*cm, height=3*cm, kind='proportional')
-            img.hAlign = 'CENTER'
+            # Logo rechts oben (nur erste Seite), kleinere Größe: 5cm breit, 1.5cm hoch
+            img = Image(company.document_header.path, width=5*cm, height=1.5*cm, kind='proportional')
+            img.hAlign = 'RIGHT'
             elements.append(img)
             elements.append(Spacer(1, 0.5*cm))
         except:
