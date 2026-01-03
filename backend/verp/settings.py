@@ -202,6 +202,16 @@ else:
     # In production, rely on explicit CORS_ALLOWED_ORIGINS above
     CORS_ALLOW_ALL_ORIGINS = False
 
+# CSRF Trusted Origins - required for Django 4.0+ to accept POST requests
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 # Optional: Übersetzungs-API Konfiguration (z.B. LibreTranslate compatible endpoint)
 # Set `TRANSLATION_API_URL` to the API endpoint (e.g. https://libretranslate.com/translate)
 # Optionally set `TRANSLATION_API_KEY` if your provider requires authentication.

@@ -509,24 +509,7 @@ class Message(models.Model):
         return f"{self.sender or 'System'} -> {self.user.get_full_name()}: {self.title}"
 
 
-class Reminder(models.Model):
-    """
-    Persönliche Erinnerungen
-    """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reminders')
-    title = models.CharField(max_length=200, verbose_name='Titel')
-    description = models.TextField(blank=True, verbose_name='Beschreibung')
-    due_date = models.DateTimeField(verbose_name='Fälligkeitsdatum')
-    is_completed = models.BooleanField(default=False, verbose_name='Erledigt')
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Erinnerung'
-        verbose_name_plural = 'Erinnerungen'
-        ordering = ['due_date']
-
-    def __str__(self):
-        return f"{self.user.get_full_name()} - {self.title}"
+# Reminder model consolidated further down in this file (avoid duplicate model registration)
 
 
 class MonthlyWorkSummary(models.Model):

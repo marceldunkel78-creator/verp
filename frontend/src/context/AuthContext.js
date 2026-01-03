@@ -17,12 +17,19 @@ export const AuthProvider = ({ children }) => {
       const response = await api.get('/users/me/');
       setUser(response.data);
     } catch (error) {
-      console.error('Fehler beim Laden der Benutzerdaten:', error);
-      // Bei Fehler: sicherstellen, dass kein veralteter Zustand bleibt
-      try {
-        // Force logout on server side to clear cookies
-        await api.post('/auth/logout/');
-      } catch (e) {}
+      // 401 = nicht authentifiziert - das ist normal wenn keine Session existiert
+      if (error.response?.status !== 401) {
+        console.error('Fehler beim Laden der Benutzerdaten:', error);
+      }
+      setUser(null);
+      // Wenn der Benutzer nicht authentifiziert ist, weiterleiten zur Login-Seite
+      // und verhindern, dass mehrere Redirects/Requests entstehen.
+      if (error.response?.status === 401) {
+        if (!sessionStorage.getItem('logoutRedirect') && window.location.pathname !== '/login') {
+          sessionStorage.setItem('logoutRedirect', '1');
+          window.location.href = '/login';
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -34,6 +41,8 @@ export const AuthProvider = ({ children }) => {
       await api.post('/auth/login/', { username, password });
       // Now try to load user
       await fetchUser();
+      // Clear any previous logout redirect flag after successful login
+      sessionStorage.removeItem('logoutRedirect');
       return { success: true };
     } catch (error) {
       // Normalize error to a string for rendering

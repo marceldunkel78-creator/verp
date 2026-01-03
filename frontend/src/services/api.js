@@ -8,26 +8,83 @@ const api = axios.create({
   withCredentials: true,
 });
 // Response Interceptor - handle refresh via cookie-based endpoint
+let isRefreshing = false;
+let failedRefresh = false;
+let refreshSubscribers = [];
+
+function subscribeTokenRefresh(cb) {
+  refreshSubscribers.push(cb);
+}
+function onRefreshed() {
+  refreshSubscribers.forEach((cb) => cb());
+  refreshSubscribers = [];
+}
+function rejectSubscribers(err) {
+  refreshSubscribers.forEach((cb) => cb(err));
+  refreshSubscribers = [];
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config || {};
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const status = error.response?.status;
+
+    // If request is unauthorized, try to refresh once using a single in-flight refresh
+    if (status === 401) {
+      // If refresh already failed previously, redirect immediately
+      if (failedRefresh) {
+        if (!sessionStorage.getItem('logoutRedirect')) {
+          sessionStorage.setItem('logoutRedirect', '1');
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+
+      // If a refresh is already in progress, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((err) => {
+            if (err) return reject(err);
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      // Mark as retrying this request
+      if (originalRequest._retry) {
+        // Already retried -> redirect once
+        if (!sessionStorage.getItem('logoutRedirect')) {
+          sessionStorage.setItem('logoutRedirect', '1');
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
+
       try {
-        // Call refresh endpoint; cookie will be sent because withCredentials=true
         const refreshUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/auth/refresh/`;
         await axios.post(refreshUrl, {}, { withCredentials: true });
-        // Retry original request; cookies will be sent and backend will read access_token cookie
+        isRefreshing = false;
+        onRefreshed();
         return api(originalRequest);
       } catch (refreshError) {
-        // Failed refresh -> go to login
-        window.location.href = '/login';
+        isRefreshing = false;
+        failedRefresh = true;
+        rejectSubscribers(refreshError);
+        if (!sessionStorage.getItem('logoutRedirect')) {
+          sessionStorage.setItem('logoutRedirect', '1');
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
+
     return Promise.reject(error);
   }
 );
+
 
 export default api;
