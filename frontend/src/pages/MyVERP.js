@@ -53,13 +53,25 @@ const MyVERP = () => {
   }, []);
 
   const fetchData = async () => {
+    let meRes;
+    let me = {};
     try {
       setErrors({});
+
+      // Fetch current user first so we can request *only* their vacation requests
+      try {
+        meRes = await api.get('/users/me/');
+        me = meRes.data || {};
+      } catch (err) {
+        me = {};
+      }
+
       const endpoints = {
         time: api.get('/users/time-entries/'),
         messages: api.get('/users/messages/'),
         reminders: api.get('/users/reminders/'),
-        vacation: api.get('/users/vacation-requests/'),
+        // Always filter vacation requests to the current user in the personal dashboard
+        vacation: api.get(`/users/vacation-requests/?user=${me.id}`),
         report: api.get('/users/time-entries/weekly_report/'),
         month: api.get('/users/time-entries/monthly_report/'),
 
@@ -94,17 +106,16 @@ const MyVERP = () => {
     } finally {
       setLoading(false);
     }
-    // additionally fetch /users/me and employee details (separate call)
+    // additionally fetch employee details (separate call)
     try {
-      const meRes = await api.get('/users/me/');
       try {
         const empRes = await api.get('/users/employees/me/');
         setEmployeeDetails(empRes.data || null);
       } catch (err) {
         // fallback: try the id-based endpoint if present
-        if (meRes.data && meRes.data.employee) {
+        if (me && me.employee) {
           try {
-            const empRes = await api.get(`/users/employees/${meRes.data.employee}/`);
+            const empRes = await api.get(`/users/employees/${me.employee}/`);
             setEmployeeDetails(empRes.data);
           } catch (err2) {
             console.warn('Employee details nicht verfügbar', err2);
@@ -213,6 +224,7 @@ const MyVERP = () => {
 // TimeTrackingTab Component
 const TimeTrackingTab = ({ timeEntries, weeklyReport, monthlyReport, onRefresh, errors }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState(null);
   // Defaults for new time entry (persisted per browser via localStorage)
   const [defaults, setDefaults] = useState({ start_time: '08:00', end_time: '17:00', break_time: '00:30:00' });
   const [editingDefaults, setEditingDefaults] = useState({ start_time: '', end_time: '', break_time: '' });
@@ -279,14 +291,19 @@ const TimeTrackingTab = ({ timeEntries, weeklyReport, monthlyReport, onRefresh, 
       break_time: defaults.break_time || '00:30:00',
       description: ''
     });
+    setEditingEntryId(null);
     setShowModal(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await api.post('/users/time-entries/', formData);
-      onRefresh();
+      if (editingEntryId) {
+        await api.patch(`/users/time-entries/${editingEntryId}/`, formData);
+      } else {
+        await api.post('/users/time-entries/', formData);
+      }
+      await onRefresh();
       setShowModal(false);
       setFormData({
         date: new Date().toISOString().split('T')[0],
@@ -295,8 +312,32 @@ const TimeTrackingTab = ({ timeEntries, weeklyReport, monthlyReport, onRefresh, 
         break_time: defaults.break_time || '00:30:00',
         description: ''
       });
+      setEditingEntryId(null);
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
+    }
+  };
+
+  const handleEditEntry = (entry) => {
+    setFormData({
+      date: entry.date,
+      start_time: entry.start_time,
+      end_time: entry.end_time,
+      break_time: entry.break_time || '00:30:00',
+      description: entry.description || ''
+    });
+    setEditingEntryId(entry.id);
+    setShowModal(true);
+  };
+
+  const handleDeleteEntry = async (id) => {
+    if (!window.confirm('Zeiteintrag wirklich löschen?')) return;
+    try {
+      await api.delete(`/users/time-entries/${id}/`);
+      await onRefresh();
+    } catch (err) {
+      console.error('Fehler beim Löschen:', err);
+      alert('Fehler beim Löschen: ' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -419,6 +460,10 @@ const TimeTrackingTab = ({ timeEntries, weeklyReport, monthlyReport, onRefresh, 
                   <div className="text-right">
                     <p className="text-sm font-medium text-gray-900">{entry.duration_display}</p>
                     <p className="text-xs text-gray-500">Pause: {entry.break_time}</p>
+                    <div className="mt-2 flex justify-end gap-2">
+                      <button onClick={() => handleEditEntry(entry)} className="text-sm text-blue-600 hover:text-blue-800">Bearbeiten</button>
+                      <button onClick={() => handleDeleteEntry(entry.id)} className="text-sm text-red-600 hover:text-red-800">Löschen</button>
+                    </div>
                   </div>
                 </div>
               </li>
@@ -1324,6 +1369,9 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
   const [form, setForm] = React.useState({ start_date: '', end_date: '', start_half: 'none', end_half: 'none', reason: '' });
   const [previewDays, setPreviewDays] = React.useState(0);
   const [previewRemaining, setPreviewRemaining] = React.useState(null);
+  const [yearBalance, setYearBalance] = React.useState(null);
+  const [adjustments, setAdjustments] = React.useState([]);
+  const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
 
   // calendar selection state
   const [selectedRange, setSelectedRange] = React.useState({ start: null, end: null });
@@ -1335,6 +1383,26 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
 
   const formatDate = (s) => s ? new Date(s).toLocaleDateString() : '-';
 
+  // Fetch year balance and adjustments
+  React.useEffect(() => {
+    const fetchYearData = async () => {
+      try {
+        const balanceRes = await api.get(`/users/vacation-year-balances/my_balance/?year=${selectedYear}`);
+        setYearBalance(balanceRes.data);
+      } catch (err) {
+        console.warn('Jahresurlaubskonto nicht verfügbar:', err);
+        setYearBalance(null);
+      }
+      try {
+        const adjustRes = await api.get(`/users/vacation-adjustments/?year=${selectedYear}`);
+        setAdjustments(adjustRes.data.results || adjustRes.data || []);
+      } catch (err) {
+        console.warn('Urlaubsanpassungen nicht verfügbar:', err);
+        setAdjustments([]);
+      }
+    };
+    fetchYearData();
+  }, [selectedYear, employeeDetails]);
 
   React.useEffect(() => {
     // recompute preview when form or employee details change
@@ -1378,82 +1446,106 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
     }
   };
 
+  // Year selector options (current year and previous 2 years)
+  const yearOptions = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2];
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-medium text-gray-900">Urlaub</h2>
-        <div>
+        <div className="flex items-center gap-4">
+          <select 
+            value={selectedYear} 
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="rounded-md border-gray-300 text-sm"
+          >
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
           <button onClick={() => setShowModal(true)} className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Neuen Antrag stellen</button>
         </div>
       </div>
       {errors?.vacation && (
         <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.vacation}</div>
       )}
-      <div className="mb-4">
-        <div className="p-3 bg-gray-50 rounded mb-3 flex items-center justify-between">
-          <div>
-            <div className="text-sm text-gray-500">Aktuelles Urlaubskonto</div>
-            <div className="text-xl font-semibold">{employeeDetails && employeeDetails.vacation_balance !== undefined ? `${parseFloat(employeeDetails.vacation_balance).toFixed(1)} Tage` : '-'}</div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-500">Jahresurlaub</div>
-            <div className="text-xl font-semibold">{employeeDetails && employeeDetails.annual_vacation_days !== undefined ? `${employeeDetails.annual_vacation_days} Tage` : '-'}</div>
-          </div>
+      
+      {/* Balance Overview */}
+      <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 bg-gray-50 rounded">
+          <div className="text-sm text-gray-500">Jahresanspruch {selectedYear}</div>
+          <div className="text-xl font-semibold">{yearBalance?.entitlement !== undefined ? `${parseFloat(yearBalance.entitlement).toFixed(1)} Tage` : '-'}</div>
         </div>
-
-        {/* Calendar selector */}
-        <div className="p-3 bg-white rounded border">
-          <CalendarMonth vacationRequests={vacationRequests} onSelect={handleCalendarSelect} />
-
-          <div className="mt-3 flex items-center justify-between">
-            <div className="text-sm">
-              Ausgewählt: <span className="font-medium">{selectedRange.start ? formatDate(selectedRange.start) : '-'}{selectedRange.end ? ` — ${formatDate(selectedRange.end)}` : (selectedRange.start ? ' (einzeltag)' : '')}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="px-3 py-1 bg-blue-600 text-white rounded" disabled={!selectedRange.start} onClick={() => {
-                // apply selection to form and open modal
-                const start = selectedRange.start;
-                const end = selectedRange.end || selectedRange.start;
-                setForm(prev => ({ ...prev, start_date: start, end_date: end }));
-                setShowModal(true);
-              }}>Neuen Urlaubsantrag</button>
-              <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded" onClick={() => setSelectedRange({start:null,end:null})}>Auswahl zurücksetzen</button>
-            </div>
-          </div>
+        <div className="p-3 bg-blue-50 rounded">
+          <div className="text-sm text-gray-500">Übertrag aus Vorjahr</div>
+          <div className="text-xl font-semibold text-blue-700">{yearBalance?.carryover !== undefined ? `${parseFloat(yearBalance.carryover).toFixed(1)} Tage` : '-'}</div>
         </div>
-
+        <div className="p-3 bg-orange-50 rounded">
+          <div className="text-sm text-gray-500">Genommen</div>
+          <div className="text-xl font-semibold text-orange-700">{yearBalance?.taken !== undefined ? `${parseFloat(yearBalance.taken).toFixed(1)} Tage` : '-'}</div>
+        </div>
+        <div className="p-3 bg-green-50 rounded">
+          <div className="text-sm text-gray-500">Aktuelles Guthaben</div>
+          <div className="text-xl font-semibold text-green-700">{employeeDetails?.vacation_balance !== undefined ? `${parseFloat(employeeDetails.vacation_balance).toFixed(1)} Tage` : '-'}</div>
+        </div>
       </div>
 
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        {vacationRequests.length === 0 ? (
-          <div className="p-6 text-center text-sm text-gray-500">Keine Urlaubsanträge vorhanden.</div>
-        ) : (
-          <ul className="divide-y divide-gray-200">
-            {vacationRequests.map((request) => (
-              <li key={request.id} className="px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {new Date(request.start_date).toLocaleDateString()}
-                      {request.start_half && request.start_half !== 'none' ? ` (${request.start_half_label})` : ''}
-                      {' '}– {' '}
-                      {new Date(request.end_date).toLocaleDateString()}
-                      {request.end_half && request.end_half !== 'none' ? ` (${request.end_half_label})` : ''}
-                    </p>
-                    <p className="text-sm text-gray-500">{request.reason}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                      request.status === 'approved' ? 'bg-green-100 text-green-800' :
-                      request.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                      request.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {request.status}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">{request.days_requested} Tage</p>
-                    {request.status === 'pending' && (
-                      <div className="mt-2">
+      {/* Calendar selector */}
+      <div className="p-3 bg-white rounded border mb-4">
+        <CalendarMonth vacationRequests={vacationRequests} onSelect={handleCalendarSelect} />
+
+        <div className="mt-3 flex items-center justify-between">
+          <div className="text-sm">
+            Ausgewählt: <span className="font-medium">{selectedRange.start ? formatDate(selectedRange.start) : '-'}{selectedRange.end ? ` — ${formatDate(selectedRange.end)}` : (selectedRange.start ? ' (einzeltag)' : '')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-1 bg-blue-600 text-white rounded" disabled={!selectedRange.start} onClick={() => {
+              // apply selection to form and open modal
+              const start = selectedRange.start;
+              const end = selectedRange.end || selectedRange.start;
+              setForm(prev => ({ ...prev, start_date: start, end_date: end }));
+              setShowModal(true);
+            }}>Neuen Urlaubsantrag</button>
+            <button className="px-3 py-1 bg-gray-100 text-gray-700 rounded" onClick={() => setSelectedRange({start:null,end:null})}>Auswahl zurücksetzen</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Two columns: Requests left, Changelog right */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Left: Vacation Requests */}
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+          <div className="px-4 py-3 bg-gray-50 border-b">
+            <h3 className="text-sm font-medium text-gray-900">Urlaubsanträge {selectedYear}</h3>
+          </div>
+          {vacationRequests.filter(r => new Date(r.start_date).getFullYear() === selectedYear).length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-500">Keine Urlaubsanträge für {selectedYear} vorhanden.</div>
+          ) : (
+            <ul className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+              {vacationRequests.filter(r => new Date(r.start_date).getFullYear() === selectedYear).map((request) => (
+                <li key={request.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {new Date(request.start_date).toLocaleDateString()}
+                        {request.start_half && request.start_half !== 'none' ? ` (${request.start_half_label})` : ''}
+                        {' '}– {' '}
+                        {new Date(request.end_date).toLocaleDateString()}
+                        {request.end_half && request.end_half !== 'none' ? ` (${request.end_half_label})` : ''}
+                      </p>
+                      <p className="text-xs text-gray-500">{request.reason}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                        request.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        request.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                        request.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {request.status === 'approved' ? 'Genehmigt' : 
+                         request.status === 'rejected' ? 'Abgelehnt' :
+                         request.status === 'cancelled' ? 'Storniert' : 'Ausstehend'}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">{request.days_requested} Tage</p>
+                      {request.status === 'pending' && (
                         <button onClick={async ()=>{
                           if (!window.confirm('Diesen ausstehenden Antrag wirklich löschen?')) return;
                           try {
@@ -1463,15 +1555,50 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
                             console.error('Fehler beim Löschen:', err);
                             alert('Fehler beim Löschen: ' + (err.response?.data?.detail || err.message));
                           }
-                        }} className="text-sm text-red-600 hover:text-red-900">Löschen</button>
-                      </div>
-                    )}
+                        }} className="text-xs text-red-600 hover:text-red-900 mt-1">Löschen</button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Right: Changelog */}
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+          <div className="px-4 py-3 bg-gray-50 border-b">
+            <h3 className="text-sm font-medium text-gray-900">Urlaubskonto Änderungsprotokoll</h3>
+          </div>
+          {adjustments.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-500">Keine Änderungen für {selectedYear} vorhanden.</div>
+          ) : (
+            <ul className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+              {adjustments.map((adj) => (
+                <li key={adj.id} className="px-4 py-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{adj.adjustment_type_display}</p>
+                      <p className="text-xs text-gray-500">{adj.reason}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(adj.created_at).toLocaleDateString()} {new Date(adj.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {adj.created_by_name && ` • ${adj.created_by_name}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-sm font-semibold ${parseFloat(adj.days) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {parseFloat(adj.days) >= 0 ? '+' : ''}{parseFloat(adj.days).toFixed(1)} Tage
+                      </span>
+                      <p className="text-xs text-gray-500">
+                        {parseFloat(adj.balance_before).toFixed(1)} → {parseFloat(adj.balance_after).toFixed(1)}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {showModal && (

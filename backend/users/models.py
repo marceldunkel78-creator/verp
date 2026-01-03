@@ -237,6 +237,177 @@ class TimeEntry(models.Model):
         return timedelta(0)
 
 
+class VacationYearBalance(models.Model):
+    """
+    Jahresurlaubskonto für einen Mitarbeiter.
+    Trackt: Anspruch, Übertrag aus Vorjahr, genommen, Rest.
+    Wird bei Jahresabschluss erstellt/aktualisiert.
+    """
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='vacation_year_balances')
+    year = models.PositiveIntegerField(verbose_name='Jahr')
+    
+    # Anspruch basierend auf Beschäftigungsmonaten (anteilig)
+    entitlement = models.DecimalField(max_digits=5, decimal_places=1, default=0, verbose_name='Jahresanspruch (anteilig)')
+    # Übertrag aus dem Vorjahr
+    carryover = models.DecimalField(max_digits=5, decimal_places=1, default=0, verbose_name='Übertrag aus Vorjahr')
+    # Manuelle Anpassungen (Summe aus VacationAdjustment)
+    manual_adjustment = models.DecimalField(max_digits=5, decimal_places=1, default=0, verbose_name='Manuelle Anpassungen')
+    # Genommene Tage (genehmigter Urlaub in diesem Jahr)
+    taken = models.DecimalField(max_digits=5, decimal_places=1, default=0, verbose_name='Genommen')
+    # Berechnetes Guthaben: entitlement + carryover + manual_adjustment - taken
+    balance = models.DecimalField(max_digits=5, decimal_places=1, default=0, verbose_name='Resturlaub')
+    
+    # Ob der Jahresabschluss durchgeführt wurde
+    is_closed = models.BooleanField(default=False, verbose_name='Jahr abgeschlossen')
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name='Abgeschlossen am')
+    closed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='closed_vacation_years')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Jahresurlaubskonto'
+        verbose_name_plural = 'Jahresurlaubskonten'
+        unique_together = ['employee', 'year']
+        ordering = ['-year']
+    
+    def __str__(self):
+        return f"{self.employee.employee_id} - {self.year}: {self.balance} Tage"
+    
+    def recalculate_balance(self):
+        """Berechnet das Guthaben neu basierend auf allen Komponenten."""
+        from decimal import Decimal
+        self.balance = (
+            Decimal(str(self.entitlement)) +
+            Decimal(str(self.carryover)) +
+            Decimal(str(self.manual_adjustment)) -
+            Decimal(str(self.taken))
+        )
+        return self.balance
+    
+    @classmethod
+    def get_or_create_for_year(cls, employee, year):
+        """
+        Erstellt oder gibt das Jahresurlaubskonto für einen Mitarbeiter und Jahr zurück.
+        Berechnet den anteiligen Anspruch basierend auf Beschäftigungsmonaten.
+        """
+        from decimal import Decimal
+        from datetime import date
+        
+        obj, created = cls.objects.get_or_create(
+            employee=employee,
+            year=year,
+            defaults={'entitlement': 0, 'carryover': 0, 'taken': 0, 'balance': 0}
+        )
+        
+        # Berechne anteiligen Anspruch, Übertrag und genommene Tage (taken)
+        annual_days = Decimal(str(employee.annual_vacation_days or 30))
+        start_date = employee.employment_start_date
+        end_date = employee.employment_end_date
+
+        year_start = date(year, 1, 1)
+        year_end = date(year, 12, 31)
+
+        # Beschäftigungsbeginn in diesem Jahr
+        effective_start = max(start_date, year_start) if start_date else year_start
+        # Beschäftigungsende in diesem Jahr (oder Jahresende)
+        effective_end = min(end_date, year_end) if end_date else year_end
+
+        # Nur zählen wenn Beschäftigung in diesem Jahr liegt
+        if effective_start <= year_end and effective_end >= year_start:
+            # Monate berechnen (vereinfacht: volle Monate)
+            months_employed = 0
+            for month in range(1, 13):
+                month_start = date(year, month, 1)
+                if month == 12:
+                    month_end = date(year, 12, 31)
+                else:
+                    month_end = date(year, month + 1, 1) - timedelta(days=1)
+
+                # Prüfen ob der Mitarbeiter in diesem Monat mindestens 15 Tage beschäftigt war
+                if effective_start <= month_end and effective_end >= month_start:
+                    overlap_start = max(effective_start, month_start)
+                    overlap_end = min(effective_end, month_end)
+                    days_in_month = (overlap_end - overlap_start).days + 1
+                    if days_in_month >= 15:
+                        months_employed += 1
+
+            # Anteiliger Anspruch: (annual_days / 12) * months_employed
+            obj.entitlement = (annual_days / Decimal('12') * Decimal(str(months_employed))).quantize(Decimal('0.1'))
+
+        # Übertrag aus Vorjahr holen
+        try:
+            prev_year = cls.objects.get(employee=employee, year=year - 1)
+            if prev_year.is_closed:
+                obj.carryover = prev_year.balance
+        except cls.DoesNotExist:
+            pass
+
+        # Berechne genommene Tage aus genehmigten Urlaubsanträgen, damit 'taken' stets konsistent ist
+        try:
+            from django.db.models import Sum
+            taken_sum = VacationRequest.objects.filter(
+                user__employee=employee,
+                status='approved',
+                start_date__year=year
+            ).aggregate(total=Sum('days_requested'))['total']
+            obj.taken = Decimal(str(taken_sum or 0))
+        except Exception:
+            # fallback: falls etwas schiefgeht, leave existing taken value
+            pass
+
+        obj.recalculate_balance()
+        obj.save()
+
+        # Synchronisiere das Mitarbeiter-Guthaben mit dem berechneten Jahreskonto
+        try:
+            if employee:
+                employee.vacation_balance = float(obj.balance)
+                employee.save()
+        except Exception:
+            pass
+
+        return obj
+
+
+class VacationAdjustment(models.Model):
+    """
+    Manuelle Anpassungen am Urlaubskonto eines Mitarbeiters.
+    Dient als Changelog für alle Änderungen.
+    """
+    ADJUSTMENT_TYPE_CHOICES = [
+        ('manual', 'Manuelle Anpassung'),
+        ('carryover', 'Übertrag'),
+        ('year_close', 'Jahresabschluss'),
+        ('correction', 'Korrektur'),
+        ('approval', 'Genehmigung'),
+        ('rejection', 'Ablehnung'),
+        ('cancellation', 'Stornierung'),
+        ('entitlement_change', 'Anspruchsänderung'),
+    ]
+    
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='vacation_adjustments')
+    year_balance = models.ForeignKey(VacationYearBalance, on_delete=models.CASCADE, null=True, blank=True, related_name='adjustments')
+    vacation_request = models.ForeignKey('VacationRequest', on_delete=models.SET_NULL, null=True, blank=True, related_name='adjustments')
+    
+    adjustment_type = models.CharField(max_length=20, choices=ADJUSTMENT_TYPE_CHOICES, verbose_name='Art der Anpassung')
+    days = models.DecimalField(max_digits=5, decimal_places=1, verbose_name='Tage (+/-)')
+    balance_before = models.DecimalField(max_digits=5, decimal_places=1, verbose_name='Kontostand vorher')
+    balance_after = models.DecimalField(max_digits=5, decimal_places=1, verbose_name='Kontostand nachher')
+    reason = models.TextField(verbose_name='Begründung')
+    
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='vacation_adjustments_made')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Urlaubsanpassung'
+        verbose_name_plural = 'Urlaubsanpassungen'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.employee.employee_id} - {self.get_adjustment_type_display()}: {self.days:+.1f} Tage"
+
+
 class VacationRequest(models.Model):
     """
     Urlaubsanträge
@@ -277,6 +448,10 @@ class VacationRequest(models.Model):
 
     def __str__(self):
         return f"{self.user.get_full_name()} - {self.start_date} bis {self.end_date}"
+    
+    def get_year(self):
+        """Gibt das Jahr zurück, in dem der Urlaub hauptsächlich liegt (Startdatum)."""
+        return self.start_date.year if self.start_date else None
 
 
 class Message(models.Model):

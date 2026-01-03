@@ -207,6 +207,10 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                 pass
     
     def perform_update(self, serializer):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"=== perform_update aufgerufen für Ticket ===")
+        
         old_instance = self.get_object()
         old_data = {
             'title': old_instance.title,
@@ -221,6 +225,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
         old_assigned_to = old_instance.assigned_to
         
         instance = serializer.save()
+        logger.warning(f"Ticket gespeichert: #{instance.ticket_number}, Watchers: {list(instance.watchers.values_list('username', flat=True))}")
         
         # Änderungen protokollieren
         field_labels = {
@@ -257,6 +262,8 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                     changed_by=self.request.user
                 )
                 changes.append((field_labels.get(field, field), str(old_value or ''), str(new_value or '')))
+        
+        logger.warning(f"Änderungen gefunden: {len(changes)} - {[c[0] for c in changes]}")
         
         # Wenn "Zugewiesen an" geändert wurde, Beobachter aktualisieren
         if old_assigned_to != instance.assigned_to:
@@ -302,7 +309,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                 if instance.assigned_to:
                     recipients.add(instance.assigned_to)
 
-                logger.info(f"Sende Ticket-Benachrichtigungen an {len(recipients)} Empfänger")
+                logger.warning(f"Sende Ticket-Benachrichtigungen an {len(recipients)} Empfänger")
                 
                 for recipient in recipients:
                     # Sende nicht an den Ändernden selbst
@@ -316,7 +323,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                             content=message_text,
                             message_type='ticket'
                         )
-                        logger.info(f"Nachricht erstellt für {recipient.username}: ID {msg.id}")
+                        logger.warning(f"Nachricht erstellt für {recipient.username}: ID {msg.id}")
                     except Exception as e:
                         logger.error(f"Fehler beim Erstellen der Nachricht für {recipient.username}: {e}")
                         

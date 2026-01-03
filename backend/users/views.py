@@ -341,6 +341,7 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         status_param = self.request.query_params.get('status')
+        year_param = self.request.query_params.get('year')
         if user.is_staff or user.can_read_hr:
             # admins/HR can see all or filter by user or employee
             uid = self.request.query_params.get('user')
@@ -376,16 +377,85 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
             # apply status filter if provided
             if status_param:
                 qs = qs.filter(status=status_param)
+            if year_param:
+                qs = qs.filter(start_date__year=year_param)
             return qs
         # regular users only see own requests
         qs = VacationRequest.objects.filter(user=user)
         if status_param:
             qs = qs.filter(status=status_param)
+        if year_param:
+            qs = qs.filter(start_date__year=year_param)
         return qs
 
     def perform_create(self, serializer):
         # set the requesting user as owner
         serializer.save(user=self.request.user)
+
+    def _send_vacation_notification(self, vacation_request, action_type, actor, reason=''):
+        """Sendet eine Benachrichtigung an den Mitarbeiter bei Urlaubsänderungen."""
+        from .models import Message
+        
+        status_labels = {
+            'approved': 'genehmigt',
+            'rejected': 'abgelehnt',
+            'cancelled': 'storniert',
+            'manual_adjustment': 'manuell angepasst',
+        }
+        
+        action_label = status_labels.get(action_type, action_type)
+        title = f"Urlaubsantrag {action_label}"
+        
+        content = f"Ihr Urlaubsantrag vom {vacation_request.start_date.strftime('%d.%m.%Y')} bis {vacation_request.end_date.strftime('%d.%m.%Y')} ({vacation_request.days_requested} Tage) wurde von {actor.get_full_name() or actor.username} {action_label}."
+        
+        if reason:
+            content += f"\n\nBegründung: {reason}"
+        
+        Message.objects.create(
+            user=vacation_request.user,
+            sender=actor,
+            title=title,
+            content=content,
+            message_type='system'
+        )
+
+    def _create_vacation_adjustment(self, employee, year_balance, vacation_request, adjustment_type, days, reason, created_by):
+        """Erstellt einen Changelog-Eintrag für eine Urlaubsänderung."""
+        from .models import VacationAdjustment
+        from decimal import Decimal
+        from django.utils import timezone
+        
+        # Ensure the year_balance belongs to the correct employee/year
+        try:
+            year = None
+            if vacation_request and getattr(vacation_request, 'start_date', None):
+                year = vacation_request.start_date.year
+            elif year_balance:
+                year = year_balance.year
+            else:
+                year = timezone.now().year
+
+            from .models import VacationYearBalance
+            if not year_balance or year_balance.employee_id != employee.id or year_balance.year != year:
+                year_balance = VacationYearBalance.get_or_create_for_year(employee, year)
+        except Exception:
+            # fallback: keep provided year_balance if something fails
+            pass
+
+        balance_before = Decimal(str(employee.vacation_balance or 0))
+        balance_after = balance_before + Decimal(str(days))
+
+        VacationAdjustment.objects.create(
+            employee=employee,
+            year_balance=year_balance,
+            vacation_request=vacation_request,
+            adjustment_type=adjustment_type,
+            days=days,
+            balance_before=balance_before,
+            balance_after=balance_after,
+            reason=reason,
+            created_by=created_by
+        )
 
     def perform_update(self, serializer):
         # ensure that only HR/admin can change approval status
@@ -398,6 +468,8 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
 
         # if approving, validate that employee has enough balance
         from decimal import Decimal
+        from .models import VacationYearBalance
+        
         if new_status == 'approved':
             try:
                 emp = getattr(instance.user, 'employee', None)
@@ -417,49 +489,115 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
         serializer.save()
         updated = serializer.instance
         from django.utils import timezone
+        
         # status transitioned
         if prev_status != updated.status:
+            emp = getattr(updated.user, 'employee', None)
+            year = updated.start_date.year if updated.start_date else timezone.now().year
+            year_balance = None
+            if emp:
+                year_balance = VacationYearBalance.get_or_create_for_year(emp, year)
+            
             # approval: deduct days from employee vacation_balance
             if updated.status == 'approved':
                 updated.approved_by = self.request.user
                 updated.approved_at = timezone.now()
                 updated.save()
                 try:
-                    emp = getattr(updated.user, 'employee', None)
                     if emp:
                         days = Decimal(str(updated.days_requested or 0))
-                        bal = Decimal(str(emp.vacation_balance or 0))
-                        emp.vacation_balance = bal - days
-                        emp.save()
+
+                        # Update year balance
+                        if year_balance:
+                            year_balance.taken = Decimal(str(year_balance.taken or 0)) + days
+                            year_balance.recalculate_balance()
+                            year_balance.save()
+
+                            # Synchronisiere Employee-Konto mit berechnetem Jahresguthaben
+                            emp.vacation_balance = float(year_balance.balance)
+                            emp.save()
+
+                        # Create changelog entry
+                        self._create_vacation_adjustment(
+                            emp, year_balance, updated,
+                            'approval', -days,
+                            f"Urlaubsantrag genehmigt: {updated.start_date} - {updated.end_date}",
+                            self.request.user
+                        )
                 except Exception:
-                    # swallow errors to avoid blocking the update
                     pass
-            # cancellation: when an approved request is cancelled, restore days and set cancelled metadata
+
+                # Send notification
+                self._send_vacation_notification(updated, 'approved', self.request.user)
+                
+            # cancellation: when an approved request is cancelled, restore days
             elif prev_status == 'approved' and updated.status == 'cancelled':
                 try:
-                    emp = getattr(updated.user, 'employee', None)
                     if emp:
                         days = Decimal(str(updated.days_requested or 0))
-                        bal = Decimal(str(emp.vacation_balance or 0))
-                        emp.vacation_balance = bal + days
-                        emp.save()
+
+                        # Update year balance
+                        if year_balance:
+                            year_balance.taken = Decimal(str(year_balance.taken or 0)) - days
+                            year_balance.recalculate_balance()
+                            year_balance.save()
+
+                            # Synchronisiere Employee-Konto mit berechnetem Jahresguthaben
+                            emp.vacation_balance = float(year_balance.balance)
+                            emp.save()
+
+                        # Create changelog entry
+                        self._create_vacation_adjustment(
+                            emp, year_balance, updated,
+                            'cancellation', days,
+                            f"Urlaubsantrag storniert: {updated.start_date} - {updated.end_date}",
+                            self.request.user
+                        )
                 except Exception:
                     pass
-            # if it was approved before and is now changed away from approved (e.g., rejected), restore days
-            elif prev_status == 'approved' and updated.status != 'approved':
+                
+                # Send notification
+                self._send_vacation_notification(updated, 'cancelled', self.request.user)
+                
+            # rejection: if it was approved before and is now rejected, restore days
+            elif prev_status == 'approved' and updated.status == 'rejected':
                 try:
-                    emp = getattr(updated.user, 'employee', None)
                     if emp:
                         days = Decimal(str(updated.days_requested or 0))
-                        bal = Decimal(str(emp.vacation_balance or 0))
-                        emp.vacation_balance = bal + days
-                        emp.save()
+
+                        # Update year balance
+                        if year_balance:
+                            year_balance.taken = Decimal(str(year_balance.taken or 0)) - days
+                            year_balance.recalculate_balance()
+                            year_balance.save()
+
+                            # Synchronisiere Employee-Konto mit berechnetem Jahresguthaben
+                            emp.vacation_balance = float(year_balance.balance)
+                            emp.save()
+
+                        # Create changelog entry
+                        self._create_vacation_adjustment(
+                            emp, year_balance, updated,
+                            'rejection', days,
+                            f"Urlaubsantrag abgelehnt: {updated.start_date} - {updated.end_date}",
+                            self.request.user
+                        )
                 except Exception:
                     pass
+                
+                # Send notification
+                self._send_vacation_notification(updated, 'rejected', self.request.user)
+            
+            # rejection of pending request
+            elif updated.status == 'rejected' and prev_status == 'pending':
+                # No balance change needed, just notify
+                self._send_vacation_notification(updated, 'rejected', self.request.user)
 
     def perform_destroy(self, instance):
         # if an approved request is deleted, restore vacation days
         from decimal import Decimal
+        from .models import VacationYearBalance
+        
         try:
             if instance.status == 'approved':
                 emp = getattr(instance.user, 'employee', None)
@@ -468,9 +606,283 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
                     bal = Decimal(str(emp.vacation_balance or 0))
                     emp.vacation_balance = bal + days
                     emp.save()
+                    
+                    # Update year balance
+                    year = instance.start_date.year if instance.start_date else None
+                    if year:
+                        try:
+                            year_balance = VacationYearBalance.objects.get(employee=emp, year=year)
+                            year_balance.taken = Decimal(str(year_balance.taken or 0)) - days
+                            year_balance.recalculate_balance()
+                            year_balance.save()
+                        except VacationYearBalance.DoesNotExist:
+                            pass
         except Exception:
             pass
         instance.delete()
+
+
+# ==================== Urlaub Jahresabschluss ViewSets ====================
+
+from .models import VacationYearBalance, VacationAdjustment
+from .serializers import (
+    VacationYearBalanceSerializer, VacationAdjustmentSerializer,
+    VacationManualAdjustmentSerializer
+)
+
+
+class VacationYearBalanceViewSet(viewsets.ModelViewSet):
+    """ViewSet für Jahresurlaubskonten"""
+    queryset = VacationYearBalance.objects.all()
+    serializer_class = VacationYearBalanceSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        year = self.request.query_params.get('year')
+        employee_id = self.request.query_params.get('employee')
+        
+        if user.is_staff or user.can_read_hr:
+            qs = VacationYearBalance.objects.all()
+            if year:
+                qs = qs.filter(year=year)
+            if employee_id:
+                qs = qs.filter(employee_id=employee_id)
+            return qs
+        
+        # Regular users: only their own employee's balances
+        emp = getattr(user, 'employee', None)
+        if emp:
+            qs = VacationYearBalance.objects.filter(employee=emp)
+            if year:
+                qs = qs.filter(year=year)
+            return qs
+        return VacationYearBalance.objects.none()
+    
+    @action(detail=False, methods=['get'])
+    def my_balance(self, request):
+        """Gibt das aktuelle Jahresurlaubskonto des eingeloggten Users zurück."""
+        from django.utils import timezone
+        
+        emp = getattr(request.user, 'employee', None)
+        if not emp:
+            return Response({'error': 'Kein Mitarbeiter verknüpft.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        year = int(request.query_params.get('year', timezone.now().year))
+        year_balance = VacationYearBalance.get_or_create_for_year(emp, year)
+        
+        serializer = self.get_serializer(year_balance)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def for_employee(self, request):
+        """Gibt das Jahresurlaubskonto für einen bestimmten Mitarbeiter zurück (HR only)."""
+        if not (request.user.is_staff or request.user.can_read_hr):
+            return Response({'error': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        from django.utils import timezone
+        
+        employee_id = request.query_params.get('employee')
+        if not employee_id:
+            return Response({'error': 'employee parameter required.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            emp = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            # Try by employee_id string
+            try:
+                emp = Employee.objects.get(employee_id=employee_id)
+            except Employee.DoesNotExist:
+                return Response({'error': 'Mitarbeiter nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        year = int(request.query_params.get('year', timezone.now().year))
+        year_balance = VacationYearBalance.get_or_create_for_year(emp, year)
+        
+        serializer = self.get_serializer(year_balance)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def close_year(self, request, pk=None):
+        """Schließt ein Urlaubsjahr ab und überträgt den Rest ins nächste Jahr (HR only)."""
+        if not (request.user.is_staff or request.user.can_write_hr):
+            return Response({'error': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        from django.utils import timezone
+        from decimal import Decimal
+        
+        year_balance = self.get_object()
+        
+        if year_balance.is_closed:
+            return Response({'error': 'Jahr bereits abgeschlossen.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Calculate remaining balance
+        year_balance.recalculate_balance()
+        
+        # Create next year's balance with carryover
+        next_year = year_balance.year + 1
+        next_balance, created = VacationYearBalance.objects.get_or_create(
+            employee=year_balance.employee,
+            year=next_year,
+            defaults={'entitlement': 0, 'carryover': 0, 'taken': 0, 'balance': 0}
+        )
+        
+        # Set carryover
+        next_balance.carryover = year_balance.balance
+        
+        # Calculate entitlement for next year if newly created
+        if created:
+            emp = year_balance.employee
+            annual_days = Decimal(str(emp.annual_vacation_days or 30))
+            # Simplified: assume full year employment for next year
+            next_balance.entitlement = annual_days
+        
+        next_balance.recalculate_balance()
+        next_balance.save()
+
+        # Synchronisiere das Mitarbeiter-Konto auf das neue Jahr-Konto (carryover angewendet)
+        try:
+            emp = year_balance.employee
+            emp.vacation_balance = float(next_balance.balance)
+            emp.save()
+        except Exception:
+            pass
+        
+        # Create adjustment entry for the carryover
+        VacationAdjustment.objects.create(
+            employee=year_balance.employee,
+            year_balance=next_balance,
+            adjustment_type='carryover',
+            days=year_balance.balance,
+            balance_before=Decimal('0'),
+            balance_after=year_balance.balance,
+            reason=f"Übertrag aus Jahr {year_balance.year}",
+            created_by=request.user
+        )
+        
+        # Mark as closed
+        year_balance.is_closed = True
+        year_balance.closed_at = timezone.now()
+        year_balance.closed_by = request.user
+        year_balance.save()
+        
+        # Create adjustment entry for year close
+        VacationAdjustment.objects.create(
+            employee=year_balance.employee,
+            year_balance=year_balance,
+            adjustment_type='year_close',
+            days=Decimal('0'),
+            balance_before=year_balance.balance,
+            balance_after=year_balance.balance,
+            reason=f"Jahresabschluss {year_balance.year}",
+            created_by=request.user
+        )
+        
+        # Send notification to employee
+        user = User.objects.filter(employee=year_balance.employee).first()
+        if user:
+            from .models import Message
+            Message.objects.create(
+                user=user,
+                sender=request.user,
+                title=f"Urlaubsjahresabschluss {year_balance.year}",
+                content=f"Ihr Urlaubsjahr {year_balance.year} wurde abgeschlossen.\n\nResturlaub: {year_balance.balance} Tage\nDieser wird ins Jahr {next_year} übertragen.\n\nIhr neues Urlaubskonto für {next_year}:\n- Jahresanspruch: {next_balance.entitlement} Tage\n- Übertrag: {next_balance.carryover} Tage\n- Verfügbar: {next_balance.balance} Tage",
+                message_type='system'
+            )
+        
+        return Response({
+            'message': f'Jahr {year_balance.year} erfolgreich abgeschlossen.',
+            'carryover': float(year_balance.balance),
+            'next_year_balance': VacationYearBalanceSerializer(next_balance).data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def adjust(self, request, pk=None):
+        """Manuelle Anpassung des Urlaubskontos (HR only)."""
+        if not (request.user.is_staff or request.user.can_write_hr):
+            return Response({'error': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
+        
+        from decimal import Decimal
+        
+        year_balance = self.get_object()
+        serializer = VacationManualAdjustmentSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        days = Decimal(str(serializer.validated_data['days']))
+        reason = serializer.validated_data['reason']
+        
+        emp = year_balance.employee
+        balance_before = Decimal(str(emp.vacation_balance or 0))
+        
+        # Update year balance
+        year_balance.manual_adjustment = Decimal(str(year_balance.manual_adjustment or 0)) + days
+        year_balance.recalculate_balance()
+        year_balance.save()
+
+        # Synchronisiere das Mitarbeiter-Guthaben mit dem Jahreskonto (berechnet)
+        emp.vacation_balance = float(year_balance.balance)
+        emp.save()
+        
+        # Create adjustment entry
+        VacationAdjustment.objects.create(
+            employee=emp,
+            year_balance=year_balance,
+            adjustment_type='manual',
+            days=days,
+            balance_before=balance_before,
+            balance_after=emp.vacation_balance,
+            reason=reason,
+            created_by=request.user
+        )
+        
+        # Send notification to employee
+        user = User.objects.filter(employee=emp).first()
+        if user:
+            from .models import Message
+            sign = '+' if days > 0 else ''
+            Message.objects.create(
+                user=user,
+                sender=request.user,
+                title="Urlaubskonto angepasst",
+                content=f"Ihr Urlaubskonto wurde manuell angepasst.\n\nÄnderung: {sign}{days} Tage\nBegründung: {reason}\n\nNeuer Kontostand: {emp.vacation_balance} Tage",
+                message_type='system'
+            )
+        
+        return Response({
+            'message': 'Urlaubskonto erfolgreich angepasst.',
+            'new_balance': float(emp.vacation_balance),
+            'year_balance': VacationYearBalanceSerializer(year_balance).data
+        })
+
+
+class VacationAdjustmentViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet für Urlaubsanpassungen (Changelog) - nur lesen"""
+    queryset = VacationAdjustment.objects.all()
+    serializer_class = VacationAdjustmentSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        employee_id = self.request.query_params.get('employee')
+        year = self.request.query_params.get('year')
+        
+        if user.is_staff or user.can_read_hr:
+            qs = VacationAdjustment.objects.all()
+            if employee_id:
+                qs = qs.filter(employee_id=employee_id)
+            if year:
+                qs = qs.filter(year_balance__year=year)
+            return qs
+        
+        # Regular users: only their own employee's adjustments
+        emp = getattr(user, 'employee', None)
+        if emp:
+            qs = VacationAdjustment.objects.filter(employee=emp)
+            if year:
+                qs = qs.filter(year_balance__year=year)
+            return qs
+        return VacationAdjustment.objects.none()
 
 
 # ==================== Reisekosten ViewSets ====================
@@ -759,10 +1171,13 @@ class MessageViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def inbox(self, request):
         """Posteingang - empfangene Nachrichten"""
+        import logging
+        logger = logging.getLogger(__name__)
         messages = Message.objects.filter(
             user=request.user,
             is_deleted_by_recipient=False
         ).order_by('-created_at')
+        logger.warning(f"Inbox request for user={request.user.username} (id={request.user.id}) - returning {messages.count()} messages: {list(messages.values_list('id','title'))}")
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
     

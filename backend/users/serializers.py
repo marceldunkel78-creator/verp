@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     Employee, TimeEntry, VacationRequest, Message, Reminder, Notification,
-    TravelExpenseReport, TravelExpenseDay, TravelExpenseItem, TravelPerDiemRate
+    TravelExpenseReport, TravelExpenseDay, TravelExpenseItem, TravelPerDiemRate,
+    VacationYearBalance, VacationAdjustment
 )
 
 User = get_user_model()
@@ -424,3 +425,66 @@ class TravelPerDiemRateSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+# ==================== Urlaub Jahresabschluss Serializers ====================
+
+class VacationAdjustmentSerializer(serializers.ModelSerializer):
+    """Serializer für Urlaubsanpassungen (Changelog)"""
+    adjustment_type_display = serializers.CharField(source='get_adjustment_type_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    employee_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VacationAdjustment
+        fields = [
+            'id', 'employee', 'employee_name', 'year_balance', 'vacation_request',
+            'adjustment_type', 'adjustment_type_display', 'days',
+            'balance_before', 'balance_after', 'reason',
+            'created_by', 'created_by_name', 'created_at'
+        ]
+        read_only_fields = ['id', 'balance_before', 'balance_after', 'created_at']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return 'System'
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}"
+        return None
+
+
+class VacationYearBalanceSerializer(serializers.ModelSerializer):
+    """Serializer für Jahresurlaubskonten"""
+    employee_name = serializers.SerializerMethodField()
+    adjustments = VacationAdjustmentSerializer(many=True, read_only=True)
+    closed_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VacationYearBalance
+        fields = [
+            'id', 'employee', 'employee_name', 'year',
+            'entitlement', 'carryover', 'manual_adjustment', 'taken', 'balance',
+            'is_closed', 'closed_at', 'closed_by', 'closed_by_name',
+            'adjustments', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'balance', 'taken', 'is_closed', 'closed_at', 'closed_by', 'created_at', 'updated_at']
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}"
+        return None
+    
+    def get_closed_by_name(self, obj):
+        if obj.closed_by:
+            return f"{obj.closed_by.first_name} {obj.closed_by.last_name}".strip() or obj.closed_by.username
+        return None
+
+
+class VacationManualAdjustmentSerializer(serializers.Serializer):
+    """Serializer für manuelle Urlaubsanpassungen durch HR"""
+    days = serializers.DecimalField(max_digits=5, decimal_places=1, help_text="Positive Zahl = hinzufügen, Negative = abziehen")
+    reason = serializers.CharField(max_length=500)
+    year = serializers.IntegerField(required=False, help_text="Jahr für die Anpassung (Standard: aktuelles Jahr)")

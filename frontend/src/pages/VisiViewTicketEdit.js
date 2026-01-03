@@ -201,6 +201,7 @@ const VisiViewTicketEdit = () => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    console.info('handleSave called for ticket', id, 'isNew:', isNew);
     setSaving(true);
     
     try {
@@ -215,12 +216,15 @@ const VisiViewTicketEdit = () => {
         customers: Array.isArray(selectedCustomers) ? selectedCustomers.join(',') : (selectedCustomers || ''),
         watchers: normalizeToIds(selectedWatchers)
       };
+      console.debug('Saving ticket payload:', payload);
       
       if (isNew) {
         const response = await api.post('/visiview/tickets/', payload);
+        console.info('Ticket created, response id:', response.data.id);
         navigate(`/visiview/tickets/${response.data.id}`);
       } else {
-        await api.patch(`/visiview/tickets/${id}/`, payload);
+        const response = await api.patch(`/visiview/tickets/${id}/`, payload);
+        console.info('Ticket updated, status:', response.status);
         fetchData();
       }
     } catch (error) {

@@ -192,66 +192,6 @@ const EmployeeList = () => {
     }
   };
 
-  // HR vacation management
-  const [hrVacations, setHrVacations] = useState([]);
-
-  const fetchVacationsForEmployee = async (empId) => {
-    try {
-      setHrVacations([]);
-      if (!empId) return;
-      const res = await api.get(`/users/vacation-requests/?employee=${empId}`);
-      const data = res.data.results || res.data;
-      setHrVacations(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Fehler beim Laden der Urlaubsanträge:', error);
-      setHrVacations([]);
-    }
-  };
-
-  const approveRequest = async (id) => {
-    try {
-      await api.patch(`/users/vacation-requests/${id}/`, { status: 'approved' });
-      if (selectedEmployeeId) {
-        fetchVacationsForEmployee(selectedEmployeeId);
-      }
-      fetchEmployees();
-    } catch (error) {
-      console.error('Fehler beim Genehmigen:', error);
-      alert('Fehler beim Genehmigen: ' + (error.response?.data?.detail || error.message));
-    }
-  };
-
-  const rejectRequest = async (id) => {
-    try {
-      await api.patch(`/users/vacation-requests/${id}/`, { status: 'rejected' });
-      if (selectedEmployeeId) {
-        fetchVacationsForEmployee(selectedEmployeeId);
-      }
-    } catch (error) {
-      console.error('Fehler beim Ablehnen:', error);
-      alert('Fehler beim Ablehnen: ' + (error.response?.data?.detail || error.message));
-    }
-  };
-
-  const cancelRequest = async (id) => {
-    try {
-      if (!window.confirm('Urlaub wirklich stornieren?')) return;
-      await api.patch(`/users/vacation-requests/${id}/`, { status: 'cancelled' });
-      if (selectedEmployeeId) {
-        fetchVacationsForEmployee(selectedEmployeeId);
-      }
-      fetchEmployees();
-    } catch (error) {
-      console.error('Fehler beim Stornieren:', error);
-      alert('Fehler beim Stornieren: ' + (error.response?.data?.detail || error.message));
-    }
-  };
-
-  const hrPending = hrVacations.filter(r => r.status === 'pending');
-  const hrApproved = hrVacations.filter(r => r.status === 'approved');
-
-
-
   // createVacationRequest moved into the section component so it can access helpers and employee props
 
   const resetForm = () => {
@@ -446,98 +386,12 @@ const EmployeeList = () => {
       </div>
 
         {activeTab === 'vacation' && (
-          <div className="mb-6 bg-white shadow rounded-md p-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Mitarbeiter auswählen</label>
-            <select onChange={(e) => { setSelectedEmployeeId(e.target.value); fetchVacationsForEmployee(e.target.value); }} value={selectedEmployeeId || ''} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm">
-              <option value="">-- bitte wählen --</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>{emp.employee_id} — {emp.first_name} {emp.last_name}</option>
-              ))}
-            </select>
-
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-3 bg-gray-50 rounded">
-                <div className="text-sm text-gray-600">Aktuelles Urlaubskonto</div>
-                <div className="text-xl font-semibold">{selectedEmployeeId ? (() => {
-                  const emp = employees.find(e => String(e.id) === String(selectedEmployeeId));
-                  return emp ? (emp.vacation_balance !== undefined ? `${parseFloat(emp.vacation_balance).toFixed(1)} Tage` : '-') : '-';
-                })() : '-'} </div>
-              </div>
-              <div className="p-3 bg-gray-50 rounded">
-                <div className="text-sm text-gray-600">Jahresurlaub</div>
-                <div className="text-xl font-semibold">{selectedEmployeeId ? (() => {
-                  const emp = employees.find(e => String(e.id) === String(selectedEmployeeId));
-                  return emp ? (emp.annual_vacation_days !== undefined ? `${emp.annual_vacation_days} Tage` : '-') : '-';
-                })() : '-'} </div>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-gray-900">Ausstehende Anträge</h3>
-              {hrPending.length === 0 ? <div className="text-sm text-gray-500 mt-2">Keine ausstehenden Anträge.</div> : (
-                <ul className="divide-y divide-gray-200 mt-2">
-                  {hrPending.map(req => (
-                    <li key={req.id} className="py-2 flex justify-between items-center">
-                      <div>
-                        <div className="text-sm font-medium">{req.start_date} – {req.end_date} ({req.days_requested} Tage)</div>
-                        <div className="text-sm text-gray-500">{req.reason || ''} — Eingereicht von {req.user ? `${req.user.first_name} ${req.user.last_name}` : '–'}</div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button onClick={() => approveRequest(req.id)} className="px-3 py-1 bg-green-600 text-white rounded">Genehmigen</button>
-                        <button onClick={() => rejectRequest(req.id)} className="px-3 py-1 bg-red-600 text-white rounded">Ablehnen</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <h3 className="text-sm font-medium text-gray-900 mt-6">Genehmigte Anträge</h3>
-              {hrApproved.length === 0 ? <div className="text-sm text-gray-500 mt-2">Keine genehmigten Anträge.</div> : (
-                <ul className="divide-y divide-gray-200 mt-2">
-                  {hrApproved.map(req => (
-                    <li key={req.id} className="py-2 flex justify-between items-center">
-                      <div>
-                        <div className="text-sm font-medium">{req.start_date} – {req.end_date} ({req.days_requested} Tage)</div>
-                        <div className="text-sm text-gray-500">Genehmigt am {req.approved_at ? new Date(req.approved_at).toLocaleDateString() : '-'} von {req.approved_by ? `${req.approved_by.first_name} ${req.approved_by.last_name}` : '-'}</div>
-                      </div>
-                      <div>
-                        <button onClick={() => cancelRequest(req.id)} className="px-3 py-1 bg-yellow-600 text-white rounded">Stornieren</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <h3 className="text-sm font-medium text-gray-900 mt-6">Storniert und Abgelehnt</h3>
-              { (hrVacations.filter(r => r.status === 'cancelled' || r.status === 'rejected')).length === 0 ? (
-                <div className="text-sm text-gray-500 mt-2">Keine stornierten oder abgelehnten Anträge.</div>
-              ) : (
-                <ul className="divide-y divide-gray-200 mt-2">
-                  {hrVacations.filter(r => r.status === 'cancelled' || r.status === 'rejected').map(req => (
-                    <li key={req.id} className="py-2 flex justify-between items-center">
-                      <div>
-                        <div className="text-sm font-medium">{req.start_date} – {req.end_date} ({req.days_requested} Tage)</div>
-                        <div className="text-sm text-gray-500">{req.status === 'cancelled' ? 'Storniert' : 'Abgelehnt'} — Eingereicht von {req.user ? `${req.user.first_name} ${req.user.last_name}` : '–'}</div>
-                      </div>
-                      <div>
-                        <button onClick={async () => {
-                          if (!window.confirm('Diesen Eintrag wirklich löschen?')) return;
-                          try {
-                            await api.delete(`/users/vacation-requests/${req.id}/`);
-                            fetchVacationsForEmployee(selectedEmployeeId);
-                          } catch (err) {
-                            console.error('Fehler beim Löschen:', err);
-                            alert('Fehler beim Löschen: ' + (err.response?.data?.detail || err.message));
-                          }
-                        }} className="px-3 py-1 bg-red-600 text-white rounded">Löschen</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-            </div>
-          </div>
+          <HRVacationSection 
+            employees={employees} 
+            selectedEmployeeId={selectedEmployeeId}
+            setSelectedEmployeeId={setSelectedEmployeeId}
+            fetchEmployees={fetchEmployees}
+          />
         )}
 
       {/* Modal */}
@@ -832,6 +686,417 @@ const EmployeeList = () => {
     </div>
   );
 };
+
+
+// ==================== HR Vacation Section Component ====================
+
+const HRVacationSection = ({ employees, selectedEmployeeId, setSelectedEmployeeId, fetchEmployees }) => {
+  const [hrVacations, setHrVacations] = useState([]);
+  const [yearBalance, setYearBalance] = useState(null);
+  const [adjustments, setAdjustments] = useState([]);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustForm, setAdjustForm] = useState({ days: '', reason: '' });
+  const [showYearCloseModal, setShowYearCloseModal] = useState(false);
+
+  const selectedEmployee = employees.find(e => String(e.id) === String(selectedEmployeeId));
+
+  // Year selector options
+  const yearOptions = [new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2];
+
+  const fetchVacationsForEmployee = async (empId) => {
+    try {
+      setHrVacations([]);
+      if (!empId) return;
+      const res = await api.get(`/users/vacation-requests/?employee=${empId}&year=${selectedYear}`);
+      const data = res.data.results || res.data;
+      setHrVacations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Urlaubsanträge:', error);
+      setHrVacations([]);
+    }
+  };
+
+  const fetchYearBalance = async (empId) => {
+    if (!empId) {
+      setYearBalance(null);
+      setAdjustments([]);
+      return;
+    }
+    try {
+      const res = await api.get(`/users/vacation-year-balances/for_employee/?employee=${empId}&year=${selectedYear}`);
+      setYearBalance(res.data);
+    } catch (err) {
+      console.warn('Jahresurlaubskonto nicht verfügbar:', err);
+      setYearBalance(null);
+    }
+    try {
+      const adjRes = await api.get(`/users/vacation-adjustments/?employee=${empId}&year=${selectedYear}`);
+      setAdjustments(adjRes.data.results || adjRes.data || []);
+    } catch (err) {
+      console.warn('Urlaubsanpassungen nicht verfügbar:', err);
+      setAdjustments([]);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedEmployeeId) {
+      fetchVacationsForEmployee(selectedEmployeeId);
+      fetchYearBalance(selectedEmployeeId);
+    }
+  }, [selectedEmployeeId, selectedYear]);
+
+  const approveRequest = async (id) => {
+    try {
+      await api.patch(`/users/vacation-requests/${id}/`, { status: 'approved' });
+      fetchVacationsForEmployee(selectedEmployeeId);
+      fetchYearBalance(selectedEmployeeId);
+      fetchEmployees();
+    } catch (error) {
+      console.error('Fehler beim Genehmigen:', error);
+      alert('Fehler beim Genehmigen: ' + (error.response?.data?.days_requested || error.response?.data?.detail || error.message));
+    }
+  };
+
+  const rejectRequest = async (id) => {
+    try {
+      await api.patch(`/users/vacation-requests/${id}/`, { status: 'rejected' });
+      fetchVacationsForEmployee(selectedEmployeeId);
+      fetchYearBalance(selectedEmployeeId);
+    } catch (error) {
+      console.error('Fehler beim Ablehnen:', error);
+      alert('Fehler beim Ablehnen: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const cancelRequest = async (id) => {
+    try {
+      if (!window.confirm('Urlaub wirklich stornieren?')) return;
+      await api.patch(`/users/vacation-requests/${id}/`, { status: 'cancelled' });
+      fetchVacationsForEmployee(selectedEmployeeId);
+      fetchYearBalance(selectedEmployeeId);
+      fetchEmployees();
+    } catch (error) {
+      console.error('Fehler beim Stornieren:', error);
+      alert('Fehler beim Stornieren: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleManualAdjustment = async (e) => {
+    e.preventDefault();
+    if (!yearBalance?.id) {
+      alert('Kein Jahresurlaubskonto gefunden.');
+      return;
+    }
+    try {
+      await api.post(`/users/vacation-year-balances/${yearBalance.id}/adjust/`, {
+        days: parseFloat(adjustForm.days),
+        reason: adjustForm.reason
+      });
+      setShowAdjustModal(false);
+      setAdjustForm({ days: '', reason: '' });
+      fetchYearBalance(selectedEmployeeId);
+      fetchEmployees();
+    } catch (error) {
+      console.error('Fehler bei manueller Anpassung:', error);
+      alert('Fehler: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleYearClose = async () => {
+    if (!yearBalance?.id) {
+      alert('Kein Jahresurlaubskonto gefunden.');
+      return;
+    }
+    if (!window.confirm(`Jahr ${selectedYear} wirklich abschließen? Der Resturlaub wird ins nächste Jahr übertragen.`)) return;
+    try {
+      const res = await api.post(`/users/vacation-year-balances/${yearBalance.id}/close_year/`);
+      alert(res.data.message);
+      setShowYearCloseModal(false);
+      fetchYearBalance(selectedEmployeeId);
+      fetchEmployees();
+    } catch (error) {
+      console.error('Fehler beim Jahresabschluss:', error);
+      alert('Fehler: ' + (error.response?.data?.error || error.response?.data?.detail || error.message));
+    }
+  };
+
+  const hrPending = hrVacations.filter(r => r.status === 'pending');
+  const hrApproved = hrVacations.filter(r => r.status === 'approved');
+  const hrRejectedCancelled = hrVacations.filter(r => r.status === 'cancelled' || r.status === 'rejected');
+
+  return (
+    <div className="mb-6 bg-white shadow rounded-md p-4">
+      {/* Header with employee selector and year selector */}
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        <div className="flex-1 min-w-64">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Mitarbeiter auswählen</label>
+          <select 
+            onChange={(e) => setSelectedEmployeeId(e.target.value)} 
+            value={selectedEmployeeId || ''} 
+            className="block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+          >
+            <option value="">-- bitte wählen --</option>
+            {employees.map(emp => (
+              <option key={emp.id} value={emp.id}>{emp.employee_id} — {emp.first_name} {emp.last_name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Jahr</label>
+          <select 
+            value={selectedYear} 
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="block rounded-md border-gray-300 shadow-sm sm:text-sm"
+          >
+            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        {selectedEmployeeId && yearBalance && (
+          <div className="flex gap-2 items-end">
+            <button 
+              onClick={() => setShowAdjustModal(true)}
+              className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            >
+              Manuelle Anpassung
+            </button>
+            {!yearBalance.is_closed && selectedYear < new Date().getFullYear() && (
+              <button 
+                onClick={() => setShowYearCloseModal(true)}
+                className="px-3 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+              >
+                Jahr abschließen
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {selectedEmployeeId && (
+        <>
+          {/* Balance Overview */}
+          <div className="mb-4 grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3 bg-gray-50 rounded">
+              <div className="text-sm text-gray-500">Jahresanspruch {selectedYear}</div>
+              <div className="text-xl font-semibold">{yearBalance?.entitlement !== undefined ? `${parseFloat(yearBalance.entitlement).toFixed(1)} Tage` : '-'}</div>
+            </div>
+            <div className="p-3 bg-blue-50 rounded">
+              <div className="text-sm text-gray-500">Übertrag</div>
+              <div className="text-xl font-semibold text-blue-700">{yearBalance?.carryover !== undefined ? `${parseFloat(yearBalance.carryover).toFixed(1)} Tage` : '-'}</div>
+            </div>
+            <div className="p-3 bg-indigo-50 rounded">
+              <div className="text-sm text-gray-500">Manuelle Anpassungen</div>
+              <div className="text-xl font-semibold text-indigo-700">{yearBalance?.manual_adjustment !== undefined ? `${parseFloat(yearBalance.manual_adjustment).toFixed(1)} Tage` : '-'}</div>
+            </div>
+            <div className="p-3 bg-orange-50 rounded">
+              <div className="text-sm text-gray-500">Genommen</div>
+              <div className="text-xl font-semibold text-orange-700">{yearBalance?.taken !== undefined ? `${parseFloat(yearBalance.taken).toFixed(1)} Tage` : '-'}</div>
+            </div>
+            <div className="p-3 bg-green-50 rounded">
+              <div className="text-sm text-gray-500">Aktuelles Guthaben</div>
+              <div className="text-xl font-semibold text-green-700">{selectedEmployee?.vacation_balance !== undefined ? `${parseFloat(selectedEmployee.vacation_balance).toFixed(1)} Tage` : '-'}</div>
+              {yearBalance?.is_closed && <span className="text-xs text-purple-600">Jahr abgeschlossen</span>}
+            </div>
+          </div>
+
+          {/* Two columns: Requests left, Changelog right */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Left: Vacation Requests */}
+            <div className="bg-white border rounded-md">
+              <div className="px-4 py-3 bg-gray-50 border-b">
+                <h3 className="text-sm font-medium text-gray-900">Urlaubsanträge {selectedYear}</h3>
+              </div>
+              <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
+                {/* Pending */}
+                <div>
+                  <h4 className="text-xs font-semibold text-yellow-700 uppercase mb-2">Ausstehend ({hrPending.length})</h4>
+                  {hrPending.length === 0 ? (
+                    <p className="text-sm text-gray-500">Keine ausstehenden Anträge.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {hrPending.map(req => (
+                        <li key={req.id} className="p-2 bg-yellow-50 rounded border border-yellow-200">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-medium">{new Date(req.start_date).toLocaleDateString()} – {new Date(req.end_date).toLocaleDateString()}</p>
+                              <p className="text-xs text-gray-500">{req.days_requested} Tage • {req.reason || 'Kein Grund angegeben'}</p>
+                            </div>
+                            <div className="flex gap-1">
+                              <button onClick={() => approveRequest(req.id)} className="px-2 py-1 text-xs bg-green-600 text-white rounded">Genehmigen</button>
+                              <button onClick={() => rejectRequest(req.id)} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Ablehnen</button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Approved */}
+                <div>
+                  <h4 className="text-xs font-semibold text-green-700 uppercase mb-2">Genehmigt ({hrApproved.length})</h4>
+                  {hrApproved.length === 0 ? (
+                    <p className="text-sm text-gray-500">Keine genehmigten Anträge.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {hrApproved.map(req => (
+                        <li key={req.id} className="p-2 bg-green-50 rounded border border-green-200">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-medium">{new Date(req.start_date).toLocaleDateString()} – {new Date(req.end_date).toLocaleDateString()}</p>
+                              <p className="text-xs text-gray-500">{req.days_requested} Tage</p>
+                            </div>
+                            <button onClick={() => cancelRequest(req.id)} className="px-2 py-1 text-xs bg-yellow-600 text-white rounded">Stornieren</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Rejected/Cancelled */}
+                {hrRejectedCancelled.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Storniert/Abgelehnt ({hrRejectedCancelled.length})</h4>
+                    <ul className="space-y-2">
+                      {hrRejectedCancelled.map(req => (
+                        <li key={req.id} className="p-2 bg-gray-50 rounded border border-gray-200">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-sm font-medium text-gray-500">{new Date(req.start_date).toLocaleDateString()} – {new Date(req.end_date).toLocaleDateString()}</p>
+                              <p className="text-xs text-gray-400">{req.days_requested} Tage • {req.status === 'cancelled' ? 'Storniert' : 'Abgelehnt'}</p>
+                            </div>
+                            <button onClick={async () => {
+                              if (!window.confirm('Diesen Eintrag wirklich löschen?')) return;
+                              try {
+                                await api.delete(`/users/vacation-requests/${req.id}/`);
+                                fetchVacationsForEmployee(selectedEmployeeId);
+                              } catch (err) {
+                                alert('Fehler beim Löschen: ' + (err.response?.data?.detail || err.message));
+                              }
+                            }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Löschen</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Changelog */}
+            <div className="bg-white border rounded-md">
+              <div className="px-4 py-3 bg-gray-50 border-b">
+                <h3 className="text-sm font-medium text-gray-900">Änderungsprotokoll {selectedYear}</h3>
+              </div>
+              {adjustments.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-500">Keine Änderungen vorhanden.</div>
+              ) : (
+                <ul className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+                  {adjustments.map((adj) => (
+                    <li key={adj.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{adj.adjustment_type_display}</p>
+                          <p className="text-xs text-gray-500">{adj.reason}</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {new Date(adj.created_at).toLocaleDateString()} {new Date(adj.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {adj.created_by_name && ` • ${adj.created_by_name}`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm font-semibold ${parseFloat(adj.days) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {parseFloat(adj.days) >= 0 ? '+' : ''}{parseFloat(adj.days).toFixed(1)} Tage
+                          </span>
+                          <p className="text-xs text-gray-500">
+                            {parseFloat(adj.balance_before).toFixed(1)} → {parseFloat(adj.balance_after).toFixed(1)}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {!selectedEmployeeId && (
+        <div className="text-center py-8 text-gray-500">
+          Bitte wählen Sie einen Mitarbeiter aus.
+        </div>
+      )}
+
+      {/* Manual Adjustment Modal */}
+      {showAdjustModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h3 className="text-lg font-medium mb-4">Manuelle Urlaubsanpassung</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Für: {selectedEmployee?.first_name} {selectedEmployee?.last_name}
+            </p>
+            <form onSubmit={handleManualAdjustment} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Tage (+/-)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  required
+                  value={adjustForm.days}
+                  onChange={(e) => setAdjustForm({...adjustForm, days: e.target.value})}
+                  placeholder="z.B. 2 oder -1.5"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">Positive Zahl = hinzufügen, Negative = abziehen</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Begründung</label>
+                <textarea
+                  required
+                  value={adjustForm.reason}
+                  onChange={(e) => setAdjustForm({...adjustForm, reason: e.target.value})}
+                  placeholder="Grund für die Anpassung"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setShowAdjustModal(false)} className="px-3 py-2 text-gray-700 bg-gray-100 rounded">Abbrechen</button>
+                <button type="submit" className="px-3 py-2 text-white bg-blue-600 rounded hover:bg-blue-700">Anpassung speichern</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Year Close Modal */}
+      {showYearCloseModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h3 className="text-lg font-medium mb-4">Jahresabschluss {selectedYear}</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Für: {selectedEmployee?.first_name} {selectedEmployee?.last_name}
+            </p>
+            <div className="bg-purple-50 p-3 rounded mb-4">
+              <p className="text-sm">
+                <strong>Aktueller Resturlaub:</strong> {yearBalance?.balance !== undefined && yearBalance?.balance !== null ? `${parseFloat(yearBalance.balance).toFixed(1)}` : '-'} Tage
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                Diese Tage werden als Übertrag ins Jahr {selectedYear + 1} übernommen.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowYearCloseModal(false)} className="px-3 py-2 text-gray-700 bg-gray-100 rounded">Abbrechen</button>
+              <button onClick={handleYearClose} className="px-3 py-2 text-white bg-purple-600 rounded hover:bg-purple-700">Jahr abschließen</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 export default EmployeeList;
 
