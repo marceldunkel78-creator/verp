@@ -185,6 +185,24 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
             ticket.watchers.add(ticket.created_by)
         if ticket.assigned_to:
             ticket.watchers.add(ticket.assigned_to)
+            # Erstelle eine Erinnerungsaufgabe für den zugewiesenen Mitarbeiter (Fällig: morgen)
+            try:
+                from django.utils import timezone
+                from datetime import timedelta
+                from users.models import Reminder
+                due = timezone.now().date() + timedelta(days=1)
+                Reminder.objects.create(
+                    user=ticket.assigned_to,
+                    title=f"Zugewiesen: Ticket #{ticket.ticket_number}",
+                    description=f"Ticket '{ticket.title}' wurde Ihnen zugewiesen.",
+                    due_date=due,
+                    related_object_type='visiview_ticket',
+                    related_object_id=ticket.id,
+                    related_url=f"/visiview/tickets/{ticket.id}"
+                )
+            except Exception:
+                # Nicht fatal für Ticket-Erstellung
+                pass
     
     def perform_update(self, serializer):
         old_instance = self.get_object()
@@ -225,6 +243,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
             'percent_done': instance.percent_done,
         }
         
+        changes = []
         for field, old_value in old_data.items():
             new_value = new_data.get(field)
             if old_value != new_value:
@@ -235,6 +254,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                     new_value=str(new_value or ''),
                     changed_by=self.request.user
                 )
+                changes.append((field_labels.get(field, field), str(old_value or ''), str(new_value or '')))
         
         # Wenn "Zugewiesen an" geändert wurde, Beobachter aktualisieren
         if old_assigned_to != instance.assigned_to:
@@ -242,6 +262,48 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                 instance.watchers.remove(old_assigned_to)
             if instance.assigned_to:
                 instance.watchers.add(instance.assigned_to)
+                # Erstelle eine Erinnerungsaufgabe für den neuen zugewiesenen Mitarbeiter (Fällig: morgen)
+                try:
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    from users.models import Reminder
+                    due = timezone.now().date() + timedelta(days=1)
+                    Reminder.objects.create(
+                        user=instance.assigned_to,
+                        title=f"Zugewiesen: Ticket #{instance.ticket_number}",
+                        description=f"Ticket '{instance.title}' wurde Ihnen zugewiesen.",
+                        due_date=due,
+                        related_object_type='visiview_ticket',
+                        related_object_id=instance.id,
+                        related_url=f"/visiview/tickets/{instance.id}"
+                    )
+                except Exception:
+                    pass
+
+        # Benachrichtige Beobachter über die Änderungen (als Nachricht in der Inbox)
+        if changes:
+            try:
+                from users.models import Message
+                message_lines = [f"Änderungen an Ticket #{instance.ticket_number}:"]
+                for label, oldv, newv in changes:
+                    message_lines.append(f"{label}: {oldv} -> {newv}")
+                message_text = "\n".join(message_lines)
+
+                for watcher in instance.watchers.all():
+                    # Sende nicht an den Ändernden selbst
+                    if watcher == self.request.user:
+                        continue
+                    Message.objects.create(
+                        sender=self.request.user,
+                        user=watcher,
+                        title=f"Änderung des Tickets nummer {instance.ticket_number}",
+                        content=message_text,
+                        message_type='ticket',
+                        related_ticket=instance
+                    )
+            except Exception:
+                # Nicht fatal
+                pass
     
     @action(detail=True, methods=['post'])
     def add_comment(self, request, pk=None):

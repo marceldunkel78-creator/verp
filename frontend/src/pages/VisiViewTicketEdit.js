@@ -57,6 +57,7 @@ const VisiViewTicketEdit = () => {
     target_version: '',
     affected_version: '',
     visiview_id: '',
+    visiview_license: null,
     customers: [],
     watchers: []
   });
@@ -70,6 +71,7 @@ const VisiViewTicketEdit = () => {
   const [users, setUsers] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [visiviewProducts, setVisiviewProducts] = useState([]);
+  const [visiviewLicenses, setVisiviewLicenses] = useState([]);
   const [selectedCustomers, setSelectedCustomers] = useState([]);
   const [selectedWatchers, setSelectedWatchers] = useState([]);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -78,10 +80,11 @@ const VisiViewTicketEdit = () => {
   const fetchData = useCallback(async () => {
     try {
       // Lade Dropdown-Daten
-      const [usersRes, customersRes, productsRes] = await Promise.all([
+      const [usersRes, customersRes, productsRes, licensesRes] = await Promise.all([
         api.get('/users/'),
         api.get('/customers/?page_size=1000'),
-        api.get('/visiview/products/?page_size=1000')
+        api.get('/visiview/products/?page_size=1000'),
+        api.get('/visiview/licenses/?page_size=1000')
       ]);
       
       const normalizeArray = (respData) => {
@@ -94,6 +97,7 @@ const VisiViewTicketEdit = () => {
       setUsers(normalizeArray(usersRes.data));
       setCustomers(normalizeArray(customersRes.data));
       setVisiviewProducts(normalizeArray(productsRes.data));
+      setVisiviewLicenses(normalizeArray(licensesRes.data));
       
       if (!isNew) {
         // Lade Ticket-Details
@@ -103,6 +107,7 @@ const VisiViewTicketEdit = () => {
           ...ticketData,
           assigned_to: ticketData.assigned_to || '',
           visiview_id: ticketData.visiview_id || '',
+          visiview_license: ticketData.visiview_license || null,
           category: ticketData.category || '',
           target_version: ticketData.target_version || '',
           affected_version: ticketData.affected_version || ''
@@ -152,7 +157,7 @@ const VisiViewTicketEdit = () => {
       const payload = {
         ...ticket,
         assigned_to: ticket.assigned_to || null,
-        visiview_id: ticket.visiview_id || null,
+        visiview_license: ticket.visiview_license || null,
         customers: normalizeToIds(selectedCustomers),
         watchers: normalizeToIds(selectedWatchers)
       };
@@ -404,17 +409,17 @@ const VisiViewTicketEdit = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">VisiView Produkt ID</label>
+                  <label className="block text-sm font-medium text-gray-700">VisiView Lizenz (Dongle Seriennummer)</label>
                   <select
-                    name="visiview_id"
-                    value={ticket.visiview_id}
-                    onChange={handleChange}
+                    name="visiview_license"
+                    value={ticket.visiview_license || ''}
+                    onChange={(e) => setTicket(prev => ({ ...prev, visiview_license: e.target.value || null }))}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   >
-                    <option value="">-- Kein Produkt --</option>
-                    {visiviewProducts.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.product_name} ({p.product_version || 'n/a'})
+                    <option value="">-- Keine Lizenz --</option>
+                    {visiviewLicenses.map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.serial_number || l.license_number} {l.customer_name_legacy ? `- ${l.customer_name_legacy}` : ''}
                       </option>
                     ))}
                   </select>

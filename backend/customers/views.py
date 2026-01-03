@@ -25,7 +25,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active', 'language']
-    search_fields = ['customer_number', 'first_name', 'last_name', 'title']
+    search_fields = ['customer_number', 'first_name', 'last_name', 'title', 'company_name', 'full_name']
     ordering_fields = ['customer_number', 'last_name', 'first_name', 'created_at']
     ordering = ['last_name', 'first_name']
     pagination_class = CustomerPagination

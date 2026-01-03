@@ -666,6 +666,17 @@ class VisiViewTicket(models.Model):
         verbose_name='VisiView ID',
         help_text='z.B. VV 2040'
     )
+
+    # Verknüpfung zu einer VisiView Lizenz (Dongle Seriennummer)
+    visiview_license = models.ForeignKey(
+        'VisiViewLicense',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visiview_tickets',
+        verbose_name='VisiView Lizenz',
+        help_text='Verknüpfte VisiView-Lizenz (Dongle-Seriennummer)'
+    )
     
     # Zeitplanung
     start_date = models.DateField(

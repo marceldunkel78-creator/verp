@@ -386,6 +386,7 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
     parent_ticket_display = serializers.SerializerMethodField()
     child_tickets = serializers.SerializerMethodField()
     watchers_list = serializers.SerializerMethodField()
+    visiview_license_display = serializers.SerializerMethodField()
     
     class Meta:
         model = VisiViewTicket
@@ -399,7 +400,7 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
             'author', 'author_user', 'author_user_name',
             'assigned_to', 'assigned_to_name', 'assigned_to_display',
             'last_changed_by',
-            'target_version', 'affected_version', 'visiview_id',
+            'target_version', 'affected_version', 'visiview_id', 'visiview_license',
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',
@@ -455,6 +456,18 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
             for user in obj.watchers.all()
         ]
 
+    def get_visiview_license_display(self, obj):
+        if obj.visiview_license:
+            lic = obj.visiview_license
+            customer = getattr(lic, 'customer', None)
+            return {
+                'id': lic.id,
+                'license_number': lic.license_number,
+                'serial_number': lic.serial_number,
+                'customer_name': getattr(customer, 'company_name', None) if customer else lic.customer_name_legacy
+            }
+        return None
+
 
 class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Erstellen/Aktualisieren von VisiView Tickets"""
@@ -466,7 +479,7 @@ class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
             'title', 'description',
             'status', 'priority', 'category',
             'author', 'author_user', 'assigned_to', 'assigned_to_name',
-            'target_version', 'affected_version', 'visiview_id',
+            'target_version', 'affected_version', 'visiview_id', 'visiview_license',
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',
