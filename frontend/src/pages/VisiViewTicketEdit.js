@@ -179,7 +179,9 @@ const VisiViewTicketEdit = () => {
 
         setCustomers(customerList);
         setSelectedCustomers(resolvedCustomerIds);
-        setSelectedWatchers(normalizeToIds(ticketData.watchers || ticketData.watcher_ids || []));
+        // Ensure watchers are stored as string IDs for consistent comparison
+        const watcherIds = normalizeToIds(ticketData.watchers || ticketData.watcher_ids || []);
+        setSelectedWatchers(watcherIds.map(id => String(id)));
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -330,10 +332,11 @@ const VisiViewTicketEdit = () => {
 
   const handleWatcherToggle = (userId) => {
     setSelectedWatchers(prev => {
-      if (prev.includes(userId)) {
-        return prev.filter(id => id !== userId);
+      const userIdStr = String(userId);
+      if (prev.some(id => String(id) === userIdStr)) {
+        return prev.filter(id => String(id) !== userIdStr);
       } else {
-        return [...prev, userId];
+        return [...prev, userIdStr];
       }
     });
   };
@@ -692,7 +695,7 @@ const VisiViewTicketEdit = () => {
                     <label key={user.id} className="flex items-center">
                       <input
                         type="checkbox"
-                        checked={selectedWatchers.includes(user.id)}
+                        checked={selectedWatchers.some(id => String(id) === String(user.id))}
                         onChange={() => handleWatcherToggle(user.id)}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />

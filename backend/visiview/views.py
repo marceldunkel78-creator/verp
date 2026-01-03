@@ -284,8 +284,11 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
 
         # Benachrichtige Beobachter über die Änderungen (als Nachricht in der Inbox)
         if changes:
+            from users.models import Message
+            import logging
+            logger = logging.getLogger(__name__)
+            
             try:
-                from users.models import Message
                 message_lines = [f"Änderungen an VisiView Ticket #{instance.ticket_number} - {instance.title}"]
                 message_lines.append("")  # Leerzeile
                 for label, oldv, newv in changes:
@@ -299,23 +302,27 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                 if instance.assigned_to:
                     recipients.add(instance.assigned_to)
 
+                logger.info(f"Sende Ticket-Benachrichtigungen an {len(recipients)} Empfänger")
+                
                 for recipient in recipients:
                     # Sende nicht an den Ändernden selbst
                     if recipient == self.request.user:
                         continue
-                    Message.objects.create(
-                        sender=self.request.user,
-                        user=recipient,
-                        title=f"Änderung des Tickets #{instance.ticket_number}",
-                        content=message_text,
-                        message_type='ticket'
-                    )
+                    try:
+                        msg = Message.objects.create(
+                            sender=self.request.user,
+                            user=recipient,
+                            title=f"Änderung des Tickets #{instance.ticket_number}",
+                            content=message_text,
+                            message_type='ticket'
+                        )
+                        logger.info(f"Nachricht erstellt für {recipient.username}: ID {msg.id}")
+                    except Exception as e:
+                        logger.error(f"Fehler beim Erstellen der Nachricht für {recipient.username}: {e}")
+                        
             except Exception as e:
                 # Nicht fatal - loggen für Debugging
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.error(f"Fehler beim Senden von Ticket-Benachrichtigungen: {e}")
-                pass
     
     @action(detail=True, methods=['post'])
     def add_comment(self, request, pk=None):

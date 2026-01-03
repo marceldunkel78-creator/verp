@@ -483,7 +483,7 @@ class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',
-            'customers', 'attachments', 'related_tickets',
+            'customers', 'attachments', 'related_tickets', 'watchers',
             'is_private', 'add_to_worklist', 'rank',
             'closed_at'
         ]
