@@ -33,10 +33,16 @@ const PRIORITY_OPTIONS = [
 
 const CATEGORY_OPTIONS = [
   { value: '', label: '-- Auswählen --' },
-  { value: 'hardware', label: 'Hardware' },
-  { value: 'software', label: 'Software' },
-  { value: 'documentation', label: 'Dokumentation' },
-  { value: 'general', label: 'Allgemein' }
+  { value: 'application', label: 'Applikation' },
+  { value: 'data_analysis', label: 'Datenanalyse Allgemein' },
+  { value: 'data_management', label: 'Datenmanagement' },
+  { value: 'deconvolution', label: 'Deconvolution' },
+  { value: 'hardware_camera', label: 'Hardware: Kamera' },
+  { value: 'hardware_microscope', label: 'Hardware: Mikroskop' },
+  { value: 'hardware_orbital', label: 'Hardware: Orbital' },
+  { value: 'hardware_tirf_frap', label: 'Hardware: VisiTIRF/FRAP' },
+  { value: 'hardware_other', label: 'Hardware: Sonstiges' },
+  { value: 'other', label: 'Sonstiges' }
 ];
 
 const VisiViewTicketEdit = () => {
@@ -82,7 +88,7 @@ const VisiViewTicketEdit = () => {
       // Lade Dropdown-Daten
       const [usersRes, customersRes, productsRes, licensesRes] = await Promise.all([
         api.get('/users/'),
-        api.get('/customers/?page_size=1000'),
+        api.get('/customers/customers/?page_size=1000'),
         api.get('/visiview/products/?page_size=1000'),
         api.get('/visiview/licenses/?page_size=1000')
       ]);
@@ -105,6 +111,8 @@ const VisiViewTicketEdit = () => {
         const ticketData = ticketRes.data;
         setTicket({
           ...ticketData,
+          // keep compatibility with frontend which uses `subject` as input name
+          subject: ticketData.title || '',
           assigned_to: ticketData.assigned_to || '',
           visiview_id: ticketData.visiview_id || '',
           visiview_license: ticketData.visiview_license || null,
@@ -126,10 +134,51 @@ const VisiViewTicketEdit = () => {
           if (Array.isArray(items)) {
             return items.map(i => (typeof i === 'object' && i !== null ? i.id : i));
           }
+          // If items is a comma-separated string (legacy storage), split into array
+          if (typeof items === 'string') {
+            return items.split(',').map(s => s.trim()).filter(s => s !== '');
+          }
           return [typeof items === 'object' && items !== null ? items.id : items];
         };
 
-        setSelectedCustomers(normalizeToIds(ticketData.customers || ticketData.customer_ids || []));
+        // Resolve stored customers (may be array of ids, objects, or comma-separated legacy strings)
+        const rawCustomers = ticketData.customers || ticketData.customer_ids || [];
+        const customerList = normalizeArray(customersRes.data);
+        const resolvedCustomerIds = [];
+
+        const ensureCustomerInList = (custObj) => {
+          if (!customerList.find(c => String(c.id) === String(custObj.id))) {
+            customerList.push(custObj);
+          }
+        };
+
+        const entries = Array.isArray(rawCustomers) ? rawCustomers : (typeof rawCustomers === 'string' ? rawCustomers.split(',').map(s => s.trim()).filter(Boolean) : []);
+        entries.forEach(item => {
+          if (!item) return;
+          if (typeof item === 'object') {
+            const id = item.id || item;
+            resolvedCustomerIds.push(String(id));
+            ensureCustomerInList(item);
+            return;
+          }
+          const s = String(item).trim();
+          // Try to match by id, customer_number, or full name
+          let match = customerList.find(c => String(c.id) === s || String(c.customer_number) === s);
+          if (!match) {
+            match = customerList.find(c => `${c.first_name || ''} ${c.last_name || ''}`.trim() === s || (c.full_name && c.full_name === s) );
+          }
+          if (match) {
+            resolvedCustomerIds.push(String(match.id));
+          } else {
+            // Fallback: add a placeholder entry so it can be displayed
+            const placeholder = { id: s, first_name: s, last_name: '', customer_number: '' };
+            customerList.push(placeholder);
+            resolvedCustomerIds.push(String(s));
+          }
+        });
+
+        setCustomers(customerList);
+        setSelectedCustomers(resolvedCustomerIds);
         setSelectedWatchers(normalizeToIds(ticketData.watchers || ticketData.watcher_ids || []));
       }
     } catch (error) {
@@ -155,10 +204,13 @@ const VisiViewTicketEdit = () => {
     try {
       const normalizeToIds = (items) => Array.isArray(items) ? items.map(i => (typeof i === 'object' && i !== null ? i.id : i)) : (items ? [items] : []);
       const payload = {
+        // ensure backend receives `title` field (backend uses `title`)
         ...ticket,
+        title: ticket.subject || ticket.title || '',
         assigned_to: ticket.assigned_to || null,
         visiview_license: ticket.visiview_license || null,
-        customers: normalizeToIds(selectedCustomers),
+        // backend expects customers as comma-separated string
+        customers: Array.isArray(selectedCustomers) ? selectedCustomers.join(',') : (selectedCustomers || ''),
         watchers: normalizeToIds(selectedWatchers)
       };
       
@@ -227,7 +279,7 @@ const VisiViewTicketEdit = () => {
     }
     
     try {
-      const response = await api.get(`/customers/?search=${searchTerm}&page_size=10`);
+      const response = await api.get(`/customers/customers/?search=${searchTerm}&page_size=10`);
       const results = response.data.results || response.data || [];
       setCustomerSearchResults(Array.isArray(results) ? results : []);
     } catch (error) {
@@ -237,15 +289,38 @@ const VisiViewTicketEdit = () => {
   };
 
   const handleAddCustomer = (customerId) => {
-    if (!selectedCustomers.includes(customerId)) {
-      setSelectedCustomers(prev => [...prev, customerId]);
+    const id = typeof customerId === 'object' && customerId !== null ? customerId.id : customerId;
+    const idStr = String(id);
+    // add id as string to keep consistent
+    setSelectedCustomers(prev => {
+      const strs = prev.map(p => String(p));
+      if (strs.includes(idStr)) return prev;
+      return [...prev, idStr];
+    });
+
+    // ensure customers state contains the full object for display
+    if (typeof customerId === 'object' && customerId !== null) {
+      setCustomers(prev => {
+        if (prev.find(c => String(c.id) === idStr)) return prev;
+        return [...prev, customerId];
+      });
+    } else {
+      const found = customerSearchResults.find(c => String(c.id) === idStr);
+      if (found) {
+        setCustomers(prev => {
+          if (prev.find(c => String(c.id) === idStr)) return prev;
+          return [...prev, found];
+        });
+      }
     }
+
     setCustomerSearchTerm('');
     setCustomerSearchResults([]);
   };
 
   const handleRemoveCustomer = (customerId) => {
-    setSelectedCustomers(prev => prev.filter(id => id !== customerId));
+    const idStr = String(customerId);
+    setSelectedCustomers(prev => prev.filter(id => String(id) !== idStr));
   };
 
   const getCustomerLabel = (customer) => {
@@ -446,83 +521,19 @@ const VisiViewTicketEdit = () => {
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   />
                 </div>
-
-                {/* Kunde hinzufügen */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Kunde hinzufügen
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={customerSearchTerm}
-                      onChange={(e) => handleCustomerSearch(e.target.value)}
-                      placeholder="Kundenname oder Firma suchen..."
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    />
-                    {customerSearchResults.length > 0 && (
-                      <div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
-                        {customerSearchResults.map(customer => (
-                          <div
-                            key={customer.id}
-                            onClick={() => handleAddCustomer(customer.id)}
-                            className="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-50"
-                          >
-                            <div className="flex items-center">
-                              <span className="font-normal block truncate">
-                                {getCustomerLabel(customer)}
-                              </span>
-                            </div>
-                            {customer.customer_number && (
-                              <span className="text-xs text-gray-500 ml-2">
-                                #{customer.customer_number}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Ausgewählte Kunden */}
-                {Array.isArray(selectedCustomers) && selectedCustomers.length > 0 ? (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ausgewählte Kunden ({selectedCustomers.length})
-                    </label>
-                    {selectedCustomers.map(customerId => {
-                      const customer = customers.find(c => c.id === customerId);
-                      if (!customer) return null;
-                      return (
-                        <div key={customerId} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md">
-                          <span className="text-sm text-gray-700">{getCustomerLabel(customer)}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCustomer(customerId)}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                          >
-                            Entfernen
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">Keine Kunden zugeordnet</p>
-                )}
-
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700">Beschreibung</label>
-                  <textarea
-                    name="description"
-                    value={ticket.description}
-                    onChange={handleChange}
-                    rows={6}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
               </div>
+            </div>
+
+            {/* Beschreibung */}
+            <div className="bg-white shadow rounded-lg p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Beschreibung</h3>
+              <textarea
+                name="description"
+                value={ticket.description}
+                onChange={handleChange}
+                rows={8}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              />
             </div>
 
             {/* Betroffene Kunden */}
@@ -534,7 +545,7 @@ const VisiViewTicketEdit = () => {
                 </p>
 
                 {/* Kunden-Suche */}
-                <div className="mb-4">
+                <div className="mb-4 relative">
                   <input
                     type="text"
                     value={customerSearchTerm}
@@ -543,7 +554,7 @@ const VisiViewTicketEdit = () => {
                     className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   />
                   {customerSearchResults.length > 0 && (
-                    <div className="mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm z-10">
+                    <div className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
                       {customerSearchResults.map(customer => (
                         <div
                           key={customer.id}
@@ -562,20 +573,32 @@ const VisiViewTicketEdit = () => {
                   )}
                 </div>
 
-                {/* Die Kunden-Auswahl wurde hier entfernt und unter 'Betroffene Kunden' eingefügt */}
-                
-                {/* Beschreibung (ganze Breite) */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">Beschreibung</label>
-                  <textarea
-                    name="description"
-                    value={ticket.description}
-                    onChange={handleChange}
-                    rows={6}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
-
+                {/* Ausgewählte Kunden */}
+                {Array.isArray(selectedCustomers) && selectedCustomers.length > 0 ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ausgewählte Kunden ({selectedCustomers.length})
+                    </label>
+                    {selectedCustomers.map(customerId => {
+                      const customer = customers.find(c => String(c.id) === String(customerId));
+                      if (!customer) return null;
+                      return (
+                        <div key={customerId} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md">
+                          <span className="text-sm text-gray-700">{getCustomerLabel(customer)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCustomer(customerId)}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                          >
+                            Entfernen
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Keine Kunden zugeordnet</p>
+                )}
               </div>
             )}
 

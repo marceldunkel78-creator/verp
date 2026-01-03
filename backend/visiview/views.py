@@ -286,25 +286,35 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
         if changes:
             try:
                 from users.models import Message
-                message_lines = [f"Änderungen an Ticket #{instance.ticket_number}:"]
+                message_lines = [f"Änderungen an VisiView Ticket #{instance.ticket_number} - {instance.title}"]
+                message_lines.append("")  # Leerzeile
                 for label, oldv, newv in changes:
-                    message_lines.append(f"{label}: {oldv} -> {newv}")
+                    message_lines.append(f"• {label}: {oldv or '(leer)'} → {newv or '(leer)'}")
+                message_lines.append("")  # Leerzeile
+                message_lines.append(f"Link zum Ticket: /visiview/tickets/{instance.id}")
                 message_text = "\n".join(message_lines)
 
-                for watcher in instance.watchers.all():
+                # Sammle alle zu benachrichtigenden User (Beobachter + zugewiesener Mitarbeiter)
+                recipients = set(instance.watchers.all())
+                if instance.assigned_to:
+                    recipients.add(instance.assigned_to)
+
+                for recipient in recipients:
                     # Sende nicht an den Ändernden selbst
-                    if watcher == self.request.user:
+                    if recipient == self.request.user:
                         continue
                     Message.objects.create(
                         sender=self.request.user,
-                        user=watcher,
-                        title=f"Änderung des Tickets nummer {instance.ticket_number}",
+                        user=recipient,
+                        title=f"Änderung des Tickets #{instance.ticket_number}",
                         content=message_text,
-                        message_type='ticket',
-                        related_ticket=instance
+                        message_type='ticket'
                     )
-            except Exception:
-                # Nicht fatal
+            except Exception as e:
+                # Nicht fatal - loggen für Debugging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Fehler beim Senden von Ticket-Benachrichtigungen: {e}")
                 pass
     
     @action(detail=True, methods=['post'])
