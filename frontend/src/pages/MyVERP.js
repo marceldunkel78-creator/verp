@@ -877,6 +877,46 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
     due_date: new Date().toISOString().split('T')[0]
   });
 
+  // Fetch assigned tickets
+  const [serviceTickets, setServiceTickets] = useState([]);
+  const [visiviewTickets, setVisiviewTickets] = useState([]);
+  const [loadingTickets, setLoadingTickets] = useState(true);
+
+  useEffect(() => {
+    fetchAssignedTickets();
+  }, []);
+
+  const fetchAssignedTickets = async () => {
+    setLoadingTickets(true);
+    try {
+      // Get current user
+      const meRes = await api.get('/users/me/');
+      const userId = meRes.data.id;
+
+      // Fetch Service Tickets
+      try {
+        const serviceRes = await api.get(`/service/tickets/?assigned_to=${userId}`);
+        setServiceTickets(serviceRes.data.results || serviceRes.data || []);
+      } catch (err) {
+        console.warn('Could not load service tickets', err);
+        setServiceTickets([]);
+      }
+
+      // Fetch VisiView Tickets
+      try {
+        const visiviewRes = await api.get(`/visiview/tickets/?assigned_to=${userId}`);
+        setVisiviewTickets(visiviewRes.data.results || visiviewRes.data || []);
+      } catch (err) {
+        console.warn('Could not load visiview tickets', err);
+        setVisiviewTickets([]);
+      }
+    } catch (err) {
+      console.error('Error fetching assigned tickets:', err);
+    } finally {
+      setLoadingTickets(false);
+    }
+  };
+
   const openNewModal = () => {
     setEditingReminder(null);
     setFormData({
@@ -975,8 +1015,101 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
       {errors?.reminders && (
         <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.reminders}</div>
       )}
+
+      {/* Service Tickets Section */}
+      <div className="mb-6">
+        <h3 className="text-md font-medium text-gray-900 mb-3">Service Tickets</h3>
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+          {loadingTickets ? (
+            <div className="p-6 text-center text-sm text-gray-500">Lade Service Tickets...</div>
+          ) : serviceTickets.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-500">Keine zugewiesenen Service Tickets.</div>
+          ) : (
+            <ul className="divide-y divide-gray-200">
+              {serviceTickets.map((ticket) => (
+                <li key={ticket.id} className="px-6 py-4 hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <a
+                        href={`/service/tickets/${ticket.id}`}
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                      >
+                        #{ticket.ticket_number || ticket.id} - {ticket.title}
+                      </a>
+                      {ticket.description && (
+                        <p className="text-sm text-gray-500 mt-1">{ticket.description.substring(0, 100)}{ticket.description.length > 100 ? '...' : ''}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                        ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
+                        ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                        ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {ticket.status}
+                      </span>
+                      {ticket.priority && (
+                        <p className="text-xs text-gray-400 mt-1">Priorität: {ticket.priority}</p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* VisiView Tickets Section */}
+      <div className="mb-6">
+        <h3 className="text-md font-medium text-gray-900 mb-3">VisiView Tickets</h3>
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+          {loadingTickets ? (
+            <div className="p-6 text-center text-sm text-gray-500">Lade VisiView Tickets...</div>
+          ) : visiviewTickets.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-500">Keine zugewiesenen VisiView Tickets.</div>
+          ) : (
+            <ul className="divide-y divide-gray-200">
+              {visiviewTickets.map((ticket) => (
+                <li key={ticket.id} className="px-6 py-4 hover:bg-gray-50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <a
+                        href={`/visiview/tickets/${ticket.id}`}
+                        className="text-sm font-medium text-blue-600 hover:underline"
+                      >
+                        #{ticket.ticket_number || ticket.id} - {ticket.title}
+                      </a>
+                      {ticket.description && (
+                        <p className="text-sm text-gray-500 mt-1">{ticket.description.substring(0, 100)}{ticket.description.length > 100 ? '...' : ''}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                        ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
+                        ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                        ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {ticket.status}
+                      </span>
+                      {ticket.priority && (
+                        <p className="text-xs text-gray-400 mt-1">Priorität: {ticket.priority}</p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
       
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
+      {/* Reminders Section */}
+      <div className="mb-6">
+        <h3 className="text-md font-medium text-gray-900 mb-3">Persönliche Erinnerungen</h3>
+        <div className="bg-white shadow overflow-hidden sm:rounded-md">
         {sortedReminders.length === 0 ? (
           <div className="p-6 text-center text-sm text-gray-500">Keine Erinnerungen vorhanden.</div>
         ) : (
@@ -1052,6 +1185,7 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
             })}
           </ul>
         )}
+      </div>
       </div>
 
       {/* Modal für Neue/Bearbeiten Erinnerung */}

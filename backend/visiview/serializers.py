@@ -400,7 +400,7 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
             'author', 'author_user', 'author_user_name',
             'assigned_to', 'assigned_to_name', 'assigned_to_display',
             'last_changed_by',
-            'target_version', 'affected_version', 'visiview_id', 'visiview_license',
+            'target_version', 'affected_version', 'visiview_id', 'visiview_license', 'visiview_license_display',
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',

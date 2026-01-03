@@ -76,6 +76,8 @@ class VisiViewOptionViewSet(viewsets.ModelViewSet):
 
 class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     """ViewSet für VisiView Lizenzen"""
+    from verp.pagination import InfinitePagination
+    pagination_class = InfinitePagination
     queryset = VisiViewLicense.objects.select_related('customer', 'created_by').all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
