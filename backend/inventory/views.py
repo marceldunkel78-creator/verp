@@ -82,12 +82,19 @@ class IncomingGoodsViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Prüfe ob Warenkategorie gesetzt ist
+        if not incoming.product_category:
+            return Response(
+                {'error': 'Warenkategorie muss eingetragen sein, bevor die Ware ins Lager überführt werden kann.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # Prüfe ob Seriennummer erforderlich ist
         requires_serial = self._requires_serial_number(incoming)
         
         if requires_serial and not incoming.serial_number:
             return Response(
-                {'error': 'Für diese Warenfunktion ist eine Seriennummer erforderlich.'},
+                {'error': 'Seriennummer muss eingetragen sein, bevor die Ware ins Lager überführt werden kann.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         

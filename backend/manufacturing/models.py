@@ -657,6 +657,17 @@ class ProductionOrder(models.Model):
         verbose_name='Kundenauftrag'
     )
     
+    # Warenkategorie für Fertigungscheckliste (erforderlich zum Starten)
+    product_category = models.ForeignKey(
+        'verp_settings.ProductCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='production_orders',
+        verbose_name='Warenkategorie',
+        help_text='Erforderlich zum Starten des Fertigungsauftrags'
+    )
+    
     quantity = models.PositiveIntegerField(default=1, verbose_name='Menge')
     
     status = models.CharField(
@@ -664,6 +675,39 @@ class ProductionOrder(models.Model):
         choices=STATUS_CHOICES,
         default='created',
         verbose_name='Status'
+    )
+    
+    # Produktionsdaten
+    serial_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Seriennummer',
+        help_text='Seriennummer der gefertigten Ware'
+    )
+    
+    estimated_completion_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Avisiertes Fertigungsende',
+        help_text='Voraussichtliches Datum der Fertigstellung'
+    )
+    
+    # Fertigungscheckliste (JSON basierend auf Warenkategorie)
+    checklist_data = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Fertigungscheckliste',
+        help_text='Checklistendaten abhängig von der Warenkategorie'
+    )
+    
+    # Projekt-Referenz
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='production_orders',
+        verbose_name='Projekt'
     )
     
     # Planung
@@ -682,6 +726,15 @@ class ProductionOrder(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='production_orders_created'
+    )
+    
+    # Beobachter (ähnlich wie bei Tickets)
+    observers = models.ManyToManyField(
+        User,
+        related_name='observed_production_orders',
+        blank=True,
+        verbose_name='Beobachter',
+        help_text='Benutzer, die über Änderungen benachrichtigt werden'
     )
     
     class Meta:

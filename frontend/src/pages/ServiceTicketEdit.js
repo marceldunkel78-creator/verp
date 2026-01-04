@@ -32,10 +32,11 @@ const ServiceTicketEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isNew = id === 'new';
+  const isNew = id === 'new' || !id;
   
-  // Get customer from URL params (for pre-filled customer from CustomerModal)
+  // Get customer and system from URL params
   const urlCustomerId = searchParams.get('customer');
+  const urlSystemId = searchParams.get('system');
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -48,26 +49,36 @@ const ServiceTicketEdit = () => {
     billing: '',
     assigned_to: '',
     linked_rma: '',
+    linked_system: urlSystemId || '',
     linked_visiview_ticket: ''
   });
+  
+  // Customer search state
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [customerResults, setCustomerResults] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
+  // System search state
+  const [systemSearch, setSystemSearch] = useState('');
+  const [searchingSystems, setSearchingSystems] = useState(false);
+  const [systemResults, setSystemResults] = useState([]);
+  const [selectedSystem, setSelectedSystem] = useState(null);
   
   const [comments, setComments] = useState([]);
   const [changeLogs, setChangeLogs] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [addingComment, setAddingComment] = useState(false);
   
-  const [customers, setCustomers] = useState([]);
   const [users, setUsers] = useState([]);
   const [rmaCases, setRmaCases] = useState([]);
-  const [systems, setSystems] = useState([]);
   const [watchers, setWatchers] = useState([]);
   const [selectedWatchers, setSelectedWatchers] = useState([]);
 
   const fetchData = useCallback(async () => {
     try {
       // Lade Dropdown-Daten
-      const [customersRes, usersRes, rmaRes] = await Promise.all([
-        api.get('/customers/?page_size=1000'),
+      const [usersRes, rmaRes] = await Promise.all([
         api.get('/users/'),
         api.get('/service/rma/?page_size=1000')
       ]);
@@ -81,7 +92,6 @@ const ServiceTicketEdit = () => {
         return [];
       };
 
-      setCustomers(normalizeArray(customersRes.data));
       setUsers(normalizeArray(usersRes.data));
       setRmaCases(normalizeArray(rmaRes.data));
       
@@ -101,15 +111,41 @@ const ServiceTicketEdit = () => {
         setChangeLogs(ticketData.change_logs || []);
         setSelectedWatchers(ticketData.watchers || ticketData.watcher_ids || []);
 
-        // If ticket has a customer, load its systems
-        const customerId = ticketData.customer;
-        if (customerId) {
+        // Load customer details if set
+        if (ticketData.customer) {
           try {
-            const sysRes = await api.get(`/customers/${customerId}/systems/`);
-            setSystems(normalizeArray(sysRes.data));
+            const custRes = await api.get(`/customers/customers/${ticketData.customer}/`);
+            setSelectedCustomer(custRes.data);
           } catch (err) {
-            console.error('Error loading customer systems:', err);
-            setSystems([]);
+            console.error('Error loading customer:', err);
+          }
+        }
+        
+        // Load system details if set
+        if (ticketData.linked_system) {
+          try {
+            const sysRes = await api.get(`/systems/systems/${ticketData.linked_system}/`);
+            setSelectedSystem(sysRes.data);
+          } catch (err) {
+            console.error('Error loading system:', err);
+          }
+        }
+      } else {
+        // For new tickets, load customer/system from URL params
+        if (urlCustomerId) {
+          try {
+            const custRes = await api.get(`/customers/customers/${urlCustomerId}/`);
+            setSelectedCustomer(custRes.data);
+          } catch (err) {
+            console.error('Error loading customer from URL:', err);
+          }
+        }
+        if (urlSystemId) {
+          try {
+            const sysRes = await api.get(`/systems/systems/${urlSystemId}/`);
+            setSelectedSystem(sysRes.data);
+          } catch (err) {
+            console.error('Error loading system from URL:', err);
           }
         }
       }
@@ -118,34 +154,65 @@ const ServiceTicketEdit = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, isNew]);
-
-  // Fetch systems when customer selection changes
-  useEffect(() => {
-    const cid = ticket.customer;
-    if (!cid) {
-      setSystems([]);
-      setTicket(prev => ({ ...prev, linked_system: '' }));
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get(`/customers/${cid}/systems/`);
-        if (!cancelled) setSystems(res.data.results || res.data || []);
-      } catch (err) {
-        console.error('Error fetching systems for customer:', err);
-        if (!cancelled) setSystems([]);
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [ticket.customer]);
+  }, [id, isNew, urlCustomerId, urlSystemId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Customer search
+  const searchCustomers = async () => {
+    if (!customerSearch.trim()) return;
+    setSearchingCustomers(true);
+    try {
+      const response = await api.get(`/customers/customers/?search=${encodeURIComponent(customerSearch)}&is_active=true`);
+      setCustomerResults(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error searching customers:', err);
+      setCustomerResults([]);
+    } finally {
+      setSearchingCustomers(false);
+    }
+  };
+
+  const selectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setTicket(prev => ({ ...prev, customer: customer.id }));
+    setCustomerResults([]);
+    setCustomerSearch('');
+  };
+
+  const clearCustomer = () => {
+    setSelectedCustomer(null);
+    setTicket(prev => ({ ...prev, customer: '' }));
+  };
+
+  // System search
+  const searchSystems = async () => {
+    if (!systemSearch.trim()) return;
+    setSearchingSystems(true);
+    try {
+      const response = await api.get(`/systems/systems/?search=${encodeURIComponent(systemSearch)}`);
+      setSystemResults(response.data.results || response.data || []);
+    } catch (err) {
+      console.error('Error searching systems:', err);
+      setSystemResults([]);
+    } finally {
+      setSearchingSystems(false);
+    }
+  };
+
+  const selectSystem = (system) => {
+    setSelectedSystem(system);
+    setTicket(prev => ({ ...prev, linked_system: system.id }));
+    setSystemResults([]);
+    setSystemSearch('');
+  };
+
+  const clearSystem = () => {
+    setSelectedSystem(null);
+    setTicket(prev => ({ ...prev, linked_system: '' }));
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -308,23 +375,60 @@ const ServiceTicketEdit = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Kunde/Dealer</label>
-                  <select
-                    name="customer"
-                    value={ticket.customer}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  >
-                    <option value="">-- Auswählen --</option>
-                    {customers.map(c => {
-                      const nameParts = `${c.first_name || ''} ${c.last_name || ''}`.trim();
-                      const label = c.company_name || c.full_name || nameParts || c.customer_number || 'Kunde';
-                      return (
-                        <option key={c.id} value={c.id}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  {selectedCustomer ? (
+                    <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border rounded-md">
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">
+                          {selectedCustomer.full_name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`}
+                        </div>
+                        <div className="text-sm text-gray-600">{selectedCustomer.customer_number}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearCustomer}
+                        className="p-1 text-gray-400 hover:text-red-600"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="mt-1 flex gap-2">
+                        <input
+                          type="text"
+                          value={customerSearch}
+                          onChange={(e) => setCustomerSearch(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchCustomers())}
+                          placeholder="Kundenname oder -nummer..."
+                          className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={searchCustomers}
+                          disabled={searchingCustomers}
+                          className="px-3 py-2 border rounded-md text-sm bg-white hover:bg-gray-50"
+                        >
+                          {searchingCustomers ? '...' : 'Suchen'}
+                        </button>
+                      </div>
+                      {customerResults.length > 0 && (
+                        <div className="mt-2 bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {customerResults.map((c) => (
+                            <div
+                              key={c.id}
+                              onClick={() => selectCustomer(c)}
+                              className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                            >
+                              <div className="font-medium text-gray-900">
+                                {c.full_name || `${c.first_name || ''} ${c.last_name || ''}`}
+                              </div>
+                              <div className="text-sm text-gray-600">{c.customer_number}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 <div>
@@ -431,23 +535,65 @@ const ServiceTicketEdit = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Verknüpftes System</label>
-                  <select
-                    name="linked_system"
-                    value={ticket.linked_system || ''}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  >
-                    <option value="">-- Kein System --</option>
-                    {systems.map(sys => (
-                      <option key={sys.id} value={sys.id}>
-                        {(sys.system_number ? `${sys.system_number} - ` : '') + (sys.system_name || sys.name || sys.system_number)}
-                      </option>
-                    ))}
-                  </select>
-                  {ticket.linked_system && (
+                  {selectedSystem ? (
+                    <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                      <div className="flex-1">
+                        <div className="font-medium">{selectedSystem.system_name || selectedSystem.name}</div>
+                        <div className="text-sm text-gray-600">{selectedSystem.system_number}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearSystem}
+                        className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="mt-1 flex gap-2">
+                        <input
+                          type="text"
+                          value={systemSearch}
+                          onChange={(e) => setSystemSearch(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              searchSystems();
+                            }
+                          }}
+                          placeholder="System suchen..."
+                          className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={searchSystems}
+                          disabled={searchingSystems}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                        >
+                          {searchingSystems ? 'Suchen...' : 'Suchen'}
+                        </button>
+                      </div>
+                      {systemResults.length > 0 && (
+                        <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                          {systemResults.map((sys) => (
+                            <div
+                              key={sys.id}
+                              onClick={() => selectSystem(sys)}
+                              className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                            >
+                              <div className="font-medium">{sys.system_name || sys.name}</div>
+                              <div className="text-sm text-gray-600">{sys.system_number}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {selectedSystem && (
                     <button
                       type="button"
-                      onClick={() => navigate(`/systems/${ticket.linked_system}`)}
+                      onClick={() => navigate(`/systems/${selectedSystem.id}`)}
                       className="mt-2 text-sm text-blue-600 hover:text-blue-800"
                     >
                       → Zum System wechseln

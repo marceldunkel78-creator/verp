@@ -20,8 +20,12 @@ class SystemViewSet(viewsets.ModelViewSet):
     queryset = System.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'customer']
-    search_fields = ['system_number', 'system_name', 'description', 'customer__name', 'customer__company_name']
-    ordering_fields = ['system_number', 'system_name', 'created_at', 'customer__name']
+    # Use actual Customer model fields for related searches/ordering
+    search_fields = [
+        'system_number', 'system_name', 'description',
+        'customer__customer_number', 'customer__first_name', 'customer__last_name'
+    ]
+    ordering_fields = ['system_number', 'system_name', 'created_at', 'customer__last_name']
     ordering = ['-created_at']
     
     def get_serializer_class(self):

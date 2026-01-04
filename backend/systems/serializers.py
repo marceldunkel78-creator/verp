@@ -114,6 +114,8 @@ class SystemDetailSerializer(serializers.ModelSerializer):
     """Detaillierter Serializer für System-Ansicht"""
     customer_name = serializers.SerializerMethodField()
     customer_data = serializers.SerializerMethodField()
+    customer_details = serializers.SerializerMethodField()
+    visiview_license_details = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     components = SystemComponentSerializer(many=True, read_only=True)
     photos = SystemPhotoSerializer(many=True, read_only=True)
@@ -126,8 +128,9 @@ class SystemDetailSerializer(serializers.ModelSerializer):
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
-            'customer_data', 'description', 'status', 'status_display',
+            'customer_data', 'customer_details', 'description', 'status', 'status_display',
             'location', 'installation_date', 'warranty_end', 'notes',
+            'visiview_license', 'visiview_license_details',
             'components', 'photos', 'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
@@ -153,6 +156,32 @@ class SystemDetailSerializer(serializers.ModelSerializer):
         parts = [cust.title or '', cust.first_name or '', cust.last_name or '']
         name = ' '.join([p for p in parts if p]).strip()
         return f"{cust.customer_number} - {name}" if getattr(cust, 'customer_number', None) else name
+    
+    def get_customer_details(self, obj):
+        if obj.customer:
+            cust = obj.customer
+            parts = [cust.title or '', cust.first_name or '', cust.last_name or '']
+            name = ' '.join([p for p in parts if p]).strip()
+            return {
+                'id': cust.id,
+                'customer_number': getattr(cust, 'customer_number', None),
+                'full_name': name,
+                'first_name': getattr(cust, 'first_name', None),
+                'last_name': getattr(cust, 'last_name', None),
+            }
+        return None
+    
+    def get_visiview_license_details(self, obj):
+        if obj.visiview_license:
+            lic = obj.visiview_license
+            return {
+                'id': lic.id,
+                'license_number': lic.license_number,
+                'serial_number': lic.serial_number,
+                'version': lic.version or '',
+                'status': lic.status,
+            }
+        return None
 
 
 class SystemCreateUpdateSerializer(serializers.ModelSerializer):
@@ -164,7 +193,7 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'description',
             'status', 'location', 'installation_date', 'warranty_end',
-            'notes', 'components'
+            'notes', 'visiview_license', 'components'
         ]
         read_only_fields = ['id', 'system_number']
     

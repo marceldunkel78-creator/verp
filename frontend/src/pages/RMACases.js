@@ -7,8 +7,7 @@ import {
   MagnifyingGlassIcon,
   ArrowPathIcon,
   ChevronLeftIcon,
-  ChevronRightIcon,
-  ExclamationTriangleIcon
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 
 // Status mapping
@@ -31,15 +30,6 @@ const RMACases = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  
-  // Create Modal State
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newRMA, setNewRMA] = useState({
-    title: '',
-    customer_name: '',
-    product_serial: ''
-  });
-  const [createLoading, setCreateLoading] = useState(false);
 
   const fetchRMACases = useCallback(async () => {
     setLoading(true);
@@ -73,23 +63,6 @@ const RMACases = () => {
     fetchRMACases();
   };
 
-  const handleCreateRMA = async (e) => {
-    e.preventDefault();
-    setCreateLoading(true);
-    try {
-      const response = await api.post('/service/rma/', newRMA);
-      setShowCreateModal(false);
-      setNewRMA({ title: '', customer_name: '', product_serial: '' });
-      // Navigate to edit page with new RMA case
-      navigate(`/service/rma/${response.data.id}`);
-    } catch (error) {
-      console.error('Error creating RMA case:', error);
-      alert('Fehler beim Erstellen: ' + (error.response?.data?.detail || error.message));
-    } finally {
-      setCreateLoading(false);
-    }
-  };
-
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleDateString('de-DE');
@@ -113,7 +86,7 @@ const RMACases = () => {
           <p className="text-gray-500 text-sm">Rücksendungen und Reparaturen verwalten</p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => navigate('/service/rma/new')}
           className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700"
         >
           <PlusIcon className="h-5 w-5" />
@@ -264,92 +237,6 @@ const RMACases = () => {
             >
               <ChevronRightIcon className="h-5 w-5" />
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Neuer RMA-Fall</h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                ×
-              </button>
-            </div>
-            
-            <form onSubmit={handleCreateRMA} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Titel / Betreff *
-                </label>
-                <input
-                  type="text"
-                  value={newRMA.title}
-                  onChange={(e) => setNewRMA(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                  placeholder="z.B. Defektes Display"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Kunde
-                </label>
-                <input
-                  type="text"
-                  value={newRMA.customer_name}
-                  onChange={(e) => setNewRMA(prev => ({ ...prev, customer_name: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                  placeholder="Kundenname"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Produkt-Seriennummer
-                </label>
-                <input
-                  type="text"
-                  value={newRMA.product_serial}
-                  onChange={(e) => setNewRMA(prev => ({ ...prev, product_serial: e.target.value }))}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                  placeholder="Seriennummer des defekten Produkts"
-                />
-              </div>
-
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-700">
-                <div className="flex items-start gap-2">
-                  <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">RMA-Nummer wird automatisch vergeben</p>
-                    <p className="text-xs mt-1">Format: RMA-00001, RMA-00002, ...</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-gray-700 border rounded-lg hover:bg-gray-50"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newRMA.title || createLoading}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
-                >
-                  {createLoading ? 'Erstelle...' : 'Erstellen'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

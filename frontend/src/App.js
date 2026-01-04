@@ -35,6 +35,7 @@ import SystemEdit from './pages/SystemEdit';
 import VSHardware from './pages/VSHardware';
 import VSHardwareEdit from './pages/VSHardwareEdit';
 import ProductionOrders from './pages/ProductionOrders';
+import ProductionOrderEdit from './pages/ProductionOrderEdit';
 import InventoryItemEdit from './pages/InventoryItemEdit';
 import VisiViewProducts from './pages/VisiViewProducts';
 import VisiViewProductEdit from './pages/VisiViewProductEdit';
@@ -99,6 +100,7 @@ function App() {
             <Route path="manufacturing/vs-hardware" element={<VSHardware />} />
             <Route path="manufacturing/vs-hardware/:id" element={<VSHardwareEdit />} />
             <Route path="manufacturing/production-orders" element={<ProductionOrders />} />
+            <Route path="manufacturing/production-orders/:id" element={<ProductionOrderEdit />} />
             <Route path="visiview" element={<VisiView />} />
             <Route path="visiview/products" element={<VisiViewProducts />} />
             <Route path="visiview/products/:id" element={<VisiViewProductEdit />} />
@@ -113,8 +115,10 @@ function App() {
             <Route path="service/vs-service" element={<VSServiceProducts />} />
             <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />
             <Route path="service/tickets" element={<ServiceTickets />} />
+            <Route path="service/tickets/new" element={<ServiceTicketEdit />} />
             <Route path="service/tickets/:id" element={<ServiceTicketEdit />} />
             <Route path="service/rma" element={<RMACases />} />
+            <Route path="service/rma/new" element={<RMACaseEdit />} />
             <Route path="service/rma/:id" element={<RMACaseEdit />} />
             <Route path="bi" element={<BusinessIntelligence />} />
             <Route path="documents" element={<Documents />} />
@@ -149,6 +153,7 @@ function App() {
             <Route path="sales/pricelists/new" element={<PriceListEdit />} />
             <Route path="sales/pricelists/:id" element={<PriceListEdit />} />
             <Route path="sales/projects" element={<Projects />} />
+            <Route path="sales/projects/new" element={<ProjectEdit />} />
             <Route path="sales/projects/:id" element={<ProjectEdit />} />
             <Route path="sales/systems" element={<Systems />} />
             <Route path="sales/systems/:id" element={<SystemEdit />} />

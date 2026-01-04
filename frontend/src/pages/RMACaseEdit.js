@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
   ArrowLeftIcon,
@@ -32,12 +32,38 @@ const STATUS_OPTIONS = [
 const RMACaseEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isNew = id === 'new' || !id;
+  
+  // Get URL params for pre-filling
+  const urlCustomerId = searchParams.get('customer');
+  const urlSystemId = searchParams.get('system');
+  const urlInventoryItemId = searchParams.get('inventory_item');
+  
   const [activeTab, setActiveTab] = useState('basic');
   const [rmaCase, setRmaCase] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+  
+  // Customer search state
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [customerResults, setCustomerResults] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
+  // System search state
+  const [systemSearch, setSystemSearch] = useState('');
+  const [searchingSystems, setSearchingSystems] = useState(false);
+  const [systemResults, setSystemResults] = useState([]);
+  const [selectedSystem, setSelectedSystem] = useState(null);
+  
+  // Inventory item search state
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [searchingInventory, setSearchingInventory] = useState(false);
+  const [inventoryResults, setInventoryResults] = useState([]);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
 
   // Form data for all tabs
   const [formData, setFormData] = useState({
@@ -45,10 +71,13 @@ const RMACaseEdit = () => {
     title: '',
     description: '',
     status: 'open',
+    customer: urlCustomerId || '',
     customer_name: '',
     customer_contact: '',
     customer_email: '',
     customer_phone: '',
+    linked_system: urlSystemId || '',
+    inventory_item: urlInventoryItemId || '',
     product_name: '',
     product_serial: '',
     product_purchase_date: '',
@@ -86,81 +115,262 @@ const RMACaseEdit = () => {
   });
 
   const fetchRMACase = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
     try {
-      const response = await api.get(`/service/rma/${id}/`);
-      const data = response.data;
-      setRmaCase(data);
-      setFormData({
-        // Basic Info
-        title: data.title || '',
-        description: data.description || '',
-        status: data.status || 'open',
-        customer_name: data.customer_name || '',
-        customer_contact: data.customer_contact || '',
-        customer_email: data.customer_email || '',
-        customer_phone: data.customer_phone || '',
-        product_name: data.product_name || '',
-        product_serial: data.product_serial || '',
-        product_purchase_date: data.product_purchase_date || '',
-        warranty_status: data.warranty_status || 'unknown',
-        fault_description: data.fault_description || '',
+      if (!isNew) {
+        // Load existing RMA case
+        const response = await api.get(`/service/rma/${id}/`);
+        const data = response.data;
+        setRmaCase(data);
+        setFormData({
+          // Basic Info
+          title: data.title || '',
+          description: data.description || '',
+          status: data.status || 'open',
+          customer: data.customer || '',
+          customer_name: data.customer_name || '',
+          customer_contact: data.customer_contact || '',
+          customer_email: data.customer_email || '',
+          customer_phone: data.customer_phone || '',
+          linked_system: data.linked_system || '',
+          inventory_item: data.inventory_item || '',
+          product_name: data.product_name || '',
+          product_serial: data.product_serial || '',
+          product_purchase_date: data.product_purchase_date || '',
+          warranty_status: data.warranty_status || 'unknown',
+          fault_description: data.fault_description || '',
+          
+          // Shipping
+          received_date: data.received_date || '',
+          received_by: data.received_by || '',
+          received_condition: data.received_condition || '',
+          tracking_inbound: data.tracking_inbound || '',
+          shipped_date: data.shipped_date || '',
+          shipped_by: data.shipped_by || '',
+          tracking_outbound: data.tracking_outbound || '',
+          shipping_notes: data.shipping_notes || '',
+          
+          // Calculation
+          estimated_cost: data.estimated_cost || '',
+          actual_cost: data.actual_cost || '',
+          parts_cost: data.parts_cost || '',
+          labor_cost: data.labor_cost || '',
+          shipping_cost: data.shipping_cost || '',
+          total_cost: data.total_cost || '',
+          quote_sent: data.quote_sent || false,
+          quote_accepted: data.quote_accepted || false,
+          
+          // Report
+          diagnosis: data.diagnosis || '',
+          repair_actions: data.repair_actions || '',
+          parts_used: data.parts_used || '',
+          repair_date: data.repair_date || '',
+          repaired_by: data.repaired_by || '',
+          test_results: data.test_results || '',
+          final_notes: data.final_notes || ''
+        });
         
-        // Shipping
-        received_date: data.received_date || '',
-        received_by: data.received_by || '',
-        received_condition: data.received_condition || '',
-        tracking_inbound: data.tracking_inbound || '',
-        shipped_date: data.shipped_date || '',
-        shipped_by: data.shipped_by || '',
-        tracking_outbound: data.tracking_outbound || '',
-        shipping_notes: data.shipping_notes || '',
+        // Load customer details if set
+        if (data.customer) {
+          try {
+            const custRes = await api.get(`/customers/customers/${data.customer}/`);
+            setSelectedCustomer(custRes.data);
+          } catch (err) {
+            console.error('Error loading customer:', err);
+          }
+        }
         
-        // Calculation
-        estimated_cost: data.estimated_cost || '',
-        actual_cost: data.actual_cost || '',
-        parts_cost: data.parts_cost || '',
-        labor_cost: data.labor_cost || '',
-        shipping_cost: data.shipping_cost || '',
-        total_cost: data.total_cost || '',
-        quote_sent: data.quote_sent || false,
-        quote_accepted: data.quote_accepted || false,
+        // Load system details if set
+        if (data.linked_system) {
+          try {
+            const sysRes = await api.get(`/systems/systems/${data.linked_system}/`);
+            setSelectedSystem(sysRes.data);
+          } catch (err) {
+            console.error('Error loading system:', err);
+          }
+        }
         
-        // Report
-        diagnosis: data.diagnosis || '',
-        repair_actions: data.repair_actions || '',
-        parts_used: data.parts_used || '',
-        repair_date: data.repair_date || '',
-        repaired_by: data.repaired_by || '',
-        test_results: data.test_results || '',
-        final_notes: data.final_notes || ''
-      });
+        // Load inventory item details if set
+        if (data.inventory_item) {
+          try {
+            const invRes = await api.get(`/inventory/inventory-items/${data.inventory_item}/`);
+            setSelectedInventoryItem(invRes.data);
+          } catch (err) {
+            console.error('Error loading inventory item:', err);
+          }
+        }
+      } else {
+        // For new RMA cases, load customer/system/inventory from URL params
+        if (urlCustomerId) {
+          try {
+            const custRes = await api.get(`/customers/customers/${urlCustomerId}/`);
+            setSelectedCustomer(custRes.data);
+          } catch (err) {
+            console.error('Error loading customer from URL:', err);
+          }
+        }
+        if (urlSystemId) {
+          try {
+            const sysRes = await api.get(`/systems/systems/${urlSystemId}/`);
+            setSelectedSystem(sysRes.data);
+          } catch (err) {
+            console.error('Error loading system from URL:', err);
+          }
+        }
+        if (urlInventoryItemId) {
+          try {
+            const invRes = await api.get(`/inventory/inventory-items/${urlInventoryItemId}/`);
+            setSelectedInventoryItem(invRes.data);
+          } catch (err) {
+            console.error('Error loading inventory item from URL:', err);
+          }
+        }
+      }
     } catch (error) {
-      console.error('Error fetching RMA case:', error);
-      alert('Fehler beim Laden des RMA-Falls');
+      console.error('Error loading RMA case:', error);
+      if (!isNew) {
+        alert('Fehler beim Laden des RMA-Falls');
+      }
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, isNew, urlCustomerId, urlSystemId, urlInventoryItemId]);
 
   useEffect(() => {
     fetchRMACase();
   }, [fetchRMACase]);
+
+  // Warning before leaving page with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setHasChanges(true);
   };
 
+  // Customer search functions
+  const searchCustomers = async () => {
+    if (!customerSearch.trim()) return;
+    setSearchingCustomers(true);
+    try {
+      const response = await api.get(`/customers/customers/?search=${customerSearch}&is_active=true`);
+      setCustomerResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error searching customers:', error);
+    } finally {
+      setSearchingCustomers(false);
+    }
+  };
+
+  const selectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setFormData(prev => ({ ...prev, customer: customer.id }));
+    setCustomerSearch('');
+    setCustomerResults([]);
+    setHasChanges(true);
+  };
+
+  const clearCustomer = () => {
+    setSelectedCustomer(null);
+    setFormData(prev => ({ ...prev, customer: '' }));
+    setHasChanges(true);
+  };
+
+  // System search functions
+  const searchSystems = async () => {
+    if (!systemSearch.trim()) return;
+    setSearchingSystems(true);
+    try {
+      const response = await api.get(`/systems/systems/?search=${systemSearch}`);
+      setSystemResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error searching systems:', error);
+    } finally {
+      setSearchingSystems(false);
+    }
+  };
+
+  const selectSystem = (system) => {
+    setSelectedSystem(system);
+    setFormData(prev => ({ ...prev, linked_system: system.id }));
+    setSystemSearch('');
+    setSystemResults([]);
+    setHasChanges(true);
+  };
+
+  const clearSystem = () => {
+    setSelectedSystem(null);
+    setFormData(prev => ({ ...prev, linked_system: '' }));
+    setHasChanges(true);
+  };
+
+  // Inventory item search functions
+  const searchInventory = async () => {
+    if (!inventorySearch.trim()) return;
+    setSearchingInventory(true);
+    try {
+      const response = await api.get(`/inventory/inventory-items/?search=${inventorySearch}`);
+      setInventoryResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error searching inventory:', error);
+    } finally {
+      setSearchingInventory(false);
+    }
+  };
+
+  const selectInventoryItem = (item) => {
+    setSelectedInventoryItem(item);
+    setFormData(prev => ({
+      ...prev,
+      inventory_item: item.id,
+      product_name: item.name || '',
+      product_serial: item.serial_number || ''
+    }));
+    setInventorySearch('');
+    setInventoryResults([]);
+    setHasChanges(true);
+  };
+
+  const clearInventoryItem = () => {
+    setSelectedInventoryItem(null);
+    setFormData(prev => ({
+      ...prev,
+      inventory_item: '',
+      product_name: '',
+      product_serial: ''
+    }));
+    setHasChanges(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/service/rma/${id}/`, formData);
-      setSaveMessage({ type: 'success', text: 'Änderungen gespeichert!' });
-      setHasChanges(false);
-      setTimeout(() => setSaveMessage(null), 3000);
-      fetchRMACase();
+      const payload = { ...formData };
+      
+      if (isNew) {
+        // Create new RMA case
+        const response = await api.post('/service/rma/', payload);
+        setSaveMessage({ type: 'success', text: 'RMA-Fall erstellt!' });
+        setHasChanges(false);
+        // Navigate to the new RMA case
+        navigate(`/service/rma/${response.data.id}`, { replace: true });
+      } else {
+        // Update existing RMA case
+        await api.patch(`/service/rma/${id}/`, payload);
+        setSaveMessage({ type: 'success', text: 'Änderungen gespeichert!' });
+        setHasChanges(false);
+        setTimeout(() => setSaveMessage(null), 3000);
+        fetchRMACase();
+      }
     } catch (error) {
       console.error('Error saving:', error);
       setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
@@ -201,20 +411,17 @@ const RMACaseEdit = () => {
     );
   }
 
-  if (!rmaCase) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center text-gray-500">RMA-Fall nicht gefunden</div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/service/rma')}
+          onClick={() => {
+            if (hasChanges && !window.confirm('Sie haben ungespeicherte Änderungen. Möchten Sie wirklich fortfahren?')) {
+              return;
+            }
+            navigate('/service/rma');
+          }}
           className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeftIcon className="h-5 w-5 mr-2" />
@@ -226,13 +433,20 @@ const RMACaseEdit = () => {
             <div className="flex items-center gap-3">
               <ArrowPathIcon className="h-8 w-8 text-orange-500" />
               <h1 className="text-2xl font-bold text-gray-900">
-                {rmaCase.rma_number} - {rmaCase.title}
+                {isNew ? 'Neuer RMA-Fall' : `${rmaCase?.rma_number || ''} - ${rmaCase?.title || formData.title}`}
               </h1>
             </div>
-            <p className="mt-1 text-sm text-gray-500">
-              Status: {STATUS_OPTIONS.find(s => s.value === rmaCase.status)?.label || rmaCase.status} | 
-              Erstellt: {formatDate(rmaCase.created_at)}
-            </p>
+            {!isNew && rmaCase && (
+              <p className="mt-1 text-sm text-gray-500">
+                Status: {STATUS_OPTIONS.find(s => s.value === rmaCase.status)?.label || rmaCase.status} | 
+                Erstellt: {formatDate(rmaCase.created_at)}
+              </p>
+            )}
+            {isNew && (
+              <p className="mt-1 text-sm text-gray-500">
+                Die RMA-Nummer wird beim ersten Speichern automatisch vergeben
+              </p>
+            )}
           </div>
           
           <div className="flex items-center gap-3">
@@ -249,16 +463,22 @@ const RMACaseEdit = () => {
                 {saveMessage.text}
               </div>
             )}
+            {hasChanges && !isNew && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full text-sm bg-yellow-100 text-yellow-700">
+                <ExclamationCircleIcon className="h-4 w-4" />
+                Nicht gespeicherte Änderungen
+              </div>
+            )}
             <button
               onClick={handleSave}
-              disabled={saving || !hasChanges}
+              disabled={saving}
               className={`px-4 py-2 rounded-lg text-white ${
-                hasChanges 
-                  ? 'bg-orange-600 hover:bg-orange-700' 
-                  : 'bg-gray-400 cursor-not-allowed'
+                saving
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-orange-600 hover:bg-orange-700'
               }`}
             >
-              {saving ? 'Speichere...' : 'Speichern'}
+              {saving ? 'Speichere...' : (isNew ? 'Erstellen' : 'Speichern')}
             </button>
           </div>
         </div>
@@ -292,17 +512,19 @@ const RMACaseEdit = () => {
             <div className="space-y-6">
               <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Grunddaten</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    RMA-Nummer
-                  </label>
-                  <input
-                    type="text"
-                    value={rmaCase.rma_number || ''}
-                    disabled
-                    className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-600"
-                  />
-                </div>
+                {!isNew && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      RMA-Nummer
+                    </label>
+                    <input
+                      type="text"
+                      value={rmaCase?.rma_number || ''}
+                      disabled
+                      className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-600"
+                    />
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -347,19 +569,68 @@ const RMACaseEdit = () => {
               </div>
 
               <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mt-8">Kundendaten</h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Kunde
+                </label>
+                {selectedCustomer ? (
+                  <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-medium">{selectedCustomer.first_name} {selectedCustomer.last_name}</div>
+                      <div className="text-sm text-gray-600">{selectedCustomer.customer_number}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearCustomer}
+                      className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            searchCustomers();
+                          }
+                        }}
+                        placeholder="Kunde suchen..."
+                        className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchCustomers}
+                        disabled={searchingCustomers}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+                      >
+                        {searchingCustomers ? 'Suchen...' : 'Suchen'}
+                      </button>
+                    </div>
+                    {customerResults.length > 0 && (
+                      <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                        {customerResults.map((cust) => (
+                          <div
+                            key={cust.id}
+                            onClick={() => selectCustomer(cust)}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                          >
+                            <div className="font-medium">{cust.first_name} {cust.last_name}</div>
+                            <div className="text-sm text-gray-600">{cust.customer_number}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Kundenname
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.customer_name}
-                    onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-                
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Ansprechpartner
@@ -397,7 +668,139 @@ const RMACaseEdit = () => {
                 </div>
               </div>
 
+              <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mt-8">Verknüpftes System</h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  System (optional)
+                </label>
+                {selectedSystem ? (
+                  <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-medium">{selectedSystem.system_name || selectedSystem.name}</div>
+                      <div className="text-sm text-gray-600">{selectedSystem.system_number}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearSystem}
+                      className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={systemSearch}
+                        onChange={(e) => setSystemSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            searchSystems();
+                          }
+                        }}
+                        placeholder="System suchen..."
+                        className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchSystems}
+                        disabled={searchingSystems}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+                      >
+                        {searchingSystems ? 'Suchen...' : 'Suchen'}
+                      </button>
+                    </div>
+                    {systemResults.length > 0 && (
+                      <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                        {systemResults.map((sys) => (
+                          <div
+                            key={sys.id}
+                            onClick={() => selectSystem(sys)}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                          >
+                            <div className="font-medium">{sys.system_name || sys.name}</div>
+                            <div className="text-sm text-gray-600">{sys.system_number}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mt-8">Produktdaten</h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Warenlager-Artikel (optional)
+                </label>
+                {selectedInventoryItem ? (
+                  <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-medium">{selectedInventoryItem.name}</div>
+                      <div className="text-sm text-gray-600">
+                        {selectedInventoryItem.inventory_number}
+                        {selectedInventoryItem.serial_number && ` - SN: ${selectedInventoryItem.serial_number}`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearInventoryItem}
+                      className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={inventorySearch}
+                        onChange={(e) => setInventorySearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            searchInventory();
+                          }
+                        }}
+                        placeholder="Artikel im Warenlager suchen..."
+                        className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchInventory}
+                        disabled={searchingInventory}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+                      >
+                        {searchingInventory ? 'Suchen...' : 'Suchen'}
+                      </button>
+                    </div>
+                    {inventoryResults.length > 0 && (
+                      <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                        {inventoryResults.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => selectInventoryItem(item)}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                          >
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-gray-600">
+                              {item.inventory_number}
+                              {item.serial_number && ` - SN: ${item.serial_number}`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Wählen Sie einen Artikel aus dem Warenlager, um Produktdaten automatisch zu füllen
+                </p>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

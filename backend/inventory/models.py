@@ -440,6 +440,15 @@ class InventoryItem(models.Model):
         help_text='Kategorie-spezifische Qualitätsprüfungen'
     )
     
+    # Allgemeine Ausgangschecks für alle Waren
+    outgoing_checks = models.JSONField(
+        null=True,
+        blank=True,
+        default=dict,
+        verbose_name='Ausgangschecks',
+        help_text='Allgemeine Ausgangschecks für Warenausgang'
+    )
+    
     # =====================
     # Preis- und Statusinformationen
     # =====================

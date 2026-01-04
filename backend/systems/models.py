@@ -94,6 +94,16 @@ class System(models.Model):
         verbose_name='Notizen'
     )
     
+    # VisiView Lizenz (optional)
+    visiview_license = models.ForeignKey(
+        'visiview.VisiViewLicense',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='associated_systems',
+        verbose_name='VisiView Lizenz'
+    )
+    
     # Metadaten
     created_by = models.ForeignKey(
         User,

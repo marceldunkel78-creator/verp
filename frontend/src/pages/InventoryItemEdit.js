@@ -15,7 +15,7 @@ const TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },
   { id: 'instance', name: 'Instanz-Details', icon: UserIcon },
   { id: 'equipment', name: 'Ausstattung/Zubehör', icon: WrenchScrewdriverIcon },
-  { id: 'qm', name: 'QM-Checks', icon: ClipboardDocumentCheckIcon }
+  { id: 'outgoing', name: 'Ausgangschecks', icon: ClipboardDocumentCheckIcon }
 ];
 
 const InventoryItemEdit = () => {
@@ -60,9 +60,8 @@ const InventoryItemEdit = () => {
   const [equipmentData, setEquipmentData] = useState({});
   const [equipmentTemplate, setEquipmentTemplate] = useState(null);
 
-  // Form Data für Tab 4: QM
-  const [qmData, setQmData] = useState({});
-  const [qmTemplate, setQmTemplate] = useState(null);
+  // Form Data für Tab 4: Ausgangschecks
+  const [outgoingChecks, setOutgoingChecks] = useState({});
 
   // Dropdown-Optionen
   const [suppliers, setSuppliers] = useState([]);
@@ -109,9 +108,8 @@ const InventoryItemEdit = () => {
       
       // Tab 3 & 4: Templates und Daten laden
       setEquipmentData(data.equipment_data || {});
-      setQmData(data.qm_data || {});
+      setOutgoingChecks(data.outgoing_checks || {});
       setEquipmentTemplate(data.equipment_template || null);
-      setQmTemplate(data.qm_template || null);
       
     } catch (error) {
       console.error('Error fetching inventory item:', error);
@@ -163,8 +161,8 @@ const InventoryItemEdit = () => {
     setHasChanges(true);
   };
 
-  const handleQmChange = (field, value) => {
-    setQmData(prev => ({ ...prev, [field]: value }));
+  const handleOutgoingCheckChange = (fieldName, value) => {
+    setOutgoingChecks(prev => ({ ...prev, [fieldName]: value }));
     setHasChanges(true);
   };
 
@@ -175,11 +173,11 @@ const InventoryItemEdit = () => {
         ...basicData,
         ...instanceData,
         equipment_data: equipmentData,
-        qm_data: qmData
+        outgoing_checks: outgoingChecks
       };
       
       await api.patch(`/inventory/inventory-items/${id}/`, payload);
-      setSaveMessage({ type: 'success', text: 'Änderungen gespeichert!' });
+      setSaveMessage({ type: 'success', text: 'Erfolgreich gespeichert' });
       setHasChanges(false);
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error) {
@@ -324,13 +322,11 @@ const InventoryItemEdit = () => {
           />
         )}
 
-        {/* Tab 4: QM-Checks */}
-        {activeTab === 'qm' && (
-          <QmTab
-            data={qmData}
-            template={qmTemplate}
-            onChange={handleQmChange}
-            categoryCode={item.product_category_code || item.item_category}
+        {/* Tab 4: Ausgangschecks */}
+        {activeTab === 'outgoing' && (
+          <OutgoingChecksTab
+            data={outgoingChecks}
+            onChange={handleOutgoingCheckChange}
           />
         )}
       </div>
@@ -783,147 +779,82 @@ const EquipmentTab = ({ data, template, onChange, categoryCode }) => {
   );
 };
 
-// Tab 4: QM-Checks
-const QmTab = ({ data, template, onChange, categoryCode }) => {
-  // Fallback-Template
-  const defaultChecks = [
-    { name: 'visual_inspection', label: 'Sichtprüfung', type: 'pass_fail' },
-    { name: 'functional_test', label: 'Funktionstest', type: 'pass_fail' },
-    { name: 'completeness_check', label: 'Vollständigkeitsprüfung', type: 'pass_fail' }
+// Tab 4: Ausgangschecks
+const OutgoingChecksTab = ({ data, onChange }) => {
+  const checks = [
+    { id: 'sauber', label: 'Sauber' },
+    { id: 'funktion', label: 'Funktion' },
+    { id: 'vslabel', label: 'VSLabel' },
+    { id: 'tools', label: 'Tools' },
+    { id: 'manual', label: 'Manual' },
+    { id: 'keys', label: 'Keys' },
+    { id: 'interlock', label: 'Interlock' },
+    { id: 'datenkabel', label: 'Datenkabel' },
+    { id: 'interface', label: 'Interface' },
+    { id: 'triggerkabel', label: 'Triggerkabel' },
+    { id: 'dongle', label: 'Dongle' },
+    { id: 'stromkabel', label: 'Stromkabel' },
+    { id: 'netzteil', label: 'Netzteil' },
+    { id: 'v230', label: '230V' },
+    { id: 'v120', label: '120V' },
+    { id: 'fiber_llg', label: 'Fiber/LLG' },
+    { id: 'sn', label: 'S/N' },
+    { id: 'supportjacks', label: 'Support Jacks' },
+    { id: 'geraetverpackt', label: 'Gerät verpackt' }
   ];
   
-  const checks = template?.checks || defaultChecks;
-  
-  const getCheckValue = (checkName, field) => {
-    return data[checkName]?.[field] || '';
+  const handleCheckToggle = (checkId) => {
+    onChange(checkId, !data[checkId]);
   };
   
-  const setCheckValue = (checkName, field, value) => {
-    const currentCheck = data[checkName] || {};
-    onChange(checkName, { ...currentCheck, [field]: value });
-  };
-  
-  const renderCheck = (check) => {
-    const result = getCheckValue(check.name, 'result');
-    const notes = getCheckValue(check.name, 'notes');
-    const measurement = getCheckValue(check.name, 'measurement');
-    const date = getCheckValue(check.name, 'date');
-    const tester = getCheckValue(check.name, 'tester');
-    
-    return (
-      <div key={check.name} className="bg-gray-50 rounded-lg p-4">
-        <div className="flex justify-between items-start mb-3">
-          <h4 className="font-medium text-gray-900">{check.label}</h4>
-          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-            result === 'pass' ? 'bg-green-100 text-green-800' :
-            result === 'fail' ? 'bg-red-100 text-red-800' :
-            'bg-gray-200 text-gray-600'
-          }`}>
-            {result === 'pass' ? 'BESTANDEN' : result === 'fail' ? 'NICHT BESTANDEN' : 'OFFEN'}
-          </span>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Ergebnis */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Ergebnis</label>
-            {check.type === 'pass_fail' ? (
-              <select
-                value={result}
-                onChange={(e) => setCheckValue(check.name, 'result', e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-              >
-                <option value="">Auswählen...</option>
-                <option value="pass">Bestanden</option>
-                <option value="fail">Nicht bestanden</option>
-                <option value="na">N/A</option>
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={measurement}
-                onChange={(e) => setCheckValue(check.name, 'measurement', e.target.value)}
-                placeholder="Messwert"
-                className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-              />
-            )}
-          </div>
-          
-          {/* Datum */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Datum</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setCheckValue(check.name, 'date', e.target.value)}
-              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-            />
-          </div>
-          
-          {/* Prüfer */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Prüfer</label>
-            <input
-              type="text"
-              value={tester}
-              onChange={(e) => setCheckValue(check.name, 'tester', e.target.value)}
-              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-            />
-          </div>
-        </div>
-        
-        {/* Notizen */}
-        <div className="mt-3">
-          <label className="block text-xs font-medium text-gray-500 mb-1">Notizen</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setCheckValue(check.name, 'notes', e.target.value)}
-            rows={2}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-          />
-        </div>
-      </div>
-    );
-  };
-  
-  // Berechne QM-Status
-  const getQmStatus = () => {
-    const results = checks.map(c => getCheckValue(c.name, 'result'));
-    const completed = results.filter(r => r === 'pass' || r === 'fail' || r === 'na').length;
-    const passed = results.filter(r => r === 'pass' || r === 'na').length;
-    const failed = results.filter(r => r === 'fail').length;
-    
-    return { completed, total: checks.length, passed, failed };
-  };
-  
-  const status = getQmStatus();
+  const completedCount = checks.filter(c => data[c.id]).length;
+  const totalCount = checks.length;
   
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center border-b pb-2">
-        <h3 className="text-lg font-medium text-gray-900">QM - Ausgangs- und Funktionschecks</h3>
+        <h3 className="text-lg font-medium text-gray-900">Allgemeine Ausgangschecks</h3>
         <div className="flex items-center space-x-4">
-          {categoryCode && (
-            <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded">
-              Kategorie: {categoryCode}
-            </span>
-          )}
           <span className="text-sm">
             <span className={`font-semibold ${
-              status.failed > 0 ? 'text-red-600' :
-              status.completed === status.total ? 'text-green-600' : 'text-gray-600'
+              completedCount === totalCount ? 'text-green-600' : 'text-gray-600'
             }`}>
-              {status.completed}/{status.total} geprüft
+              {completedCount}/{totalCount} geprüft
             </span>
-            {status.failed > 0 && (
-              <span className="text-red-600 ml-2">({status.failed} fehlgeschlagen)</span>
-            )}
           </span>
+          {completedCount === totalCount && (
+            <CheckCircleIcon className="h-6 w-6 text-green-500" />
+          )}
         </div>
       </div>
       
-      <div className="space-y-4">
-        {checks.map(check => renderCheck(check))}
+      <div className="bg-gray-50 rounded-lg p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {checks.map(check => (
+            <label
+              key={check.id}
+              className="flex items-center gap-3 p-3 bg-white rounded border hover:border-blue-300 cursor-pointer transition-colors"
+            >
+              <input
+                type="checkbox"
+                checked={!!data[check.id]}
+                onChange={() => handleCheckToggle(check.id)}
+                className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-700">{check.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <InformationCircleIcon className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1">Hinweis:</p>
+            <p>Diese Ausgangschecks sollten vor dem Versand oder der Übergabe an den Kunden durchgeführt werden.</p>
+          </div>
+        </div>
       </div>
     </div>
   );

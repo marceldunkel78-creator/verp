@@ -267,6 +267,7 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             # Tab 1: Basisinfos
             'title', 'description', 'status', 'status_display',
             'customer', 'customer_name', 'customer_contact', 'customer_email', 'customer_phone',
+            'linked_system', 'inventory_item',
             'product_name', 'product_serial', 'product_purchase_date',
             'warranty_status', 'fault_description',
             
@@ -310,6 +311,7 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             
             # Tab 1 - Basisinfos
             'customer', 'customer_name', 'customer_contact', 'customer_email', 'customer_phone',
+            'linked_system', 'inventory_item',
             'title', 'description', 'status',
             'product_name', 'product_serial', 'product_purchase_date', 'warranty_status', 'fault_description',
 

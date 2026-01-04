@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   ClipboardDocumentListIcon,
-  InboxArrowDownIcon,
   PlayIcon,
   CheckCircleIcon,
   XCircleIcon,
@@ -10,15 +10,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
-  ExclamationCircleIcon
+  PencilSquareIcon,
+  PlusIcon
 } from '@heroicons/react/24/outline';
 
 const STATUS_CONFIG = {
-  // Inbox statuses
-  pending: { label: 'Ausstehend', color: 'bg-yellow-100 text-yellow-800', icon: ClockIcon },
-  accepted: { label: 'Angenommen', color: 'bg-green-100 text-green-800', icon: CheckCircleIcon },
-  rejected: { label: 'Abgelehnt', color: 'bg-red-100 text-red-800', icon: XCircleIcon },
-  // Order statuses
   created: { label: 'Erstellt', color: 'bg-gray-100 text-gray-800', icon: ClipboardDocumentListIcon },
   in_progress: { label: 'In Bearbeitung', color: 'bg-blue-100 text-blue-800', icon: PlayIcon },
   completed: { label: 'Abgeschlossen', color: 'bg-green-100 text-green-800', icon: CheckCircleIcon },
@@ -26,12 +22,7 @@ const STATUS_CONFIG = {
 };
 
 const ProductionOrders = () => {
-  const [activeTab, setActiveTab] = useState('inbox');
-  
-  // Inbox state
-  const [inboxItems, setInboxItems] = useState([]);
-  const [inboxLoading, setInboxLoading] = useState(false);
-  const [inboxFilter, setInboxFilter] = useState('pending');
+  const navigate = useNavigate();
   
   // Orders state
   const [orders, setOrders] = useState([]);
@@ -44,38 +35,36 @@ const ProductionOrders = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newOrderData, setNewOrderData] = useState({ vs_hardware: '', quantity: 1, notes: '' });
 
+  // Start order modal with category selection
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [startingOrder, setStartingOrder] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [productCategories, setProductCategories] = useState([]);
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
-    if (activeTab === 'inbox') {
-      fetchInbox();
-    } else {
-      fetchOrders();
-    }
+    fetchOrders();
     setCurrentPage(1);
-  }, [activeTab, inboxFilter, ordersFilter]);
+  }, [ordersFilter]);
 
   useEffect(() => {
-    if (activeTab === 'orders') {
-      fetchOrders();
-    }
+    fetchOrders();
   }, [currentPage]);
 
-  const fetchInbox = async () => {
-    setInboxLoading(true);
+  useEffect(() => {
+    fetchProductCategories();
+  }, []);
+
+  const fetchProductCategories = async () => {
     try {
-      const params = new URLSearchParams();
-      if (inboxFilter !== 'all') params.append('status', inboxFilter);
-      
-      const response = await api.get(`/manufacturing/production-inbox/?${params.toString()}`);
-      setInboxItems(response.data.results || response.data);
+      const response = await api.get('/settings/product-categories/?is_active=true');
+      setProductCategories(response.data.results || response.data);
     } catch (error) {
-      console.error('Error fetching inbox:', error);
-    } finally {
-      setInboxLoading(false);
+      console.error('Error fetching product categories:', error);
     }
   };
 
@@ -127,39 +116,34 @@ const ProductionOrders = () => {
       alert('Fertigungsauftrag erstellt');
       setShowCreateModal(false);
       setNewOrderData({ vs_hardware: '', quantity: 1, notes: '' });
-      // Refresh lists
       fetchOrders();
-      fetchInbox();
     } catch (error) {
       console.error('Error creating production order:', error);
       alert('Fehler beim Erstellen: ' + (error.response?.data?.error || error.message));
     }
   };
 
-  const handleAcceptInbox = async (itemId) => {
-    try {
-      await api.post(`/manufacturing/production-inbox/${itemId}/accept/`);
-      fetchInbox();
-    } catch (error) {
-      console.error('Error accepting inbox item:', error);
-      alert('Fehler: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleRejectInbox = async (itemId) => {
-    const reason = prompt('Ablehnungsgrund (optional):');
-    try {
-      await api.post(`/manufacturing/production-inbox/${itemId}/reject/`, { reason });
-      fetchInbox();
-    } catch (error) {
-      console.error('Error rejecting inbox item:', error);
-      alert('Fehler: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
   const handleStartOrder = async (orderId) => {
+    // Show modal to select category
+    const order = orders.find(o => o.id === orderId);
+    setStartingOrder(order);
+    setSelectedCategory(order?.product_category || '');
+    setShowStartModal(true);
+  };
+
+  const confirmStartOrder = async () => {
+    if (!selectedCategory) {
+      alert('Bitte eine Warenkategorie auswählen');
+      return;
+    }
+    
     try {
-      await api.post(`/manufacturing/production-orders/${orderId}/start/`);
+      await api.post(`/manufacturing/production-orders/${startingOrder.id}/start/`, {
+        product_category: selectedCategory
+      });
+      setShowStartModal(false);
+      setStartingOrder(null);
+      setSelectedCategory('');
       fetchOrders();
     } catch (error) {
       console.error('Error starting order:', error);
@@ -211,203 +195,81 @@ const ProductionOrders = () => {
     );
   };
 
-  // Count pending inbox items
-  const pendingCount = inboxItems.filter(i => i.status === 'pending').length;
-
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Fertigungsaufträge</h1>
-        <p className="text-gray-500 text-sm">Auftragseingang und Fertigungsübersicht</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Fertigungsaufträge</h1>
+          <p className="text-gray-500 text-sm">Übersicht aller Fertigungsaufträge</p>
+        </div>
+        <button
+          onClick={() => { setShowCreateModal(true); fetchVSHardware(); }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <PlusIcon className="h-5 w-5" />
+          Neuer Fertigungsauftrag
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b">
-        <nav className="flex -mb-px">
-          <button
-            onClick={() => setActiveTab('inbox')}
-            className={`flex items-center gap-2 px-6 py-4 border-b-2 font-medium text-sm ${
-              activeTab === 'inbox'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <InboxArrowDownIcon className="h-5 w-5" />
-            Auftragseingang
-            {pendingCount > 0 && (
-              <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 ml-1">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`flex items-center gap-2 px-6 py-4 border-b-2 font-medium text-sm ${
-              activeTab === 'orders'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <ClipboardDocumentListIcon className="h-5 w-5" />
-            Fertigungsaufträge
-          </button>
-        </nav>
-      </div>
 
-      {/* Inbox Tab */}
-      {activeTab === 'inbox' && (
-        <div className="bg-white rounded-lg shadow">
-          {/* Filter */}
-          <div className="p-4 border-b flex items-center justify-between">
-            <div className="flex gap-2">
-              {['all', 'pending', 'accepted', 'rejected'].map(filter => (
-                <button
-                  key={filter}
-                  onClick={() => setInboxFilter(filter)}
-                  className={`px-4 py-2 rounded-lg text-sm ${
-                    inboxFilter === filter
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+
+      {/* Create Order Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowCreateModal(false)} />
+          <div className="bg-white rounded-lg shadow-lg z-10 w-full max-w-md p-6">
+            <h3 className="text-lg font-medium mb-4">Neuer Fertigungsauftrag</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">VS-Hardware</label>
+                <select
+                  value={newOrderData.vs_hardware}
+                  onChange={(e) => setNewOrderData({ ...newOrderData, vs_hardware: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
                 >
-                  {filter === 'all' ? 'Alle' : STATUS_CONFIG[filter]?.label}
-                </button>
-              ))}
-            </div>
-            <div>
-              <button
-                onClick={() => { setShowCreateModal(true); fetchVSHardware(); }}
-                className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm"
-              >
-                Neuer Fertigungsauftrag
-              </button>
-            </div>
-          </div>
-
-          {/* Create Order Modal */}
-          {showCreateModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowCreateModal(false)} />
-              <div className="bg-white rounded-lg shadow-lg z-10 w-full max-w-md p-6">
-                <h3 className="text-lg font-medium mb-4">Neuer Fertigungsauftrag</h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">VS-Hardware</label>
-                    <select
-                      value={newOrderData.vs_hardware}
-                      onChange={(e) => setNewOrderData({ ...newOrderData, vs_hardware: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                    >
-                      <option value="">Auswählen...</option>
-                      {vsList.map(v => (
-                        <option key={v.id} value={v.id}>{v.part_number} - {v.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">Menge</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={newOrderData.quantity}
-                      onChange={(e) => setNewOrderData({ ...newOrderData, quantity: parseInt(e.target.value || '1') })}
-                      className="w-full border rounded px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-700 mb-1">Notizen (optional)</label>
-                    <textarea
-                      value={newOrderData.notes}
-                      onChange={(e) => setNewOrderData({ ...newOrderData, notes: e.target.value })}
-                      className="w-full border rounded px-3 py-2"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 mt-4">
-                    <button
-                      onClick={() => setShowCreateModal(false)}
-                      className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
-                    >Abbrechen</button>
-                    <button
-                      onClick={handleCreateOrder}
-                      className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-                    >Erstellen</button>
-                  </div>
-                </div>
+                  <option value="">Auswählen...</option>
+                  {vsList.map(v => (
+                    <option key={v.id} value={v.id}>{v.part_number} - {v.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Menge</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newOrderData.quantity}
+                  onChange={(e) => setNewOrderData({ ...newOrderData, quantity: parseInt(e.target.value || '1') })}
+                  className="w-full border rounded px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Notizen (optional)</label>
+                <textarea
+                  value={newOrderData.notes}
+                  onChange={(e) => setNewOrderData({ ...newOrderData, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
+                >Abbrechen</button>
+                <button
+                  onClick={handleCreateOrder}
+                  className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+                >Erstellen</button>
               </div>
             </div>
-          )}
-
-          {/* Inbox List */}
-          {inboxLoading ? (
-            <div className="p-8 text-center text-gray-500">Laden...</div>
-          ) : inboxItems.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <InboxArrowDownIcon className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>Keine Einträge vorhanden</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {inboxItems.map(item => (
-                <div key={item.id} className="p-4 hover:bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <StatusBadge status={item.status} />
-                        <span className="text-sm text-gray-500">
-                          Eingegangen: {formatDateTime(item.received_at)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-blue-600">{item.vs_hardware_part_number}</span>
-                        <span className="font-medium">{item.vs_hardware_name}</span>
-                        <span className="text-gray-500">× {item.quantity}</span>
-                      </div>
-                      {item.customer_order_number && (
-                        <div className="text-sm text-gray-600 mt-1">
-                          Kundenauftrag: <span className="font-mono">{item.customer_order_number}</span>
-                          {item.customer_name && ` • ${item.customer_name}`}
-                        </div>
-                      )}
-                      {item.notes && (
-                        <p className="text-sm text-gray-500 mt-1">{item.notes}</p>
-                      )}
-                    </div>
-                    {item.status === 'pending' && (
-                      <div className="flex gap-2 ml-4">
-                        <button
-                          onClick={() => handleAcceptInbox(item.id)}
-                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-                        >
-                          Annehmen
-                        </button>
-                        <button
-                          onClick={() => handleRejectInbox(item.id)}
-                          className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-                        >
-                          Ablehnen
-                        </button>
-                      </div>
-                    )}
-                    {item.status === 'accepted' && item.production_order && (
-                      <div className="text-sm text-gray-500">
-                        → FA-{item.production_order}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Modal moved above */}
-
-            </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Orders Tab */}
-      {activeTab === 'orders' && (
+      {/* Orders List */}
+      (
         <div className="bg-white rounded-lg shadow">
           {/* Search & Filter */}
           <div className="p-4 border-b">
@@ -511,12 +373,21 @@ const ProductionOrders = () => {
                         </button>
                       )}
                       {order.status === 'in_progress' && (
-                        <button
-                          onClick={() => handleCompleteOrder(order.id)}
-                          className="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 mr-2"
-                        >
-                          Abschließen
-                        </button>
+                        <>
+                          <button
+                            onClick={() => navigate(`/manufacturing/production-orders/${order.id}`)}
+                            className="text-sm px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 mr-2"
+                            title="Bearbeiten"
+                          >
+                            <PencilSquareIcon className="h-4 w-4 inline" />
+                          </button>
+                          <button
+                            onClick={() => handleCompleteOrder(order.id)}
+                            className="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 mr-2"
+                          >
+                            Abschließen
+                          </button>
+                        </>
                       )}
                       {(order.status === 'created' || order.status === 'in_progress') && (
                         <button
@@ -531,6 +402,56 @@ const ProductionOrders = () => {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {/* Start Order Modal */}
+          {showStartModal && startingOrder && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowStartModal(false)} />
+              <div className="bg-white rounded-lg shadow-lg z-10 w-full max-w-md p-6">
+                <h3 className="text-lg font-medium mb-4">Fertigungsauftrag starten</h3>
+                <div className="space-y-4">
+                  <div className="bg-gray-50 p-3 rounded">
+                    <div className="font-mono text-blue-600">{startingOrder.order_number}</div>
+                    <div className="text-sm">{startingOrder.vs_hardware_part_number} - {startingOrder.vs_hardware_name}</div>
+                    <div className="text-sm text-gray-500">Menge: {startingOrder.quantity}</div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Warenkategorie <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      <option value="">Auswählen...</option>
+                      {productCategories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Die Warenkategorie bestimmt die Fertigungscheckliste.
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-4 border-t">
+                    <button
+                      onClick={() => { setShowStartModal(false); setStartingOrder(null); setSelectedCategory(''); }}
+                      className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
+                    >
+                      Abbrechen
+                    </button>
+                    <button
+                      onClick={confirmStartOrder}
+                      disabled={!selectedCategory}
+                      className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                      Starten
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Pagination */}
@@ -561,7 +482,6 @@ const ProductionOrders = () => {
             </div>
           )}
         </div>
-      )}
     </div>
   );
 };

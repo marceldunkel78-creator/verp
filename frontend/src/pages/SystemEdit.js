@@ -7,7 +7,6 @@ import {
   InformationCircleIcon,
   CubeIcon,
   PhotoIcon,
-  LinkIcon,
   TrashIcon,
   PlusIcon,
   XMarkIcon,
@@ -17,19 +16,22 @@ import {
   SparklesIcon,
   CheckIcon,
   ExclamationTriangleIcon,
-  ClockIcon,
   WrenchScrewdriverIcon,
   FolderIcon,
   ShoppingCartIcon,
-  TruckIcon
+  TicketIcon,
+  ArrowTopRightOnSquareIcon,
+  KeyIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },
   { id: 'components', name: 'Komponenten', icon: CubeIcon },
   { id: 'photos', name: 'Fotos', icon: PhotoIcon },
-  { id: 'history', name: 'Historie', icon: ClockIcon },
-  { id: 'related', name: 'Verknüpfungen', icon: LinkIcon }
+  { id: 'projects', name: 'Projekte', icon: FolderIcon },
+  { id: 'orders', name: 'Aufträge', icon: ShoppingCartIcon },
+  { id: 'service', name: 'Service', icon: WrenchScrewdriverIcon },
+  { id: 'visiview', name: 'VisiView', icon: KeyIcon }
 ];
 
 const SystemEdit = () => {
@@ -55,9 +57,19 @@ const SystemEdit = () => {
     location: '',
     installation_date: '',
     warranty_end: '',
-    notes: ''
+    notes: '',
+    visiview_license: ''
   });
   const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [searchingCustomers, setSearchingCustomers] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
+  // VisiView License State
+  const [licenses, setLicenses] = useState([]);
+  const [licenseSearch, setLicenseSearch] = useState('');
+  const [searchingLicenses, setSearchingLicenses] = useState(false);
+  const [selectedLicense, setSelectedLicense] = useState(null);
   
   // Components State
   const [components, setComponents] = useState([]);
@@ -71,21 +83,22 @@ const SystemEdit = () => {
   const [photoCarouselOpen, setPhotoCarouselOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   
-  // Related Items State
-  const [relatedItems, setRelatedItems] = useState({
-    projects: [],
-    customer_orders: [],
-    orders: []
-  });
+  // Projekte Tab State
+  const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   
-  // History State (for Historie tab)
-  const [historyData, setHistoryData] = useState({
-    projects: [],
-    customer_orders: [],
-    orders: [],
-    service_tickets: []
-  });
-  const [historyLoading, setHistoryLoading] = useState(false);
+  // Aufträge Tab State
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  
+  // Service Tab State
+  const [serviceTickets, setServiceTickets] = useState([]);
+  const [rmaCases, setRmaCases] = useState([]);
+  const [serviceLoading, setServiceLoading] = useState(false);
+  
+  // VisiView Tab State
+  const [visiviewTickets, setVisiviewTickets] = useState([]);
+  const [visiviewLoading, setVisiviewLoading] = useState(false);
   
   // Customer inventory for component modal
   const [customerInventory, setCustomerInventory] = useState([]);
@@ -100,14 +113,20 @@ const SystemEdit = () => {
   useEffect(() => {
     if (id) {
       fetchSystem();
-      fetchCustomers();
     }
   }, [id]);
 
-  // Load history when tab is selected
+  // Load tab data when tab is selected
   useEffect(() => {
-    if (activeTab === 'history' && id && !historyData.projects?.length && !historyLoading) {
-      fetchHistory();
+    if (!id) return;
+    if (activeTab === 'projects' && !projects.length && !projectsLoading) {
+      fetchProjects();
+    } else if (activeTab === 'orders' && !customerOrders.length && !ordersLoading) {
+      fetchOrders();
+    } else if (activeTab === 'service' && !serviceTickets.length && !rmaCases.length && !serviceLoading) {
+      fetchServiceData();
+    } else if (activeTab === 'visiview' && !visiviewTickets.length && !visiviewLoading) {
+      fetchVisiviewTickets();
     }
   }, [activeTab, id]);
 
@@ -125,13 +144,21 @@ const SystemEdit = () => {
         location: data.location || '',
         installation_date: data.installation_date || '',
         warranty_end: data.warranty_end || '',
-        notes: data.notes || ''
+        notes: data.notes || '',
+        visiview_license: data.visiview_license || ''
       });
       setComponents(data.components || []);
       setPhotos(data.photos || []);
       
-      // Fetch related items
-      fetchRelatedItems();
+      // Load customer details if customer is set
+      if (data.customer_details) {
+        setSelectedCustomer(data.customer_details);
+      }
+      
+      // Load license details if license is set
+      if (data.visiview_license_details) {
+        setSelectedLicense(data.visiview_license_details);
+      }
     } catch (error) {
       console.error('Error fetching system:', error);
       alert('Fehler beim Laden des Systems');
@@ -140,33 +167,118 @@ const SystemEdit = () => {
     }
   };
 
-  const fetchCustomers = async () => {
+  const searchCustomers = async () => {
+    if (!customerSearch.trim()) return;
+    setSearchingCustomers(true);
     try {
-      const response = await api.get('/customers/customers/?is_active=true');
-      setCustomers(response.data.results || response.data);
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-    }
-  };
-
-  const fetchRelatedItems = async () => {
-    try {
-      const response = await api.get(`/systems/systems/${id}/related_items/`);
-      setRelatedItems(response.data);
-    } catch (error) {
-      console.error('Error fetching related items:', error);
-    }
-  };
-
-  const fetchHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const response = await api.get(`/systems/systems/${id}/history/`);
-      setHistoryData(response.data);
-    } catch (error) {
-      console.error('Error fetching history:', error);
+      const params = new URLSearchParams();
+      params.append('search', customerSearch);
+      params.append('is_active', 'true');
+      const response = await api.get(`/customers/customers/?${params.toString()}`);
+      const data = response.data.results || response.data || [];
+      setCustomers(data);
+    } catch (err) {
+      console.error('Error searching customers:', err);
+      setCustomers([]);
     } finally {
-      setHistoryLoading(false);
+      setSearchingCustomers(false);
+    }
+  };
+
+  const selectCustomer = (customer) => {
+    setSelectedCustomer(customer);
+    setFormData(prev => ({ ...prev, customer: customer.id }));
+    setCustomers([]);
+    setCustomerSearch('');
+    setHasChanges(true);
+  };
+
+  const clearCustomer = () => {
+    setSelectedCustomer(null);
+    setFormData(prev => ({ ...prev, customer: '' }));
+    setHasChanges(true);
+  };
+  
+  const searchLicenses = async () => {
+    if (!licenseSearch.trim()) return;
+    setSearchingLicenses(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('search', licenseSearch);
+      const response = await api.get(`/visiview/licenses/?${params.toString()}`);
+      const data = response.data.results || response.data || [];
+      setLicenses(data);
+    } catch (err) {
+      console.error('Error searching licenses:', err);
+      setLicenses([]);
+    } finally {
+      setSearchingLicenses(false);
+    }
+  };
+
+  const selectLicense = (license) => {
+    setSelectedLicense(license);
+    setFormData(prev => ({ ...prev, visiview_license: license.id }));
+    setLicenses([]);
+    setLicenseSearch('');
+    setHasChanges(true);
+  };
+
+  const clearLicense = () => {
+    setSelectedLicense(null);
+    setFormData(prev => ({ ...prev, visiview_license: '' }));
+    setHasChanges(true);
+  };
+
+  const fetchProjects = async () => {
+    setProjectsLoading(true);
+    try {
+      const response = await api.get(`/projects/?linked_system=${id}`);
+      setProjects(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const response = await api.get(`/customer-orders/orders/?linked_system=${id}`);
+      setCustomerOrders(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const fetchServiceData = async () => {
+    setServiceLoading(true);
+    try {
+      const [ticketsRes, rmaRes] = await Promise.all([
+        api.get(`/service/tickets/?linked_system=${id}`),
+        api.get(`/service/rma/?linked_system=${id}`)
+      ]);
+      setServiceTickets(ticketsRes.data.results || ticketsRes.data || []);
+      setRmaCases(rmaRes.data.results || rmaRes.data || []);
+    } catch (error) {
+      console.error('Error fetching service data:', error);
+    } finally {
+      setServiceLoading(false);
+    }
+  };
+
+  const fetchVisiviewTickets = async () => {
+    setVisiviewLoading(true);
+    try {
+      const response = await api.get(`/visiview/tickets/?linked_system=${id}`);
+      setVisiviewTickets(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching VisiView tickets:', error);
+    } finally {
+      setVisiviewLoading(false);
     }
   };
   
@@ -493,18 +605,141 @@ const SystemEdit = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Kunde
               </label>
-              <select
-                value={formData.customer}
-                onChange={(e) => handleInputChange('customer', e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Kunde auswählen...</option>
-                {customers.map(customer => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.customer_number} - {customer.first_name} {customer.last_name}
-                  </option>
-                ))}
-              </select>
+              {selectedCustomer ? (
+                <div className="flex items-center gap-2 p-3 bg-gray-50 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">
+                      {selectedCustomer.full_name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`}
+                    </div>
+                    <div className="text-sm text-gray-600">{selectedCustomer.customer_number}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearCustomer}
+                    className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-200"
+                    title="Kunde entfernen"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && searchCustomers()}
+                      placeholder="Kundenname oder -nummer suchen..."
+                      className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchCustomers}
+                      disabled={searchingCustomers}
+                      className="px-4 py-2 border rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {searchingCustomers ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                      ) : (
+                        'Suchen'
+                      )}
+                    </button>
+                  </div>
+
+                  {customers.length > 0 && (
+                    <div className="mt-2 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {customers.map((c) => (
+                        <div
+                          key={c.id}
+                          onClick={() => selectCustomer(c)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900">
+                            {c.full_name || `${c.first_name || ''} ${c.last_name || ''}`}
+                          </div>
+                          <div className="text-sm text-gray-600">{c.customer_number}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                VisiView Lizenz
+              </label>
+              {selectedLicense ? (
+                <div className="flex items-center gap-2 p-3 bg-gray-50 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">
+                      {selectedLicense.license_number}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Dongle: {selectedLicense.serial_number}
+                      {selectedLicense.version && ` • Version: ${selectedLicense.version}`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearLicense}
+                    className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-200"
+                    title="Lizenz entfernen"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={licenseSearch}
+                      onChange={(e) => setLicenseSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && searchLicenses()}
+                      placeholder="Lizenznummer oder Dongle-Seriennummer suchen..."
+                      className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchLicenses}
+                      disabled={searchingLicenses}
+                      className="px-4 py-2 border rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {searchingLicenses ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                      ) : (
+                        'Suchen'
+                      )}
+                    </button>
+                  </div>
+
+                  {licenses.length > 0 && (
+                    <div className="mt-2 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {licenses.map((lic) => (
+                        <div
+                          key={lic.id}
+                          onClick={() => selectLicense(lic)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900">{lic.license_number}</div>
+                          <div className="text-sm text-gray-600">
+                            Dongle: {lic.serial_number}
+                            {lic.version && ` • Version: ${lic.version}`}
+                            {lic.customer_name && (
+                              <span className="ml-2 text-gray-500">
+                                ({lic.customer_name})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -764,189 +999,225 @@ const SystemEdit = () => {
           </div>
         )}
 
-        {/* History Tab */}
-        {activeTab === 'history' && (
+        {/* Projekte Tab */}
+        {activeTab === 'projects' && (
           <div>
-            {/* Header mit Neues Projekt Button */}
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium">System-Historie</h3>
+              <h3 className="text-lg font-medium">Verknüpfte Projekte</h3>
               <button
-                onClick={() => navigate(`/sales/projects?customer=${formData.customer}&system=${id}`)}
+                onClick={() => navigate(`/sales/projects/new?customer=${formData.customer}&system=${id}`)}
                 className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
               >
                 <PlusIcon className="h-5 w-5" />
-                Neues Projekt erstellen
+                Neues Projekt
               </button>
             </div>
             
-            {!historyData.projects?.length && !historyData.customer_orders?.length && 
-             !historyData.orders?.length && !historyData.service_tickets?.length && !historyLoading ? (
+            {projectsLoading ? (
               <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+            ) : projects.length > 0 ? (
+              <div className="space-y-2">
+                {projects.map(project => (
+                  <div
+                    key={project.id}
+                    onClick={() => navigate(`/sales/projects/${project.id}`)}
+                    className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                  >
+                    <div>
+                      <span className="font-mono text-blue-600">{project.project_number}</span>
+                      <span className="ml-2 font-medium">{project.name}</span>
+                      {project.description && (
+                        <p className="text-sm text-gray-500 mt-1">{project.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        project.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        project.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {project.status}
+                      </span>
+                      <ArrowTopRightOnSquareIcon className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <FolderIcon className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>Keine Projekte mit diesem System verknüpft</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Aufträge Tab */}
+        {activeTab === 'orders' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-medium">Kundenaufträge</h3>
+            </div>
+            
+            {ordersLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+            ) : customerOrders.length > 0 ? (
+              <div className="space-y-2">
+                {customerOrders.map(order => (
+                  <div
+                    key={order.id}
+                    onClick={() => navigate(`/sales/order-processing/${order.id}`)}
+                    className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                  >
+                    <div>
+                      <span className="font-mono text-green-600">{order.order_number}</span>
+                      {order.order_date && (
+                        <span className="ml-2 text-sm text-gray-500">
+                          {new Date(order.order_date).toLocaleDateString('de-DE')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {order.total && (
+                        <span className="text-sm font-medium">
+                          {parseFloat(order.total).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+                        </span>
+                      )}
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        order.status === 'completed' || order.status === 'delivered' ? 'bg-green-100 text-green-700' :
+                        order.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {order.status}
+                      </span>
+                      <ArrowTopRightOnSquareIcon className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <ShoppingCartIcon className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>Keine Aufträge mit diesem System verknüpft</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Service Tab */}
+        {activeTab === 'service' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-medium">Service & RMA</h3>
+              <div className="flex gap-2">
                 <button
-                  onClick={fetchHistory}
-                  className="text-blue-600 hover:underline"
+                  onClick={() => navigate(`/service/tickets/new?customer=${formData.customer}&system=${id}`)}
+                  className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700"
                 >
-                  Historie laden
+                  <PlusIcon className="h-5 w-5" />
+                  Neues Ticket
+                </button>
+                <button
+                  onClick={() => navigate(`/service/rma/new?customer=${formData.customer}&system=${id}`)}
+                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Neuer RMA-Fall
                 </button>
               </div>
-            ) : historyLoading ? (
+            </div>
+            
+            {serviceLoading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Projekte */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-blue-50 px-4 py-3 flex items-center gap-2">
-                    <FolderIcon className="h-5 w-5 text-blue-600" />
-                    <h4 className="font-medium text-blue-800">Projekte ({historyData.projects?.length || 0})</h4>
-                  </div>
-                  {historyData.projects?.length > 0 ? (
-                    <div className="divide-y">
-                      {historyData.projects.map(project => (
-                        <a
-                            key={project.id}
-                            href={`/sales/projects/${project.id}`}
-                            className="block px-4 py-3 hover:bg-gray-50"
-                          >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <span className="font-mono text-blue-600">{project.project_number}</span>
-                              <span className="ml-2">{project.name}</span>
-                            </div>
-                            <span className="text-sm text-gray-500">{project.status}</span>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="px-4 py-3 text-gray-500">Keine Projekte</p>
-                  )}
-                </div>
-
-                {/* Kundenaufträge */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-green-50 px-4 py-3 flex items-center gap-2">
-                    <ShoppingCartIcon className="h-5 w-5 text-green-600" />
-                    <h4 className="font-medium text-green-800">Kundenaufträge ({historyData.customer_orders?.length || 0})</h4>
-                  </div>
-                  {historyData.customer_orders?.length > 0 ? (
-                    <div className="divide-y">
-                      {historyData.customer_orders.map(order => (
-                        <a
-                          key={order.id}
-                          href={`/sales/order-processing/${order.id}`}
-                          className="block px-4 py-3 hover:bg-gray-50"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <span className="font-mono text-green-600">{order.order_number}</span>
-                              {order.order_date && (
-                                <span className="ml-2 text-sm text-gray-500">
-                                  {new Date(order.order_date).toLocaleDateString('de-DE')}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {order.total && (
-                                <span className="text-sm font-medium">
-                                  {parseFloat(order.total).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
-                                </span>
-                              )}
-                              <span className="text-sm text-gray-500">{order.status}</span>
-                            </div>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="px-4 py-3 text-gray-500">Keine Kundenaufträge</p>
-                  )}
-                </div>
-
-                {/* Bestellungen (Einkauf) */}
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-purple-50 px-4 py-3 flex items-center gap-2">
-                    <TruckIcon className="h-5 w-5 text-purple-600" />
-                    <h4 className="font-medium text-purple-800">Bestellungen ({historyData.orders?.length || 0})</h4>
-                  </div>
-                  {historyData.orders?.length > 0 ? (
-                    <div className="divide-y">
-                      {historyData.orders.map(order => (
-                        <a
-                          key={order.id}
-                          href={`/procurement/orders/${order.id}`}
-                          className="block px-4 py-3 hover:bg-gray-50"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <span className="font-mono text-purple-600">{order.order_number}</span>
-                              {order.order_date && (
-                                <span className="ml-2 text-sm text-gray-500">
-                                  {new Date(order.order_date).toLocaleDateString('de-DE')}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {order.total_amount && (
-                                <span className="text-sm font-medium">
-                                  {parseFloat(order.total_amount).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
-                                </span>
-                              )}
-                              <span className="text-sm text-gray-500">{order.status}</span>
-                            </div>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="px-4 py-3 text-gray-500">Keine Bestellungen</p>
-                  )}
-                </div>
-
-                {/* Service-Tickets */}
+                {/* Service Tickets */}
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-orange-50 px-4 py-3 flex items-center gap-2">
-                    <WrenchScrewdriverIcon className="h-5 w-5 text-orange-600" />
-                    <h4 className="font-medium text-orange-800">Service-Tickets ({historyData.service_tickets?.length || 0})</h4>
+                    <TicketIcon className="h-5 w-5 text-orange-600" />
+                    <h4 className="font-medium text-orange-800">Service-Tickets ({serviceTickets.length})</h4>
                   </div>
-                  {historyData.service_tickets?.length > 0 ? (
+                  {serviceTickets.length > 0 ? (
                     <div className="divide-y">
-                      {historyData.service_tickets.map(ticket => (
-                        <a
+                      {serviceTickets.map(ticket => (
+                        <div
                           key={ticket.id}
-                          href={`/service/tickets/${ticket.id}`}
-                          className="block px-4 py-3 hover:bg-gray-50"
+                          onClick={() => navigate(`/service/tickets/${ticket.id}`)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex justify-between items-center"
                         >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <span className="font-mono text-orange-600">{ticket.ticket_number}</span>
-                              <span className="ml-2">{ticket.title}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                ticket.priority === 'high' || ticket.priority === 'urgent' 
-                                  ? 'bg-red-100 text-red-700' 
-                                  : 'bg-gray-100 text-gray-700'
-                              }`}>
-                                {ticket.priority}
-                              </span>
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                ticket.status === 'closed' || ticket.status === 'resolved'
-                                  ? 'bg-green-100 text-green-700'
-                                  : ticket.status === 'open' || ticket.status === 'new'
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {ticket.status}
-                              </span>
-                            </div>
+                          <div>
+                            <span className="font-mono text-orange-600">{ticket.ticket_number}</span>
+                            <span className="ml-2">{ticket.title}</span>
                           </div>
-                        </a>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              ticket.priority === 'high' || ticket.priority === 'urgent' 
+                                ? 'bg-red-100 text-red-700' 
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {ticket.priority}
+                            </span>
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              ticket.status === 'closed' || ticket.status === 'resolved'
+                                ? 'bg-green-100 text-green-700'
+                                : ticket.status === 'open' || ticket.status === 'new'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {ticket.status}
+                            </span>
+                            <ArrowTopRightOnSquareIcon className="h-4 w-4 text-gray-400" />
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : (
                     <p className="px-4 py-3 text-gray-500">Keine Service-Tickets</p>
+                  )}
+                </div>
+
+                {/* RMA Cases */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-purple-50 px-4 py-3 flex items-center gap-2">
+                    <WrenchScrewdriverIcon className="h-5 w-5 text-purple-600" />
+                    <h4 className="font-medium text-purple-800">RMA-Fälle ({rmaCases.length})</h4>
+                  </div>
+                  {rmaCases.length > 0 ? (
+                    <div className="divide-y">
+                      {rmaCases.map(rma => (
+                        <div
+                          key={rma.id}
+                          onClick={() => navigate(`/service/rma/${rma.id}`)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                        >
+                          <div>
+                            <span className="font-mono text-purple-600">{rma.rma_number}</span>
+                            <span className="ml-2">{rma.description || rma.title}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              rma.status === 'completed' || rma.status === 'closed'
+                                ? 'bg-green-100 text-green-700'
+                                : rma.status === 'in_progress'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {rma.status}
+                            </span>
+                            <ArrowTopRightOnSquareIcon className="h-4 w-4 text-gray-400" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-4 py-3 text-gray-500">Keine RMA-Fälle</p>
                   )}
                 </div>
               </div>
@@ -954,91 +1225,107 @@ const SystemEdit = () => {
           </div>
         )}
 
-        {/* Related Items Tab */}
-        {activeTab === 'related' && (
-          <div className="space-y-6">
-            {/* Projects */}
-            <div>
-              <h3 className="text-lg font-medium mb-3">Verknüpfte Projekte</h3>
-              {relatedItems.projects?.length > 0 ? (
-                <div className="space-y-2">
-                  {relatedItems.projects.map(project => (
-                    <a
-                      key={project.id}
-                      href={`/sales/projects/${project.id}`}
-                      className="block p-3 border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="font-mono text-blue-600">{project.project_number}</span>
-                          <span className="ml-2">{project.name}</span>
-                        </div>
-                        <span className="text-sm text-gray-500">{project.status}</span>
+        {/* VisiView Tab */}
+        {activeTab === 'visiview' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-medium">VisiView</h3>
+              <div className="flex gap-2">
+                {selectedLicense && (
+                  <button
+                    onClick={() => navigate(`/visiview/licenses/${selectedLicense.id}`)}
+                    className="flex items-center gap-2 border border-blue-600 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50"
+                  >
+                    <KeyIcon className="h-5 w-5" />
+                    Lizenz bearbeiten
+                  </button>
+                )}
+                <button
+                  onClick={() => navigate(`/visiview/tickets/new?customer=${formData.customer}&system=${id}${selectedLicense ? `&license=${selectedLicense.id}` : ''}`)}
+                  className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Neues VisiView Ticket
+                </button>
+              </div>
+            </div>
+            
+            {/* Verknüpfte Lizenz Info */}
+            {selectedLicense && (
+              <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <KeyIcon className="h-6 w-6 text-indigo-600" />
+                    <div>
+                      <div className="font-medium text-indigo-900">Verknüpfte Lizenz: {selectedLicense.license_number}</div>
+                      <div className="text-sm text-indigo-700">
+                        Dongle: {selectedLicense.serial_number}
+                        {selectedLicense.version && ` • Version: ${selectedLicense.version}`}
                       </div>
-                    </a>
-                  ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/visiview/licenses/${selectedLicense.id}`)}
+                    className="text-indigo-600 hover:text-indigo-800"
+                  >
+                    <ArrowTopRightOnSquareIcon className="h-5 w-5" />
+                  </button>
                 </div>
-              ) : (
-                <p className="text-gray-500">Keine verknüpften Projekte</p>
-              )}
-            </div>
-
-            {/* Customer Orders */}
-            <div>
-              <h3 className="text-lg font-medium mb-3">Kundenbestellungen</h3>
-              {relatedItems.customer_orders?.length > 0 ? (
-                <div className="space-y-2">
-                  {relatedItems.customer_orders.map(order => (
-                    <a
-                      key={order.id}
-                      href={`/sales/order-processing/${order.id}`}
-                      className="block p-3 border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex justify-between items-center">
+              </div>
+            )}
+            
+            {visiviewLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-indigo-50 px-4 py-3 flex items-center gap-2">
+                  <TicketIcon className="h-5 w-5 text-indigo-600" />
+                  <h4 className="font-medium text-indigo-800">VisiView Tickets ({visiviewTickets.length})</h4>
+                </div>
+                {visiviewTickets.length > 0 ? (
+                  <div className="divide-y">
+                    {visiviewTickets.map(ticket => (
+                      <div
+                        key={ticket.id}
+                        onClick={() => navigate(`/visiview/tickets/${ticket.id}`)}
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                      >
                         <div>
-                          <span className="font-mono text-blue-600">{order.order_number}</span>
+                          <span className="font-mono text-indigo-600">{ticket.ticket_number}</span>
+                          <span className="ml-2">{ticket.title}</span>
                         </div>
-                        <span className="text-sm text-gray-500">{order.status}</span>
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500">Keine Kundenbestellungen</p>
-              )}
-            </div>
-
-            {/* Purchase Orders */}
-            <div>
-              <h3 className="text-lg font-medium mb-3">Bestellungen (Einkauf)</h3>
-              {relatedItems.orders?.length > 0 ? (
-                <div className="space-y-2">
-                  {relatedItems.orders.map(order => (
-                    <a
-                      key={order.id}
-                      href={`/procurement/orders/${order.id}`}
-                      className="block p-3 border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="font-mono text-blue-600">{order.order_number}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            ticket.ticket_type === 'bug' ? 'bg-red-100 text-red-700' :
+                            ticket.ticket_type === 'feature' ? 'bg-blue-100 text-blue-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {ticket.ticket_type}
+                          </span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            ticket.status === 'closed' || ticket.status === 'resolved'
+                              ? 'bg-green-100 text-green-700'
+                              : ticket.status === 'open' || ticket.status === 'new'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {ticket.status}
+                          </span>
+                          <ArrowTopRightOnSquareIcon className="h-4 w-4 text-gray-400" />
                         </div>
-                        <span className="text-sm text-gray-500">{order.status}</span>
                       </div>
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500">Keine Einkaufsbestellungen</p>
-              )}
-            </div>
-
-            {/* Future: VisiView Licenses, Service Tickets */}
-            <div className="border-t pt-6">
-              <p className="text-sm text-gray-500">
-                VisiView-Lizenzen und Service-Tickets finden Sie im Historie-Tab.
-              </p>
-            </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-4 py-8 text-center text-gray-500">
+                    <TicketIcon className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                    <p>Keine VisiView Tickets</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

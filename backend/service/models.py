@@ -504,6 +504,24 @@ class RMACase(models.Model):
     customer_email = models.EmailField(blank=True, verbose_name='E-Mail')
     customer_phone = models.CharField(max_length=50, blank=True, verbose_name='Telefon')
     
+    # Verknüpfungen
+    linked_system = models.ForeignKey(
+        'systems.System',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_cases',
+        verbose_name='Verknüpftes System'
+    )
+    inventory_item = models.ForeignKey(
+        'inventory.InventoryItem',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_cases',
+        verbose_name='Warenlager-Artikel'
+    )
+    
     # Produktdaten
     product_name = models.CharField(max_length=200, blank=True, verbose_name='Produktbezeichnung')
     product_serial = models.CharField(max_length=100, blank=True, verbose_name='Seriennummer')

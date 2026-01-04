@@ -325,20 +325,31 @@ class ProductionOrderSerializer(serializers.ModelSerializer):
     """Serializer für Fertigungsaufträge"""
     vs_hardware_name = serializers.CharField(source='vs_hardware.name', read_only=True)
     vs_hardware_part_number = serializers.CharField(source='vs_hardware.part_number', read_only=True)
+    vs_hardware_description = serializers.CharField(source='vs_hardware.description', read_only=True)
+    vs_hardware_category = serializers.CharField(source='vs_hardware.product_category.code', read_only=True)
     customer_order_number = serializers.SerializerMethodField()
     customer_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.SerializerMethodField()
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
+    product_category_code = serializers.CharField(source='product_category.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_number = serializers.CharField(source='project.project_number', read_only=True)
+    observers_list = serializers.SerializerMethodField()
     
     class Meta:
         model = ProductionOrder
         fields = [
             'id', 'order_number',
             'inbox_item', 'vs_hardware', 'vs_hardware_name', 'vs_hardware_part_number',
+            'vs_hardware_description', 'vs_hardware_category',
             'customer_order', 'customer_order_number', 'customer_name',
+            'product_category', 'product_category_name', 'product_category_code',
+            'project', 'project_name', 'project_number',
             'quantity', 'status', 'status_display',
+            'serial_number', 'estimated_completion_date', 'checklist_data',
             'planned_start', 'planned_end', 'actual_start', 'actual_end',
-            'notes',
+            'notes', 'observers', 'observers_list',
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
         read_only_fields = ['order_number', 'created_at', 'updated_at', 'created_by']
@@ -356,6 +367,132 @@ class ProductionOrderSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+    
+    def get_observers_list(self, obj):
+        return [
+            {
+                'id': user.id,
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'full_name': f"{user.first_name} {user.last_name}".strip() or user.username
+            }
+            for user in obj.observers.all()
+        ]
+
+
+class ProductionOrderDetailSerializer(serializers.ModelSerializer):
+    """Detaillierter Serializer für Fertigungsauftrag mit Material-Informationen"""
+    vs_hardware_name = serializers.CharField(source='vs_hardware.name', read_only=True)
+    vs_hardware_part_number = serializers.CharField(source='vs_hardware.part_number', read_only=True)
+    vs_hardware_description = serializers.CharField(source='vs_hardware.description', read_only=True)
+    vs_hardware_category = serializers.CharField(source='vs_hardware.product_category.code', read_only=True)
+    vs_hardware_materials = serializers.SerializerMethodField()
+    vs_hardware_documents = serializers.SerializerMethodField()
+    customer_order_number = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
+    product_category_code = serializers.CharField(source='product_category.code', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_number = serializers.CharField(source='project.project_number', read_only=True)
+    observers_list = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ProductionOrder
+        fields = [
+            'id', 'order_number',
+            'inbox_item', 'vs_hardware', 'vs_hardware_name', 'vs_hardware_part_number',
+            'vs_hardware_description', 'vs_hardware_category',
+            'vs_hardware_materials', 'vs_hardware_documents',
+            'customer_order', 'customer_order_number', 'customer_name',
+            'product_category', 'product_category_name', 'product_category_code',
+            'project', 'project_name', 'project_number',
+            'quantity', 'status', 'status_display',
+            'serial_number', 'estimated_completion_date', 'checklist_data',
+            'planned_start', 'planned_end', 'actual_start', 'actual_end',
+            'notes', 'observers', 'observers_list',
+            'created_at', 'updated_at', 'created_by', 'created_by_name'
+        ]
+        read_only_fields = ['order_number', 'created_at', 'updated_at', 'created_by']
+    
+    def get_vs_hardware_materials(self, obj):
+        """Gibt die Materialliste der VS-Hardware mit Lagerbestandsinformationen zurück"""
+        materials = []
+        for item in obj.vs_hardware.material_items.all():
+            # Hole Lagerbestand aus inventory
+            stock_quantity = 0
+            try:
+                from inventory.models import InventoryItem
+                stock_items = InventoryItem.objects.filter(
+                    material_supply=item.material_supply
+                )
+                stock_quantity = sum(float(si.quantity) for si in stock_items)
+            except Exception:
+                pass
+            
+            required_qty = float(item.quantity) * obj.quantity
+            materials.append({
+                'id': item.id,
+                'material_supply_id': item.material_supply.id,
+                'material_supply_name': item.material_supply.name,
+                'material_supply_part_number': getattr(item.material_supply, 'visitron_part_number', ''),
+                'unit': item.material_supply.unit,
+                'quantity_per_unit': float(item.quantity),
+                'quantity_required': required_qty,
+                'stock_quantity': stock_quantity,
+                'stock_sufficient': stock_quantity >= required_qty,
+                'notes': item.notes
+            })
+        return materials
+    
+    def get_vs_hardware_documents(self, obj):
+        """Gibt die Fertigungspläne (Dokumente) der VS-Hardware zurück"""
+        documents = []
+        for doc in obj.vs_hardware.documents.all():
+            request = self.context.get('request')
+            file_url = doc.file.url if doc.file else None
+            if request and file_url:
+                file_url = request.build_absolute_uri(file_url)
+            
+            documents.append({
+                'id': doc.id,
+                'document_type': doc.document_type,
+                'document_type_display': doc.get_document_type_display(),
+                'title': doc.title,
+                'description': doc.description,
+                'version': doc.version,
+                'file_url': file_url,
+                'file_name': doc.file.name.split('/')[-1] if doc.file else None
+            })
+        return documents
+    
+    def get_customer_order_number(self, obj):
+        return obj.customer_order.order_number if obj.customer_order else None
+    
+    def get_customer_name(self, obj):
+        if obj.customer_order and obj.customer_order.customer:
+            c = obj.customer_order.customer
+            return f"{c.first_name} {c.last_name}".strip() or c.customer_number
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_observers_list(self, obj):
+        return [
+            {
+                'id': user.id,
+                'username': user.username,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'full_name': f"{user.first_name} {user.last_name}".strip() or user.username
+            }
+            for user in obj.observers.all()
+        ]
 
 
 # ============================================
