@@ -115,3 +115,10 @@ python import_visiview_macros.py
 Next steps: run a dry-run first:
 python backend/delete_supplier_and_incoming.py --number 104
 If output looks correct, run with --yes to perform deletion.
+
+favicons generieren: 
+cd frontend
+# sicherstellen, dass frontend/public/VERP.svg vorhanden ist
+npm run generate-favicons
+
+python import_maintenance_data.py --license-id 1598

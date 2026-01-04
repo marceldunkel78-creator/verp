@@ -824,6 +824,12 @@ def calculate_maintenance_balance(license_id):
 def process_expenditure_deduction(expenditure):
     """
     Verarbeitet eine neue Zeitaufwendung und zieht sie von der ältesten gültigen Zeitgutschrift ab.
+    
+    WICHTIG: Eine Gutschrift gilt als "gültig" für eine Aufwendung, wenn das Aufwendungsdatum
+    innerhalb des Gültigkeitszeitraums der Gutschrift liegt (start_date <= expenditure.date <= end_date).
+    
+    Dies stellt sicher, dass bei chronologischem Import die Aufwendungen korrekt den zeitlich
+    passenden Gutschriften zugeordnet werden.
 
     Legt für jede beteiligte Gutschrift einen `MaintenanceTimeCreditDeduction`-Eintrag an,
     damit Löschungen von Gutschriften später präzise in Zeitschuld umgewandelt werden können.
@@ -832,13 +838,14 @@ def process_expenditure_deduction(expenditure):
         # Kulanz wird nicht abgezogen
         return
 
-    today = date.today()
     hours_to_deduct = Decimal(expenditure.hours_spent)
 
-    # Finde alle gültigen Gutschriften in Reihenfolge
+    # Finde alle zum Zeitpunkt der Aufwendung gültigen Gutschriften
+    # (start_date <= expenditure.date <= end_date)
     available_credits = MaintenanceTimeCredit.objects.filter(
         license=expenditure.license,
-        end_date__gte=today,
+        start_date__lte=expenditure.date,
+        end_date__gte=expenditure.date,
         remaining_hours__gt=0
     ).order_by('start_date', 'end_date')
 
