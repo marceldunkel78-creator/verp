@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
-    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog
+    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
+    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction
 )
 
 
@@ -232,3 +233,90 @@ class VisiViewTicketChangeLogAdmin(admin.ModelAdmin):
     
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(VisiViewTicketAttachment)
+class VisiViewTicketAttachmentAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'filename', 'file_size', 'is_image', 'uploaded_by', 'uploaded_at']
+    list_filter = ['uploaded_at', 'content_type']
+    search_fields = ['ticket__ticket_number', 'filename']
+    raw_id_fields = ['ticket', 'uploaded_by']
+    readonly_fields = ['uploaded_at', 'file_size', 'content_type', 'is_image']
+
+
+@admin.register(VisiViewTicketTimeEntry)
+class VisiViewTicketTimeEntryAdmin(admin.ModelAdmin):
+    list_display = ['ticket', 'date', 'time', 'employee', 'hours_spent', 'description', 'created_at']
+    list_filter = ['date', 'employee']
+    search_fields = ['ticket__ticket_number', 'description']
+    raw_id_fields = ['ticket', 'employee', 'created_by']
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
+    date_hierarchy = 'date'
+
+
+@admin.register(MaintenanceTimeCredit)
+class MaintenanceTimeCreditAdmin(admin.ModelAdmin):
+    list_display = ['license', 'start_date', 'end_date', 'credit_hours', 'remaining_hours', 'user', 'created_at']
+    list_filter = ['start_date', 'end_date', 'user']
+    search_fields = ['license__license_number', 'license__serial_number']
+    raw_id_fields = ['license', 'user', 'created_by']
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
+    date_hierarchy = 'start_date'
+    
+    fieldsets = (
+        ('Lizenz', {
+            'fields': ('license',)
+        }),
+        ('Zeitgutschrift', {
+            'fields': ('start_date', 'end_date', 'credit_hours', 'remaining_hours', 'user')
+        }),
+        ('Metadaten', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+class MaintenanceTimeCreditDeductionInline(admin.TabularInline):
+    model = MaintenanceTimeCreditDeduction
+    extra = 0
+    fields = ['credit', 'hours_deducted']
+    readonly_fields = ['credit', 'hours_deducted']
+
+@admin.register(MaintenanceTimeExpenditure)
+class MaintenanceTimeExpenditureAdmin(admin.ModelAdmin):
+    list_display = ['license', 'date', 'time', 'user', 'activity', 'task_type', 'hours_spent', 'is_goodwill', 'created_at']
+    list_filter = ['date', 'activity', 'task_type', 'is_goodwill', 'user']
+    search_fields = ['license__license_number', 'license__serial_number', 'comment']
+    raw_id_fields = ['license', 'user', 'created_by']
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
+    date_hierarchy = 'date'
+    inlines = [MaintenanceTimeCreditDeductionInline]
+    
+    fieldsets = (
+        ('Lizenz', {
+            'fields': ('license',)
+        }),
+        ('Zeitaufwendung', {
+            'fields': ('date', 'time', 'user', 'activity', 'task_type', 'hours_spent', 'comment', 'is_goodwill')
+        }),
+        ('Abrechnung', {
+            'fields': ('created_debt',),
+            'classes': ('collapse',)
+        }),
+        ('Metadaten', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+

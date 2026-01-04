@@ -129,7 +129,7 @@ class SystemDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
             'customer_data', 'customer_details', 'description', 'status', 'status_display',
-            'location', 'installation_date', 'warranty_end', 'notes',
+            'location', 'installation_date', 'notes',
             'visiview_license', 'visiview_license_details',
             'components', 'photos', 'created_by', 'created_by_name',
             'created_at', 'updated_at'
@@ -192,7 +192,7 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'description',
-            'status', 'location', 'installation_date', 'warranty_end',
+            'status', 'location', 'installation_date',
             'notes', 'visiview_license', 'components'
         ]
         read_only_fields = ['id', 'system_number']

@@ -48,6 +48,33 @@ def _get_year_from_instance(instance):
 
 
 def customer_order_upload_path(instance, filename):
+    """Upload-Pfad für Kundenaufträge: /customer_orders/Jahr/Auftragsnummer/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    year = _get_year_from_instance(instance)
+    order_number = _sanitize_path_component(instance.order_number or 'unknown')
+    return os.path.join('customer_orders', year, order_number, safe_filename)
+
+
+def service_ticket_attachment_path(instance, filename):
+    """Upload-Pfad für Service-Ticket Anhänge: /Service/Service-tickets/Ticketnummer/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    ticket_number = _sanitize_path_component(instance.ticket.ticket_number or 'unknown')
+    return os.path.join('Service', 'Service-tickets', ticket_number, safe_filename)
+
+
+def troubleshooting_attachment_path(instance, filename):
+    """Upload-Pfad für Troubleshooting Anhänge: /Service/Troubleshooting/Ticketnummer/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    ticket_number = _sanitize_path_component(instance.ticket.ticket_number or 'unknown')
+    return os.path.join('Service', 'Troubleshooting', ticket_number, safe_filename)
+
+
+def visiview_ticket_attachment_path(instance, filename):
+    """Upload-Pfad für VisiView-Ticket Anhänge: /VisiView/VisiView-Tickets/Ticketnummer/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    ticket_number = _sanitize_path_component(instance.ticket.ticket_number or 'unknown')
+    return os.path.join('VisiView', 'VisiView-Tickets', ticket_number, safe_filename)
+
     """
     Upload-Pfad: /customer_orders/Jahr/Auftragsnummer/filename
     """

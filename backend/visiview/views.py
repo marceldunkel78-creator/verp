@@ -2,11 +2,17 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
+from django.http import FileResponse, Http404
+from django.utils import timezone
+from datetime import date
+from decimal import Decimal
 
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
-    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog
+    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
+    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure
 )
 from .serializers import (
     VisiViewProductListSerializer,
@@ -21,7 +27,14 @@ from .serializers import (
     VisiViewTicketDetailSerializer,
     VisiViewTicketCreateUpdateSerializer,
     VisiViewTicketCommentSerializer,
-    VisiViewTicketChangeLogSerializer
+    VisiViewTicketChangeLogSerializer,
+    VisiViewTicketAttachmentSerializer,
+    VisiViewTicketTimeEntrySerializer,
+    MaintenanceTimeCreditSerializer,
+    MaintenanceTimeExpenditureSerializer,
+    calculate_maintenance_balance,
+    process_expenditure_deduction,
+    apply_new_credit_to_debt
 )
 
 
@@ -142,6 +155,193 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
         licenses = self.queryset.filter(customer_id=customer_id)
         serializer = VisiViewLicenseListSerializer(licenses, many=True)
         return Response(serializer.data)
+
+    # ============================================================
+    # Maintenance Time Credits & Expenditures
+    # ============================================================
+    
+    @action(detail=True, methods=['get'])
+    def maintenance(self, request, pk=None):
+        """Gibt alle Wartungsdaten für eine Lizenz zurück inkl. Berechnung"""
+        license = self.get_object()
+        
+        # Zeitgutschriften
+        credits = MaintenanceTimeCredit.objects.filter(license=license).order_by('start_date', 'end_date')
+        
+        # Zeitaufwendungen
+        expenditures = MaintenanceTimeExpenditure.objects.filter(license=license).order_by('-date', '-time')
+        
+        # Saldo berechnen
+        balance = calculate_maintenance_balance(license.id)
+        
+        return Response({
+            'total_expenditures': balance['total_expenditures'],
+            'total_credits': balance['total_credits'],
+            'current_balance': balance['current_balance'],
+            'time_credits': MaintenanceTimeCreditSerializer(credits, many=True).data,
+            'time_expenditures': MaintenanceTimeExpenditureSerializer(expenditures, many=True).data
+        })
+    
+    @action(detail=True, methods=['get'])
+    def time_credits(self, request, pk=None):
+        """Gibt alle Zeitgutschriften für eine Lizenz zurück"""
+        license = self.get_object()
+        credits = MaintenanceTimeCredit.objects.filter(license=license).order_by('start_date', 'end_date')
+        serializer = MaintenanceTimeCreditSerializer(credits, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_time_credit(self, request, pk=None):
+        """Fügt eine neue Zeitgutschrift hinzu"""
+        license = self.get_object()
+        
+        data = request.data.copy()
+        data['license'] = license.id
+        
+        # Defaults
+        if not data.get('start_date'):
+            data['start_date'] = date.today().isoformat()
+        if not data.get('user'):
+            data['user'] = request.user.id
+        
+        # remaining_hours wird automatisch auf credit_hours gesetzt
+        if data.get('credit_hours') and not data.get('remaining_hours'):
+            data['remaining_hours'] = data['credit_hours']
+        
+        serializer = MaintenanceTimeCreditSerializer(data=data)
+        if serializer.is_valid():
+            credit = serializer.save(created_by=request.user)
+            # Prüfe ob bestehende Zeitschuld getilgt werden kann
+            apply_new_credit_to_debt(credit)
+            return Response(MaintenanceTimeCreditSerializer(credit).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch', 'put'], url_path='update_time_credit/(?P<credit_id>[^/.]+)')
+    def update_time_credit(self, request, pk=None, credit_id=None):
+        """Aktualisiert eine Zeitgutschrift"""
+        license = self.get_object()
+        try:
+            credit = MaintenanceTimeCredit.objects.get(id=credit_id, license=license)
+        except MaintenanceTimeCredit.DoesNotExist:
+            return Response({'error': 'Zeitgutschrift nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = MaintenanceTimeCreditSerializer(credit, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_time_credit/(?P<credit_id>[^/.]+)')
+    def delete_time_credit(self, request, pk=None, credit_id=None):
+        """Löscht eine Zeitgutschrift. Falls bereits Teile der Gutschrift verwendet wurden,
+        erzeugen wir eine Zeitschuld in Höhe von (credit_hours - remaining_hours),
+        damit bereits verbuchte Zeitaufwendungen berücksichtigt bleiben.
+        """
+        license = self.get_object()
+        try:
+            credit = MaintenanceTimeCredit.objects.get(id=credit_id, license=license)
+        except MaintenanceTimeCredit.DoesNotExist:
+            return Response({'error': 'Zeitgutschrift nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Transferiere Deductionen zurück in Zeitschuld für die betroffenen Aufwendungen
+        from .models import MaintenanceTimeCreditDeduction
+        deductions = list(MaintenanceTimeCreditDeduction.objects.filter(credit=credit))
+        total_deducted = Decimal('0')
+        for d in deductions:
+            exp = d.expenditure
+            exp.created_debt = Decimal(exp.created_debt or 0) + Decimal(d.hours_deducted)
+            exp.save()
+            total_deducted += Decimal(d.hours_deducted)
+            # entferne die Deduction
+            d.delete()
+
+        # Berechne, wie viel der Gutschrift tatsächlich verwendet wurde
+        used = (Decimal(credit.credit_hours) - Decimal(credit.remaining_hours)) if credit.credit_hours is not None and credit.remaining_hours is not None else Decimal('0')
+
+        # Falls es eine Differenz zwischen dem verwendeten Betrag und den dokumentierten Deductionen
+        # gibt, erzeugen wir nur diese Differenz als zusätzliche Zeitschuld.
+        residual = used - total_deducted
+        if residual > 0:
+            try:
+                MaintenanceTimeExpenditure.objects.create(
+                    license=license,
+                    date=date.today(),
+                    time=None,
+                    user=credit.user if credit.user_id else request.user,
+                    activity='remote_support',
+                    task_type='other',
+                    hours_spent=Decimal('0'),
+                    comment=f'Automatische Zeitschuld durch Löschen der Gutschrift #{credit.id} (Residual)',
+                    is_goodwill=False,
+                    created_debt=residual,
+                    created_by=request.user
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.exception('Fehler beim Erstellen der Zeitschuld: %s', e)
+
+        credit.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    @action(detail=True, methods=['get'])
+    def time_expenditures(self, request, pk=None):
+        """Gibt alle Zeitaufwendungen für eine Lizenz zurück"""
+        license = self.get_object()
+        expenditures = MaintenanceTimeExpenditure.objects.filter(license=license).order_by('-date', '-time')
+        serializer = MaintenanceTimeExpenditureSerializer(expenditures, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_time_expenditure(self, request, pk=None):
+        """Fügt eine neue Zeitaufwendung hinzu"""
+        license = self.get_object()
+        
+        data = request.data.copy()
+        data['license'] = license.id
+        
+        # Defaults
+        if not data.get('date'):
+            data['date'] = date.today().isoformat()
+        if not data.get('time'):
+            data['time'] = timezone.now().strftime('%H:%M')
+        if not data.get('user'):
+            data['user'] = request.user.id
+        
+        serializer = MaintenanceTimeExpenditureSerializer(data=data)
+        if serializer.is_valid():
+            expenditure = serializer.save(created_by=request.user)
+            # Verarbeite die Zeitabzüge von Gutschriften
+            process_expenditure_deduction(expenditure)
+            return Response(MaintenanceTimeExpenditureSerializer(expenditure).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['patch', 'put'], url_path='update_time_expenditure/(?P<expenditure_id>[^/.]+)')
+    def update_time_expenditure(self, request, pk=None, expenditure_id=None):
+        """Aktualisiert eine Zeitaufwendung"""
+        license = self.get_object()
+        try:
+            expenditure = MaintenanceTimeExpenditure.objects.get(id=expenditure_id, license=license)
+        except MaintenanceTimeExpenditure.DoesNotExist:
+            return Response({'error': 'Zeitaufwendung nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = MaintenanceTimeExpenditureSerializer(expenditure, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_time_expenditure/(?P<expenditure_id>[^/.]+)')
+    def delete_time_expenditure(self, request, pk=None, expenditure_id=None):
+        """Löscht eine Zeitaufwendung"""
+        license = self.get_object()
+        try:
+            expenditure = MaintenanceTimeExpenditure.objects.get(id=expenditure_id, license=license)
+        except MaintenanceTimeExpenditure.DoesNotExist:
+            return Response({'error': 'Zeitaufwendung nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+        
+        expenditure.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class VisiViewTicketViewSet(viewsets.ModelViewSet):
@@ -331,6 +531,51 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                 # Nicht fatal - loggen für Debugging
                 logger.error(f"Fehler beim Senden von Ticket-Benachrichtigungen: {e}")
     
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_attachment(self, request, pk=None):
+        """Lädt eine Datei für das Ticket hoch"""
+        ticket = self.get_object()
+        file_obj = request.FILES.get('file')
+        
+        if not file_obj:
+            return Response({'error': 'Keine Datei hochgeladen'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        attachment = VisiViewTicketAttachment.objects.create(
+            ticket=ticket,
+            file=file_obj,
+            filename=file_obj.name,
+            file_size=file_obj.size,
+            content_type=file_obj.content_type or '',
+            uploaded_by=request.user
+        )
+        
+        serializer = VisiViewTicketAttachmentSerializer(attachment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """Löscht einen Dateianhang"""
+        ticket = self.get_object()
+        try:
+            attachment = VisiViewTicketAttachment.objects.get(id=attachment_id, ticket=ticket)
+            attachment.file.delete()
+            attachment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except VisiViewTicketAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
+    @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Lädt einen Dateianhang herunter"""
+        ticket = self.get_object()
+        try:
+            attachment = VisiViewTicketAttachment.objects.get(id=attachment_id, ticket=ticket)
+            return FileResponse(attachment.file.open('rb'), 
+                              as_attachment=True, 
+                              filename=attachment.filename)
+        except VisiViewTicketAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
     @action(detail=True, methods=['post'])
     def add_comment(self, request, pk=None):
         """Fügt einen Kommentar zum Ticket hinzu"""
@@ -456,6 +701,116 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
             'by_tracker': tracker_counts,
             'by_priority': priority_counts,
         })
+    
+    @action(detail=True, methods=['get'])
+    def time_entries(self, request, pk=None):
+        """Gibt alle Zeiteinträge für das Ticket zurück"""
+        ticket = self.get_object()
+        entries = ticket.time_entries.all().order_by('-date', '-time')
+        serializer = VisiViewTicketTimeEntrySerializer(entries, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_time_entry(self, request, pk=None):
+        """Fügt einen Zeiteintrag zum Ticket hinzu"""
+        from django.utils import timezone
+        from django.contrib.auth import get_user_model
+        
+        ticket = self.get_object()
+        User = get_user_model()
+        
+        # Auto-Defaults
+        date = request.data.get('date', timezone.now().date())
+        time = request.data.get('time', timezone.now().time())
+        employee_id = request.data.get('employee')
+        
+        # Wenn kein Mitarbeiter angegeben ist, verwende den zugewiesenen User oder den ersten User
+        if not employee_id:
+            if ticket.assigned_to:
+                employee_id = ticket.assigned_to.id
+            else:
+                first_user = User.objects.first()
+                employee_id = first_user.id if first_user else None
+        
+        hours_spent = request.data.get('hours_spent')
+        description = request.data.get('description', '').strip()
+        
+        # Validierung
+        if not hours_spent or not description:
+            return Response(
+                {'error': 'Aufgewendete Stunden und Beschreibung sind erforderlich'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            hours_spent = float(hours_spent)
+            if hours_spent <= 0:
+                raise ValueError("Stunden müssen größer als 0 sein")
+        except ValueError as e:
+            return Response(
+                {'error': f'Ungültiger Wert für aufgewendete Stunden: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Erstelle den Zeiteintrag
+        time_entry = VisiViewTicketTimeEntry.objects.create(
+            ticket=ticket,
+            date=date,
+            time=time,
+            employee_id=employee_id,
+            hours_spent=hours_spent,
+            description=description,
+            created_by=request.user
+        )
+        
+        serializer = VisiViewTicketTimeEntrySerializer(time_entry)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['put', 'patch'], url_path='update_time_entry/(?P<entry_id>[^/.]+)')
+    def update_time_entry(self, request, pk=None, entry_id=None):
+        """Aktualisiert einen Zeiteintrag"""
+        ticket = self.get_object()
+        try:
+            time_entry = VisiViewTicketTimeEntry.objects.get(id=entry_id, ticket=ticket)
+        except VisiViewTicketTimeEntry.DoesNotExist:
+            raise Http404("Zeiteintrag nicht gefunden")
+        
+        # Update nur die bereitgestellten Felder
+        if 'date' in request.data:
+            time_entry.date = request.data['date']
+        if 'time' in request.data:
+            time_entry.time = request.data['time']
+        if 'employee' in request.data:
+            time_entry.employee_id = request.data['employee']
+        if 'hours_spent' in request.data:
+            try:
+                hours_spent = float(request.data['hours_spent'])
+                if hours_spent <= 0:
+                    raise ValueError("Stunden müssen größer als 0 sein")
+                time_entry.hours_spent = hours_spent
+            except ValueError as e:
+                return Response(
+                    {'error': f'Ungültiger Wert für aufgewendete Stunden: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        if 'description' in request.data:
+            time_entry.description = request.data['description']
+        
+        time_entry.save()
+        
+        serializer = VisiViewTicketTimeEntrySerializer(time_entry)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_time_entry/(?P<entry_id>[^/.]+)')
+    def delete_time_entry(self, request, pk=None, entry_id=None):
+        """Löscht einen Zeiteintrag"""
+        ticket = self.get_object()
+        try:
+            time_entry = VisiViewTicketTimeEntry.objects.get(id=entry_id, ticket=ticket)
+            time_entry.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except VisiViewTicketTimeEntry.DoesNotExist:
+            raise Http404("Zeiteintrag nicht gefunden")
 
 
 # ==================== VisiView Macro Views ====================

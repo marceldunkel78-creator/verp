@@ -1,8 +1,12 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.db.models import Sum
+from datetime import date
+from decimal import Decimal
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
-    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog
+    VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
+    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction
 )
 
 User = get_user_model()
@@ -337,6 +341,54 @@ class VisiViewTicketChangeLogSerializer(serializers.ModelSerializer):
         return None
 
 
+class VisiViewTicketAttachmentSerializer(serializers.ModelSerializer):
+    """Serializer für VisiView-Ticket Anhänge"""
+    uploaded_by_name = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewTicketAttachment
+        fields = ['id', 'file', 'file_url', 'filename', 'file_size', 'content_type', 
+                  'is_image', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at', 'file_size', 'content_type', 'is_image']
+    
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip() or obj.uploaded_by.username
+        return None
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
+
+
+class VisiViewTicketTimeEntrySerializer(serializers.ModelSerializer):
+    """Serializer für VisiView-Ticket Zeiteinträge"""
+    employee_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = VisiViewTicketTimeEntry
+        fields = ['id', 'ticket', 'date', 'time', 'employee', 'employee_name', 
+                  'hours_spent', 'description', 'created_by', 'created_by_name', 
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}".strip() or obj.employee.username
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
 class VisiViewTicketListSerializer(serializers.ModelSerializer):
     """Serializer für VisiView Ticket Liste"""
     subject = serializers.CharField(source='title', read_only=True)  # Alias für Frontend-Kompatibilität
@@ -383,6 +435,9 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
     is_open = serializers.BooleanField(read_only=True)
     comments = VisiViewTicketCommentSerializer(many=True, read_only=True)
     change_logs = VisiViewTicketChangeLogSerializer(many=True, read_only=True)
+    attachments = VisiViewTicketAttachmentSerializer(many=True, read_only=True)
+    time_entries = VisiViewTicketTimeEntrySerializer(many=True, read_only=True)
+    total_hours_spent = serializers.SerializerMethodField()
     parent_ticket_display = serializers.SerializerMethodField()
     child_tickets = serializers.SerializerMethodField()
     watchers_list = serializers.SerializerMethodField()
@@ -404,14 +459,14 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',
-            'customers', 'attachments', 'related_tickets',
+            'customers', 'attachment_notes', 'related_tickets',
             'is_private', 'add_to_worklist', 'rank',
             'is_open',
             'created_at', 'updated_at', 'closed_at',
             'imported_created_at', 'imported_updated_at',
             'created_by', 'created_by_name',
             'watchers', 'watchers_list',
-            'comments', 'change_logs'
+            'comments', 'change_logs', 'attachments', 'time_entries', 'total_hours_spent'
         ]
     
     def get_assigned_to_display(self, obj):
@@ -428,6 +483,11 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+    
+    def get_total_hours_spent(self, obj):
+        from django.db.models import Sum
+        total = obj.time_entries.aggregate(Sum('hours_spent'))['hours_spent__sum']
+        return float(total) if total else 0.0
     
     def get_parent_ticket_display(self, obj):
         if obj.parent_ticket:
@@ -471,6 +531,7 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
 
 class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Erstellen/Aktualisieren von VisiView Tickets"""
+    attachments = VisiViewTicketAttachmentSerializer(many=True, read_only=True)
     
     class Meta:
         model = VisiViewTicket
@@ -614,3 +675,241 @@ class VisiViewMacroCreateUpdateSerializer(serializers.ModelSerializer):
             'dependencies', 'original_filename'
         ]
         read_only_fields = ['id', 'macro_id']
+
+
+# ============================================================
+# Maintenance Time Credits & Expenditures
+# ============================================================
+
+class MaintenanceTimeCreditSerializer(serializers.ModelSerializer):
+    """Serializer für Wartungs-Zeitgutschriften"""
+    user_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MaintenanceTimeCredit
+        fields = [
+            'id', 'license', 'start_date', 'end_date',
+            'credit_hours', 'remaining_hours',
+            'user', 'user_name',
+            'is_active', 'is_expired',
+            'created_by', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+    
+    def get_user_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_is_active(self, obj):
+        return obj.is_active
+    
+    def get_is_expired(self, obj):
+        return obj.is_expired
+
+
+class MaintenanceTimeCreditDeductionSerializer(serializers.ModelSerializer):
+    """Serializer für Gutschrift-Abzüge"""
+    credit_start = serializers.DateField(source='credit.start_date', read_only=True)
+    credit_end = serializers.DateField(source='credit.end_date', read_only=True)
+    credit_id = serializers.IntegerField(source='credit.id', read_only=True)
+
+    class Meta:
+        model = MaintenanceTimeCreditDeduction
+        fields = ['id', 'credit_id', 'credit_start', 'credit_end', 'hours_deducted']
+
+
+class MaintenanceTimeExpenditureSerializer(serializers.ModelSerializer):
+    """Serializer für Wartungs-Zeitaufwendungen"""
+    user_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    activity_display = serializers.SerializerMethodField()
+    task_type_display = serializers.SerializerMethodField()
+    deductions = MaintenanceTimeCreditDeductionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = MaintenanceTimeExpenditure
+        fields = [
+            'id', 'license', 'date', 'time',
+            'user', 'user_name',
+            'activity', 'activity_display',
+            'task_type', 'task_type_display',
+            'hours_spent', 'comment', 'is_goodwill',
+            'created_debt',
+            'deductions',
+            'created_by', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by', 'created_debt']
+
+    def get_user_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+    def get_activity_display(self, obj):
+        return obj.get_activity_display()
+
+    def get_task_type_display(self, obj):
+        return obj.get_task_type_display()
+
+class MaintenanceSummarySerializer(serializers.Serializer):
+    """Serializer für die Maintenance-Zusammenfassung einer Lizenz"""
+    total_expenditures = serializers.DecimalField(max_digits=8, decimal_places=2)
+    total_credits = serializers.DecimalField(max_digits=8, decimal_places=2)
+    current_balance = serializers.DecimalField(max_digits=8, decimal_places=2)
+    time_credits = MaintenanceTimeCreditSerializer(many=True)
+    time_expenditures = MaintenanceTimeExpenditureSerializer(many=True)
+
+
+def calculate_maintenance_balance(license_id):
+    """
+    Berechnet das Zeitguthaben für eine Lizenz.
+    
+    Logik:
+    1. Zeitgutschriften haben Start- und Enddatum
+    2. Abgelaufene Gutschriften (end_date < heute): remaining_hours = 0
+    3. Aufwendungen werden von der ältesten gültigen Gutschrift abgezogen
+    4. Wenn Gutschrift überzogen: Überzug wird zur Zeitschuld
+    5. Neue Gutschriften reduzieren Zeitschuld
+    """
+    today = date.today()
+    
+    # Alle Zeitgutschriften für diese Lizenz
+    credits = MaintenanceTimeCredit.objects.filter(license_id=license_id).order_by('start_date', 'end_date')
+    
+    # Alle Zeitaufwendungen für diese Lizenz (nicht-Kulanz)
+    expenditures = MaintenanceTimeExpenditure.objects.filter(
+        license_id=license_id,
+        is_goodwill=False
+    ).order_by('date', 'time')
+    
+    # Summen
+    total_credit_hours = credits.aggregate(total=Sum('credit_hours'))['total'] or Decimal('0')
+    total_expenditure_hours = expenditures.aggregate(total=Sum('hours_spent'))['total'] or Decimal('0')
+    
+    # Berechne aktuellen Saldo
+    # Summiere alle aktiven (nicht abgelaufenen) remaining_hours
+    active_remaining = credits.filter(end_date__gte=today).aggregate(
+        total=Sum('remaining_hours')
+    )['total'] or Decimal('0')
+    
+    # Berechne Zeitschuld aus abgelaufenen Gutschriften die überzogen wurden
+    # Zeitschuld = Summe aller created_debt aus Aufwendungen
+    total_debt = expenditures.aggregate(total=Sum('created_debt'))['total'] or Decimal('0')
+    
+    current_balance = active_remaining - total_debt
+    
+    return {
+        'total_expenditures': total_expenditure_hours,
+        'total_credits': total_credit_hours,
+        'current_balance': current_balance
+    }
+
+
+def process_expenditure_deduction(expenditure):
+    """
+    Verarbeitet eine neue Zeitaufwendung und zieht sie von der ältesten gültigen Zeitgutschrift ab.
+
+    Legt für jede beteiligte Gutschrift einen `MaintenanceTimeCreditDeduction`-Eintrag an,
+    damit Löschungen von Gutschriften später präzise in Zeitschuld umgewandelt werden können.
+    """
+    if expenditure.is_goodwill:
+        # Kulanz wird nicht abgezogen
+        return
+
+    today = date.today()
+    hours_to_deduct = Decimal(expenditure.hours_spent)
+
+    # Finde alle gültigen Gutschriften in Reihenfolge
+    available_credits = MaintenanceTimeCredit.objects.filter(
+        license=expenditure.license,
+        end_date__gte=today,
+        remaining_hours__gt=0
+    ).order_by('start_date', 'end_date')
+
+    remaining = hours_to_deduct
+
+    for credit in available_credits:
+        if remaining <= 0:
+            break
+        take = min(Decimal(credit.remaining_hours), remaining)
+        if take > 0:
+            # Reduziere Kredit und erstelle Deduction
+            credit.remaining_hours = Decimal(credit.remaining_hours) - take
+            credit.save()
+            MaintenanceTimeCreditDeduction.objects.create(
+                credit=credit,
+                expenditure=expenditure,
+                hours_deducted=take
+            )
+            remaining -= take
+
+    if remaining > 0:
+        # Es blieb Rest - das wird zur Zeitschuld
+        expenditure.created_debt = Decimal(remaining)
+    else:
+        expenditure.created_debt = Decimal('0')
+
+    expenditure.save()
+
+
+def apply_new_credit_to_debt(credit):
+    """
+    Wenn eine neue Zeitgutschrift hinzugefügt wird, reduziert sie bestehende Zeitschuld.
+    Dabei werden Deduction-Einträge erstellt, um die Zuordnung zur neuen Gutschrift zu dokumentieren.
+    """
+    # Finde alle Aufwendungen mit Zeitschuld für diese Lizenz
+    debt_expenditures = MaintenanceTimeExpenditure.objects.filter(
+        license=credit.license,
+        created_debt__gt=0
+    ).order_by('date', 'time')
+    
+    remaining_credit = Decimal(credit.remaining_hours)
+    
+    for exp in debt_expenditures:
+        if remaining_credit <= 0:
+            break
+        
+        debt = Decimal(exp.created_debt or 0)
+        if debt <= remaining_credit:
+            # Schuld kann vollständig getilgt werden
+            # Erstelle Deduction für die gesamte Schuldmenge
+            if debt > 0:
+                MaintenanceTimeCreditDeduction.objects.create(
+                    credit=credit,
+                    expenditure=exp,
+                    hours_deducted=debt
+                )
+            remaining_credit -= debt
+            exp.created_debt = Decimal('0')
+            exp.save()
+        else:
+            # Schuld teilweise tilgen
+            to_apply = remaining_credit
+            if to_apply > 0:
+                MaintenanceTimeCreditDeduction.objects.create(
+                    credit=credit,
+                    expenditure=exp,
+                    hours_deducted=to_apply
+                )
+            exp.created_debt = debt - to_apply
+            remaining_credit = Decimal('0')
+            exp.save()
+    
+    credit.remaining_hours = remaining_credit
+    credit.save()

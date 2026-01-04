@@ -176,6 +176,20 @@ export const Service = () => (
           </div>
         </div>
       </Link>
+      <Link
+        to="/service/troubleshooting"
+        className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-amber-100 rounded-lg">
+            <WrenchScrewdriverIcon className="h-8 w-8 text-amber-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Troubleshooting</h3>
+            <p className="text-sm text-gray-500">Wissensdatenbank & Lösungen</p>
+          </div>
+        </div>
+      </Link>
     </div>
   </div>
 );

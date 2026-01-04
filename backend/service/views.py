@@ -2,16 +2,25 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.http import FileResponse, Http404
 
-from .models import VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, TicketChangeLog
+from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
+                     TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
+                     ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
+                     RMACaseTimeEntry)
 from .serializers import (
     VSServiceListSerializer, VSServiceDetailSerializer, VSServiceCreateUpdateSerializer,
     VSServicePriceSerializer,
     ServiceTicketListSerializer, ServiceTicketDetailSerializer, ServiceTicketCreateUpdateSerializer,
-    TicketCommentSerializer, TicketChangeLogSerializer,
-    RMACaseListSerializer, RMACaseDetailSerializer, RMACaseCreateUpdateSerializer
+    TicketCommentSerializer, TicketChangeLogSerializer, ServiceTicketAttachmentSerializer,
+    ServiceTicketTimeEntrySerializer,
+    RMACaseListSerializer, RMACaseDetailSerializer, RMACaseCreateUpdateSerializer,
+    RMACaseTimeEntrySerializer,
+    TroubleshootingListSerializer, TroubleshootingDetailSerializer, TroubleshootingCreateUpdateSerializer,
+    TroubleshootingCommentSerializer, TroubleshootingAttachmentSerializer
 )
 from users.models import Message
 
@@ -192,6 +201,51 @@ class ServiceTicketViewSet(viewsets.ModelViewSet):
                     related_ticket=ticket
                 )
     
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_attachment(self, request, pk=None):
+        """Lädt eine Datei für das Ticket hoch"""
+        ticket = self.get_object()
+        file_obj = request.FILES.get('file')
+        
+        if not file_obj:
+            return Response({'error': 'Keine Datei hochgeladen'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        attachment = ServiceTicketAttachment.objects.create(
+            ticket=ticket,
+            file=file_obj,
+            filename=file_obj.name,
+            file_size=file_obj.size,
+            content_type=file_obj.content_type or '',
+            uploaded_by=request.user
+        )
+        
+        serializer = ServiceTicketAttachmentSerializer(attachment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """Löscht einen Dateianhang"""
+        ticket = self.get_object()
+        try:
+            attachment = ServiceTicketAttachment.objects.get(id=attachment_id, ticket=ticket)
+            attachment.file.delete()  # Löscht die Datei vom Speicher
+            attachment.delete()  # Löscht den Datenbankeintrag
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ServiceTicketAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
+    @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Lädt einen Dateianhang herunter"""
+        ticket = self.get_object()
+        try:
+            attachment = ServiceTicketAttachment.objects.get(id=attachment_id, ticket=ticket)
+            return FileResponse(attachment.file.open('rb'), 
+                              as_attachment=True, 
+                              filename=attachment.filename)
+        except ServiceTicketAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
     @action(detail=True, methods=['post'])
     def add_comment(self, request, pk=None):
         """Fügt einen Kommentar zum Ticket hinzu"""
@@ -241,6 +295,83 @@ class ServiceTicketViewSet(viewsets.ModelViewSet):
         logs = ticket.change_logs.all().order_by('-changed_at')
         serializer = TicketChangeLogSerializer(logs, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def time_entries(self, request, pk=None):
+        """Gibt alle Zeiteinträge zurück"""
+        ticket = self.get_object()
+        entries = ticket.time_entries.all().order_by('-date', '-time')
+        serializer = ServiceTicketTimeEntrySerializer(entries, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_time_entry(self, request, pk=None):
+        """Fügt einen Zeiteintrag zum Ticket hinzu"""
+        from datetime import datetime, date
+        ticket = self.get_object()
+        
+        # Standard-Werte wenn nicht angegeben
+        entry_date = request.data.get('date') or date.today().isoformat()
+        entry_time = request.data.get('time') or datetime.now().strftime('%H:%M:%S')
+        employee_id = request.data.get('employee', request.user.id)
+        hours_spent = request.data.get('hours_spent')
+        description = request.data.get('description', '').strip()
+        
+        if not hours_spent:
+            return Response({'error': 'Aufgewendete Zeit ist erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not description:
+            return Response({'error': 'Beschreibung ist erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        time_entry = ServiceTicketTimeEntry.objects.create(
+            ticket=ticket,
+            date=entry_date,
+            time=entry_time,
+            employee_id=employee_id,
+            hours_spent=hours_spent,
+            description=description,
+            created_by=request.user
+        )
+        
+        serializer = ServiceTicketTimeEntrySerializer(time_entry)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['put', 'patch'], url_path='update_time_entry/(?P<entry_id>[^/.]+)')
+    def update_time_entry(self, request, pk=None, entry_id=None):
+        """Aktualisiert einen Zeiteintrag"""
+        ticket = self.get_object()
+        try:
+            time_entry = ServiceTicketTimeEntry.objects.get(id=entry_id, ticket=ticket)
+        except ServiceTicketTimeEntry.DoesNotExist:
+            raise Http404("Zeiteintrag nicht gefunden")
+        
+        # Update fields if provided
+        if 'date' in request.data:
+            time_entry.date = request.data['date']
+        if 'time' in request.data:
+            time_entry.time = request.data['time']
+        if 'employee' in request.data:
+            time_entry.employee_id = request.data['employee']
+        if 'hours_spent' in request.data:
+            time_entry.hours_spent = request.data['hours_spent']
+        if 'description' in request.data:
+            time_entry.description = request.data['description']
+        
+        time_entry.save()
+        
+        serializer = ServiceTicketTimeEntrySerializer(time_entry)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_time_entry/(?P<entry_id>[^/.]+)')
+    def delete_time_entry(self, request, pk=None, entry_id=None):
+        """Löscht einen Zeiteintrag"""
+        ticket = self.get_object()
+        try:
+            time_entry = ServiceTicketTimeEntry.objects.get(id=entry_id, ticket=ticket)
+            time_entry.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ServiceTicketTimeEntry.DoesNotExist:
+            raise Http404("Zeiteintrag nicht gefunden")
     
     @action(detail=True, methods=['post'])
     def update_watchers(self, request, pk=None):
@@ -329,3 +460,204 @@ class RMACaseViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['get'])
+    def time_entries(self, request, pk=None):
+        """Gibt alle Zeiteinträge zurück"""
+        rma_case = self.get_object()
+        entries = rma_case.time_entries.all().order_by('-date', '-time')
+        serializer = RMACaseTimeEntrySerializer(entries, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_time_entry(self, request, pk=None):
+        """Fügt einen Zeiteintrag zum RMA-Fall hinzu"""
+        from datetime import datetime, date
+        rma_case = self.get_object()
+        
+        # Standard-Werte wenn nicht angegeben
+        entry_date = request.data.get('date') or date.today().isoformat()
+        entry_time = request.data.get('time') or datetime.now().strftime('%H:%M:%S')
+        employee_id = request.data.get('employee', request.user.id)
+        hours_spent = request.data.get('hours_spent')
+        description = request.data.get('description', '').strip()
+        
+        if not hours_spent:
+            return Response({'error': 'Aufgewendete Zeit ist erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not description:
+            return Response({'error': 'Beschreibung ist erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        time_entry = RMACaseTimeEntry.objects.create(
+            rma_case=rma_case,
+            date=entry_date,
+            time=entry_time,
+            employee_id=employee_id,
+            hours_spent=hours_spent,
+            description=description,
+            created_by=request.user
+        )
+        
+        serializer = RMACaseTimeEntrySerializer(time_entry)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['put', 'patch'], url_path='update_time_entry/(?P<entry_id>[^/.]+)')
+    def update_time_entry(self, request, pk=None, entry_id=None):
+        """Aktualisiert einen Zeiteintrag"""
+        rma_case = self.get_object()
+        try:
+            time_entry = RMACaseTimeEntry.objects.get(id=entry_id, rma_case=rma_case)
+        except RMACaseTimeEntry.DoesNotExist:
+            raise Http404("Zeiteintrag nicht gefunden")
+        
+        # Update fields if provided
+        if 'date' in request.data:
+            time_entry.date = request.data['date']
+        if 'time' in request.data:
+            time_entry.time = request.data['time']
+        if 'employee' in request.data:
+            time_entry.employee_id = request.data['employee']
+        if 'hours_spent' in request.data:
+            time_entry.hours_spent = request.data['hours_spent']
+        if 'description' in request.data:
+            time_entry.description = request.data['description']
+        
+        time_entry.save()
+        
+        serializer = RMACaseTimeEntrySerializer(time_entry)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_time_entry/(?P<entry_id>[^/.]+)')
+    def delete_time_entry(self, request, pk=None, entry_id=None):
+        """Löscht einen Zeiteintrag"""
+        rma_case = self.get_object()
+        try:
+            time_entry = RMACaseTimeEntry.objects.get(id=entry_id, rma_case=rma_case)
+            time_entry.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except RMACaseTimeEntry.DoesNotExist:
+            raise Http404("Zeiteintrag nicht gefunden")
+
+
+class TroubleshootingViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Troubleshooting Tickets
+    """
+    queryset = TroubleshootingTicket.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['status', 'priority', 'category', 'assigned_to']
+    search_fields = ['ticket_number', 'title', 'description', 'root_cause', 'corrective_action', 'affected_version']
+    ordering_fields = ['ticket_number', 'created_at', 'updated_at', 'status', 'priority']
+    ordering = ['-updated_at']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return TroubleshootingListSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return TroubleshootingCreateUpdateSerializer
+        return TroubleshootingDetailSerializer
+    
+    def get_queryset(self):
+        queryset = TroubleshootingTicket.objects.all()
+        # Filter für offene/geschlossene Tickets
+        is_open = self.request.query_params.get('is_open')
+        if is_open is not None:
+            if is_open.lower() == 'true':
+                queryset = queryset.exclude(status__in=['resolved', 'closed'])
+            else:
+                queryset = queryset.filter(status__in=['resolved', 'closed'])
+        return queryset
+    
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user, last_changed_by=self.request.user)
+    
+    def perform_update(self, serializer):
+        serializer.save(last_changed_by=self.request.user)
+    
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_attachment(self, request, pk=None):
+        """Lädt eine Datei für das Ticket hoch"""
+        ticket = self.get_object()
+        file_obj = request.FILES.get('file')
+        
+        if not file_obj:
+            return Response({'error': 'Keine Datei hochgeladen'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        attachment = TroubleshootingAttachment.objects.create(
+            ticket=ticket,
+            file=file_obj,
+            filename=file_obj.name,
+            file_size=file_obj.size,
+            content_type=file_obj.content_type or '',
+            uploaded_by=request.user
+        )
+        
+        serializer = TroubleshootingAttachmentSerializer(attachment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """Löscht einen Dateianhang"""
+        ticket = self.get_object()
+        try:
+            attachment = TroubleshootingAttachment.objects.get(id=attachment_id, ticket=ticket)
+            attachment.file.delete()
+            attachment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except TroubleshootingAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
+    @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Lädt einen Dateianhang herunter"""
+        ticket = self.get_object()
+        try:
+            attachment = TroubleshootingAttachment.objects.get(id=attachment_id, ticket=ticket)
+            return FileResponse(attachment.file.open('rb'), 
+                              as_attachment=True, 
+                              filename=attachment.filename)
+        except TroubleshootingAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
+    @action(detail=True, methods=['post'])
+    def add_comment(self, request, pk=None):
+        """Fügt einen Kommentar zum Ticket hinzu"""
+        ticket = self.get_object()
+        comment_text = request.data.get('comment', '').strip()
+        
+        if not comment_text:
+            return Response({'error': 'Kommentar darf nicht leer sein'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        comment = TroubleshootingComment.objects.create(
+            ticket=ticket,
+            comment=comment_text,
+            created_by=request.user
+        )
+        
+        serializer = TroubleshootingCommentSerializer(comment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['get'])
+    def comments(self, request, pk=None):
+        """Gibt alle Kommentare zurück"""
+        ticket = self.get_object()
+        comments = ticket.comments.all().order_by('-created_at')
+        serializer = TroubleshootingCommentSerializer(comments, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """Gibt Statistiken zurück"""
+        total = TroubleshootingTicket.objects.count()
+        by_status = {}
+        for status_code, status_label in TroubleshootingTicket.STATUS_CHOICES:
+            by_status[status_code] = TroubleshootingTicket.objects.filter(status=status_code).count()
+        by_category = {}
+        for cat_code, cat_label in TroubleshootingTicket.CATEGORY_CHOICES:
+            by_category[cat_code] = TroubleshootingTicket.objects.filter(category=cat_code).count()
+        return Response({
+            'total': total,
+            'by_status': by_status,
+            'by_category': by_category
+        })

@@ -56,7 +56,6 @@ const SystemEdit = () => {
     status: 'active',
     location: '',
     installation_date: '',
-    warranty_end: '',
     notes: '',
     visiview_license: ''
   });
@@ -143,7 +142,6 @@ const SystemEdit = () => {
         status: data.status || 'active',
         location: data.location || '',
         installation_date: data.installation_date || '',
-        warranty_end: data.warranty_end || '',
         notes: data.notes || '',
         visiview_license: data.visiview_license || ''
       });
@@ -783,17 +781,7 @@ const SystemEdit = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Garantie bis
-              </label>
-              <input
-                type="date"
-                value={formData.warranty_end}
-                onChange={(e) => handleInputChange('warranty_end', e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            {/* Warranty end removed from base info per request */}
 
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">

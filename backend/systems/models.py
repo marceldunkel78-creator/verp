@@ -46,7 +46,9 @@ class System(models.Model):
         Customer,
         on_delete=models.PROTECT,
         related_name='system_records',
-        verbose_name='Kunde'
+        verbose_name='Kunde',
+        null=True,
+        blank=True
     )
     
     description = models.TextField(
@@ -80,12 +82,6 @@ class System(models.Model):
         null=True,
         blank=True,
         verbose_name='Installationsdatum'
-    )
-    
-    warranty_end = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name='Garantie bis'
     )
     
     # Notizen

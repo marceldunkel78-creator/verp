@@ -9,7 +9,10 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   XMarkIcon,
-  LinkIcon
+  LinkIcon,
+  ClockIcon,
+  PlusIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 const VisiViewLicenseEdit = () => {
@@ -59,9 +62,31 @@ const VisiViewLicenseEdit = () => {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
   const [error, setError] = useState(null);
+  
+  // Maintenance state
+  const [maintenanceData, setMaintenanceData] = useState({
+    total_expenditures: 0,
+    total_credits: 0,
+    current_balance: 0,
+    time_credits: [],
+    time_expenditures: []
+  });
+  const [employees, setEmployees] = useState([]);
+  const [showExpenditureModal, setShowExpenditureModal] = useState(false);
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [editingExpenditure, setEditingExpenditure] = useState(null);
+  const [editingCredit, setEditingCredit] = useState(null);
+  const [expenditureForm, setExpenditureForm] = useState({
+    date: '', time: '', user: '', activity: '', task_type: '', 
+    hours_spent: '', comment: '', is_goodwill: false
+  });
+  const [creditForm, setCreditForm] = useState({
+    start_date: '', end_date: '', user: '', credit_hours: ''
+  });
 
   useEffect(() => {
     fetchOptions();
+    fetchEmployees();
     if (!isNew) {
       fetchLicense();
     }
@@ -82,11 +107,33 @@ const VisiViewLicenseEdit = () => {
       
       setLicense(data);
       setActiveOptions(data.active_options || []);
+      
+      // Fetch maintenance data
+      await fetchMaintenance();
     } catch (error) {
       console.error('Error fetching license:', error);
       setError('Lizenz konnte nicht geladen werden.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMaintenance = async () => {
+    if (isNew) return;
+    try {
+      const response = await api.get(`/visiview/licenses/${id}/maintenance/`);
+      setMaintenanceData(response.data);
+    } catch (error) {
+      console.error('Error fetching maintenance data:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await api.get('/users/?is_active=true');
+      setEmployees(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
     }
   };
 
@@ -197,10 +244,115 @@ const VisiViewLicenseEdit = () => {
     }
   };
 
+  // Maintenance handlers
+  const openExpenditureModal = (expenditure = null) => {
+    if (expenditure) {
+      setEditingExpenditure(expenditure);
+      setExpenditureForm({
+        date: expenditure.date || '',
+        time: expenditure.time || '',
+        user: expenditure.user || '',
+        activity: expenditure.activity || '',
+        task_type: expenditure.task_type || '',
+        hours_spent: expenditure.hours_spent || '',
+        comment: expenditure.comment || '',
+        is_goodwill: expenditure.is_goodwill || false
+      });
+    } else {
+      setEditingExpenditure(null);
+      setExpenditureForm({
+        date: '', time: '', user: '', activity: '', task_type: '',
+        hours_spent: '', comment: '', is_goodwill: false
+      });
+    }
+    setShowExpenditureModal(true);
+  };
+
+  const openCreditModal = (credit = null) => {
+    if (credit) {
+      setEditingCredit(credit);
+      setCreditForm({
+        start_date: credit.start_date || '',
+        end_date: credit.end_date || '',
+        user: credit.user || '',
+        credit_hours: credit.credit_hours || ''
+      });
+    } else {
+      setEditingCredit(null);
+      setCreditForm({
+        start_date: '', end_date: '', user: '', credit_hours: ''
+      });
+    }
+    setShowCreditModal(true);
+  };
+
+  const handleSaveExpenditure = async () => {
+    try {
+      if (editingExpenditure) {
+        await api.patch(`/visiview/licenses/${id}/update_time_expenditure/${editingExpenditure.id}/`, expenditureForm);
+      } else {
+        await api.post(`/visiview/licenses/${id}/add_time_expenditure/`, expenditureForm);
+      }
+      setShowExpenditureModal(false);
+      await fetchMaintenance();
+    } catch (error) {
+      console.error('Error saving expenditure:', error);
+      alert('Fehler beim Speichern der Zeitaufwendung');
+    }
+  };
+
+  const handleDeleteExpenditure = async (expenditureId) => {
+    if (!window.confirm('Möchten Sie diese Zeitaufwendung wirklich löschen?')) return;
+    try {
+      await api.delete(`/visiview/licenses/${id}/delete_time_expenditure/${expenditureId}/`);
+      await fetchMaintenance();
+    } catch (error) {
+      console.error('Error deleting expenditure:', error);
+      alert('Fehler beim Löschen');
+    }
+  };
+
+  const handleSaveCredit = async () => {
+    try {
+      if (editingCredit) {
+        await api.patch(`/visiview/licenses/${id}/update_time_credit/${editingCredit.id}/`, creditForm);
+      } else {
+        await api.post(`/visiview/licenses/${id}/add_time_credit/`, creditForm);
+      }
+      setShowCreditModal(false);
+      await fetchMaintenance();
+    } catch (error) {
+      console.error('Error saving credit:', error);
+      alert('Fehler beim Speichern der Zeitgutschrift');
+    }
+  };
+
+  const handleDeleteCredit = async (creditId) => {
+    if (!window.confirm('Möchten Sie diese Zeitgutschrift wirklich löschen?')) return;
+    try {
+      await api.delete(`/visiview/licenses/${id}/delete_time_credit/${creditId}/`);
+      await fetchMaintenance();
+    } catch (error) {
+      console.error('Error deleting credit:', error);
+      alert('Fehler beim Löschen');
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('de-DE');
+  };
+
+  const formatDecimal = (value) => {
+    if (value === null || value === undefined) return '0.00';
+    return parseFloat(value).toFixed(2);
+  };
+
   const tabs = [
     { id: 'details', name: 'Details', icon: DocumentTextIcon },
     { id: 'options', name: 'Optionen', icon: CogIcon },
     { id: 'customer', name: 'Kunde', icon: UserIcon },
+    { id: 'maintenance', name: 'Maintenance', icon: ClockIcon },
   ];
 
   if (loading) {
@@ -626,7 +778,404 @@ const VisiViewLicenseEdit = () => {
             </div>
           </div>
         )}
+
+        {/* Maintenance Tab */}
+        {activeTab === 'maintenance' && !isNew && (
+          <div className="space-y-6">
+            {/* Summary Section */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-red-50 p-4 rounded-lg text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {formatDecimal(maintenanceData.total_expenditures)} h
+                </div>
+                <div className="text-sm text-gray-600">Zeitaufwendungen</div>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {formatDecimal(maintenanceData.total_credits)} h
+                </div>
+                <div className="text-sm text-gray-600">Zeitgutschriften</div>
+              </div>
+              <div className={`p-4 rounded-lg text-center ${parseFloat(maintenanceData.current_balance) >= 0 ? 'bg-blue-50' : 'bg-orange-50'}`}>
+                <div className={`text-2xl font-bold ${parseFloat(maintenanceData.current_balance) >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                  {parseFloat(maintenanceData.current_balance) >= 0 ? '+' : ''}{formatDecimal(maintenanceData.current_balance)} h
+                </div>
+                <div className="text-sm text-gray-600">Zeitguthaben</div>
+              </div>
+            </div>
+
+            {/* Two column layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left: Zeitaufwendungen */}
+              <div className="bg-white border rounded-lg p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Zeitaufwendungen</h3>
+                  <button
+                    onClick={() => openExpenditureModal()}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Neu
+                  </button>
+                </div>
+                
+                {maintenanceData.time_expenditures.length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-4">Keine Zeitaufwendungen</p>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {maintenanceData.time_expenditures.map(exp => (
+                      <div
+                        key={exp.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
+                        onClick={() => openExpenditureModal(exp)}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{formatDate(exp.date)}</span>
+                            {exp.time && <span className="text-gray-500">{exp.time}</span>}
+                            {exp.is_goodwill && (
+                              <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">Kulanz</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {exp.activity_display} - {exp.task_type_display}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-red-600">{exp.hours_spent} h</div>
+                          <div className="text-xs text-gray-500">{exp.user_name}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Zeitgutschriften */}
+              <div className="bg-white border rounded-lg p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Zeitgutschriften</h3>
+                  <button
+                    onClick={() => openCreditModal()}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Neu
+                  </button>
+                </div>
+                
+                {maintenanceData.time_credits.length === 0 ? (
+                  <p className="text-gray-500 text-sm text-center py-4">Keine Zeitgutschriften</p>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {maintenanceData.time_credits.map(credit => (
+                      <div
+                        key={credit.id}
+                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer ${
+                          credit.is_expired ? 'bg-gray-100 opacity-60' : credit.is_active ? 'bg-green-50 hover:bg-green-100' : 'bg-yellow-50'
+                        }`}
+                        onClick={() => openCreditModal(credit)}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Gültig bis: {formatDate(credit.end_date)}</span>
+                            {credit.is_expired && (
+                              <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">Abgelaufen</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Ab {formatDate(credit.start_date)}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-green-600">{credit.credit_hours} h</div>
+                          <div className="text-sm text-gray-500">
+                            Rest: <span className={parseFloat(credit.remaining_hours) > 0 ? 'text-green-600' : 'text-gray-400'}>{credit.remaining_hours} h</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'maintenance' && isNew && (
+          <div className="text-center py-12 text-gray-500">
+            Maintenance-Daten sind erst nach dem Speichern der Lizenz verfügbar.
+          </div>
+        )}
       </div>
+
+      {/* Expenditure Modal */}
+      {showExpenditureModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                {editingExpenditure ? 'Zeitaufwendung bearbeiten' : 'Neue Zeitaufwendung'}
+              </h3>
+              <button onClick={() => setShowExpenditureModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Datum *</label>
+                  <input
+                    type="date"
+                    value={expenditureForm.date}
+                    onChange={(e) => setExpenditureForm({...expenditureForm, date: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Uhrzeit</label>
+                  <input
+                    type="time"
+                    value={expenditureForm.time}
+                    onChange={(e) => setExpenditureForm({...expenditureForm, time: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mitarbeiter *</label>
+                <select
+                  value={expenditureForm.user}
+                  onChange={(e) => setExpenditureForm({...expenditureForm, user: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  required
+                >
+                  <option value="">Auswählen...</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Aktivität *</label>
+                  <select
+                    value={expenditureForm.activity}
+                    onChange={(e) => setExpenditureForm({...expenditureForm, activity: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    required
+                  >
+                    <option value="">Auswählen...</option>
+                    <option value="email_support">Email Support</option>
+                    <option value="remote_support">Remote Support</option>
+                    <option value="phone_support">Telefon Support</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tätigkeit *</label>
+                  <select
+                    value={expenditureForm.task_type}
+                    onChange={(e) => setExpenditureForm({...expenditureForm, task_type: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    required
+                  >
+                    <option value="">Auswählen...</option>
+                    <option value="training">Schulung</option>
+                    <option value="testing">Test</option>
+                    <option value="bugs">Bugs</option>
+                    <option value="other">Sonstiges</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Aufgewendete Zeit (h) *</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={expenditureForm.hours_spent}
+                    onChange={(e) => setExpenditureForm({...expenditureForm, hours_spent: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    placeholder="z.B. 1.5"
+                    required
+                  />
+                </div>
+                <div className="flex items-center pt-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={expenditureForm.is_goodwill}
+                      onChange={(e) => setExpenditureForm({...expenditureForm, is_goodwill: e.target.checked})}
+                      className="h-4 w-4 text-indigo-600 rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Kulanz</span>
+                  </label>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kommentar</label>
+                <textarea
+                  value={expenditureForm.comment}
+                  onChange={(e) => setExpenditureForm({...expenditureForm, comment: e.target.value})}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Beschreibung der Tätigkeit..."
+                />
+              </div>
+
+              {editingExpenditure && editingExpenditure.deductions && editingExpenditure.deductions.length > 0 && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <div className="text-sm font-medium text-gray-700 mb-2">Abzüge von Gutschriften</div>
+                  <div className="space-y-1">
+                    {editingExpenditure.deductions.map(d => (
+                      <div key={d.id} className="flex justify-between items-center text-sm text-gray-700">
+                        <div>
+                          Gutschrift #{d.credit_id} (bis {d.credit_end || '-'})
+                        </div>
+                        <div className="font-semibold text-gray-900">- {parseFloat(d.hours_deducted).toFixed(2)} h</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-between mt-6">
+              {editingExpenditure && (
+                <button
+                  onClick={() => { handleDeleteExpenditure(editingExpenditure.id); setShowExpenditureModal(false); }}
+                  className="px-4 py-2 text-red-600 hover:text-red-700"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
+              <div className="flex gap-3 ml-auto">
+                <button
+                  onClick={() => setShowExpenditureModal(false)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSaveExpenditure}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  Speichern
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credit Modal */}
+      {showCreditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                {editingCredit ? 'Zeitgutschrift bearbeiten' : 'Neue Zeitgutschrift'}
+              </h3>
+              <button onClick={() => setShowCreditModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Beginn-Datum *</label>
+                  <input
+                    type="date"
+                    value={creditForm.start_date}
+                    onChange={(e) => setCreditForm({...creditForm, start_date: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ende-Datum *</label>
+                  <input
+                    type="date"
+                    value={creditForm.end_date}
+                    onChange={(e) => setCreditForm({...creditForm, end_date: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mitarbeiter</label>
+                <select
+                  value={creditForm.user}
+                  onChange={(e) => setCreditForm({...creditForm, user: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Auswählen...</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Zeitgutschrift (h) *</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={creditForm.credit_hours}
+                  onChange={(e) => setCreditForm({...creditForm, credit_hours: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                  placeholder="z.B. 10"
+                  required
+                />
+              </div>
+
+              {editingCredit && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Rest-Zeitgutschrift:</span> {editingCredit.remaining_hours} h
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-between mt-6">
+              {editingCredit && (
+                <button
+                  onClick={() => { handleDeleteCredit(editingCredit.id); setShowCreditModal(false); }}
+                  className="px-4 py-2 text-red-600 hover:text-red-700"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
+              <div className="flex gap-3 ml-auto">
+                <button
+                  onClick={() => setShowCreditModal(false)}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSaveCredit}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Speichern
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

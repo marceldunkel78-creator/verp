@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from core.upload_paths import visiview_ticket_attachment_path
 
 User = get_user_model()
 
@@ -726,10 +727,10 @@ class VisiViewTicket(models.Model):
     )
     
     # Dateien (als Text für importierte Daten)
-    attachments = models.TextField(
+    attachment_notes = models.TextField(
         blank=True,
-        verbose_name='Dateien',
-        help_text='Angehängte Dateien'
+        verbose_name='Datei-Notizen',
+        help_text='Notizen zu angehängten Dateien (Altsystem)'
     )
     
     # Zugehörige Tickets
@@ -1234,3 +1235,322 @@ class VisiViewMacroChangeLog(models.Model):
     
     def __str__(self):
         return f"Änderung an {self.macro.macro_id}: {self.version}"
+
+
+class VisiViewTicketAttachment(models.Model):
+    """
+    Dateianhänge für VisiView-Tickets
+    """
+    ticket = models.ForeignKey(
+        'VisiViewTicket',
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='Ticket'
+    )
+    file = models.FileField(
+        upload_to=visiview_ticket_attachment_path,
+        verbose_name='Datei'
+    )
+    filename = models.CharField(
+        max_length=255,
+        verbose_name='Dateiname'
+    )
+    file_size = models.IntegerField(
+        verbose_name='Dateigröße (Bytes)',
+        null=True,
+        blank=True
+    )
+    content_type = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Content-Type'
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='visiview_ticket_uploads',
+        verbose_name='Hochgeladen von'
+    )
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Hochgeladen am'
+    )
+    
+    class Meta:
+        verbose_name = 'VisiView-Ticket Anhang'
+        verbose_name_plural = 'VisiView-Ticket Anhänge'
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.filename} ({self.ticket.ticket_number})"
+    
+    @property
+    def is_image(self):
+        """Prüft ob die Datei ein Bild ist"""
+        if self.content_type:
+            return self.content_type.startswith('image/')
+        return self.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
+
+
+class VisiViewTicketTimeEntry(models.Model):
+    """
+    Zeiterfassung für VisiView-Tickets
+    """
+    ticket = models.ForeignKey(
+        'VisiViewTicket',
+        on_delete=models.CASCADE,
+        related_name='time_entries',
+        verbose_name='Ticket'
+    )
+    date = models.DateField(
+        verbose_name='Datum'
+    )
+    time = models.TimeField(
+        verbose_name='Uhrzeit'
+    )
+    employee = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='visiview_time_entries',
+        verbose_name='Mitarbeiter'
+    )
+    hours_spent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Aufgewendete Stunden'
+    )
+    description = models.TextField(
+        verbose_name='Beschreibung'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='visiview_time_entries_created',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Erstellt am'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Aktualisiert am'
+    )
+    
+    class Meta:
+        verbose_name = 'VisiView-Ticket Zeiteintrag'
+        verbose_name_plural = 'VisiView-Ticket Zeiteinträge'
+        ordering = ['-date', '-time']
+    
+    def __str__(self):
+        return f"{self.ticket.ticket_number} - {self.date} {self.time} ({self.hours_spent}h)"
+
+
+class MaintenanceTimeCredit(models.Model):
+    """
+    Zeitgutschriften für VisiView-Lizenzen
+    Zeitgutschriften haben ein Gültigkeitszeitraum und verfallen nach dem Enddatum.
+    Die Restzeitgutschrift wird sequentiell durch Zeitaufwendungen reduziert.
+    """
+    license = models.ForeignKey(
+        'VisiViewLicense',
+        on_delete=models.CASCADE,
+        related_name='time_credits',
+        verbose_name='Lizenz'
+    )
+    start_date = models.DateField(
+        verbose_name='Beginn-Datum'
+    )
+    end_date = models.DateField(
+        verbose_name='Ende-Datum'
+    )
+    credit_hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        verbose_name='Zeitgutschrift (h)'
+    )
+    remaining_hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        verbose_name='Rest-Zeitgutschrift (h)'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='maintenance_credits_assigned',
+        verbose_name='Mitarbeiter'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='maintenance_credits_created',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Erstellt am'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Aktualisiert am'
+    )
+    
+    class Meta:
+        verbose_name = 'Wartungs-Zeitgutschrift'
+        verbose_name_plural = 'Wartungs-Zeitgutschriften'
+        ordering = ['start_date', 'end_date']
+    
+    def __str__(self):
+        return f"{self.license.license_number} - {self.credit_hours}h bis {self.end_date}"
+    
+    def save(self, *args, **kwargs):
+        # Bei Erstellung: remaining_hours = credit_hours
+        if not self.pk and not self.remaining_hours:
+            self.remaining_hours = self.credit_hours
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_active(self):
+        """Prüft ob die Zeitgutschrift noch aktiv ist (nicht abgelaufen)"""
+        from datetime import date
+        return self.end_date >= date.today() and self.remaining_hours > 0
+    
+    @property
+    def is_expired(self):
+        """Prüft ob die Zeitgutschrift abgelaufen ist"""
+        from datetime import date
+        return self.end_date < date.today()
+
+
+class MaintenanceTimeExpenditure(models.Model):
+    """
+    Zeitaufwendungen für VisiView-Lizenzen Wartung
+    Wird sequentiell von der ältesten gültigen Zeitgutschrift abgezogen.
+    """
+    ACTIVITY_CHOICES = [
+        ('email_support', 'Email Support'),
+        ('remote_support', 'Remote Support'),
+        ('phone_support', 'Telefon Support'),
+    ]
+    
+    TASK_TYPE_CHOICES = [
+        ('training', 'Schulung'),
+        ('testing', 'Test'),
+        ('bugs', 'Bugs'),
+        ('other', 'Sonstiges'),
+    ]
+    
+    license = models.ForeignKey(
+        'VisiViewLicense',
+        on_delete=models.CASCADE,
+        related_name='time_expenditures',
+        verbose_name='Lizenz'
+    )
+    date = models.DateField(
+        verbose_name='Datum'
+    )
+    time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Uhrzeit'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='maintenance_expenditures_assigned',
+        verbose_name='Mitarbeiter'
+    )
+    activity = models.CharField(
+        max_length=20,
+        choices=ACTIVITY_CHOICES,
+        verbose_name='Aktivität'
+    )
+    task_type = models.CharField(
+        max_length=20,
+        choices=TASK_TYPE_CHOICES,
+        verbose_name='Tätigkeit'
+    )
+    hours_spent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Aufgewendete Zeit (h)'
+    )
+    comment = models.TextField(
+        blank=True,
+        verbose_name='Kommentar'
+    )
+    is_goodwill = models.BooleanField(
+        default=False,
+        verbose_name='Kulanz'
+    )
+    # Zeitschuld wenn keine Gutschrift verfügbar war
+    created_debt = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name='Erzeugte Zeitschuld (h)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='maintenance_expenditures_created',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Erstellt am'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Aktualisiert am'
+    )
+    
+    class Meta:
+        verbose_name = 'Wartungs-Zeitaufwendung'
+        verbose_name_plural = 'Wartungs-Zeitaufwendungen'
+        ordering = ['-date', '-time']
+    
+    def __str__(self):
+        return f"{self.license.license_number} - {self.date} ({self.hours_spent}h)"
+
+
+class MaintenanceTimeCreditDeduction(models.Model):
+    """
+    Dokumentiert wie viel einer Zeitaufwendung von welcher Zeitgutschrift abgezogen wurde.
+    Wird verwendet, damit beim Löschen einer Gutschrift die entsprechende Zeitschuld
+    präzise den betroffenen Aufwendungen zugewiesen werden kann.
+    """
+    credit = models.ForeignKey(
+        'MaintenanceTimeCredit',
+        on_delete=models.CASCADE,
+        related_name='deductions',
+        verbose_name='Zeitgutschrift'
+    )
+    expenditure = models.ForeignKey(
+        'MaintenanceTimeExpenditure',
+        on_delete=models.CASCADE,
+        related_name='deductions',
+        verbose_name='Zeitaufwendung'
+    )
+    hours_deducted = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        verbose_name='Abgezogene Stunden (h)'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        verbose_name = 'Gutschrift-Abzug'
+        verbose_name_plural = 'Gutschrift-Abzüge'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.credit.license.license_number} - {self.hours_deducted}h von Gutschrift {self.credit.id} für Aufwendung {self.expenditure.id}"
+

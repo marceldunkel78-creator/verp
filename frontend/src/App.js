@@ -53,6 +53,8 @@ import ProductCollections from './pages/ProductCollections';
 import ProductCollectionEdit from './pages/ProductCollectionEdit';
 import ServiceTickets from './pages/ServiceTickets';
 import ServiceTicketEdit from './pages/ServiceTicketEdit';
+import Troubleshooting from './pages/Troubleshooting';
+import TroubleshootingEdit from './pages/TroubleshootingEdit';
 import Dealers from './pages/Dealers';
 import DealerEdit from './pages/DealerEdit';
 import PriceLists from './pages/PriceLists';
@@ -120,6 +122,9 @@ function App() {
             <Route path="service/rma" element={<RMACases />} />
             <Route path="service/rma/new" element={<RMACaseEdit />} />
             <Route path="service/rma/:id" element={<RMACaseEdit />} />
+            <Route path="service/troubleshooting" element={<Troubleshooting />} />
+            <Route path="service/troubleshooting/new" element={<TroubleshootingEdit />} />
+            <Route path="service/troubleshooting/:id" element={<TroubleshootingEdit />} />
             <Route path="bi" element={<BusinessIntelligence />} />
             <Route path="documents" element={<Documents />} />
             <Route path="settings" element={<Settings />} />

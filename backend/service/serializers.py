@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, TicketChangeLog
+from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
+                     TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
+                     ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
+                     RMACaseTimeEntry)
 
 
 class VSServicePriceSerializer(serializers.ModelSerializer):
@@ -162,6 +165,54 @@ class TicketChangeLogSerializer(serializers.ModelSerializer):
         return None
 
 
+class ServiceTicketAttachmentSerializer(serializers.ModelSerializer):
+    """Serializer für Service-Ticket Anhänge"""
+    uploaded_by_name = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ServiceTicketAttachment
+        fields = ['id', 'file', 'file_url', 'filename', 'file_size', 'content_type', 
+                  'is_image', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at', 'file_size', 'content_type', 'is_image']
+    
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip() or obj.uploaded_by.username
+        return None
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
+
+
+class ServiceTicketTimeEntrySerializer(serializers.ModelSerializer):
+    """Serializer für Service-Ticket Zeiteinträge"""
+    employee_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ServiceTicketTimeEntry
+        fields = ['id', 'ticket', 'date', 'time', 'employee', 'employee_name', 
+                  'hours_spent', 'description', 'created_by', 'created_by_name', 
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}".strip() or obj.employee.username
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
 class ServiceTicketDetailSerializer(serializers.ModelSerializer):
     """Detaillierter Serializer für Service Tickets"""
     customer_name = serializers.SerializerMethodField()
@@ -173,6 +224,9 @@ class ServiceTicketDetailSerializer(serializers.ModelSerializer):
     linked_system_name = serializers.SerializerMethodField()
     comments = TicketCommentSerializer(many=True, read_only=True)
     change_logs = TicketChangeLogSerializer(many=True, read_only=True)
+    ticket_attachments = ServiceTicketAttachmentSerializer(many=True, read_only=True)
+    time_entries = ServiceTicketTimeEntrySerializer(many=True, read_only=True)
+    total_hours_spent = serializers.SerializerMethodField()
     watcher_ids = serializers.PrimaryKeyRelatedField(
         source='watchers',
         many=True,
@@ -189,11 +243,11 @@ class ServiceTicketDetailSerializer(serializers.ModelSerializer):
             'assigned_to', 'assigned_to_name',
             'linked_rma', 'linked_rma_number', 'linked_visiview_ticket', 'linked_system', 'linked_system_name',
             'watchers', 'watcher_ids',
-            'comments', 'change_logs',
+            'comments', 'change_logs', 'ticket_attachments', 'time_entries', 'total_hours_spent',
             'is_open',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['ticket_number', 'created_at', 'updated_at', 'comments', 'change_logs']
+        read_only_fields = ['ticket_number', 'created_at', 'updated_at', 'comments', 'change_logs', 'ticket_attachments', 'time_entries']
     
     def get_customer_name(self, obj):
         if obj.customer:
@@ -222,6 +276,12 @@ class ServiceTicketDetailSerializer(serializers.ModelSerializer):
                 return f"{obj.linked_system.system_number} - {obj.linked_system.system_name}"
             return getattr(obj.linked_system, 'system_name', None)
         return None
+    
+    def get_total_hours_spent(self, obj):
+        """Berechnet die Gesamtstunden aus allen Zeiteinträgen"""
+        from django.db.models import Sum
+        total = obj.time_entries.aggregate(Sum('hours_spent'))['hours_spent__sum']
+        return float(total) if total else 0.0
 
 
 class ServiceTicketCreateUpdateSerializer(serializers.ModelSerializer):
@@ -236,6 +296,29 @@ class ServiceTicketCreateUpdateSerializer(serializers.ModelSerializer):
             'watchers'
         ]
         read_only_fields = ['id', 'ticket_number']
+
+
+class RMACaseTimeEntrySerializer(serializers.ModelSerializer):
+    """Serializer für RMA-Fall Zeiteinträge"""
+    employee_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RMACaseTimeEntry
+        fields = ['id', 'rma_case', 'date', 'time', 'employee', 'employee_name', 
+                  'hours_spent', 'description', 'created_by', 'created_by_name', 
+                  'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}".strip() or obj.employee.username
+        return None
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
 
 
 class RMACaseListSerializer(serializers.ModelSerializer):
@@ -257,6 +340,8 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    time_entries = RMACaseTimeEntrySerializer(many=True, read_only=True)
+    total_hours_spent = serializers.SerializerMethodField()
     
     class Meta:
         model = RMACase
@@ -285,7 +370,10 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             
             # Metadaten
             'assigned_to', 'assigned_to_name',
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+            
+            # Zeiterfassung
+            'time_entries', 'total_hours_spent'
         ]
         read_only_fields = ['rma_number', 'created_at', 'updated_at']
     
@@ -298,6 +386,12 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+    
+    def get_total_hours_spent(self, obj):
+        """Berechnet die Gesamtstunden aus allen Zeiteinträgen"""
+        from django.db.models import Sum
+        total = obj.time_entries.aggregate(Sum('hours_spent'))['hours_spent__sum']
+        return float(total) if total else 0.0
 
 
 class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
@@ -330,3 +424,136 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             'assigned_to'
         ]
         read_only_fields = ['id', 'rma_number']
+
+
+class TroubleshootingCommentSerializer(serializers.ModelSerializer):
+    """Serializer für Troubleshooting Kommentare"""
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TroubleshootingComment
+        fields = ['id', 'comment', 'created_by', 'created_by_name', 'created_at']
+        read_only_fields = ['id', 'created_at', 'created_by', 'created_by_name']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
+class TroubleshootingAttachmentSerializer(serializers.ModelSerializer):
+    """Serializer für Troubleshooting Anhänge"""
+    uploaded_by_name = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TroubleshootingAttachment
+        fields = ['id', 'file', 'file_url', 'filename', 'file_size', 'content_type', 
+                  'is_image', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at', 'file_size', 'content_type', 'is_image']
+    
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip() or obj.uploaded_by.username
+        return None
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
+
+
+class TroubleshootingListSerializer(serializers.ModelSerializer):
+    """Serializer für Troubleshooting Ticket Liste"""
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    author_name = serializers.SerializerMethodField()
+    is_open = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = TroubleshootingTicket
+        fields = [
+            'id', 'ticket_number', 'legacy_id', 'title',
+            'status', 'status_display', 'priority', 'priority_display',
+            'category', 'category_display',
+            'assigned_to', 'assigned_to_name',
+            'author', 'author_name',
+            'affected_version', 'is_open',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
+        return None
+    
+    def get_author_name(self, obj):
+        if obj.author:
+            return f"{obj.author.first_name} {obj.author.last_name}".strip() or obj.author.username
+        return None
+
+
+class TroubleshootingDetailSerializer(serializers.ModelSerializer):
+    """Detaillierter Serializer für Troubleshooting Tickets"""
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    author_name = serializers.SerializerMethodField()
+    last_changed_by_name = serializers.SerializerMethodField()
+    comments = TroubleshootingCommentSerializer(many=True, read_only=True)
+    attachments = TroubleshootingAttachmentSerializer(many=True, read_only=True)
+    is_open = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = TroubleshootingTicket
+        fields = [
+            'id', 'ticket_number', 'legacy_id', 'title', 'description',
+            'status', 'status_display', 'priority', 'priority_display',
+            'category', 'category_display',
+            'assigned_to', 'assigned_to_name',
+            'affected_version', 'root_cause', 'corrective_action',
+            'related_tickets', 'files', 'last_comments',
+            'author', 'author_name',
+            'last_changed_by', 'last_changed_by_name',
+            'comments', 'is_open',
+            'attachments',
+            'created_at', 'updated_at', 'closed_at'
+        ]
+        read_only_fields = ['ticket_number', 'created_at', 'updated_at', 'comments', 'attachments']
+    
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
+        return None
+    
+    def get_author_name(self, obj):
+        if obj.author:
+            return f"{obj.author.first_name} {obj.author.last_name}".strip() or obj.author.username
+        return None
+    
+    def get_last_changed_by_name(self, obj):
+        if obj.last_changed_by:
+            return f"{obj.last_changed_by.first_name} {obj.last_changed_by.last_name}".strip() or obj.last_changed_by.username
+        return None
+
+
+class TroubleshootingCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer für Erstellen/Aktualisieren von Troubleshooting Tickets"""
+    
+    class Meta:
+        model = TroubleshootingTicket
+        fields = [
+            'id', 'ticket_number', 'title', 'description',
+            'status', 'priority', 'category',
+            'assigned_to', 'affected_version',
+            'root_cause', 'corrective_action',
+            'related_tickets', 'files', 'last_comments',
+            'closed_at'
+        ]
+        read_only_fields = ['id', 'ticket_number']

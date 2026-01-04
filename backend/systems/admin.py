@@ -27,7 +27,7 @@ class SystemAdmin(admin.ModelAdmin):
             'fields': ('system_number', 'system_name', 'customer', 'description')
         }),
         ('Status & Standort', {
-            'fields': ('status', 'location', 'installation_date', 'warranty_end')
+            'fields': ('status', 'location', 'installation_date')
         }),
         ('Notizen', {
             'fields': ('notes',)

@@ -9,14 +9,18 @@ import {
   DocumentTextIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ClockIcon,
+  PlusIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
   { id: 'basic', name: 'Basisinfos', icon: InformationCircleIcon },
   { id: 'shipping', name: 'Wareneingang/-ausgang', icon: TruckIcon },
   { id: 'calculation', name: 'RMA-Kalkulation', icon: CalculatorIcon },
-  { id: 'report', name: 'Reparaturbericht', icon: DocumentTextIcon }
+  { id: 'report', name: 'Reparaturbericht', icon: DocumentTextIcon },
+  { id: 'time', name: 'Zeiterfassung', icon: ClockIcon }
 ];
 
 const STATUS_OPTIONS = [
@@ -64,6 +68,18 @@ const RMACaseEdit = () => {
   const [searchingInventory, setSearchingInventory] = useState(false);
   const [inventoryResults, setInventoryResults] = useState([]);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
+
+  // Time tracking state
+  const [timeEntries, setTimeEntries] = useState([]);
+  const [newTimeEntry, setNewTimeEntry] = useState({
+    date: '',
+    time: '',
+    employee: '',
+    hours_spent: '',
+    description: ''
+  });
+  const [addingTimeEntry, setAddingTimeEntry] = useState(false);
+  const [employees, setEmployees] = useState([]);
 
   // Form data for all tabs
   const [formData, setFormData] = useState({
@@ -121,6 +137,12 @@ const RMACaseEdit = () => {
         const response = await api.get(`/service/rma/${id}/`);
         const data = response.data;
         setRmaCase(data);
+        
+        // Load time entries
+        if (data.time_entries) {
+          setTimeEntries(data.time_entries);
+        }
+        
         setFormData({
           // Basic Info
           title: data.title || '',
@@ -238,6 +260,21 @@ const RMACaseEdit = () => {
   useEffect(() => {
     fetchRMACase();
   }, [fetchRMACase]);
+
+  // Load employees for time tracking
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const response = await api.get('/users/?is_active=true');
+        setEmployees(response.data.results || response.data || []);
+      } catch (error) {
+        console.error('Error loading employees:', error);
+      }
+    };
+    if (!isNew) {
+      fetchEmployees();
+    }
+  }, [isNew]);
 
   // Warning before leaving page with unsaved changes
   useEffect(() => {
@@ -398,6 +435,48 @@ const RMACaseEdit = () => {
     const labor = parseFloat(formData.labor_cost) || 0;
     const shipping = parseFloat(formData.shipping_cost) || 0;
     return (parts + labor + shipping).toFixed(2);
+  };
+
+  // Time entry handlers
+  const handleAddTimeEntry = async () => {
+    if (!newTimeEntry.employee || !newTimeEntry.hours_spent) {
+      alert('Bitte Mitarbeiter und Stunden ausfüllen');
+      return;
+    }
+    
+    setAddingTimeEntry(true);
+    try {
+      const response = await api.post(`/service/rma/${id}/add_time_entry/`, newTimeEntry);
+      setTimeEntries([...timeEntries, response.data]);
+      setNewTimeEntry({
+        date: '',
+        time: '',
+        employee: '',
+        hours_spent: '',
+        description: ''
+      });
+      fetchRMACase(); // Reload to get updated total_hours_spent
+    } catch (error) {
+      console.error('Error adding time entry:', error);
+      alert('Fehler beim Hinzufügen der Zeiterfassung');
+    } finally {
+      setAddingTimeEntry(false);
+    }
+  };
+
+  const handleDeleteTimeEntry = async (entryId) => {
+    if (!window.confirm('Möchten Sie diesen Zeiteintrag wirklich löschen?')) {
+      return;
+    }
+    
+    try {
+      await api.delete(`/service/rma/${id}/delete_time_entry/${entryId}/`);
+      setTimeEntries(timeEntries.filter(entry => entry.id !== entryId));
+      fetchRMACase(); // Reload to get updated total_hours_spent
+    } catch (error) {
+      console.error('Error deleting time entry:', error);
+      alert('Fehler beim Löschen der Zeiterfassung');
+    }
   };
 
   if (loading) {
@@ -1214,6 +1293,184 @@ const RMACaseEdit = () => {
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                   placeholder="Weitere Anmerkungen..."
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: Zeiterfassung */}
+          {activeTab === 'time' && (
+            <div className="space-y-6">
+              {/* Header with total hours */}
+              <div className="flex justify-between items-center border-b pb-4">
+                <h3 className="text-lg font-medium text-gray-900">Zeiterfassung</h3>
+                {rmaCase?.total_hours_spent !== undefined && (
+                  <div className="text-sm">
+                    <span className="text-gray-600">Gesamt: </span>
+                    <span className="font-semibold text-orange-600">
+                      {rmaCase.total_hours_spent} Stunden
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Add new time entry form */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Neue Zeiterfassung</h4>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Datum
+                    </label>
+                    <input
+                      type="date"
+                      value={newTimeEntry.date}
+                      onChange={(e) => setNewTimeEntry({ ...newTimeEntry, date: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Uhrzeit
+                    </label>
+                    <input
+                      type="time"
+                      value={newTimeEntry.time}
+                      onChange={(e) => setNewTimeEntry({ ...newTimeEntry, time: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Mitarbeiter *
+                    </label>
+                    <select
+                      value={newTimeEntry.employee}
+                      onChange={(e) => setNewTimeEntry({ ...newTimeEntry, employee: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      required
+                    >
+                      <option value="">Auswählen...</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.first_name} {emp.last_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Stunden *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      value={newTimeEntry.hours_spent}
+                      onChange={(e) => setNewTimeEntry({ ...newTimeEntry, hours_spent: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      placeholder="z.B. 2.5"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <button
+                      onClick={handleAddTimeEntry}
+                      disabled={addingTimeEntry || !newTimeEntry.employee || !newTimeEntry.hours_spent}
+                      className="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                      <PlusIcon className="h-5 w-5 mr-1" />
+                      Hinzufügen
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Beschreibung
+                  </label>
+                  <textarea
+                    value={newTimeEntry.description}
+                    onChange={(e) => setNewTimeEntry({ ...newTimeEntry, description: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    placeholder="Beschreibung der durchgeführten Arbeiten..."
+                  />
+                </div>
+              </div>
+
+              {/* Time entries table */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Zeiteinträge</h4>
+                {timeEntries.length === 0 ? (
+                  <p className="text-gray-500 text-sm py-8 text-center">
+                    Noch keine Zeiteinträge vorhanden
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Datum
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Uhrzeit
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Mitarbeiter
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Stunden
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Beschreibung
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Erfasst von
+                          </th>
+                          <th className="px-6 py-3"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {timeEntries.map(entry => (
+                          <tr key={entry.id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formatDate(entry.date)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {entry.time || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {entry.employee_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {entry.hours_spent}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              {entry.description || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {entry.created_by_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                              <button
+                                onClick={() => handleDeleteTimeEntry(entry.id)}
+                                className="text-red-600 hover:text-red-800"
+                                title="Löschen"
+                              >
+                                <TrashIcon className="h-5 w-5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
