@@ -237,6 +237,20 @@ def visiview_ticket_upload_path(instance, filename):
     return f"VisiView/unknown/{safe_filename}"
 
 
+def sales_ticket_attachment_path(instance, filename):
+    """
+    Upload-Pfad für Sales-Ticket Anhänge: /Sales/Sales-Tickets/Ticketnummer/filename
+    """
+    safe_filename = _sanitize_path_component(filename)
+    # instance is expected to be a SalesTicketAttachment or similar with .ticket
+    ticket = getattr(instance, 'ticket', None) or instance
+    ticket_number = _sanitize_path_component(getattr(ticket, 'ticket_number', '') or '')
+
+    if ticket_number:
+        return f"Sales/Sales-Tickets/{ticket_number}/{safe_filename}"
+    return f"Sales/Sales-Tickets/unknown/{safe_filename}"
+
+
 def company_upload_path(instance, filename):
     """
     Upload-Pfad: /company/filename

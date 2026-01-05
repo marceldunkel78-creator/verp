@@ -1,10 +1,11 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django_filters.rest_framework import DjangoFilterBackend
 from .serializers import (
     UserSerializer, UserCreateSerializer, 
     UserUpdateSerializer, ChangePasswordSerializer, EmployeeSerializer
@@ -394,7 +395,7 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
 
     def _send_vacation_notification(self, vacation_request, action_type, actor, reason=''):
         """Sendet eine Benachrichtigung an den Mitarbeiter bei Urlaubsänderungen."""
-        from .models import Message
+        from .models import Notification
         
         status_labels = {
             'approved': 'genehmigt',
@@ -406,17 +407,17 @@ class VacationRequestViewSet(viewsets.ModelViewSet):
         action_label = status_labels.get(action_type, action_type)
         title = f"Urlaubsantrag {action_label}"
         
-        content = f"Ihr Urlaubsantrag vom {vacation_request.start_date.strftime('%d.%m.%Y')} bis {vacation_request.end_date.strftime('%d.%m.%Y')} ({vacation_request.days_requested} Tage) wurde von {actor.get_full_name() or actor.username} {action_label}."
+        message = f"Ihr Urlaubsantrag vom {vacation_request.start_date.strftime('%d.%m.%Y')} bis {vacation_request.end_date.strftime('%d.%m.%Y')} ({vacation_request.days_requested} Tage) wurde von {actor.get_full_name() or actor.username} {action_label}."
         
         if reason:
-            content += f"\n\nBegründung: {reason}"
+            message += f"\n\nBegründung: {reason}"
         
-        Message.objects.create(
+        Notification.objects.create(
             user=vacation_request.user,
-            sender=actor,
             title=title,
-            content=content,
-            message_type='system'
+            message=message,
+            notification_type='vacation',
+            related_url='/myverp'
         )
 
     def _create_vacation_adjustment(self, employee, year_balance, vacation_request, adjustment_type, days, reason, created_by):
@@ -897,14 +898,30 @@ from .serializers import (
 class TravelExpenseReportViewSet(viewsets.ModelViewSet):
     """
     ViewSet für Reisekostenabrechnungen
+    
+    Unterstützt Filterung nach:
+    - year: Jahr der Abrechnung
+    - user_id: Mitarbeiter-ID
+    - status: Status der Abrechnung (draft, submitted, approved, rejected)
     """
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['year', 'status']
+    search_fields = ['user__username', 'user__first_name', 'user__last_name']
+    ordering_fields = ['year', 'created_at', 'status']
+    ordering = ['-year', '-created_at']
     
     def get_queryset(self):
         user = self.request.user
+        queryset = TravelExpenseReport.objects.all() if user.is_staff else TravelExpenseReport.objects.filter(user=user)
+        
+        # Zusätzliche Filterung nach user_id (nur für Staff)
         if user.is_staff:
-            return TravelExpenseReport.objects.all()
-        return TravelExpenseReport.objects.filter(user=user)
+            user_id = self.request.query_params.get('user_id')
+            if user_id:
+                queryset = queryset.filter(user_id=user_id)
+        
+        return queryset.select_related('user', 'approved_by')
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -982,6 +999,21 @@ class TravelExpenseReportViewSet(viewsets.ModelViewSet):
         
         report.status = 'submitted'
         report.save()
+        
+        # Benachrichtige alle HR-Mitarbeiter
+        from .models import Notification
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        hr_users = User.objects.filter(can_write_hr=True, is_active=True)
+        for hr_user in hr_users:
+            Notification.objects.create(
+                user=hr_user,
+                title='Neue Reisekostenabrechnung eingereicht',
+                message=f'{report.user.get_full_name() or report.user.username} hat eine Reisekostenabrechnung für {report.year} eingereicht. Gesamtbetrag: {report.total_amount}€',
+                notification_type='info',
+                related_url='/hr/travel-expenses'
+            )
+        
         return Response({'message': 'Abrechnung eingereicht.', 'status': report.status})
     
     @action(detail=True, methods=['post'])
@@ -995,24 +1027,44 @@ class TravelExpenseReportViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Nur eingereichte Abrechnungen können genehmigt werden.'}, status=status.HTTP_400_BAD_REQUEST)
         
         from django.utils import timezone
+        from .models import Notification
         report.status = 'approved'
         report.approved_by = request.user
         report.approved_at = timezone.now()
         report.save()
+        
+        # Benachrichtige den Einreicher
+        Notification.objects.create(
+            user=report.user,
+            title='Reisekostenabrechnung genehmigt',
+            message=f'Ihre Reisekostenabrechnung für {report.year} wurde von {request.user.get_full_name() or request.user.username} genehmigt.',
+            notification_type='success',
+            related_url='/myverp'
+        )
+        
         return Response({'message': 'Abrechnung genehmigt.', 'status': report.status})
-    
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         """Lehnt die Abrechnung ab (nur Staff)"""
         if not request.user.is_staff:
             return Response({'error': 'Keine Berechtigung.'}, status=status.HTTP_403_FORBIDDEN)
-        
+
         report = self.get_object()
         if report.status != 'submitted':
             return Response({'error': 'Nur eingereichte Abrechnungen können abgelehnt werden.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
+        from .models import Notification
         report.status = 'rejected'
         report.save()
+
+        # Benachrichtige den Einreicher
+        Notification.objects.create(
+            user=report.user,
+            title='Reisekostenabrechnung abgelehnt',
+            message=f'Ihre Reisekostenabrechnung für {report.year} wurde von {request.user.get_full_name() or request.user.username} abgelehnt.',
+            notification_type='warning',
+            related_url='/myverp'
+        )
         return Response({'message': 'Abrechnung abgelehnt.', 'status': report.status})
     
     @action(detail=True, methods=['get'])

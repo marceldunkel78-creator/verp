@@ -69,7 +69,8 @@ const VisiViewLicenseEdit = () => {
     total_credits: 0,
     current_balance: 0,
     time_credits: [],
-    time_expenditures: []
+    time_expenditures: [],
+    settlements: []  // Zwischenabrechnungen
   });
   const [employees, setEmployees] = useState([]);
   const [showExpenditureModal, setShowExpenditureModal] = useState(false);
@@ -82,6 +83,14 @@ const VisiViewLicenseEdit = () => {
   });
   const [creditForm, setCreditForm] = useState({
     start_date: '', end_date: '', user: '', credit_hours: ''
+  });
+  
+  // Maintenance Invoice state
+  const [maintenanceInvoices, setMaintenanceInvoices] = useState([]);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState({
+    start_date: '', end_date: '', invoice_number: ''
   });
 
   useEffect(() => {
@@ -110,6 +119,7 @@ const VisiViewLicenseEdit = () => {
       
       // Fetch maintenance data
       await fetchMaintenance();
+      await fetchMaintenanceInvoices();
     } catch (error) {
       console.error('Error fetching license:', error);
       setError('Lizenz konnte nicht geladen werden.');
@@ -125,6 +135,16 @@ const VisiViewLicenseEdit = () => {
       setMaintenanceData(response.data);
     } catch (error) {
       console.error('Error fetching maintenance data:', error);
+    }
+  };
+
+  const fetchMaintenanceInvoices = async () => {
+    if (isNew) return;
+    try {
+      const response = await api.get(`/visiview/licenses/${id}/maintenance_invoices/`);
+      setMaintenanceInvoices(response.data || []);
+    } catch (error) {
+      console.error('Error fetching maintenance invoices:', error);
     }
   };
 
@@ -335,6 +355,46 @@ const VisiViewLicenseEdit = () => {
     } catch (error) {
       console.error('Error deleting credit:', error);
       alert('Fehler beim Löschen');
+    }
+  };
+
+  // Maintenance Invoice handlers
+  const handleGenerateInvoice = async () => {
+    setGeneratingInvoice(true);
+    try {
+      const payload = {
+        invoice_number: invoiceForm.invoice_number,
+        start_date: invoiceForm.start_date || null,
+        end_date: invoiceForm.end_date || null
+      };
+      
+      await api.post(`/visiview/licenses/${id}/generate_maintenance_invoice/`, payload);
+      setShowInvoiceModal(false);
+      setInvoiceForm({ start_date: '', end_date: '', invoice_number: '' });
+      await fetchMaintenanceInvoices();
+      alert('Abrechnung erfolgreich erstellt');
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      alert('Fehler beim Erstellen der Abrechnung: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setGeneratingInvoice(false);
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId) => {
+    if (!window.confirm('Möchten Sie diese Abrechnung wirklich löschen?')) return;
+    try {
+      await api.delete(`/visiview/licenses/${id}/delete_maintenance_invoice/${invoiceId}/`);
+      await fetchMaintenanceInvoices();
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      alert('Fehler beim Löschen der Abrechnung');
+    }
+  };
+
+  const handleOpenInvoice = (invoice) => {
+    if (invoice.pdf_url) {
+      window.open(invoice.pdf_url, '_blank');
     }
   };
 
@@ -804,20 +864,120 @@ const VisiViewLicenseEdit = () => {
               </div>
             </div>
 
-            {/* Two column layout */}
+            {/* Zwischenabrechnungen Section */}
+            {maintenanceData.settlements && maintenanceData.settlements.length > 0 && (
+              <div className="bg-white border rounded-lg p-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Zwischenabrechnungen</h3>
+                <div className="space-y-4">
+                  {maintenanceData.settlements.map((settlement, index) => (
+                    <div 
+                      key={index} 
+                      className={`border rounded-lg p-4 ${settlement.is_final ? 'border-blue-300 bg-blue-50' : 'border-gray-200'}`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <span className="font-semibold text-gray-900">
+                            Abrechnung {index + 1}
+                            {settlement.is_final && <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">ENDABRECHNUNG</span>}
+                          </span>
+                          {settlement.credit && (
+                            <div className="text-sm text-gray-600">
+                              Gutschrift: {formatDate(settlement.credit.start_date)} - {formatDate(settlement.credit.end_date)}
+                            </div>
+                          )}
+                          {!settlement.credit && (
+                            <div className="text-sm text-orange-600">Ohne Gutschrift (Zeitschuld)</div>
+                          )}
+                        </div>
+                        <div className={`text-lg font-bold ${parseFloat(settlement.balance) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {parseFloat(settlement.balance) >= 0 ? '+' : ''}{formatDecimal(settlement.balance)} h
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        {/* HABEN Seite */}
+                        <div className="bg-green-50 rounded p-3">
+                          <div className="font-semibold text-green-800 mb-2">HABEN</div>
+                          {parseFloat(settlement.carry_over_in) < 0 && (
+                            <div className="flex justify-between text-orange-600">
+                              <span>Übertrag:</span>
+                              <span>{formatDecimal(settlement.carry_over_in)} h</span>
+                            </div>
+                          )}
+                          {settlement.credit && (
+                            <div className="flex justify-between text-green-700">
+                              <span>Gutschrift:</span>
+                              <span>{formatDecimal(settlement.credit_amount)} h</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* SOLL Seite */}
+                        <div className="bg-red-50 rounded p-3">
+                          <div className="font-semibold text-red-800 mb-2">SOLL</div>
+                          <div className="flex justify-between text-red-700">
+                            <span>Aufwendungen ({settlement.expenditures?.length || 0}):</span>
+                            <span>{formatDecimal(settlement.expenditure_total)} h</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Übertrag Info */}
+                      {!settlement.is_final && (
+                        <div className="mt-2 text-xs text-gray-500 text-right">
+                          {parseFloat(settlement.balance) > 0 
+                            ? 'Restguthaben verfällt → Übertrag: 0 h' 
+                            : `Übertrag zur nächsten Abrechnung: ${formatDecimal(settlement.carry_over_out)} h`}
+                        </div>
+                      )}
+                      
+                      {/* Aufwendungen Details (collapsible) */}
+                      {settlement.expenditures && settlement.expenditures.length > 0 && (
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">
+                            {settlement.expenditures.length} Aufwendung(en) anzeigen
+                          </summary>
+                          <div className="mt-2 space-y-1 pl-2 border-l-2 border-gray-200">
+                            {settlement.expenditures.map(exp => (
+                              <div key={exp.id} className="text-xs flex justify-between py-1">
+                                <span className="text-gray-600">
+                                  {formatDate(exp.date)} - {exp.activity_display || exp.activity}
+                                </span>
+                                <span className="text-red-600 font-medium">{exp.hours_spent} h</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-4">
+              <button
+                onClick={() => openExpenditureModal()}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Zeitaufwendung erfassen
+              </button>
+              <button
+                onClick={() => openCreditModal()}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Zeitgutschrift hinzufügen
+              </button>
+            </div>
+
+            {/* Two column layout for existing entries */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left: Zeitaufwendungen */}
               <div className="bg-white border rounded-lg p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Zeitaufwendungen</h3>
-                  <button
-                    onClick={() => openExpenditureModal()}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                    Neu
-                  </button>
-                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Alle Zeitaufwendungen</h3>
                 
                 {maintenanceData.time_expenditures.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">Keine Zeitaufwendungen</p>
@@ -853,16 +1013,7 @@ const VisiViewLicenseEdit = () => {
 
               {/* Right: Zeitgutschriften */}
               <div className="bg-white border rounded-lg p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Zeitgutschriften</h3>
-                  <button
-                    onClick={() => openCreditModal()}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                    Neu
-                  </button>
-                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Alle Zeitgutschriften</h3>
                 
                 {maintenanceData.time_credits.length === 0 ? (
                   <p className="text-gray-500 text-sm text-center py-4">Keine Zeitgutschriften</p>
@@ -889,15 +1040,72 @@ const VisiViewLicenseEdit = () => {
                         </div>
                         <div className="text-right">
                           <div className="font-semibold text-green-600">{credit.credit_hours} h</div>
-                          <div className="text-sm text-gray-500">
-                            Rest: <span className={parseFloat(credit.remaining_hours) > 0 ? 'text-green-600' : 'text-gray-400'}>{credit.remaining_hours} h</span>
-                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Maintenance Invoices Section */}
+            <div className="bg-white border rounded-lg p-4">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Abrechnungen (PDF)</h3>
+                <button
+                  onClick={() => setShowInvoiceModal(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  Abrechnung erstellen
+                </button>
+              </div>
+              
+              {maintenanceInvoices.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-4">Keine Abrechnungen erstellt</p>
+              ) : (
+                <div className="space-y-2">
+                  {maintenanceInvoices.map(invoice => (
+                    <div
+                      key={invoice.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {invoice.invoice_number || `Abrechnung #${invoice.id}`}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {formatDate(invoice.created_at)}
+                          </span>
+                        </div>
+                        {(invoice.start_date || invoice.end_date) && (
+                          <div className="text-sm text-gray-600">
+                            Zeitraum: {formatDate(invoice.start_date)} - {formatDate(invoice.end_date)}
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-500 mt-1">
+                          Gutschriften: {invoice.total_credits}h | Aufwendungen: {invoice.total_expenditures}h | Saldo: {invoice.balance}h
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenInvoice(invoice)}
+                          className="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
+                        >
+                          Öffnen
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInvoice(invoice.id)}
+                          className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1172,6 +1380,82 @@ const VisiViewLicenseEdit = () => {
                   Speichern
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Modal */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Maintenance-Abrechnung erstellen</h3>
+              <button onClick={() => setShowInvoiceModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Rechnungsnummer (optional)
+                </label>
+                <input
+                  type="text"
+                  value={invoiceForm.invoice_number}
+                  onChange={(e) => setInvoiceForm({...invoiceForm, invoice_number: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="z.B. RE-2024-001"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Von Datum (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={invoiceForm.start_date}
+                    onChange={(e) => setInvoiceForm({...invoiceForm, start_date: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Bis Datum (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={invoiceForm.end_date}
+                    onChange={(e) => setInvoiceForm({...invoiceForm, end_date: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                <p className="font-medium mb-1">Hinweis:</p>
+                <p>Ohne Datumsangaben werden alle Zeitgutschriften und Aufwendungen in die Abrechnung aufgenommen.</p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 mt-6 justify-end">
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                disabled={generatingInvoice}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleGenerateInvoice}
+                disabled={generatingInvoice}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {generatingInvoice ? 'Erstelle PDF...' : 'Abrechnung erstellen'}
+              </button>
             </div>
           </div>
         </div>

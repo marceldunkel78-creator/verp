@@ -98,25 +98,43 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
       return;
     }
 
-    try {
-      const endpoint = getEndpoint();
-      await api.delete(`/${endpoint}/${ticketId}/delete_attachment/${attachmentId}/`);
+    const endpoint = getEndpoint();
+    const base = `/${endpoint}/${ticketId}`;
 
-      if (onDeleteSuccess) {
-        onDeleteSuccess(attachmentId);
-      }
+    try {
+      console.debug('Attempting to delete attachment (hyphen) at', `${base}/delete-attachment/${attachmentId}/`);
+      await api.delete(`${base}/delete-attachment/${attachmentId}/`);
     } catch (error) {
-      console.error('Fehler beim Löschen:', error);
-      alert('Fehler beim Löschen der Datei: ' + (error.response?.data?.error || error.message));
+      // If the backend expects underscore naming, try that as a fallback
+      if (error.response?.status === 404) {
+        try {
+          console.debug('Fallback delete (underscore) at', `${base}/delete_attachment/${attachmentId}/`);
+          await api.delete(`${base}/delete_attachment/${attachmentId}/`);
+        } catch (err2) {
+          console.error('Fehler beim Löschen (Fallback):', err2);
+          alert('Fehler beim Löschen der Datei: ' + (err2.response?.data?.error || err2.message));
+          return;
+        }
+      } else {
+        console.error('Fehler beim Löschen:', error);
+        alert('Fehler beim Löschen der Datei: ' + (error.response?.data?.error || error.message));
+        return;
+      }
+    }
+
+    if (onDeleteSuccess) {
+      onDeleteSuccess(attachmentId);
     }
   };
 
   const handleDownload = async (attachmentId, filename) => {
+    const endpoint = getEndpoint();
+    const base = `/${endpoint}/${ticketId}`;
+
     try {
-      const endpoint = getEndpoint();
-      const response = await api.get(`/${endpoint}/${ticketId}/download_attachment/${attachmentId}/`, {
-        responseType: 'blob'
-      });
+      // try hyphen variant first
+      console.debug('Attempting download (hyphen) at', `${base}/download-attachment/${attachmentId}/`);
+      let response = await api.get(`${base}/download-attachment/${attachmentId}/`, { responseType: 'blob' });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -127,8 +145,26 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Fehler beim Download:', error);
-      alert('Fehler beim Download der Datei');
+      if (error.response?.status === 404) {
+        try {
+          console.debug('Fallback download (underscore) at', `${base}/download_attachment/${attachmentId}/`);
+          const response = await api.get(`${base}/download_attachment/${attachmentId}/`, { responseType: 'blob' });
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', filename);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url);
+        } catch (err2) {
+          console.error('Fehler beim Download (Fallback):', err2);
+          alert('Fehler beim Download der Datei');
+        }
+      } else {
+        console.error('Fehler beim Download:', error);
+        alert('Fehler beim Download der Datei');
+      }
     }
   };
 

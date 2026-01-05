@@ -17,7 +17,6 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 from visiview.models import VisiViewLicense, MaintenanceTimeCredit, MaintenanceTimeExpenditure
-from visiview.serializers import process_expenditure_deduction, apply_new_credit_to_debt
 
 User = get_user_model()
 
@@ -240,8 +239,15 @@ def import_time_expenditures(csv_path, serial_number=None):
 
 
 def recalculate_balances(serial_number=None):
-    """Recalculate all balances for licenses by processing expenditures"""
-    print(f"\n=== Recalculating Balances ===")
+    """
+    Berechnet und zeigt Zwischenabrechnungen für Lizenzen.
+    
+    Mit der neuen Logik werden Deductions nicht mehr benötigt - die Berechnung
+    erfolgt dynamisch über calculate_interim_settlements.
+    """
+    from visiview.serializers import calculate_interim_settlements
+    
+    print(f"\n=== Verifying Interim Settlements ===")
     
     if serial_number:
         licenses = VisiViewLicense.objects.filter(serial_number=serial_number)
@@ -254,37 +260,47 @@ def recalculate_balances(serial_number=None):
         ).distinct()
     
     for license_obj in licenses:
-        print(f"\nProcessing License {license_obj.id} ({license_obj.license_number}):")
+        print(f"\nLizenz {license_obj.id} ({license_obj.license_number}):")
         
-        # Reset all credits to their original amounts
+        # Reset credits to original values (remaining_hours = credit_hours)
         for credit in license_obj.time_credits.all():
             credit.remaining_hours = credit.credit_hours
             credit.save()
         
-        # Reset all expenditures
+        # Reset expenditure debt (nicht mehr benötigt mit neuer Logik)
         for expenditure in license_obj.time_expenditures.all():
             expenditure.created_debt = Decimal('0.00')
             expenditure.save()
-            # Clear existing deductions
-            expenditure.deductions.all().delete()
         
-        # Process all expenditures in chronological order (date, then time)
-        expenditures = license_obj.time_expenditures.order_by('date', 'time')
+        # Lösche alte Deductions (nicht mehr benötigt)
+        from visiview.models import MaintenanceTimeCreditDeduction
+        MaintenanceTimeCreditDeduction.objects.filter(
+            credit__license=license_obj
+        ).delete()
         
-        print(f"  Found {expenditures.count()} expenditures to process")
+        # Berechne Zwischenabrechnungen
+        settlements = calculate_interim_settlements(license_obj.id)
         
-        for expenditure in expenditures:
-            if not expenditure.is_goodwill:
-                process_expenditure_deduction(expenditure)
-                expenditure.refresh_from_db()
-                print(f"    Processed expenditure {expenditure.id}: {expenditure.hours_spent}h -> debt: {expenditure.created_debt}h")
+        print(f"  {len(settlements)} Zwischenabrechnungen:")
         
-        # Apply credits to existing debts
-        credits = license_obj.time_credits.order_by('start_date')
-        for credit in credits:
-            apply_new_credit_to_debt(credit)
-            credit.refresh_from_db()
-            print(f"    Applied credit {credit.id}: {credit.credit_hours}h -> remaining: {credit.remaining_hours}h")
+        for i, settlement in enumerate(settlements, 1):
+            credit = settlement['credit']
+            credit_info = f"Gutschrift bis {credit.end_date}" if credit else "Ohne Gutschrift"
+            final_marker = " [ENDABRECHNUNG]" if settlement['is_final'] else ""
+            
+            print(f"\n  {i}. Zwischenabrechnung: {credit_info}{final_marker}")
+            print(f"      Übertrag rein:    {settlement['carry_over_in']:>8.2f} h")
+            print(f"      Gutschrift:       {settlement['credit_amount']:>8.2f} h")
+            print(f"      Aufwendungen:     {settlement['expenditure_total']:>8.2f} h ({len(settlement['expenditures'])} Einträge)")
+            print(f"      Saldo:            {settlement['balance']:>8.2f} h")
+            print(f"      Übertrag raus:    {settlement['carry_over_out']:>8.2f} h")
+        
+        if settlements:
+            final_balance = settlements[-1]['balance']
+            status = "Guthaben" if final_balance >= 0 else "Schuld"
+            print(f"\n  AKTUELLES ZEITGUTHABEN: {final_balance:+.2f} h ({status})")
+        else:
+            print(f"\n  Keine Daten vorhanden")
 
 
 def main():

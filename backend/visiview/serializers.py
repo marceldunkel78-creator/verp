@@ -6,7 +6,8 @@ from decimal import Decimal
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
-    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction
+    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction,
+    MaintenanceInvoice
 )
 
 User = get_user_model()
@@ -776,147 +777,211 @@ class MaintenanceSummarySerializer(serializers.Serializer):
     time_expenditures = MaintenanceTimeExpenditureSerializer(many=True)
 
 
+def calculate_interim_settlements(license_id):
+    """
+    Berechnet Zwischenabrechnungen für eine Lizenz.
+    
+    NEUE Abrechnungslogik:
+    1. Pro Zeitgutschrift gibt es eine Zwischenabrechnung (sortiert nach start_date)
+    2. Haben-Seite: Die jeweilige Zeitgutschrift (credit_hours) + Übertrag (wenn negativ)
+    3. Soll-Seite: Alle Zeitaufwendungen mit Datum <= Ende-Datum dieser Gutschrift
+       (die noch nicht in vorherigen Abrechnungen enthalten waren)
+    4. Saldo-Berechnung:
+       - Negativ → Übertrag zur nächsten Abrechnung
+       - Positiv → Übertrag von 0 (Rest verfällt!)
+    5. Die letzte Zwischenabrechnung ist die Endabrechnung
+    
+    Returns:
+        Liste von Zwischenabrechnungen mit:
+        - credit: Die Zeitgutschrift für diese Abrechnung
+        - expenditures: Liste der zugeordneten Aufwendungen
+        - credit_amount: Gutschriftsbetrag
+        - carry_over_in: Übertrag aus vorheriger Abrechnung (0 oder negativ)
+        - expenditure_total: Summe der Aufwendungen
+        - balance: Saldo dieser Abrechnung
+        - carry_over_out: Übertrag zur nächsten Abrechnung (0 oder negativ)
+        - is_final: True wenn letzte Abrechnung
+    """
+    # Alle Zeitgutschriften für diese Lizenz (sortiert nach Beginn-Datum)
+    credits = list(MaintenanceTimeCredit.objects.filter(
+        license_id=license_id
+    ).order_by('start_date', 'end_date'))
+    
+    # Alle Zeitaufwendungen für diese Lizenz (nicht-Kulanz, sortiert nach Datum)
+    all_expenditures = list(MaintenanceTimeExpenditure.objects.filter(
+        license_id=license_id,
+        is_goodwill=False
+    ).order_by('date', 'time'))
+    
+    settlements = []
+    carry_over = Decimal('0')  # Übertrag (0 oder negativ)
+    processed_expenditure_ids = set()
+    
+    for i, credit in enumerate(credits):
+        is_final = (i == len(credits) - 1)
+        
+        # Finde alle Aufwendungen mit Datum <= Ende-Datum dieser Gutschrift
+        # die noch nicht in vorherigen Abrechnungen waren
+        settlement_expenditures = []
+        for exp in all_expenditures:
+            if exp.id not in processed_expenditure_ids and exp.date <= credit.end_date:
+                settlement_expenditures.append(exp)
+                processed_expenditure_ids.add(exp.id)
+        
+        # Berechnung
+        credit_amount = Decimal(str(credit.credit_hours))
+        expenditure_total = sum(Decimal(str(e.hours_spent)) for e in settlement_expenditures)
+        
+        # Saldo = Übertrag + Gutschrift - Aufwendungen
+        balance = carry_over + credit_amount - expenditure_total
+        
+        # Übertrag für nächste Abrechnung
+        if balance < 0:
+            # Negativer Saldo wird übertragen
+            carry_over_out = balance
+        else:
+            # Positiver Saldo verfällt → Übertrag ist 0
+            carry_over_out = Decimal('0')
+        
+        settlements.append({
+            'credit': credit,
+            'expenditures': settlement_expenditures,
+            'credit_amount': credit_amount,
+            'carry_over_in': carry_over,
+            'expenditure_total': expenditure_total,
+            'balance': balance,
+            'carry_over_out': carry_over_out,
+            'is_final': is_final,
+        })
+        
+        # Übertrag für nächste Runde
+        carry_over = carry_over_out
+    
+    # Falls es Aufwendungen gibt, die keiner Gutschrift zugeordnet wurden
+    # (Datum nach Ende aller Gutschriften), erstelle eine finale Abrechnung ohne Gutschrift
+    remaining_expenditures = [
+        exp for exp in all_expenditures 
+        if exp.id not in processed_expenditure_ids
+    ]
+    
+    if remaining_expenditures:
+        expenditure_total = sum(Decimal(str(e.hours_spent)) for e in remaining_expenditures)
+        balance = carry_over - expenditure_total
+        
+        # Markiere vorherige als nicht-final
+        if settlements:
+            settlements[-1]['is_final'] = False
+        
+        settlements.append({
+            'credit': None,  # Keine Gutschrift
+            'expenditures': remaining_expenditures,
+            'credit_amount': Decimal('0'),
+            'carry_over_in': carry_over,
+            'expenditure_total': expenditure_total,
+            'balance': balance,
+            'carry_over_out': balance if balance < 0 else Decimal('0'),
+            'is_final': True,
+        })
+    
+    return settlements
+
+
 def calculate_maintenance_balance(license_id):
     """
-    Berechnet das Zeitguthaben für eine Lizenz.
+    Berechnet das Zeitguthaben für eine Lizenz basierend auf Zwischenabrechnungen.
     
-    Logik:
-    1. Zeitgutschriften haben Start- und Enddatum
-    2. Abgelaufene Gutschriften (end_date < heute): remaining_hours = 0
-    3. Aufwendungen werden von der ältesten gültigen Gutschrift abgezogen
-    4. Wenn Gutschrift überzogen: Überzug wird zur Zeitschuld
-    5. Neue Gutschriften reduzieren Zeitschuld
+    Das aktuelle Guthaben ergibt sich aus der letzten Zwischenabrechnung.
     """
-    today = date.today()
+    settlements = calculate_interim_settlements(license_id)
     
-    # Alle Zeitgutschriften für diese Lizenz
+    # Hole alle Daten für die Zusammenfassung
     credits = MaintenanceTimeCredit.objects.filter(license_id=license_id).order_by('start_date', 'end_date')
-    
-    # Alle Zeitaufwendungen für diese Lizenz (nicht-Kulanz)
     expenditures = MaintenanceTimeExpenditure.objects.filter(
         license_id=license_id,
         is_goodwill=False
     ).order_by('date', 'time')
     
-    # Summen
     total_credit_hours = credits.aggregate(total=Sum('credit_hours'))['total'] or Decimal('0')
     total_expenditure_hours = expenditures.aggregate(total=Sum('hours_spent'))['total'] or Decimal('0')
     
-    # Berechne aktuellen Saldo
-    # Summiere alle aktiven (nicht abgelaufenen) remaining_hours
-    active_remaining = credits.filter(end_date__gte=today).aggregate(
-        total=Sum('remaining_hours')
-    )['total'] or Decimal('0')
-    
-    # Berechne Zeitschuld aus abgelaufenen Gutschriften die überzogen wurden
-    # Zeitschuld = Summe aller created_debt aus Aufwendungen
-    total_debt = expenditures.aggregate(total=Sum('created_debt'))['total'] or Decimal('0')
-    
-    current_balance = active_remaining - total_debt
+    # Das aktuelle Guthaben ist der Saldo der letzten Abrechnung
+    # Aber nur wenn positiv (sonst ist es Schuld)
+    if settlements:
+        final_balance = settlements[-1]['balance']
+        # Wenn der finale Saldo positiv ist, ist das das aktuelle Guthaben
+        # Wenn negativ, ist es Zeitschuld
+        current_balance = final_balance
+    else:
+        current_balance = Decimal('0')
     
     return {
         'total_expenditures': total_expenditure_hours,
         'total_credits': total_credit_hours,
-        'current_balance': current_balance
+        'current_balance': current_balance,
+        'settlements': settlements,  # Zwischenabrechnungen für detaillierte Ansicht
     }
 
 
 def process_expenditure_deduction(expenditure):
     """
-    Verarbeitet eine neue Zeitaufwendung und zieht sie von der ältesten gültigen Zeitgutschrift ab.
+    Verarbeitet eine neue Zeitaufwendung.
     
-    WICHTIG: Eine Gutschrift gilt als "gültig" für eine Aufwendung, wenn das Aufwendungsdatum
-    innerhalb des Gültigkeitszeitraums der Gutschrift liegt (start_date <= expenditure.date <= end_date).
+    Mit der neuen Zwischenabrechnungs-Logik werden keine MaintenanceTimeCreditDeduction
+    Einträge mehr benötigt, da die Zuordnung dynamisch über das Datum erfolgt.
     
-    Dies stellt sicher, dass bei chronologischem Import die Aufwendungen korrekt den zeitlich
-    passenden Gutschriften zugeordnet werden.
-
-    Legt für jede beteiligte Gutschrift einen `MaintenanceTimeCreditDeduction`-Eintrag an,
-    damit Löschungen von Gutschriften später präzise in Zeitschuld umgewandelt werden können.
+    Diese Funktion ist jetzt vereinfacht und setzt nur noch created_debt basierend
+    auf der aktuellen Berechnung.
     """
     if expenditure.is_goodwill:
         # Kulanz wird nicht abgezogen
-        return
-
-    hours_to_deduct = Decimal(expenditure.hours_spent)
-
-    # Finde alle zum Zeitpunkt der Aufwendung gültigen Gutschriften
-    # (start_date <= expenditure.date <= end_date)
-    available_credits = MaintenanceTimeCredit.objects.filter(
-        license=expenditure.license,
-        start_date__lte=expenditure.date,
-        end_date__gte=expenditure.date,
-        remaining_hours__gt=0
-    ).order_by('start_date', 'end_date')
-
-    remaining = hours_to_deduct
-
-    for credit in available_credits:
-        if remaining <= 0:
-            break
-        take = min(Decimal(credit.remaining_hours), remaining)
-        if take > 0:
-            # Reduziere Kredit und erstelle Deduction
-            credit.remaining_hours = Decimal(credit.remaining_hours) - take
-            credit.save()
-            MaintenanceTimeCreditDeduction.objects.create(
-                credit=credit,
-                expenditure=expenditure,
-                hours_deducted=take
-            )
-            remaining -= take
-
-    if remaining > 0:
-        # Es blieb Rest - das wird zur Zeitschuld
-        expenditure.created_debt = Decimal(remaining)
-    else:
         expenditure.created_debt = Decimal('0')
-
+        expenditure.save()
+        return
+    
+    # Mit der neuen Logik wird created_debt nicht mehr pro Aufwendung gespeichert,
+    # sondern die Berechnung erfolgt dynamisch über calculate_interim_settlements.
+    # Wir setzen created_debt auf 0, da die eigentliche Schuld über die 
+    # Zwischenabrechnungen berechnet wird.
+    expenditure.created_debt = Decimal('0')
     expenditure.save()
 
 
 def apply_new_credit_to_debt(credit):
     """
-    Wenn eine neue Zeitgutschrift hinzugefügt wird, reduziert sie bestehende Zeitschuld.
-    Dabei werden Deduction-Einträge erstellt, um die Zuordnung zur neuen Gutschrift zu dokumentieren.
+    Wird aufgerufen, wenn eine neue Zeitgutschrift hinzugefügt wird.
+    
+    Mit der neuen Zwischenabrechnungs-Logik wird die Zuordnung dynamisch berechnet.
+    Diese Funktion setzt nur remaining_hours = credit_hours, da die eigentliche
+    Berechnung in calculate_interim_settlements erfolgt.
     """
-    # Finde alle Aufwendungen mit Zeitschuld für diese Lizenz
-    debt_expenditures = MaintenanceTimeExpenditure.objects.filter(
-        license=credit.license,
-        created_debt__gt=0
-    ).order_by('date', 'time')
-    
-    remaining_credit = Decimal(credit.remaining_hours)
-    
-    for exp in debt_expenditures:
-        if remaining_credit <= 0:
-            break
-        
-        debt = Decimal(exp.created_debt or 0)
-        if debt <= remaining_credit:
-            # Schuld kann vollständig getilgt werden
-            # Erstelle Deduction für die gesamte Schuldmenge
-            if debt > 0:
-                MaintenanceTimeCreditDeduction.objects.create(
-                    credit=credit,
-                    expenditure=exp,
-                    hours_deducted=debt
-                )
-            remaining_credit -= debt
-            exp.created_debt = Decimal('0')
-            exp.save()
-        else:
-            # Schuld teilweise tilgen
-            to_apply = remaining_credit
-            if to_apply > 0:
-                MaintenanceTimeCreditDeduction.objects.create(
-                    credit=credit,
-                    expenditure=exp,
-                    hours_deducted=to_apply
-                )
-            exp.created_debt = debt - to_apply
-            remaining_credit = Decimal('0')
-            exp.save()
-    
-    credit.remaining_hours = remaining_credit
+    # Bei der neuen Logik wird remaining_hours nicht mehr zur Laufzeit aktualisiert
+    # Die Gutschrift behält ihren vollen Wert und die Berechnung erfolgt dynamisch
+    credit.remaining_hours = credit.credit_hours
     credit.save()
+
+
+class MaintenanceInvoiceSerializer(serializers.ModelSerializer):
+    """Serializer für Maintenance-Abrechnungen"""
+    created_by_name = serializers.SerializerMethodField()
+    pdf_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MaintenanceInvoice
+        fields = [
+            'id', 'license', 'invoice_number', 'start_date', 'end_date',
+            'pdf_file', 'pdf_url', 'total_credits', 'total_expenditures', 'balance',
+            'created_by', 'created_by_name', 'created_at'
+        ]
+        read_only_fields = ['pdf_file', 'total_credits', 'total_expenditures', 'balance', 'created_at', 'created_by']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_pdf_url(self, obj):
+        if obj.pdf_file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.pdf_file.url)
+        return None

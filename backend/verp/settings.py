@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'visiview',
     'service',
     'procurement',
+    'notifications',
 ]
 
 MIDDLEWARE = [

@@ -542,13 +542,14 @@ const QuotationForm = () => {
       const mappedItems = (quotation.items || []).map(item => {
         // Bestimme object_id Format für das Frontend
         let frontendObjectId = null;
-        let productName = item.name || '';
+        // Verwende item_name vom Server als Fallback (nicht name, da der Serializer item_name zurückgibt)
+        let productName = item.item_name || item.name || '';
         
         if (item.object_id && item.content_type_data) {
           const model = item.content_type_data.model;
           if (model === 'tradingproduct') {
             frontendObjectId = `tp-${item.object_id}`;
-            // Finde das Produkt und erstelle product_name
+            // Finde das Produkt und erstelle product_name (nur wenn Produkte geladen sind)
             const product = tradingProducts.find(p => p.id === item.object_id);
             if (product) {
               productName = `${product.visitron_part_number || ''} - ${product.name || ''}`.trim();
@@ -2266,7 +2267,7 @@ setCustomerAddresses(customer.addresses || []);
                         <div className="md:col-span-3">
                           <label className="block text-sm font-medium text-gray-700">Produkt</label>
                           <div className="mt-1 block w-full border border-gray-200 rounded-md shadow-sm py-2 px-3 bg-gray-50 text-sm text-gray-900">
-                            {item.item_name || item.product_name || item.name || 'Kein Produkt ausgewählt'}
+                            {item.product_name || item.item_name || item.name || 'Kein Produkt ausgewählt'}
                           </div>
                         </div>
 

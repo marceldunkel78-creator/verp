@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
-  BanknotesIcon, CircleStackIcon
+  BanknotesIcon, CircleStackIcon, BellIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -34,6 +34,13 @@ const Settings = () => {
       icon: BanknotesIcon,
       path: '/settings/payment-delivery',
       color: 'green'
+    },
+    {
+      name: 'Mitteilungen',
+      description: 'Benachrichtigungen bei Statusänderungen konfigurieren',
+      icon: BellIcon,
+      path: '/settings/notifications',
+      color: 'yellow'
     },
     {
       name: 'Backup & Restore',

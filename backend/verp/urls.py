@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/visiview/', include('visiview.urls')),
     path('api/service/', include('service.urls')),
     path('api/procurement/', include('procurement.urls')),
+    path('api/notifications/', include('notifications.urls')),
 ]
 
 if settings.DEBUG:

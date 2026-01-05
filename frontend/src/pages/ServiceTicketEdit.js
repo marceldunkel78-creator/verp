@@ -577,6 +577,24 @@ const ServiceTicketEdit = () => {
                     </select>
                   </div>
                   
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Ersteller</label>
+                    <select
+                      name="created_by"
+                      value={ticket.created_by || ''}
+                      onChange={handleChange}
+                      disabled={!isNew}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100"
+                    >
+                      <option value="">-- Auswählen --</option>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.first_name} {u.last_name} ({u.username})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700">Beschreibung</label>
                     <textarea

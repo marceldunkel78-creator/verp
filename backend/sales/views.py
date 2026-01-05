@@ -464,8 +464,140 @@ class SalesTicketViewSet(viewsets.ModelViewSet):
         return SalesTicketDetailSerializer
     
     def perform_create(self, serializer):
-        """Setze created_by beim Erstellen"""
-        serializer.save(created_by=self.request.user)
+        """Setze created_by beim Erstellen und füge Ersteller + Zugewiesenen als Beobachter hinzu"""
+        ticket = serializer.save(created_by=self.request.user)
+        
+        # Ersteller automatisch als Beobachter hinzufügen
+        if ticket.created_by:
+            ticket.watchers.add(ticket.created_by)
+        
+        # Wenn ein User zugewiesen wurde, Erinnerung und Notification erstellen
+        if ticket.assigned_to:
+            ticket.watchers.add(ticket.assigned_to)
+            try:
+                from django.utils import timezone
+                from datetime import timedelta
+                from users.models import Reminder, Notification
+                due = timezone.now().date() + timedelta(days=1)
+                Reminder.objects.create(
+                    user=ticket.assigned_to,
+                    title=f"Zugewiesen: Sales-Ticket #{ticket.ticket_number}",
+                    description=f"Ticket '{ticket.title}' wurde Ihnen zugewiesen.",
+                    due_date=due,
+                    related_object_type='sales_ticket',
+                    related_object_id=ticket.id,
+                    related_url=f"/sales/tickets/{ticket.id}"
+                )
+                # Benachrichtigung im NotificationCenter
+                Notification.objects.create(
+                    user=ticket.assigned_to,
+                    title=f"Sales-Ticket #{ticket.ticket_number} zugewiesen",
+                    message=f"Das Ticket '{ticket.title}' wurde Ihnen zugewiesen.",
+                    notification_type='info',
+                    related_url=f'/sales/tickets/{ticket.id}'
+                )
+            except Exception:
+                pass
+    
+    def perform_update(self, serializer):
+        """Update mit Changelog und Watcher-Benachrichtigungen"""
+        old_instance = self.get_object()
+        old_data = {
+            'title': old_instance.title,
+            'status': old_instance.status,
+            'category': old_instance.category,
+            'assigned_to': old_instance.assigned_to_id,
+            'due_date': old_instance.due_date,
+        }
+        old_assigned_to = old_instance.assigned_to
+        
+        instance = serializer.save()
+        
+        # Änderungen protokollieren
+        from .models import SalesTicketChangeLog
+        field_labels = {
+            'title': 'Titel',
+            'status': 'Status',
+            'category': 'Kategorie',
+            'assigned_to': 'Zugewiesen an',
+            'due_date': 'Fälligkeitsdatum',
+        }
+        
+        changes = []
+        new_data = {
+            'title': instance.title,
+            'status': instance.status,
+            'category': instance.category,
+            'assigned_to': instance.assigned_to_id,
+            'due_date': instance.due_date,
+        }
+        
+        for field, old_value in old_data.items():
+            new_value = new_data.get(field)
+            if old_value != new_value:
+                SalesTicketChangeLog.objects.create(
+                    ticket=instance,
+                    field_name=field_labels.get(field, field),
+                    old_value=str(old_value or ''),
+                    new_value=str(new_value or ''),
+                    changed_by=self.request.user
+                )
+                changes.append((field_labels.get(field, field), str(old_value or ''), str(new_value or '')))
+        
+        # Wenn "Zugewiesen an" geändert wurde, Beobachter aktualisieren
+        if old_assigned_to != instance.assigned_to:
+            if old_assigned_to:
+                instance.watchers.remove(old_assigned_to)
+            if instance.assigned_to:
+                instance.watchers.add(instance.assigned_to)
+                # Erinnerung und Notification für neu zugewiesenen User
+                try:
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    from users.models import Reminder, Notification
+                    due = timezone.now().date() + timedelta(days=1)
+                    Reminder.objects.create(
+                        user=instance.assigned_to,
+                        title=f"Zugewiesen: Sales-Ticket #{instance.ticket_number}",
+                        description=f"Ticket '{instance.title}' wurde Ihnen zugewiesen.",
+                        due_date=due,
+                        related_object_type='sales_ticket',
+                        related_object_id=instance.id,
+                        related_url=f"/sales/tickets/{instance.id}"
+                    )
+                    Notification.objects.create(
+                        user=instance.assigned_to,
+                        title=f"Sales-Ticket #{instance.ticket_number} zugewiesen",
+                        message=f"Das Ticket '{instance.title}' wurde Ihnen zugewiesen.",
+                        notification_type='info',
+                        related_url=f'/sales/tickets/{instance.id}'
+                    )
+                except Exception:
+                    pass
+        
+        # Benachrichtige Beobachter über Änderungen
+        if changes:
+            from users.models import Notification
+            message_lines = [f"Änderungen an Sales-Ticket #{instance.ticket_number} - {instance.title}"]
+            message_lines.append("")
+            for label, oldv, newv in changes:
+                message_lines.append(f"• {label}: {oldv or '(leer)'} → {newv or '(leer)'}")
+            message_text = "\n".join(message_lines)
+            
+            for watcher in instance.watchers.all():
+                if watcher == self.request.user:
+                    continue
+                try:
+                    Notification.objects.create(
+                        user=watcher,
+                        title=f"Änderung des Sales-Tickets #{instance.ticket_number}",
+                        message=message_text,
+                        notification_type='info',
+                        related_url=f'/sales/tickets/{instance.id}'
+                    )
+                except Exception:
+                    pass
+
     
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def upload_attachment(self, request, pk=None):

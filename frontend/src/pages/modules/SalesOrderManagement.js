@@ -62,6 +62,14 @@ const SalesOrderManagement = () => {
       disabled: false
     },
     {
+      name: 'Sales Tickets',
+      description: 'Marketing-Anfragen & Dokumentation',
+      icon: ClipboardDocumentCheckIcon,
+      path: '/sales/tickets',
+      color: 'blue',
+      disabled: false
+    },
+    {
       name: 'Marketing',
       description: 'Shows, Newsletter',
       icon: MegaphoneIcon,

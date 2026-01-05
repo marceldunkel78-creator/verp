@@ -122,6 +122,31 @@ class ServiceTicketViewSet(viewsets.ModelViewSet):
             ticket.watchers.add(ticket.created_by)
         if ticket.assigned_to:
             ticket.watchers.add(ticket.assigned_to)
+            # Erstelle Erinnerung und Notification für zugewiesenen User
+            try:
+                from django.utils import timezone
+                from datetime import timedelta
+                from users.models import Reminder, Notification
+                due = timezone.now().date() + timedelta(days=1)
+                Reminder.objects.create(
+                    user=ticket.assigned_to,
+                    title=f"Zugewiesen: Service-Ticket #{ticket.ticket_number}",
+                    description=f"Ticket '{ticket.title}' wurde Ihnen zugewiesen.",
+                    due_date=due,
+                    related_object_type='service_ticket',
+                    related_object_id=ticket.id,
+                    related_url=f"/service/tickets/{ticket.id}"
+                )
+                # Benachrichtigung im NotificationCenter
+                Notification.objects.create(
+                    user=ticket.assigned_to,
+                    title=f"Service-Ticket #{ticket.ticket_number} zugewiesen",
+                    message=f"Das Ticket '{ticket.title}' wurde Ihnen zugewiesen.",
+                    notification_type='info',
+                    related_url=f'/service/tickets/{ticket.id}'
+                )
+            except Exception:
+                pass
     
     def perform_update(self, serializer):
         old_instance = self.get_object()
@@ -181,6 +206,31 @@ class ServiceTicketViewSet(viewsets.ModelViewSet):
                 instance.watchers.remove(old_assigned_to)
             if instance.assigned_to:
                 instance.watchers.add(instance.assigned_to)
+                # Erstelle Erinnerung und Notification für neu zugewiesenen User
+                try:
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    from users.models import Reminder, Notification
+                    due = timezone.now().date() + timedelta(days=1)
+                    Reminder.objects.create(
+                        user=instance.assigned_to,
+                        title=f"Zugewiesen: Service-Ticket #{instance.ticket_number}",
+                        description=f"Ticket '{instance.title}' wurde Ihnen zugewiesen.",
+                        due_date=due,
+                        related_object_type='service_ticket',
+                        related_object_id=instance.id,
+                        related_url=f"/service/tickets/{instance.id}"
+                    )
+                    # Benachrichtigung im NotificationCenter
+                    Notification.objects.create(
+                        user=instance.assigned_to,
+                        title=f"Service-Ticket #{instance.ticket_number} zugewiesen",
+                        message=f"Das Ticket '{instance.title}' wurde Ihnen zugewiesen.",
+                        notification_type='info',
+                        related_url=f'/service/tickets/{instance.id}'
+                    )
+                except Exception:
+                    pass
         
         # Benachrichtigungen an Beobachter senden
         if changes:

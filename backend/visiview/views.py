@@ -33,6 +33,7 @@ from .serializers import (
     MaintenanceTimeCreditSerializer,
     MaintenanceTimeExpenditureSerializer,
     calculate_maintenance_balance,
+    calculate_interim_settlements,
     process_expenditure_deduction,
     apply_new_credit_to_debt
 )
@@ -162,7 +163,7 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def maintenance(self, request, pk=None):
-        """Gibt alle Wartungsdaten für eine Lizenz zurück inkl. Berechnung"""
+        """Gibt alle Wartungsdaten für eine Lizenz zurück inkl. Berechnung und Zwischenabrechnungen"""
         license = self.get_object()
         
         # Zeitgutschriften
@@ -171,15 +172,31 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
         # Zeitaufwendungen
         expenditures = MaintenanceTimeExpenditure.objects.filter(license=license).order_by('-date', '-time')
         
-        # Saldo berechnen
+        # Saldo berechnen (inkl. Zwischenabrechnungen)
         balance = calculate_maintenance_balance(license.id)
+        
+        # Settlements für Frontend aufbereiten
+        settlements_data = []
+        for settlement in balance.get('settlements', []):
+            settlement_dict = {
+                'credit': MaintenanceTimeCreditSerializer(settlement['credit']).data if settlement['credit'] else None,
+                'expenditures': MaintenanceTimeExpenditureSerializer(settlement['expenditures'], many=True).data,
+                'credit_amount': str(settlement['credit_amount']),
+                'carry_over_in': str(settlement['carry_over_in']),
+                'expenditure_total': str(settlement['expenditure_total']),
+                'balance': str(settlement['balance']),
+                'carry_over_out': str(settlement['carry_over_out']),
+                'is_final': settlement['is_final'],
+            }
+            settlements_data.append(settlement_dict)
         
         return Response({
             'total_expenditures': balance['total_expenditures'],
             'total_credits': balance['total_credits'],
             'current_balance': balance['current_balance'],
             'time_credits': MaintenanceTimeCreditSerializer(credits, many=True).data,
-            'time_expenditures': MaintenanceTimeExpenditureSerializer(expenditures, many=True).data
+            'time_expenditures': MaintenanceTimeExpenditureSerializer(expenditures, many=True).data,
+            'settlements': settlements_data
         })
     
     @action(detail=True, methods=['get'])
@@ -342,6 +359,126 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
         
         expenditure.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    # Maintenance Invoices
+    @action(detail=True, methods=['get'])
+    def maintenance_invoices(self, request, pk=None):
+        """Gibt alle Maintenance-Abrechnungen für eine Lizenz zurück"""
+        license = self.get_object()
+        from .models import MaintenanceInvoice
+        from .serializers import MaintenanceInvoiceSerializer
+        
+        invoices = MaintenanceInvoice.objects.filter(license=license).order_by('-created_at')
+        serializer = MaintenanceInvoiceSerializer(invoices, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def generate_maintenance_invoice(self, request, pk=None):
+        """Erstellt eine neue Maintenance-Abrechnung als PDF"""
+        license = self.get_object()
+        from .models import MaintenanceInvoice, MaintenanceTimeCredit, MaintenanceTimeExpenditure
+        from .serializers import MaintenanceInvoiceSerializer, calculate_maintenance_balance
+        from .maintenance_invoice_pdf_generator import generate_maintenance_invoice_pdf
+        from django.core.files.base import ContentFile
+        from decimal import Decimal
+        import os
+        
+        # Optional: Start- und Enddatum für Filterung
+        start_date_str = request.data.get('start_date')
+        end_date_str = request.data.get('end_date')
+        invoice_number = request.data.get('invoice_number', '')
+        
+        start_date = None
+        end_date = None
+        
+        if start_date_str:
+            from datetime import datetime
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        if end_date_str:
+            from datetime import datetime
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        try:
+            # Generiere PDF
+            pdf_buffer = generate_maintenance_invoice_pdf(license, start_date, end_date)
+            
+            # Berechne Totale für diese Abrechnung
+            credits_qs = MaintenanceTimeCredit.objects.filter(license=license)
+            expenditures_qs = MaintenanceTimeExpenditure.objects.filter(license=license)
+            
+            if start_date:
+                credits_qs = credits_qs.filter(start_date__gte=start_date)
+                expenditures_qs = expenditures_qs.filter(date__gte=start_date)
+            if end_date:
+                credits_qs = credits_qs.filter(end_date__lte=end_date)
+                expenditures_qs = expenditures_qs.filter(date__lte=end_date)
+            
+            total_credits = sum(Decimal(str(c.credit_hours)) for c in credits_qs)
+            total_expenditures = sum(Decimal(str(e.hours_spent)) for e in expenditures_qs)
+            balance = total_credits - total_expenditures
+            
+            # Erstelle MaintenanceInvoice-Eintrag
+            invoice = MaintenanceInvoice.objects.create(
+                license=license,
+                invoice_number=invoice_number,
+                start_date=start_date,
+                end_date=end_date,
+                total_credits=total_credits,
+                total_expenditures=total_expenditures,
+                balance=balance,
+                created_by=request.user
+            )
+            
+            # Speichere PDF in license-specific folder
+            serial_number = license.serial_number or f'L{license.id}'
+            # Sanitize serial number for filename
+            safe_serial = ''.join(c if c.isalnum() or c in ['-', '_'] else '_' for c in serial_number)
+            filename = f"maintenance_invoice_{safe_serial}_{invoice.id}.pdf"
+            filepath = os.path.join('VisiView', 'Lizenzen', safe_serial, filename)
+            
+            invoice.pdf_file.save(filepath, ContentFile(pdf_buffer.read()), save=True)
+            
+            serializer = MaintenanceInvoiceSerializer(invoice, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception('Error generating maintenance invoice: %s', e)
+            return Response(
+                {'error': f'Fehler beim Generieren der Abrechnung: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['delete'], url_path='delete_maintenance_invoice/(?P<invoice_id>[^/.]+)')
+    def delete_maintenance_invoice(self, request, pk=None, invoice_id=None):
+        """Löscht eine Maintenance-Abrechnung"""
+        license = self.get_object()
+        from .models import MaintenanceInvoice
+        
+        try:
+            invoice = MaintenanceInvoice.objects.get(id=invoice_id, license=license)
+        except MaintenanceInvoice.DoesNotExist:
+            return Response({'error': 'Abrechnung nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Lösche PDF-Datei vom Speicher
+        if invoice.pdf_file:
+            try:
+                invoice.pdf_file.delete(save=False)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning('Could not delete PDF file: %s', e)
+        
+        invoice.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class VisiViewTicketViewSet(viewsets.ModelViewSet):
@@ -382,16 +519,17 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         ticket = serializer.save(created_by=self.request.user)
-        # Ersteller und zugewiesener User werden automatisch als Beobachter hinzugefügt
+        # Ersteller automatisch als Beobachter hinzufügen
         if ticket.created_by:
             ticket.watchers.add(ticket.created_by)
+        # Zugewiesener User als Beobachter
         if ticket.assigned_to:
             ticket.watchers.add(ticket.assigned_to)
             # Erstelle eine Erinnerungsaufgabe für den zugewiesenen Mitarbeiter (Fällig: morgen)
             try:
                 from django.utils import timezone
                 from datetime import timedelta
-                from users.models import Reminder
+                from users.models import Reminder, Notification
                 due = timezone.now().date() + timedelta(days=1)
                 Reminder.objects.create(
                     user=ticket.assigned_to,
@@ -401,6 +539,14 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                     related_object_type='visiview_ticket',
                     related_object_id=ticket.id,
                     related_url=f"/visiview/tickets/{ticket.id}"
+                )
+                # Benachrichtigung im NotificationCenter
+                Notification.objects.create(
+                    user=ticket.assigned_to,
+                    title=f"Ticket #{ticket.ticket_number} zugewiesen",
+                    message=f"Das Ticket '{ticket.title}' wurde Ihnen zugewiesen.",
+                    notification_type='info',
+                    related_url=f'/visiview/tickets/{ticket.id}'
                 )
             except Exception:
                 # Nicht fatal für Ticket-Erstellung
@@ -475,7 +621,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                 try:
                     from django.utils import timezone
                     from datetime import timedelta
-                    from users.models import Reminder
+                    from users.models import Reminder, Notification
                     due = timezone.now().date() + timedelta(days=1)
                     Reminder.objects.create(
                         user=instance.assigned_to,
@@ -485,6 +631,14 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                         related_object_type='visiview_ticket',
                         related_object_id=instance.id,
                         related_url=f"/visiview/tickets/{instance.id}"
+                    )
+                    # Benachrichtigung im NotificationCenter
+                    Notification.objects.create(
+                        user=instance.assigned_to,
+                        title=f"Ticket #{instance.ticket_number} zugewiesen",
+                        message=f"Das Ticket '{instance.title}' wurde Ihnen zugewiesen.",
+                        notification_type='info',
+                        related_url=f'/visiview/tickets/{instance.id}'
                     )
                 except Exception:
                     pass
@@ -516,16 +670,16 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
                     if recipient == self.request.user:
                         continue
                     try:
-                        msg = Message.objects.create(
-                            sender=self.request.user,
+                        notification = Notification.objects.create(
                             user=recipient,
                             title=f"Änderung des Tickets #{instance.ticket_number}",
-                            content=message_text,
-                            message_type='ticket'
+                            message=message_text,
+                            notification_type='info',
+                            related_url=f'/visiview/tickets/{instance.id}'
                         )
-                        logger.warning(f"Nachricht erstellt für {recipient.username}: ID {msg.id}")
+                        logger.warning(f"Benachrichtigung erstellt für {recipient.username}: ID {notification.id}")
                     except Exception as e:
-                        logger.error(f"Fehler beim Erstellen der Nachricht für {recipient.username}: {e}")
+                        logger.error(f"Fehler beim Erstellen der Benachrichtigung für {recipient.username}: {e}")
                         
             except Exception as e:
                 # Nicht fatal - loggen für Debugging

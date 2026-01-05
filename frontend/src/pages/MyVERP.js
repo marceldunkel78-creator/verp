@@ -133,6 +133,7 @@ const MyVERP = () => {
   const tabs = [
     { id: 'dashboard', name: 'Dashboard', icon: Squares2X2Icon },
     { id: 'time-tracking', name: 'Zeiterfassung', icon: ClockIcon },
+    { id: 'my-tickets', name: 'Meine Tickets', icon: ChatBubbleLeftIcon },
     { id: 'messages', name: 'Nachrichtencenter', icon: ChatBubbleLeftIcon },
     { id: 'reporting', name: 'Reporting', icon: ChartBarIcon },
     { id: 'reminders', name: 'Erinnerungen', icon: BellIcon },
@@ -200,6 +201,9 @@ const MyVERP = () => {
             onRefresh={fetchData}
             errors={errors}
           />
+        )}
+        {activeTab === 'my-tickets' && (
+          <MyTicketsTab onRefresh={fetchData} errors={errors} />
         )}
         {activeTab === 'messages' && (
           <MessagesTab messages={messages} onRefresh={fetchData} errors={errors} />
@@ -1081,162 +1085,14 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
         <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.reminders}</div>
       )}
 
-      {/* 2×2 Grid für Ticket-Typen */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Service Tickets */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
-            <span className="mr-2">🔧</span> Service Tickets
-            <span className="ml-auto text-sm text-gray-500">({serviceTickets.length})</span>
-          </h3>
-          {loadingTickets ? (
-            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
-          ) : serviceTickets.length === 0 ? (
-            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
-          ) : (
-            <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {serviceTickets.map((ticket) => (
-                <li key={ticket.id} className="border-l-4 border-blue-500 pl-3 py-2 hover:bg-gray-50">
-                  <a
-                    href={`/service/tickets/${ticket.id}`}
-                    className="text-sm font-medium text-blue-600 hover:underline"
-                  >
-                    #{ticket.ticket_number || ticket.id} - {ticket.title}
-                  </a>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                      ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
-                      ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                    {ticket.priority && (
-                      <span className="text-xs text-gray-400">Prio: {ticket.priority}</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* VisiView Tickets */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
-            <span className="mr-2">👁️</span> VisiView Tickets
-            <span className="ml-auto text-sm text-gray-500">({visiviewTickets.length})</span>
-          </h3>
-          {loadingTickets ? (
-            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
-          ) : visiviewTickets.length === 0 ? (
-            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
-          ) : (
-            <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {visiviewTickets.map((ticket) => (
-                <li key={ticket.id} className="border-l-4 border-purple-500 pl-3 py-2 hover:bg-gray-50">
-                  <a
-                    href={`/visiview/tickets/${ticket.id}`}
-                    className="text-sm font-medium text-purple-600 hover:underline"
-                  >
-                    #{ticket.ticket_number || ticket.id} - {ticket.title}
-                  </a>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                      ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
-                      ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                    {ticket.priority && (
-                      <span className="text-xs text-gray-400">Prio: {ticket.priority}</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Sales Tickets */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
-            <span className="mr-2">💼</span> Sales Tickets
-            <span className="ml-auto text-sm text-gray-500">({salesTickets.length})</span>
-          </h3>
-          {loadingTickets ? (
-            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
-          ) : salesTickets.length === 0 ? (
-            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
-          ) : (
-            <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {salesTickets.map((ticket) => (
-                <li key={ticket.id} className="border-l-4 border-green-500 pl-3 py-2 hover:bg-gray-50">
-                  <a
-                    href={`/sales/tickets/${ticket.id}`}
-                    className="text-sm font-medium text-green-600 hover:underline"
-                  >
-                    {ticket.ticket_number} - {ticket.title}
-                  </a>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                      ticket.status === 'new' ? 'bg-blue-100 text-blue-800' :
-                      ticket.status === 'assigned' ? 'bg-purple-100 text-purple-800' :
-                      ticket.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                      ticket.status === 'review' ? 'bg-orange-100 text-orange-800' :
-                      ticket.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      ticket.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {ticket.status_display}
-                    </span>
-                    {ticket.due_date && (
-                      <span className="text-xs text-gray-400">Fällig: {new Date(ticket.due_date).toLocaleDateString('de-DE')}</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Troubleshooting Tickets */}
-        <div className="bg-white shadow rounded-lg p-4">
-          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
-            <span className="mr-2">🔍</span> Troubleshooting
-            <span className="ml-auto text-sm text-gray-500">({troubleshootingTickets.length})</span>
-          </h3>
-          {loadingTickets ? (
-            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
-          ) : troubleshootingTickets.length === 0 ? (
-            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
-          ) : (
-            <ul className="space-y-2 max-h-64 overflow-y-auto">
-              {troubleshootingTickets.map((ticket) => (
-                <li key={ticket.id} className="border-l-4 border-orange-500 pl-3 py-2 hover:bg-gray-50">
-                  <a
-                    href={`/service/troubleshooting/${ticket.id}`}
-                    className="text-sm font-medium text-orange-600 hover:underline"
-                  >
-                    #{ticket.ticket_number || ticket.id} - {ticket.title}
-                  </a>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                      ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
-                      ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+      {/* Tickets moved to 'Meine Tickets' tab */}
+      <div className="mb-6">
+        <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-700">
+          Die Ticket-Übersichten (Service, VisiView, Sales) und Troubleshooting wurden in den Tab „Meine Tickets" verschoben.
+          Sie finden dort alle zugewiesenen Tickets und Details.
+          <div className="mt-3">
+            <a href="?tab=my-tickets" className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm">Zu Meine Tickets</a>
+          </div>
         </div>
       </div>
       
@@ -1470,6 +1326,8 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
   // Fetch year balance and adjustments
   React.useEffect(() => {
     const fetchYearData = async () => {
+      // clear adjustments while loading to avoid showing stale data from previous year
+      setAdjustments([]);
       try {
         const balanceRes = await api.get(`/users/vacation-year-balances/my_balance/?year=${selectedYear}`);
         setYearBalance(balanceRes.data);
@@ -1478,8 +1336,13 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
         setYearBalance(null);
       }
       try {
-        const adjustRes = await api.get(`/users/vacation-adjustments/?year=${selectedYear}`);
-        setAdjustments(adjustRes.data.results || adjustRes.data || []);
+        // Only fetch adjustments for the current employee to avoid showing adjustments for all users
+        if (employeeDetails && employeeDetails.id) {
+          const adjustRes = await api.get(`/users/vacation-adjustments/?employee=${employeeDetails.id}&year=${selectedYear}`);
+          setAdjustments(adjustRes.data.results || adjustRes.data || []);
+        } else {
+          setAdjustments([]);
+        }
       } catch (err) {
         console.warn('Urlaubsanpassungen nicht verfügbar:', err);
         setAdjustments([]);
@@ -1568,7 +1431,7 @@ const VacationTab = ({ vacationRequests, employeeDetails, onRefresh, errors }) =
         </div>
         <div className="p-3 bg-green-50 rounded">
           <div className="text-sm text-gray-500">Aktuelles Guthaben</div>
-          <div className="text-xl font-semibold text-green-700">{employeeDetails?.vacation_balance !== undefined ? `${parseFloat(employeeDetails.vacation_balance).toFixed(1)} Tage` : '-'}</div>
+          <div className="text-xl font-semibold text-green-700">{(yearBalance && typeof yearBalance.balance !== 'undefined') ? `${parseFloat(yearBalance.balance).toFixed(1)} Tage` : (employeeDetails?.vacation_balance !== undefined ? `${parseFloat(employeeDetails.vacation_balance).toFixed(1)} Tage` : '-')}</div>
         </div>
       </div>
 
@@ -2671,6 +2534,235 @@ const PersonalDashboardTab = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// MyTicketsTab Component - zeigt dem User zugewiesene Tickets aus allen Systemen
+const MyTicketsTab = ({ onRefresh, errors }) => {
+  const [tickets, setTickets] = useState({
+    visiview: [],
+    service: [],
+    sales: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState('all'); // all, visiview, service, sales
+
+  useEffect(() => {
+    fetchMyTickets();
+  }, []);
+
+  const fetchMyTickets = async () => {
+    setLoading(true);
+    try {
+      // Hole den aktuellen User
+      const meRes = await api.get('/users/me/');
+      const userId = meRes.data.id;
+
+      // Hole Tickets aus allen Systemen, wo der User zugewiesen ist
+      const [vvRes, serviceRes, salesRes] = await Promise.allSettled([
+        api.get(`/visiview/tickets/?assigned_to=${userId}`),
+        api.get(`/service/tickets/?assigned_to=${userId}`),
+        api.get(`/sales/sales-tickets/?assigned_to=${userId}`)
+      ]);
+
+      setTickets({
+        visiview: vvRes.status === 'fulfilled' ? (vvRes.value.data.results || vvRes.value.data || []) : [],
+        service: serviceRes.status === 'fulfilled' ? (serviceRes.value.data.results || serviceRes.value.data || []) : [],
+        sales: salesRes.status === 'fulfilled' ? (salesRes.value.data.results || salesRes.value.data || []) : []
+      });
+    } catch (error) {
+      console.error('Fehler beim Laden der Tickets:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      'new': 'bg-blue-100 text-blue-800',
+      'assigned': 'bg-purple-100 text-purple-800',
+      'in_progress': 'bg-yellow-100 text-yellow-800',
+      'waiting_customer': 'bg-orange-100 text-orange-800',
+      'waiting_thirdparty': 'bg-orange-100 text-orange-800',
+      'testing': 'bg-indigo-100 text-indigo-800',
+      'tested': 'bg-green-100 text-green-800',
+      'resolved': 'bg-green-100 text-green-800',
+      'closed': 'bg-gray-100 text-gray-800',
+      'no_solution': 'bg-red-100 text-red-800',
+      'rejected': 'bg-red-100 text-red-800',
+      'review': 'bg-purple-100 text-purple-800',
+      'completed': 'bg-green-100 text-green-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getPriorityColor = (priority) => {
+    const colors = {
+      'low': 'text-gray-500',
+      'normal': 'text-blue-500',
+      'high': 'text-orange-500',
+      'urgent': 'text-red-500',
+      'immediate': 'text-red-700'
+    };
+    return colors[priority] || 'text-gray-500';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('de-DE');
+  };
+
+  const allTickets = [
+    ...tickets.visiview.map(t => ({ ...t, type: 'visiview', link: `/visiview/tickets/${t.id}` })),
+    ...tickets.service.map(t => ({ ...t, type: 'service', link: `/service/tickets/${t.id}` })),
+    ...tickets.sales.map(t => ({ ...t, type: 'sales', link: `/sales/tickets/${t.id}` }))
+  ];
+
+  const filteredTickets = activeFilter === 'all'
+    ? allTickets
+    : allTickets.filter(t => t.type === activeFilter);
+
+  // Sortiere nach Erstellungsdatum (neueste zuerst)
+  const sortedTickets = [...filteredTickets].sort((a, b) => 
+    new Date(b.created_at) - new Date(a.created_at)
+  );
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Meine Tickets ({sortedTickets.length})
+          </h2>
+          <button
+            onClick={fetchMyTickets}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Aktualisieren
+          </button>
+        </div>
+
+        {/* Filter */}
+        <div className="mb-6 flex gap-2">
+          <button
+            onClick={() => setActiveFilter('all')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeFilter === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Alle ({allTickets.length})
+          </button>
+          <button
+            onClick={() => setActiveFilter('visiview')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeFilter === 'visiview'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            VisiView ({tickets.visiview.length})
+          </button>
+          <button
+            onClick={() => setActiveFilter('service')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeFilter === 'service'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Service ({tickets.service.length})
+          </button>
+          <button
+            onClick={() => setActiveFilter('sales')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeFilter === 'sales'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Sales ({tickets.sales.length})
+          </button>
+        </div>
+
+        {/* Tickets Liste */}
+        {sortedTickets.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            Keine Tickets zugewiesen
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Typ</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket #</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Titel</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priorität</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Erstellt</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sortedTickets.map((ticket) => (
+                  <tr key={`${ticket.type}-${ticket.id}`} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${
+                        ticket.type === 'visiview' ? 'bg-indigo-100 text-indigo-800' :
+                        ticket.type === 'service' ? 'bg-blue-100 text-blue-800' :
+                        'bg-purple-100 text-purple-800'
+                      }`}>
+                        {ticket.type === 'visiview' ? 'VisiView' :
+                         ticket.type === 'service' ? 'Service' : 'Sales'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                      #{ticket.ticket_number}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {ticket.title}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(ticket.status)}`}>
+                        {ticket.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {ticket.priority && (
+                        <span className={`text-sm font-medium ${getPriorityColor(ticket.priority)}`}>
+                          {ticket.priority}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(ticket.created_at)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <a
+                        href={ticket.link}
+                        className="text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Öffnen
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

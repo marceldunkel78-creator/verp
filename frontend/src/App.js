@@ -68,6 +68,7 @@ import Marketing from './pages/Marketing';
 import MarketingItemEdit from './pages/MarketingItemEdit';
 import SalesTickets from './pages/SalesTickets';
 import SalesTicketEdit from './pages/SalesTicketEdit';
+import NotificationSettings from './pages/NotificationSettings';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -189,6 +190,7 @@ function App() {
             <Route path="settings/company-info" element={<CompanyInfo />} />
             <Route path="settings/payment-delivery" element={<PaymentDeliverySettings />} />
             <Route path="settings/backup-restore" element={<BackupRestore />} />
+            <Route path="settings/notifications" element={<NotificationSettings />} />
             
             {/* Legacy redirects for backward compatibility */}
             <Route path="users" element={<Navigate to="/settings/users" replace />} />

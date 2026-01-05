@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from core.upload_paths import quotation_upload_path, marketing_upload_path
+from core.upload_paths import quotation_upload_path, marketing_upload_path, sales_ticket_attachment_path
 
 User = get_user_model()
 
@@ -777,6 +777,14 @@ class SalesTicket(models.Model):
         verbose_name='Zugewiesen an'
     )
     
+    # Beobachter
+    watchers = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='sales_tickets_watching',
+        verbose_name='Beobachter'
+    )
+    
     # Daten
     due_date = models.DateField(
         null=True,
@@ -847,7 +855,7 @@ class SalesTicketAttachment(models.Model):
         verbose_name='Ticket'
     )
     file = models.FileField(
-        upload_to='Sales/Sales-Tickets/',  # Will be enhanced with ticket_number in upload_paths
+        upload_to=sales_ticket_attachment_path,
         verbose_name='Datei'
     )
     filename = models.CharField(
@@ -916,3 +924,34 @@ class SalesTicketComment(models.Model):
     
     def __str__(self):
         return f"Kommentar zu {self.ticket.ticket_number} von {self.created_by}"
+
+
+class SalesTicketChangeLog(models.Model):
+    """
+    Änderungsprotokoll für Sales-Tickets
+    """
+    ticket = models.ForeignKey(
+        SalesTicket,
+        on_delete=models.CASCADE,
+        related_name='change_logs',
+        verbose_name='Ticket'
+    )
+    field_name = models.CharField(max_length=100, verbose_name='Geändertes Feld')
+    old_value = models.TextField(blank=True, verbose_name='Alter Wert')
+    new_value = models.TextField(blank=True, verbose_name='Neuer Wert')
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='sales_ticket_changes',
+        verbose_name='Geändert von'
+    )
+    changed_at = models.DateTimeField(auto_now_add=True, verbose_name='Geändert am')
+    
+    class Meta:
+        verbose_name = 'Sales-Ticket Änderung'
+        verbose_name_plural = 'Sales-Ticket Änderungen'
+        ordering = ['-changed_at']
+    
+    def __str__(self):
+        return f"{self.field_name} geändert von {self.changed_by} am {self.changed_at}"

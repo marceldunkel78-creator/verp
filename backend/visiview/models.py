@@ -1554,3 +1554,72 @@ class MaintenanceTimeCreditDeduction(models.Model):
     def __str__(self):
         return f"{self.credit.license.license_number} - {self.hours_deducted}h von Gutschrift {self.credit.id} für Aufwendung {self.expenditure.id}"
 
+
+class MaintenanceInvoice(models.Model):
+    """
+    Maintenance-Abrechnungen (PDFs) für VisiView-Lizenzen
+    """
+    license = models.ForeignKey(
+        'VisiViewLicense',
+        on_delete=models.CASCADE,
+        related_name='maintenance_invoices',
+        verbose_name='Lizenz'
+    )
+    invoice_number = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Rechnungsnummer',
+        help_text='Optional: Interne Referenznummer'
+    )
+    start_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Zeitraum von'
+    )
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Zeitraum bis'
+    )
+    pdf_file = models.FileField(
+        upload_to='VisiView/Lizenzen/',  # Will be enhanced with serial_number
+        verbose_name='PDF-Datei'
+    )
+    total_credits = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=0,
+        verbose_name='Zeitgutschriften (h)'
+    )
+    total_expenditures = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=0,
+        verbose_name='Zeitaufwendungen (h)'
+    )
+    balance = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=0,
+        verbose_name='Saldo (h)'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='maintenance_invoices_created',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Erstellt am'
+    )
+    
+    class Meta:
+        verbose_name = 'Maintenance-Abrechnung'
+        verbose_name_plural = 'Maintenance-Abrechnungen'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Abrechnung {self.license.license_number} ({self.created_at.strftime('%d.%m.%Y')})"
+

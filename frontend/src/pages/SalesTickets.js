@@ -51,8 +51,8 @@ const SalesTickets = () => {
       if (filters.status) params.status = filters.status;
       if (filters.search) params.search = filters.search;
 
-      const response = await api.get('/api/sales/sales-tickets/', { params });
-      setTickets(response.data);
+      const response = await api.get('/sales/sales-tickets/', { params });
+      setTickets(response.data.results || response.data);
     } catch (error) {
       console.error('Fehler beim Laden der Tickets:', error);
       setError('Fehler beim Laden der Tickets');

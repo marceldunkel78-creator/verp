@@ -1,11 +1,14 @@
 from rest_framework import serializers
 from .models import (
     Quotation, QuotationItem, MarketingItem, MarketingItemFile,
-    SalesTicket, SalesTicketAttachment, SalesTicketComment
+    SalesTicket, SalesTicketAttachment, SalesTicketComment, SalesTicketChangeLog
 )
 from customers.models import Customer
 from suppliers.models import TradingProduct
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 class QuotationItemSerializer(serializers.ModelSerializer):
@@ -220,13 +223,25 @@ class QuotationListSerializer(serializers.ModelSerializer):
         return obj.items.count()
     
     def get_total_amount(self, obj):
-        """Gesamtsumme - nur Gruppen-Header und Einzelpositionen (ohne group_id)"""
+        """Gesamtsumme NETTO - nur Gruppen-Header und Einzelpositionen (ohne group_id)"""
         from decimal import Decimal
+        
+        items = [it for it in obj.items.all() if (it.is_group_header or not it.group_id)]
         total = Decimal('0.00')
-        for item in obj.items.all():
-            # Nur Gruppen-Header oder Einzelpositionen (ohne group_id) zählen
-            if item.is_group_header or not item.group_id:
-                total += item.total
+
+        # Detect items using system price
+        uses_system = any(getattr(it, 'uses_system_price', False) and obj.system_price for it in items)
+
+        # Sum subtotals for items not using system price
+        for it in items:
+            if getattr(it, 'uses_system_price', False) and obj.system_price:
+                continue
+            total += it.subtotal  # Netto (nicht total welches Brutto ist)
+
+        # If any item uses system price, add the quotation.system_price once (netto)
+        if uses_system:
+            total += (obj.system_price or Decimal('0.00'))
+
         return float(total)
 
 
@@ -526,6 +541,20 @@ class SalesTicketCommentSerializer(serializers.ModelSerializer):
         return None
 
 
+class SalesTicketChangeLogSerializer(serializers.ModelSerializer):
+    """Serializer für Sales-Ticket ChangeLog"""
+    changed_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SalesTicketChangeLog
+        fields = ['id', 'field_name', 'old_value', 'new_value', 'changed_by', 'changed_by_name', 'changed_at']
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return obj.changed_by.get_full_name() or obj.changed_by.username
+        return None
+
+
 class SalesTicketListSerializer(serializers.ModelSerializer):
     """List-Serializer für Sales-Tickets"""
     category_display = serializers.CharField(source='get_category_display', read_only=True)
@@ -561,6 +590,9 @@ class SalesTicketDetailSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()
     attachments = SalesTicketAttachmentSerializer(many=True, read_only=True)
     comments = SalesTicketCommentSerializer(many=True, read_only=True)
+    change_logs = SalesTicketChangeLogSerializer(many=True, read_only=True)
+    watchers = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    watcher_names = serializers.SerializerMethodField()
     
     class Meta:
         model = SalesTicket
@@ -569,7 +601,8 @@ class SalesTicketDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'title', 'description',
             'created_by', 'created_by_name', 'assigned_to', 'assigned_to_name',
             'due_date', 'completed_date', 'notes',
-            'attachments', 'comments',
+            'attachments', 'comments', 'change_logs',
+            'watchers', 'watcher_names',
             'created_at', 'updated_at'
         ]
     
@@ -582,15 +615,31 @@ class SalesTicketDetailSerializer(serializers.ModelSerializer):
         if obj.assigned_to:
             return obj.assigned_to.get_full_name() or obj.assigned_to.username
         return None
+    
+    def get_watcher_names(self, obj):
+        return [{'id': w.id, 'name': w.get_full_name() or w.username} for w in obj.watchers.all()]
 
 
 class SalesTicketCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Erstellen/Aktualisieren von Sales-Tickets"""
+    id = serializers.IntegerField(read_only=True)
+    ticket_number = serializers.CharField(read_only=True)
+    watchers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.all(),
+        required=False
+    )
     
     class Meta:
         model = SalesTicket
         fields = [
-            'category', 'status', 'title', 'description',
-            'assigned_to', 'due_date', 'completed_date', 'notes'
+            'id', 'ticket_number', 'category', 'status', 'title', 'description',
+            'assigned_to', 'due_date', 'completed_date', 'notes', 'watchers', 'created_by'
         ]
+
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return obj.changed_by.get_full_name() or obj.changed_by.username
+        return None
 

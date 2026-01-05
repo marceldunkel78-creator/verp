@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DueRemindersModal from './DueRemindersModal';
+import NotificationCenter from './NotificationCenter';
 import {
   Bars3Icon,
   XMarkIcon,
@@ -108,8 +109,9 @@ const Layout = () => {
       {/* Desktop Sidebar */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
-          <div className="flex items-center h-16 px-4 bg-blue-600">
+          <div className="flex items-center justify-between h-16 px-4 bg-blue-600">
             <span className="text-2xl font-bold text-white">VERP</span>
+            <NotificationCenter darkMode={true} align="left" />
           </div>
           <nav className="flex-1 px-2 py-4 space-y-1">
             {filteredNavigation.map((item) => {
@@ -163,6 +165,9 @@ const Layout = () => {
           </button>
           <div className="flex items-center flex-1 px-4">
             <span className="text-xl font-bold text-blue-600">VERP</span>
+          </div>
+          <div className="flex items-center px-4">
+            <NotificationCenter />
           </div>
         </div>
 
