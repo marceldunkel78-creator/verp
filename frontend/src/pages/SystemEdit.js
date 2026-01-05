@@ -529,7 +529,7 @@ const SystemEdit = () => {
 
       {/* Tabs */}
       <div className="border-b mb-6">
-        <nav className="flex gap-4">
+        <nav className="tab-scroll flex gap-4">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             return (

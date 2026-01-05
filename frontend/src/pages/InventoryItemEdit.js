@@ -267,7 +267,7 @@ const InventoryItemEdit = () => {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="tab-scroll -mb-px flex space-x-8">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             return (

@@ -17,28 +17,40 @@ Implemented comprehensive file upload functionality for all three ticket types i
 - ✅ File metadata (size, content type, upload date)
 
 ## Folder Structure
-Files are automatically organized in the following structure:
+Files are automatically organized in the following structure under the configured `MEDIA_ROOT` (e.g. `C:/VERP-Media` in local dev):
+
+Top-level is grouped by application/area to match the frontend hierarchy (Sales, Procurement, Service, VisiView, HR, MyVERP, etc.). Example structure:
 ```
-/VERP-Media/
+/<MEDIA_ROOT>/
+  ├── Sales/
+  │   ├── Marketing/
+  │   │   └── <category>/<marketing_id>/
+  │   │       ├── file.pdf
+  │   │       └── image.jpg
+  │   ├── customer_orders/
+  │   │   └── {year}/{order_number}/...
+  │   └── quotations/
+  │       └── {year}/{quotation_number}/...
+  ├── Procurement/
+  │   ├── orders/
+  │   │   └── {year}/{order_number}/...
+  │   └── Trading Goods/
+  │       └── {article_number}/manuals/...
   ├── Service/
-  │   └── Service-tickets/
-  │       └── {ticket_number}/
-  │           ├── file1.pdf
-  │           ├── image1.jpg
-  │           └── ...
-  ├── Service/
-  │   └── Troubleshooting/
-  │       └── {ticket_number}/
-  │           ├── file1.pdf
-  │           ├── screenshot1.png
-  │           └── ...
-  └── VisiView/
-      └── VisiView-Tickets/
-          └── {ticket_number}/
-              ├── file1.pdf
-              ├── diagram1.jpg
-              └── ...
+  │   ├── Service-tickets/{ticket_number}/...
+  │   └── Troubleshooting/{ticket_number}/...
+  ├── VisiView/
+  │   ├── {license_number}/...
+  │   └── VisiView-Tickets/{ticket_number}/...
+  ├── HR/
+  │   └── {employee_id}/signatures/...
+  ├── MyVERP/
+  │   └── <user_folder>/Reisekosten/...
+  └── company/
+      └── headers/...
 ```
+
+This mirrors the frontend module hierarchy to keep related media grouped in one place and to make later migration to a shared fileserver trivial.
 
 ## Backend Implementation
 
@@ -186,7 +198,11 @@ import FileUpload from '../components/FileUpload';
 
 ## Files Modified
 ### Backend
-- `backend/core/upload_paths.py` - Added 3 upload path functions
+- `backend/core/upload_paths.py` - Centralized upload path helpers (customer orders, orders, quotations, systems, projects, HR, Trading Goods, M&S, Service, Manufacturing, VisiView, company)
+- `backend/core/upload_paths.py` - Added new helpers: `hr_signature_upload_path`, `trading_product_manual_upload_path`, `marketing_upload_path`
+- `backend/users/models.py` - Use `hr_signature_upload_path` for `Employee.signature_image` (replaces `hr/signatures/`)
+- `backend/suppliers/models.py` - Use `trading_product_manual_upload_path` for `TradingProduct.release_manual` (replaces `TradingProducts/manuals/`)
+- `backend/sales/models.py` - Use `quotation_upload_path` for `Quotation.pdf_file` (replaces `quotations/%Y/`); use `marketing_upload_path` for marketing attachments
 - `backend/service/models.py` - Added ServiceTicketAttachment, TroubleshootingAttachment, fixed TicketChangeLog
 - `backend/service/serializers.py` - Added attachment serializers, updated ticket detail serializers
 - `backend/service/views.py` - Added upload/download/delete endpoints to ServiceTicketViewSet, TroubleshootingViewSet
@@ -195,6 +211,10 @@ import FileUpload from '../components/FileUpload';
 - `backend/visiview/serializers.py` - Added VisiViewTicketAttachmentSerializer, updated ticket detail serializer
 - `backend/visiview/views.py` - Added upload/download/delete endpoints to VisiViewTicketViewSet
 - `backend/visiview/admin.py` - Registered VisiViewTicketAttachment
+
+**Notes:**
+- Some older migrations still contain string-based `upload_to` values (this is expected and kept for migration history). New model fields use central helpers moving forward.
+- To place media on a network fileserver, set `MEDIA_ROOT` to the target mount path (e.g., `\\fileserver\verp_media` on Windows or `/mnt/verp_media` on Linux). Ensure the running user has proper read/write permissions and that backups are configured.
 
 ### Frontend
 - `frontend/src/components/FileUpload.js` - New reusable component

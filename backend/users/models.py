@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from datetime import datetime, timedelta
 import os
+from core.upload_paths import hr_signature_upload_path
 
 
 def default_work_days():
@@ -130,7 +131,7 @@ class Employee(models.Model):
     
     # Unterschriftsbild für Angebote/Dokumente
     signature_image = models.ImageField(
-        upload_to='hr/signatures/',
+        upload_to=hr_signature_upload_path,
         blank=True,
         null=True,
         verbose_name='Unterschrift',

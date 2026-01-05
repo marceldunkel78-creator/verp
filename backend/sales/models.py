@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from core.upload_paths import quotation_upload_path
+from core.upload_paths import quotation_upload_path, marketing_upload_path
 
 User = get_user_model()
 
@@ -216,7 +216,7 @@ class Quotation(models.Model):
     
     # PDF Datei (nach Erstellung)
     pdf_file = models.FileField(
-        upload_to='quotations/%Y/',
+        upload_to=quotation_upload_path,
         blank=True,
         null=True,
         verbose_name='PDF Datei',
@@ -569,3 +569,350 @@ class QuotationItem(models.Model):
             'percent': margin_pct,
             'total_cost': total_cost
         }
+
+
+# ==================== Marketing Models ====================
+
+# Note: upload path for marketing files is provided by core.upload_paths.marketing_upload_path
+
+def marketing_item_upload_path(instance, filename):
+    """Compatibility wrapper used by older migrations."""
+    return marketing_upload_path(instance, filename)
+
+
+class MarketingItem(models.Model):
+    """
+    Marketing-Materialien: Newsletter, AppNotes, TechNotes, Broschüren, Shows, Workshops
+    """
+    CATEGORY_CHOICES = [
+        ('newsletter', 'Newsletter'),
+        ('appnote', 'AppNote'),
+        ('technote', 'TechNote'),
+        ('brochure', 'Broschüre'),
+        ('show', 'Show'),
+        ('workshop', 'Workshop'),
+    ]
+    
+    # Basisfelder
+    category = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        verbose_name='Kategorie'
+    )
+    title = models.CharField(max_length=300, verbose_name='Titel')
+    description = models.TextField(blank=True, verbose_name='Beschreibung')
+    
+    # Zuständige Mitarbeiter (ManyToMany)
+    responsible_employees = models.ManyToManyField(
+        'users.Employee',
+        blank=True,
+        related_name='marketing_items',
+        verbose_name='Zuständige Mitarbeiter'
+    )
+    
+    # Veranstaltungsfelder (nur für Shows/Workshops)
+    event_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Veranstaltungsdatum',
+        help_text='Nur für Shows und Workshops'
+    )
+    event_location = models.CharField(
+        max_length=300,
+        blank=True,
+        verbose_name='Veranstaltungsort',
+        help_text='Nur für Shows und Workshops'
+    )
+    
+    # Metadaten
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_marketing_items',
+        verbose_name='Erstellt von'
+    )
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Marketing-Material'
+        verbose_name_plural = 'Marketing-Materialien'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.get_category_display()}: {self.title}"
+    
+    @property
+    def is_event(self):
+        """Prüft ob es sich um ein Event (Show/Workshop) handelt"""
+        return self.category in ['show', 'workshop']
+
+
+class MarketingItemFile(models.Model):
+    """
+    Dateianhänge für Marketing-Items
+    """
+    marketing_item = models.ForeignKey(
+        MarketingItem,
+        on_delete=models.CASCADE,
+        related_name='files',
+        verbose_name='Marketing-Material'
+    )
+    file = models.FileField(
+        upload_to=marketing_upload_path,
+        verbose_name='Datei'
+    )
+    filename = models.CharField(
+        max_length=255,
+        verbose_name='Dateiname'
+    )
+    file_size = models.IntegerField(
+        verbose_name='Dateigröße (Bytes)',
+        null=True,
+        blank=True
+    )
+    content_type = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Content-Type'
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='marketing_file_uploads',
+        verbose_name='Hochgeladen von'
+    )
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Hochgeladen am'
+    )
+    
+    class Meta:
+        verbose_name = 'Marketing-Datei'
+        verbose_name_plural = 'Marketing-Dateien'
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.filename} ({self.marketing_item.title})"
+    
+    @property
+    def is_image(self):
+        """Prüft ob die Datei ein Bild ist"""
+        if self.content_type:
+            return self.content_type.startswith('image/')
+        return self.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
+
+
+# ==================== Sales Ticket Models ====================
+
+class SalesTicket(models.Model):
+    """
+    Sales-Tickets für Dokumentation, Marketing-Material, Trainingsmaterial etc.
+    """
+    CATEGORY_CHOICES = [
+        ('appnote', 'AppNote'),
+        ('technote', 'TechNote'),
+        ('usermanual', 'User Manual'),
+        ('fieldservicemanual', 'Field Service Manual'),
+        ('brochure', 'Broschüre'),
+        ('newsletter', 'Newsletter'),
+        ('trainingvideo', 'Training Video'),
+        ('marketingvideo', 'Marketing Video'),
+        ('helparticle', 'Helpeintrag'),
+        ('marketresearch', 'Markterkundung'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('new', 'Neu'),
+        ('assigned', 'Zugewiesen'),
+        ('in_progress', 'In Bearbeitung'),
+        ('review', 'Review'),
+        ('completed', 'Erledigt'),
+        ('rejected', 'Abgelehnt'),
+    ]
+    
+    # Ticket-Identifikation
+    ticket_number = models.CharField(
+        max_length=20,
+        unique=True,
+        editable=False,
+        verbose_name='Ticketnummer'
+    )
+    
+    # Kategorie und Status
+    category = models.CharField(
+        max_length=30,
+        choices=CATEGORY_CHOICES,
+        verbose_name='Kategorie'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='new',
+        verbose_name='Status'
+    )
+    
+    # Basisdaten
+    title = models.CharField(max_length=300, verbose_name='Titel')
+    description = models.TextField(blank=True, verbose_name='Beschreibung')
+    
+    # Zuweisungen
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='sales_tickets_created',
+        verbose_name='Erstellt von'
+    )
+    
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sales_tickets_assigned',
+        verbose_name='Zugewiesen an'
+    )
+    
+    # Daten
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Avisiertes Abgabedatum'
+    )
+    
+    completed_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Abschlussdatum'
+    )
+    
+    # Notizen und interne Kommentare
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Interne Notizen'
+    )
+    
+    # Metadaten
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Sales-Ticket'
+        verbose_name_plural = 'Sales-Tickets'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.ticket_number} - {self.title}"
+    
+    def save(self, *args, **kwargs):
+        if not self.ticket_number:
+            self.ticket_number = self._generate_ticket_number()
+        super().save(*args, **kwargs)
+    
+    @staticmethod
+    def _generate_ticket_number():
+        """Generiert eine eindeutige Ticketnummer im Format ST-YYYY-NNNN"""
+        from datetime import datetime
+        year = datetime.now().year
+        prefix = f'ST-{year}-'
+        
+        existing_tickets = SalesTicket.objects.filter(
+            ticket_number__startswith=prefix
+        ).order_by('-ticket_number')
+        
+        if existing_tickets.exists():
+            last_number = existing_tickets.first().ticket_number
+            try:
+                number = int(last_number.split('-')[-1]) + 1
+            except (ValueError, IndexError):
+                number = 1
+        else:
+            number = 1
+        
+        return f'{prefix}{number:04d}'
+
+
+class SalesTicketAttachment(models.Model):
+    """
+    Dateianhänge für Sales-Tickets
+    """
+    ticket = models.ForeignKey(
+        SalesTicket,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='Ticket'
+    )
+    file = models.FileField(
+        upload_to='Sales/Sales-Tickets/',  # Will be enhanced with ticket_number in upload_paths
+        verbose_name='Datei'
+    )
+    filename = models.CharField(
+        max_length=255,
+        verbose_name='Dateiname'
+    )
+    file_size = models.IntegerField(
+        default=0,
+        verbose_name='Dateigröße (Bytes)'
+    )
+    content_type = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Content-Type'
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name='Hochgeladen von'
+    )
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Hochgeladen am'
+    )
+    
+    class Meta:
+        verbose_name = 'Sales-Ticket Anhang'
+        verbose_name_plural = 'Sales-Ticket Anhänge'
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.filename} ({self.ticket.ticket_number})"
+    
+    @property
+    def is_image(self):
+        """Prüft ob die Datei ein Bild ist"""
+        if self.content_type:
+            return self.content_type.startswith('image/')
+        return self.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
+
+
+class SalesTicketComment(models.Model):
+    """
+    Kommentare zu Sales-Tickets
+    """
+    ticket = models.ForeignKey(
+        SalesTicket,
+        on_delete=models.CASCADE,
+        related_name='comments',
+        verbose_name='Ticket'
+    )
+    comment = models.TextField(verbose_name='Kommentar')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    
+    class Meta:
+        verbose_name = 'Sales-Ticket Kommentar'
+        verbose_name_plural = 'Sales-Ticket Kommentare'
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"Kommentar zu {self.ticket.ticket_number} von {self.created_by}"

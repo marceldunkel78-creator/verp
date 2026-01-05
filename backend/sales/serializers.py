@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import Quotation, QuotationItem
+from .models import (
+    Quotation, QuotationItem, MarketingItem, MarketingItemFile,
+    SalesTicket, SalesTicketAttachment, SalesTicketComment
+)
 from customers.models import Customer
 from suppliers.models import TradingProduct
 from django.contrib.contenttypes.models import ContentType
@@ -385,5 +388,209 @@ class QuotationCreateUpdateSerializer(serializers.ModelSerializer):
             'recipient_postal_code', 'recipient_city', 'recipient_country',
             'description_text', 'footer_text',
             'notes', 'created_by', 'commission_user'
+        ]
+
+
+# ==================== Marketing Serializers ====================
+
+class MarketingItemFileSerializer(serializers.ModelSerializer):
+    """Serializer für Marketing-Dateien"""
+    file_url = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = MarketingItemFile
+        fields = [
+            'id', 'marketing_item', 'file', 'file_url', 'filename', 
+            'file_size', 'content_type', 'uploaded_by', 'uploaded_by_name',
+            'uploaded_at', 'is_image'
+        ]
+        read_only_fields = ['uploaded_at', 'is_image']
+    
+    def get_file_url(self, obj):
+        """Gibt die vollständige URL zur Datei zurück"""
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
+    
+    def get_uploaded_by_name(self, obj):
+        """Gibt den Namen des Uploaders zurück"""
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return None
+
+
+class MarketingItemSerializer(serializers.ModelSerializer):
+    """Serializer für Marketing-Items mit verschachtelten Dateien und Mitarbeitern"""
+    files = MarketingItemFileSerializer(many=True, read_only=True)
+    responsible_employees_data = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    is_event = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = MarketingItem
+        fields = [
+            'id', 'category', 'category_display', 'title', 'description',
+            'responsible_employees', 'responsible_employees_data',
+            'event_date', 'event_location', 'is_event',
+            'created_at', 'created_by', 'created_by_name', 'updated_at',
+            'files'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'is_event']
+    
+    def get_responsible_employees_data(self, obj):
+        """Gibt detaillierte Mitarbeiter-Informationen zurück"""
+        from users.models import Employee
+        employees = obj.responsible_employees.all()
+        return [{
+            'id': emp.id,
+            'employee_id': emp.employee_id,
+            'first_name': emp.first_name,
+            'last_name': emp.last_name,
+            'full_name': f"{emp.first_name} {emp.last_name}"
+        } for emp in employees]
+    
+    def get_created_by_name(self, obj):
+        """Gibt den Namen des Erstellers zurück"""
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+
+
+class MarketingItemCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer für Erstellen/Aktualisieren von Marketing-Items"""
+    
+    class Meta:
+        model = MarketingItem
+        fields = [
+            'category', 'title', 'description', 'responsible_employees',
+            'event_date', 'event_location', 'created_by'
+        ]
+    
+    def validate(self, data):
+        """Validierung: Event-Felder nur für Shows/Workshops"""
+        category = data.get('category')
+        if category not in ['show', 'workshop']:
+            # Event-Felder löschen wenn nicht Show/Workshop
+            data.pop('event_date', None)
+            data.pop('event_location', None)
+        return data
+
+
+# ==================== Sales Ticket Serializers ====================
+
+class SalesTicketAttachmentSerializer(serializers.ModelSerializer):
+    """Serializer für Sales-Ticket Anhänge"""
+    file_url = serializers.SerializerMethodField()
+    uploaded_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SalesTicketAttachment
+        fields = [
+            'id', 'ticket', 'file', 'file_url', 'filename',
+            'file_size', 'content_type', 'uploaded_by', 'uploaded_by_name',
+            'uploaded_at', 'is_image'
+        ]
+        read_only_fields = ['uploaded_at', 'is_image']
+    
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
+    
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return None
+
+
+class SalesTicketCommentSerializer(serializers.ModelSerializer):
+    """Serializer für Sales-Ticket Kommentare"""
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SalesTicketComment
+        fields = ['id', 'ticket', 'comment', 'created_by', 'created_by_name', 'created_at']
+        read_only_fields = ['created_at']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+
+
+class SalesTicketListSerializer(serializers.ModelSerializer):
+    """List-Serializer für Sales-Tickets"""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SalesTicket
+        fields = [
+            'id', 'ticket_number', 'category', 'category_display',
+            'status', 'status_display', 'title', 'due_date',
+            'created_by', 'created_by_name', 'assigned_to', 'assigned_to_name',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+    
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
+
+
+class SalesTicketDetailSerializer(serializers.ModelSerializer):
+    """Detail-Serializer für Sales-Tickets"""
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
+    attachments = SalesTicketAttachmentSerializer(many=True, read_only=True)
+    comments = SalesTicketCommentSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = SalesTicket
+        fields = [
+            'id', 'ticket_number', 'category', 'category_display',
+            'status', 'status_display', 'title', 'description',
+            'created_by', 'created_by_name', 'assigned_to', 'assigned_to_name',
+            'due_date', 'completed_date', 'notes',
+            'attachments', 'comments',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+    
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return None
+
+
+class SalesTicketCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer für Erstellen/Aktualisieren von Sales-Tickets"""
+    
+    class Meta:
+        model = SalesTicket
+        fields = [
+            'category', 'status', 'title', 'description',
+            'assigned_to', 'due_date', 'completed_date', 'notes'
         ]
 

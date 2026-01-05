@@ -8,7 +8,7 @@ import api from '../services/api';
  * Props:
  * - attachments: Array of attachment objects from ticket
  * - ticketId: ID of the ticket
- * - ticketType: 'service', 'troubleshooting', or 'visiview'
+ * - ticketType: 'service', 'troubleshooting', 'visiview', 'sales-ticket', or 'marketing'
  * - onUploadSuccess: Callback when file is uploaded
  * - onDeleteSuccess: Callback when file is deleted
  */
@@ -22,7 +22,9 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
     const typeMap = {
       service: 'service/tickets',
       troubleshooting: 'service/troubleshooting',
-      visiview: 'visiview/tickets'
+      visiview: 'visiview/tickets',
+      'sales-ticket': 'sales/sales-tickets',
+      marketing: 'sales/marketing-items'
     };
     return typeMap[ticketType] || 'service/tickets';
   };

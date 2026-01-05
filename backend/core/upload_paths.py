@@ -259,3 +259,37 @@ def dealer_upload_path(instance, filename):
     if dealer_number:
         return f"Dealers/{dealer_number}/{safe_filename}"
     return f"Dealers/unknown/{safe_filename}"
+
+
+# ---------------------- Additional helpers ----------------------
+
+def hr_signature_upload_path(instance, filename):
+    """Spezieller Pfad für HR-Unterschriftsbilder: /HR/<employee_id>/signatures/filename"""
+    employee = getattr(instance, 'employee', None) or instance
+    emp_id = _sanitize_path_component(getattr(employee, 'employee_id', '') or getattr(employee, 'employee_id', '') or '')
+    safe_filename = _sanitize_path_component(filename)
+    if emp_id:
+        return f"HR/{emp_id}/signatures/{safe_filename}"
+    return f"HR/unknown/signatures/{safe_filename}"
+
+
+def trading_product_manual_upload_path(instance, filename):
+    """Release-Manual Pfad: /Trading Goods/<article_number>/manuals/filename"""
+    article_number = _sanitize_path_component(
+        getattr(instance, 'visitron_part_number', '') or getattr(instance, 'article_number', '') or ''
+    )
+    safe_filename = _sanitize_path_component(filename)
+    if article_number:
+        return f"Trading Goods/{article_number}/manuals/{safe_filename}"
+    return f"Trading Goods/unknown/manuals/{safe_filename}"
+
+
+def marketing_upload_path(instance, filename):
+    """Upload-Pfad für Marketing-Items: /Sales/Marketing/<id>/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    # If instance is a file (MarketingItemFile), try to get the related marketing_item
+    mi = getattr(instance, 'marketing_item', None) or instance
+    mi_id = getattr(mi, 'id', None) or getattr(instance, 'id', None) or 'new'
+    category = getattr(mi, 'category', '')
+    category_folder = _sanitize_path_component(category or 'marketing')
+    return f"Sales/Marketing/{category_folder}/{mi_id}/{safe_filename}"

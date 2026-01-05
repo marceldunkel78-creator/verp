@@ -2,16 +2,25 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.http import FileResponse, HttpResponse
-from .models import Quotation, QuotationItem
+from django.http import FileResponse, HttpResponse, Http404
+from .models import (
+    Quotation, QuotationItem, MarketingItem, MarketingItemFile,
+    SalesTicket, SalesTicketAttachment, SalesTicketComment
+)
 from .serializers import (
     QuotationListSerializer,
     QuotationDetailSerializer,
     QuotationCreateUpdateSerializer,
     QuotationItemSerializer,
-    QuotationItemCreateUpdateSerializer
+    QuotationItemCreateUpdateSerializer,
+    SalesTicketListSerializer,
+    SalesTicketDetailSerializer,
+    SalesTicketCreateUpdateSerializer,
+    SalesTicketAttachmentSerializer,
+    SalesTicketCommentSerializer
 )
 import traceback
 import json
@@ -333,3 +342,232 @@ class QuotationItemViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return QuotationItemCreateUpdateSerializer
         return QuotationItemSerializer
+
+
+# ==================== Marketing ViewSets ====================
+
+class MarketingItemViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Marketing-Items (Newsletter, AppNotes, TechNotes, Broschüren, Shows, Workshops)
+    """
+    queryset = MarketingItem.objects.prefetch_related('files', 'responsible_employees', 'created_by').all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category']
+    search_fields = ['title', 'description']
+    ordering_fields = ['created_at', 'event_date', 'title']
+    ordering = ['-created_at']
+    
+    def get_serializer_class(self):
+        from .serializers import MarketingItemSerializer, MarketingItemCreateUpdateSerializer
+        if self.action in ['create', 'update', 'partial_update']:
+            return MarketingItemCreateUpdateSerializer
+        return MarketingItemSerializer
+    
+    def perform_create(self, serializer):
+        """Setze created_by automatisch"""
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_attachment(self, request, pk=None):
+        """Lädt eine Datei für das Marketing-Item hoch"""
+        marketing_item = self.get_object()
+        file_obj = request.FILES.get('file')
+        
+        if not file_obj:
+            return Response({'error': 'Keine Datei hochgeladen'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        attachment = MarketingItemFile.objects.create(
+            marketing_item=marketing_item,
+            file=file_obj,
+            filename=file_obj.name,
+            file_size=file_obj.size,
+            content_type=file_obj.content_type or '',
+            uploaded_by=request.user
+        )
+        
+        from .serializers import MarketingItemFileSerializer
+        serializer = MarketingItemFileSerializer(attachment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """Löscht einen Dateianhang"""
+        marketing_item = self.get_object()
+        try:
+            attachment = MarketingItemFile.objects.get(id=attachment_id, marketing_item=marketing_item)
+            attachment.file.delete()  # Löscht die Datei vom Speicher
+            attachment.delete()  # Löscht den Datenbankeintrag
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except MarketingItemFile.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+    
+    @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Lädt einen Dateianhang herunter"""
+        marketing_item = self.get_object()
+        try:
+            attachment = MarketingItemFile.objects.get(id=attachment_id, marketing_item=marketing_item)
+            return FileResponse(attachment.file.open('rb'), 
+                              as_attachment=True, 
+                              filename=attachment.filename)
+        except MarketingItemFile.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+
+
+class MarketingItemFileViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Marketing-Dateien
+    """
+    queryset = MarketingItemFile.objects.select_related('marketing_item', 'uploaded_by').all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['marketing_item']
+    
+    def get_serializer_class(self):
+        from .serializers import MarketingItemFileSerializer
+        return MarketingItemFileSerializer
+    
+    def perform_create(self, serializer):
+        """Setze uploaded_by und file_size automatisch"""
+        file_obj = self.request.FILES.get('file')
+        if file_obj:
+            serializer.save(
+                uploaded_by=self.request.user,
+                filename=file_obj.name,
+                file_size=file_obj.size,
+                content_type=file_obj.content_type
+            )
+        else:
+            serializer.save(uploaded_by=self.request.user)
+
+
+# ==================== Sales Ticket ViewSet ====================
+
+class SalesTicketViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Sales-Tickets
+    """
+    queryset = SalesTicket.objects.select_related('created_by', 'assigned_to').prefetch_related('attachments', 'comments').all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category', 'status', 'assigned_to', 'created_by']
+    search_fields = ['ticket_number', 'title', 'description']
+    ordering_fields = ['created_at', 'updated_at', 'due_date', 'ticket_number']
+    ordering = ['-created_at']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SalesTicketListSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return SalesTicketCreateUpdateSerializer
+        return SalesTicketDetailSerializer
+    
+    def perform_create(self, serializer):
+        """Setze created_by beim Erstellen"""
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_attachment(self, request, pk=None):
+        """Datei zu Sales-Ticket hochladen"""
+        ticket = self.get_object()
+        file_obj = request.FILES.get('file')
+        
+        if not file_obj:
+            return Response(
+                {'error': 'Keine Datei bereitgestellt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            attachment = SalesTicketAttachment.objects.create(
+                ticket=ticket,
+                file=file_obj,
+                filename=file_obj.name,
+                file_size=file_obj.size,
+                content_type=file_obj.content_type,
+                uploaded_by=request.user
+            )
+            
+            serializer = SalesTicketAttachmentSerializer(attachment, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {'error': f'Upload fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['get'], url_path='download-attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        """Datei herunterladen"""
+        try:
+            attachment = SalesTicketAttachment.objects.get(id=attachment_id, ticket_id=pk)
+            
+            if not attachment.file:
+                raise Http404('Datei nicht gefunden')
+            
+            response = FileResponse(attachment.file.open('rb'))
+            response['Content-Disposition'] = f'attachment; filename="{attachment.filename}"'
+            response['Content-Type'] = attachment.content_type or 'application/octet-stream'
+            
+            return response
+        
+        except SalesTicketAttachment.DoesNotExist:
+            raise Http404('Anhang nicht gefunden')
+        except Exception as e:
+            return Response(
+                {'error': f'Download fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['delete'], url_path='delete-attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """Datei löschen"""
+        try:
+            attachment = SalesTicketAttachment.objects.get(id=attachment_id, ticket_id=pk)
+            
+            # Datei vom Speicher löschen
+            if attachment.file:
+                attachment.file.delete(save=False)
+            
+            attachment.delete()
+            
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        
+        except SalesTicketAttachment.DoesNotExist:
+            raise Http404('Anhang nicht gefunden')
+        except Exception as e:
+            return Response(
+                {'error': f'Löschen fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'])
+    def add_comment(self, request, pk=None):
+        """Kommentar zu Sales-Ticket hinzufügen"""
+        ticket = self.get_object()
+        comment_text = request.data.get('comment')
+        
+        if not comment_text:
+            return Response(
+                {'error': 'Kein Kommentar bereitgestellt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            comment = SalesTicketComment.objects.create(
+                ticket=ticket,
+                comment=comment_text,
+                created_by=request.user
+            )
+            
+            serializer = SalesTicketCommentSerializer(comment, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            return Response(
+                {'error': f'Kommentar hinzufügen fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+

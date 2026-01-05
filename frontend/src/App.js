@@ -25,6 +25,7 @@ import ExchangeRates from './pages/ExchangeRates';
 import CompanyInfo from './pages/modules/CompanyInfo';
 import PaymentDeliverySettings from './pages/PaymentDeliverySettings';
 import EmployeeList from './pages/EmployeeList';
+import EmployeeEdit from './pages/EmployeeEdit';
 import MyVERP from './pages/MyVERP';
 import Layout from './components/Layout';
 import Inventory from './pages/Inventory';
@@ -63,6 +64,10 @@ import Loans from './pages/Loans';
 import LoanEdit from './pages/LoanEdit';
 import Documents from './pages/Documents';
 import BackupRestore from './pages/BackupRestore';
+import Marketing from './pages/Marketing';
+import MarketingItemEdit from './pages/MarketingItemEdit';
+import SalesTickets from './pages/SalesTickets';
+import SalesTicketEdit from './pages/SalesTicketEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -97,6 +102,7 @@ function App() {
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<HumanResources />} />
             <Route path="hr/employees" element={<EmployeeList />} />
+            <Route path="hr/employees/:id" element={<EmployeeEdit />} />
             <Route path="myverp" element={<MyVERP />} />
             <Route path="manufacturing" element={<Manufacturing />} />
             <Route path="manufacturing/vs-hardware" element={<VSHardware />} />
@@ -170,8 +176,12 @@ function App() {
             <Route path="sales/quotations/new" element={<QuotationForm />} />
             <Route path="sales/quotations/:id" element={<QuotationDetail />} />
             <Route path="sales/quotations/:id/edit" element={<QuotationForm />} />
-            {/* legacy redirect removed: order-processing now handled by OrderProcessing component */}
-            <Route path="sales/marketing" element={<Navigate to="/sales" replace />} />
+            <Route path="sales/marketing" element={<Marketing />} />
+            <Route path="sales/marketing/new" element={<MarketingItemEdit />} />
+            <Route path="sales/marketing/:id" element={<MarketingItemEdit />} />
+            <Route path="sales/tickets" element={<SalesTickets />} />
+            <Route path="sales/tickets/new" element={<SalesTicketEdit />} />
+            <Route path="sales/tickets/:id" element={<SalesTicketEdit />} />
             
             {/* Settings Submodules */}
             <Route path="settings/users" element={<Users />} />

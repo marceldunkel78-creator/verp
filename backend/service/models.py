@@ -549,36 +549,6 @@ class ServiceTicketAttachment(models.Model):
         return self.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
 
 
-class TicketChangeLog(models.Model):
-    """
-    Änderungsprotokoll für Service-Tickets
-    """
-    ticket = models.ForeignKey(
-        ServiceTicket,
-        on_delete=models.CASCADE,
-        related_name='change_logs',
-        verbose_name='Ticket'
-    )
-    field_name = models.CharField(max_length=100, verbose_name='Feldname')
-    old_value = models.TextField(blank=True, verbose_name='Alter Wert')
-    new_value = models.TextField(blank=True, verbose_name='Neuer Wert')
-    changed_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='ticket_changes',
-        verbose_name='Geändert von'
-    )
-    changed_at = models.DateTimeField(auto_now_add=True, verbose_name='Geändert am')
-    
-    class Meta:
-        verbose_name = 'Ticket Änderung'
-        verbose_name_plural = 'Ticket Änderungen'
-        ordering = ['-changed_at']
-    
-    def __str__(self):
-        return f"{self.field_name} geändert von {self.changed_by} am {self.changed_at}"
-
 
 class RMACase(models.Model):
     """

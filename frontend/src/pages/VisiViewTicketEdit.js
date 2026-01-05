@@ -446,7 +446,7 @@ const VisiViewTicketEdit = () => {
             {/* Tabs */}
             {!isNew && (
               <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8">
+                <nav className="tab-scroll -mb-px flex space-x-8">
                   {TABS.map(tab => (
                     <button
                       key={tab.id}

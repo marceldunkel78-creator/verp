@@ -135,7 +135,11 @@ docker-compose exec backend python manage.py migrate
 docker-compose exec backend python manage.py createsuperuser
 ```
 
-Die Anwendung ist nun verfügbar:
+**MEDIA_ROOT / file storage**
+
+Before starting the containers in production, ensure you have configured `MEDIA_ROOT` and a volume mount for persistent media storage. See `DEPLOYMENT_MEDIA.md` for detailed instructions and examples (Windows UNC, Linux mounts, Docker compose snippet, backups).
+
+The application is now available:
 - Frontend: http://localhost
 - Backend API: http://localhost:8000/api
 - Django Admin: http://localhost:8000/admin

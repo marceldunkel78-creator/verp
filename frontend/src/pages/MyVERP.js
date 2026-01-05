@@ -165,7 +165,7 @@ const MyVERP = () => {
       {/* Tabs */}
       <div className="mt-6">
         <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+          <nav className="tab-scroll -mb-px flex space-x-8">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -674,7 +674,7 @@ const MessagesTab = ({ messages: initialMessages, onRefresh, errors }) => {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-4">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="tab-scroll -mb-px flex space-x-8">
           <button
             onClick={() => setView('inbox')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -925,6 +925,8 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
   // Fetch assigned tickets
   const [serviceTickets, setServiceTickets] = useState([]);
   const [visiviewTickets, setVisiviewTickets] = useState([]);
+  const [salesTickets, setSalesTickets] = useState([]);
+  const [troubleshootingTickets, setTroubleshootingTickets] = useState([]);
   const [loadingTickets, setLoadingTickets] = useState(true);
 
   useEffect(() => {
@@ -954,6 +956,24 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
       } catch (err) {
         console.warn('Could not load visiview tickets', err);
         setVisiviewTickets([]);
+      }
+
+      // Fetch Sales Tickets
+      try {
+        const salesRes = await api.get(`/sales/sales-tickets/?assigned_to=${userId}`);
+        setSalesTickets(salesRes.data.results || salesRes.data || []);
+      } catch (err) {
+        console.warn('Could not load sales tickets', err);
+        setSalesTickets([]);
+      }
+
+      // Fetch Troubleshooting Tickets
+      try {
+        const troubleshootingRes = await api.get(`/service/troubleshooting/?assigned_to=${userId}`);
+        setTroubleshootingTickets(troubleshootingRes.data.results || troubleshootingRes.data || []);
+      } catch (err) {
+        console.warn('Could not load troubleshooting tickets', err);
+        setTroubleshootingTickets([]);
       }
     } catch (err) {
       console.error('Error fetching assigned tickets:', err);
@@ -1061,88 +1081,157 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
         <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.reminders}</div>
       )}
 
-      {/* Service Tickets Section */}
-      <div className="mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-3">Service Tickets</h3>
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+      {/* 2×2 Grid für Ticket-Typen */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Service Tickets */}
+        <div className="bg-white shadow rounded-lg p-4">
+          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
+            <span className="mr-2">🔧</span> Service Tickets
+            <span className="ml-auto text-sm text-gray-500">({serviceTickets.length})</span>
+          </h3>
           {loadingTickets ? (
-            <div className="p-6 text-center text-sm text-gray-500">Lade Service Tickets...</div>
+            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
           ) : serviceTickets.length === 0 ? (
-            <div className="p-6 text-center text-sm text-gray-500">Keine zugewiesenen Service Tickets.</div>
+            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
           ) : (
-            <ul className="divide-y divide-gray-200">
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
               {serviceTickets.map((ticket) => (
-                <li key={ticket.id} className="px-6 py-4 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <a
-                        href={`/service/tickets/${ticket.id}`}
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
-                        #{ticket.ticket_number || ticket.id} - {ticket.title}
-                      </a>
-                      {ticket.description && (
-                        <p className="text-sm text-gray-500 mt-1">{ticket.description.substring(0, 100)}{ticket.description.length > 100 ? '...' : ''}</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                        ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
-                        ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                        ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {ticket.status}
-                      </span>
-                      {ticket.priority && (
-                        <p className="text-xs text-gray-400 mt-1">Priorität: {ticket.priority}</p>
-                      )}
-                    </div>
+                <li key={ticket.id} className="border-l-4 border-blue-500 pl-3 py-2 hover:bg-gray-50">
+                  <a
+                    href={`/service/tickets/${ticket.id}`}
+                    className="text-sm font-medium text-blue-600 hover:underline"
+                  >
+                    #{ticket.ticket_number || ticket.id} - {ticket.title}
+                  </a>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
+                      ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
+                      ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {ticket.status}
+                    </span>
+                    {ticket.priority && (
+                      <span className="text-xs text-gray-400">Prio: {ticket.priority}</span>
+                    )}
                   </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
-      </div>
 
-      {/* VisiView Tickets Section */}
-      <div className="mb-6">
-        <h3 className="text-md font-medium text-gray-900 mb-3">VisiView Tickets</h3>
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        {/* VisiView Tickets */}
+        <div className="bg-white shadow rounded-lg p-4">
+          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
+            <span className="mr-2">👁️</span> VisiView Tickets
+            <span className="ml-auto text-sm text-gray-500">({visiviewTickets.length})</span>
+          </h3>
           {loadingTickets ? (
-            <div className="p-6 text-center text-sm text-gray-500">Lade VisiView Tickets...</div>
+            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
           ) : visiviewTickets.length === 0 ? (
-            <div className="p-6 text-center text-sm text-gray-500">Keine zugewiesenen VisiView Tickets.</div>
+            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
           ) : (
-            <ul className="divide-y divide-gray-200">
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
               {visiviewTickets.map((ticket) => (
-                <li key={ticket.id} className="px-6 py-4 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <a
-                        href={`/visiview/tickets/${ticket.id}`}
-                        className="text-sm font-medium text-blue-600 hover:underline"
-                      >
-                        #{ticket.ticket_number || ticket.id} - {ticket.title}
-                      </a>
-                      {ticket.description && (
-                        <p className="text-sm text-gray-500 mt-1">{ticket.description.substring(0, 100)}{ticket.description.length > 100 ? '...' : ''}</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                        ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
-                        ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                        ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {ticket.status}
-                      </span>
-                      {ticket.priority && (
-                        <p className="text-xs text-gray-400 mt-1">Priorität: {ticket.priority}</p>
-                      )}
-                    </div>
+                <li key={ticket.id} className="border-l-4 border-purple-500 pl-3 py-2 hover:bg-gray-50">
+                  <a
+                    href={`/visiview/tickets/${ticket.id}`}
+                    className="text-sm font-medium text-purple-600 hover:underline"
+                  >
+                    #{ticket.ticket_number || ticket.id} - {ticket.title}
+                  </a>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
+                      ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
+                      ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {ticket.status}
+                    </span>
+                    {ticket.priority && (
+                      <span className="text-xs text-gray-400">Prio: {ticket.priority}</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Sales Tickets */}
+        <div className="bg-white shadow rounded-lg p-4">
+          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
+            <span className="mr-2">💼</span> Sales Tickets
+            <span className="ml-auto text-sm text-gray-500">({salesTickets.length})</span>
+          </h3>
+          {loadingTickets ? (
+            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
+          ) : salesTickets.length === 0 ? (
+            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
+          ) : (
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
+              {salesTickets.map((ticket) => (
+                <li key={ticket.id} className="border-l-4 border-green-500 pl-3 py-2 hover:bg-gray-50">
+                  <a
+                    href={`/sales/tickets/${ticket.id}`}
+                    className="text-sm font-medium text-green-600 hover:underline"
+                  >
+                    {ticket.ticket_number} - {ticket.title}
+                  </a>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
+                      ticket.status === 'new' ? 'bg-blue-100 text-blue-800' :
+                      ticket.status === 'assigned' ? 'bg-purple-100 text-purple-800' :
+                      ticket.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                      ticket.status === 'review' ? 'bg-orange-100 text-orange-800' :
+                      ticket.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      ticket.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {ticket.status_display}
+                    </span>
+                    {ticket.due_date && (
+                      <span className="text-xs text-gray-400">Fällig: {new Date(ticket.due_date).toLocaleDateString('de-DE')}</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Troubleshooting Tickets */}
+        <div className="bg-white shadow rounded-lg p-4">
+          <h3 className="text-md font-medium text-gray-900 mb-3 flex items-center">
+            <span className="mr-2">🔍</span> Troubleshooting
+            <span className="ml-auto text-sm text-gray-500">({troubleshootingTickets.length})</span>
+          </h3>
+          {loadingTickets ? (
+            <div className="text-center text-sm text-gray-500 py-4">Lädt...</div>
+          ) : troubleshootingTickets.length === 0 ? (
+            <div className="text-center text-sm text-gray-500 py-4">Keine zugewiesenen Tickets</div>
+          ) : (
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
+              {troubleshootingTickets.map((ticket) => (
+                <li key={ticket.id} className="border-l-4 border-orange-500 pl-3 py-2 hover:bg-gray-50">
+                  <a
+                    href={`/service/troubleshooting/${ticket.id}`}
+                    className="text-sm font-medium text-orange-600 hover:underline"
+                  >
+                    #{ticket.ticket_number || ticket.id} - {ticket.title}
+                  </a>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
+                      ticket.status === 'open' ? 'bg-yellow-100 text-yellow-800' :
+                      ticket.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                      ticket.status === 'resolved' ? 'bg-green-100 text-green-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {ticket.status}
+                    </span>
                   </div>
                 </li>
               ))}
@@ -1200,27 +1289,22 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
                           <p className="text-xs text-gray-400">{reminder.related_object_type}</p>
                         )}
                       </div>
-                      <div className="flex gap-1">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => openEditModal(reminder)}
-                          className="p-1 text-gray-400 hover:text-blue-600"
-                          title="Bearbeiten"
+                          className="text-blue-600 hover:text-blue-800"
                         >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDismiss(reminder.id)}
-                          className="p-1 text-gray-400 hover:text-yellow-600"
-                          title="Ausblenden"
-                        >
-                          👁️‍🗨️
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
                         </button>
                         <button
                           onClick={() => handleDelete(reminder.id)}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                          title="Löschen"
+                          className="text-red-600 hover:text-red-800"
                         >
-                          🗑️
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -1230,7 +1314,7 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
             })}
           </ul>
         )}
-      </div>
+        </div>
       </div>
 
       {/* Modal für Neue/Bearbeiten Erinnerung */}

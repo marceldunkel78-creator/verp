@@ -34,3 +34,32 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Tab bar scroll helper */
+@layer components {
+  .tab-scroll {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+  }
+
+  /* Ensure tab items don't wrap and appear inline */
+  .tab-scroll > * {
+    display: inline-flex;
+    white-space: nowrap;
+  }
+
+  .tab-scroll::-webkit-scrollbar {
+    height: 12px;
+  }
+
+  .tab-scroll::-webkit-scrollbar-thumb {
+    background: #cbd5e1; /* tailwind gray-300 */
+    border-radius: 6px;
+  }
+
+  .tab-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

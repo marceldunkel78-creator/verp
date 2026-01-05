@@ -189,7 +189,7 @@ const Inventory = () => {
       
       {/* View Toggle */}
       <div className="mb-6 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+        <nav className="tab-scroll -mb-px flex space-x-8">
           <button
             onClick={() => setActiveView('incoming')}
             className={`${

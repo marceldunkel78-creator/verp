@@ -334,7 +334,7 @@ const CustomerEdit = () => {
 
         {/* Tabs */}
         <div className="border-b border-gray-200 px-6 bg-gray-50">
-          <nav className="-mb-px flex space-x-4">
+          <nav className="tab-scroll -mb-px flex space-x-4">
             {tabs.map(tab => {
               const Icon = tab.icon;
               return (

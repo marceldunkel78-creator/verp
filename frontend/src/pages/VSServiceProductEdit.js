@@ -266,7 +266,7 @@ const VSServiceProductEdit = () => {
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow">
         <div className="border-b">
-          <nav className="flex -mb-px">
+          <nav className="tab-scroll flex -mb-px">
             {TABS.map((tab) => (
               <button
                 key={tab.id}

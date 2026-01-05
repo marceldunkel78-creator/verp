@@ -992,7 +992,7 @@ const OrderFormNew = () => {
 
       {/* Tabs Navigation */}
       <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+        <nav className="tab-scroll -mb-px flex space-x-8" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;

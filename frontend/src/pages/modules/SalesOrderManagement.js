@@ -67,7 +67,7 @@ const SalesOrderManagement = () => {
       icon: MegaphoneIcon,
       path: '/sales/marketing',
       color: 'blue',
-      disabled: true
+      disabled: false
     },
     {
       name: 'Systems',

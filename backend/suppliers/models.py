@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from decimal import Decimal, ROUND_UP
+from core.upload_paths import trading_product_manual_upload_path, trading_goods_upload_path
 
 User = get_user_model()
 
@@ -477,7 +478,7 @@ class TradingProduct(models.Model):
     
     # Release-Manual Upload
     release_manual = models.FileField(
-        upload_to='TradingProducts/manuals/',
+        upload_to=trading_product_manual_upload_path,
         blank=True,
         null=True,
         verbose_name='Release-Manual',
