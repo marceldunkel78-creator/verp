@@ -1,66 +1,71 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  InboxArrowDownIcon,
-  ArchiveBoxIcon,
-  ArrowRightIcon
-} from '@heroicons/react/24/outline';
+import { Link } from 'react-router-dom';
+import { InboxArrowDownIcon, ArchiveBoxIcon, ClipboardDocumentListIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 const InventoryManagement = () => {
-  const navigate = useNavigate();
-
   const modules = [
     {
-      title: 'Wareneingang & Lager',
-      description: 'Verwalten Sie Wareneingänge und Lagerbestand',
+      name: 'Wareneingang & Lager',
+      description: 'Wareneingänge erfassen und Lagerbestand verwalten',
       icon: ArchiveBoxIcon,
       path: '/inventory/warehouse',
-      color: 'blue'
+      color: 'violet'
+    },
+    {
+      name: 'Bestandsübersicht',
+      description: 'Aktuelle Lagerbestände und Verfügbarkeiten',
+      icon: ClipboardDocumentListIcon,
+      path: '/inventory/warehouse',
+      color: 'violet',
+      disabled: true
+    },
+    {
+      name: 'Warenbewegungen',
+      description: 'Ein- und Ausgänge, Transfers, Historie',
+      icon: ArrowPathIcon,
+      path: '/inventory/movements',
+      color: 'violet',
+      disabled: true
     }
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
+    <div>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Inventory</h1>
         <p className="mt-2 text-sm text-gray-600">
           Lagerverwaltung, Bestände und Logistik
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modules.map((module, index) => {
-          const Icon = module.icon;
-          const colorClasses = {
-            blue: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
-            green: 'bg-green-50 text-green-600 hover:bg-green-100',
-            purple: 'bg-purple-50 text-purple-600 hover:bg-purple-100'
-          };
-
-          return (
+        {modules.map((module) => (
+          module.disabled ? (
             <div
-              key={index}
-              onClick={() => navigate(module.path)}
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer p-6 border border-gray-200"
+              key={module.name}
+              className="block p-6 bg-gray-100 rounded-lg shadow border-t-4 border-gray-300 opacity-60 cursor-not-allowed"
             >
-              <div className="flex items-start justify-between">
-                <div className={`p-3 rounded-lg ${colorClasses[module.color]}`}>
-                  <Icon className="h-6 w-6" />
-                </div>
+              <div className="flex items-center mb-4">
+                <module.icon className="h-8 w-8 text-gray-400 mr-3" />
+                <h3 className="text-lg font-semibold text-gray-500">{module.name}</h3>
               </div>
-              <h3 className="mt-4 text-lg font-semibold text-gray-900">
-                {module.title}
-              </h3>
-              <p className="mt-2 text-sm text-gray-600">
-                {module.description}
-              </p>
-              <div className="mt-4 flex items-center text-sm font-medium text-blue-600">
-                Öffnen
-                <ArrowRightIcon className="ml-1 h-4 w-4" />
-              </div>
+              <p className="text-sm text-gray-500">{module.description}</p>
+              <p className="text-xs text-gray-400 mt-2">Coming soon...</p>
             </div>
-          );
-        })}
+          ) : (
+            <Link
+              key={module.name}
+              to={module.path}
+              className={`block p-6 bg-white rounded-lg shadow hover:shadow-lg transition-shadow border-t-4 border-${module.color}-500`}
+            >
+              <div className="flex items-center mb-4">
+                <module.icon className={`h-8 w-8 text-${module.color}-600 mr-3`} />
+                <h3 className="text-lg font-semibold text-gray-900">{module.name}</h3>
+              </div>
+              <p className="text-sm text-gray-600">{module.description}</p>
+            </Link>
+          )
+        ))}
       </div>
     </div>
   );

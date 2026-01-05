@@ -1,15 +1,106 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
-const Users = () => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [employees, setEmployees] = useState([]);
-  const [formData, setFormData] = useState({
+// Hierarchische Modulstruktur
+const MODULE_HIERARCHY = [
+  {
+    key: 'finance',
+    label: 'Finance',
+    submodules: [
+      { key: 'accounting', label: 'Buchhaltung' },
+    ]
+  },
+  {
+    key: 'procurement',
+    label: 'Procurement',
+    submodules: [
+      { key: 'suppliers', label: 'Lieferanten' },
+      { key: 'trading', label: 'Handelsware' },
+      { key: 'material_supplies', label: 'Material & Supplies' },
+      { key: 'procurement_orders', label: 'Bestellungen' },
+      { key: 'procurement_loans', label: 'Leihgeräte' },
+      { key: 'procurement_product_collections', label: 'Produktsammlungen' },
+    ]
+  },
+  {
+    key: 'inventory',
+    label: 'Inventory',
+    submodules: [
+      { key: 'inventory_warehouse', label: 'Lager' },
+    ]
+  },
+  {
+    key: 'sales',
+    label: 'Sales / Orders',
+    submodules: [
+      { key: 'customers', label: 'Kunden' },
+      { key: 'sales_dealers', label: 'Händler' },
+      { key: 'sales_pricelists', label: 'Preislisten' },
+      { key: 'sales_projects', label: 'Projekte' },
+      { key: 'sales_systems', label: 'Systeme' },
+      { key: 'sales_quotations', label: 'Angebote' },
+      { key: 'sales_order_processing', label: 'Auftragsbearbeitung' },
+      { key: 'sales_marketing', label: 'Marketing' },
+      { key: 'sales_tickets', label: 'Tickets' },
+    ]
+  },
+  {
+    key: 'hr',
+    label: 'HR',
+    submodules: [
+      { key: 'hr_employees', label: 'Mitarbeiter' },
+    ]
+  },
+  {
+    key: 'manufacturing',
+    label: 'Manufacturing',
+    submodules: [
+      { key: 'manufacturing_vs_hardware', label: 'VS-Hardware' },
+      { key: 'manufacturing_production_orders', label: 'Fertigungsaufträge' },
+    ]
+  },
+  {
+    key: 'visiview',
+    label: 'VisiView',
+    submodules: [
+      { key: 'visiview_products', label: 'Produkte' },
+      { key: 'visiview_licenses', label: 'Lizenzen' },
+      { key: 'visiview_tickets', label: 'Tickets' },
+      { key: 'visiview_macros', label: 'Macros' },
+    ]
+  },
+  {
+    key: 'service',
+    label: 'Service',
+    submodules: [
+      { key: 'service_vs_service', label: 'VS-Service Produkte' },
+      { key: 'service_tickets', label: 'Tickets' },
+      { key: 'service_rma', label: 'RMA' },
+      { key: 'service_troubleshooting', label: 'Troubleshooting' },
+    ]
+  },
+  {
+    key: 'bi',
+    label: 'BI',
+    submodules: []
+  },
+  {
+    key: 'documents',
+    label: 'Documents',
+    submodules: []
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    submodules: []
+  },
+];
+
+// Initialer formData State mit allen Berechtigungsfeldern
+const getInitialFormData = () => {
+  const data = {
     username: '',
     email: '',
     password: '',
@@ -21,25 +112,29 @@ const Users = () => {
     department: '',
     employee: '',
     is_active: true,
-    can_read_accounting: false,
-    can_read_hr: false,
-    can_read_suppliers: false,
-    can_read_customers: false,
-    can_read_manufacturing: false,
-    can_read_service: false,
-    can_read_sales: false,
-    can_read_trading: false,
-    can_read_material_supplies: false,
-    can_write_accounting: false,
-    can_write_hr: false,
-    can_write_suppliers: false,
-    can_write_customers: false,
-    can_write_manufacturing: false,
-    can_write_service: false,
-    can_write_sales: false,
-    can_write_trading: false,
-    can_write_material_supplies: false,
+  };
+
+  // Alle Hauptmodule und Submodule hinzufügen
+  MODULE_HIERARCHY.forEach(module => {
+    data[`can_read_${module.key}`] = false;
+    data[`can_write_${module.key}`] = false;
+    module.submodules.forEach(sub => {
+      data[`can_read_${sub.key}`] = false;
+      data[`can_write_${sub.key}`] = false;
+    });
   });
+
+  return data;
+};
+
+const Users = () => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [expandedModules, setExpandedModules] = useState({});
+  const [formData, setFormData] = useState(getInitialFormData());
 
   useEffect(() => {
     fetchUsers();
@@ -50,15 +145,12 @@ const Users = () => {
     try {
       let res = await api.get('/users/employees/');
       if (res.status === 404) {
-        // fallback
         res = await api.get('/employees/');
       }
       const data = res.data.results || res.data;
       setEmployees(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Fehler beim Laden der Mitarbeiter:', e);
-      if (e.config) console.error('Request config:', e.config);
-      if (e.response) console.error('Response data:', e.response.data, 'status:', e.response.status);
       setEmployees([]);
     }
   };
@@ -66,7 +158,6 @@ const Users = () => {
   const fetchUsers = async () => {
     try {
       const response = await api.get('/users/');
-      // Handle paginated response
       const data = response.data.results || response.data;
       setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -81,7 +172,6 @@ const Users = () => {
     e.preventDefault();
     try {
       if (editingUser) {
-        // Update - include password only if provided
         const { password, password_confirm, ...updateData } = formData;
         if (password || password_confirm) {
           if (password !== password_confirm) {
@@ -93,7 +183,6 @@ const Users = () => {
         }
         await api.put(`/users/${editingUser.id}/`, updateData);
       } else {
-        // Create - mit Passwort
         if (formData.password !== formData.password_confirm) {
           alert('Passwörter stimmen nicht überein');
           return;
@@ -122,38 +211,9 @@ const Users = () => {
   };
 
   const resetForm = () => {
-    setFormData({
-      username: '',
-      email: '',
-      password: '',
-      password_confirm: '',
-      first_name: '',
-      last_name: '',
-      employee: '',
-      phone: '',
-      position: '',
-      department: '',
-      is_active: true,
-      can_read_accounting: false,
-      can_read_hr: false,
-      can_read_suppliers: false,
-      can_read_customers: false,
-      can_read_manufacturing: false,
-      can_read_service: false,
-      can_read_sales: false,
-      can_read_trading: false,
-      can_read_material_supplies: false,
-      can_write_accounting: false,
-      can_write_hr: false,
-      can_write_suppliers: false,
-      can_write_customers: false,
-      can_write_manufacturing: false,
-      can_write_service: false,
-      can_write_sales: false,
-      can_write_trading: false,
-      can_write_material_supplies: false,
-    });
+    setFormData(getInitialFormData());
     setEditingUser(null);
+    setExpandedModules({});
   };
 
   const handleEmployeeSelect = (employeeId) => {
@@ -172,9 +232,58 @@ const Users = () => {
     }));
   };
 
+  // Handler für Hauptmodul-Berechtigung - propagiert zu Submodulen
+  const handleMainModulePermissionChange = (moduleKey, permType, checked) => {
+    const module = MODULE_HIERARCHY.find(m => m.key === moduleKey);
+    if (!module) return;
+
+    setFormData(prev => {
+      const newData = { ...prev };
+      newData[`can_${permType}_${moduleKey}`] = checked;
+      
+      // Submodule automatisch setzen
+      module.submodules.forEach(sub => {
+        newData[`can_${permType}_${sub.key}`] = checked;
+      });
+      
+      return newData;
+    });
+  };
+
+  // Handler für Submodul-Berechtigung
+  const handleSubModulePermissionChange = (subKey, permType, checked) => {
+    setFormData(prev => ({
+      ...prev,
+      [`can_${permType}_${subKey}`]: checked
+    }));
+  };
+
+  // Toggle expanded state für ein Modul
+  const toggleModuleExpanded = (moduleKey) => {
+    setExpandedModules(prev => ({
+      ...prev,
+      [moduleKey]: !prev[moduleKey]
+    }));
+  };
+
+  // Prüft ob alle Submodule eines Moduls aktiviert sind
+  const areAllSubmodulesChecked = (module, permType) => {
+    if (module.submodules.length === 0) return formData[`can_${permType}_${module.key}`];
+    return module.submodules.every(sub => formData[`can_${permType}_${sub.key}`]);
+  };
+
+  // Prüft ob mindestens ein Submodul aktiviert ist (für indeterminate state)
+  const areSomeSubmodulesChecked = (module, permType) => {
+    if (module.submodules.length === 0) return false;
+    const checkedCount = module.submodules.filter(sub => formData[`can_${permType}_${sub.key}`]).length;
+    return checkedCount > 0 && checkedCount < module.submodules.length;
+  };
+
   const openEditModal = (user) => {
     setEditingUser(user);
-    setFormData({
+    
+    // Lade alle Berechtigungen aus dem User-Objekt
+    const newFormData = {
       username: user.username,
       email: user.email,
       password: '',
@@ -186,26 +295,19 @@ const Users = () => {
       position: user.position || '',
       department: user.department || '',
       is_active: user.is_active,
-      can_read_accounting: user.can_read_accounting,
-      can_read_hr: user.can_read_hr,
-      can_read_suppliers: user.can_read_suppliers,
-      can_read_customers: user.can_read_customers,
-      can_read_manufacturing: user.can_read_manufacturing,
-      can_read_service: user.can_read_service,
-      can_read_sales: user.can_read_sales,
-      can_read_trading: user.can_read_trading,
-      can_read_material_supplies: user.can_read_material_supplies,
-      can_write_accounting: user.can_write_accounting,
-      can_write_hr: user.can_write_hr,
-      can_write_suppliers: user.can_write_suppliers,
-      can_write_customers: user.can_write_customers,
-      can_write_manufacturing: user.can_write_manufacturing,
-      can_write_service: user.can_write_service,
-      can_write_sales: user.can_write_sales,
-      can_write_trading: user.can_write_trading,
-      can_write_material_supplies: user.can_write_material_supplies,
+    };
+
+    // Alle Berechtigungsfelder laden
+    MODULE_HIERARCHY.forEach(module => {
+      newFormData[`can_read_${module.key}`] = user[`can_read_${module.key}`] || false;
+      newFormData[`can_write_${module.key}`] = user[`can_write_${module.key}`] || false;
+      module.submodules.forEach(sub => {
+        newFormData[`can_read_${sub.key}`] = user[`can_read_${sub.key}`] || false;
+        newFormData[`can_write_${sub.key}`] = user[`can_write_${sub.key}`] || false;
+      });
     });
-    // load employees so dropdown is available
+
+    setFormData(newFormData);
     fetchEmployees();
     setShowModal(true);
   };
@@ -280,7 +382,6 @@ const Users = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {(() => {
-                    // user.employee may be an object or id; try resolve to employee_id via employees list
                     if (!user.employee) return '-';
                     if (typeof user.employee === 'object' && user.employee.employee_id) return user.employee.employee_id;
                     const emp = employees.find((e) => String(e.id) === String(user.employee));
@@ -339,7 +440,7 @@ const Users = () => {
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowModal(false)} />
 
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full max-h-[90vh] overflow-y-auto">
               <form onSubmit={handleSubmit}>
                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">
@@ -362,6 +463,7 @@ const Users = () => {
                         </select>
                       </div>
                     )}
+                    
                     {/* Basis-Informationen */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Benutzername *</label>
@@ -386,29 +488,27 @@ const Users = () => {
                       />
                     </div>
 
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Passwort {editingUser ? '(leer lassen = unverändert)' : '*'}</label>
-                        <input
-                          type="password"
-                          required={!editingUser}
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Passwort {editingUser ? '(leer lassen = unverändert)' : '*'}</label>
+                      <input
+                        type="password"
+                        required={!editingUser}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Passwort bestätigen {editingUser ? '(leer lassen = unverändert)' : '*'}</label>
-                        <input
-                          type="password"
-                          required={!editingUser}
-                          value={formData.password_confirm}
-                          onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                        />
-                      </div>
-                    </>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Passwort bestätigen {editingUser ? '(leer lassen = unverändert)' : '*'}</label>
+                      <input
+                        type="password"
+                        required={!editingUser}
+                        value={formData.password_confirm}
+                        onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Vorname</label>
@@ -471,44 +571,92 @@ const Users = () => {
                     </div>
                   </div>
 
-                  {/* Berechtigungen */}
+                  {/* Hierarchische Berechtigungen */}
                   <div className="mt-6 border-t pt-4">
                     <h4 className="text-md font-medium text-gray-900 mb-4">App-Berechtigungen</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {[
-                        { key: 'accounting', label: 'Buchhaltung' },
-                        { key: 'hr', label: 'HR' },
-                        { key: 'suppliers', label: 'Lieferanten' },
-                        { key: 'customers', label: 'Kunden' },
-                        { key: 'manufacturing', label: 'Produktion' },
-                        { key: 'service', label: 'Service' },
-                        { key: 'sales', label: 'Sales' },
-                        { key: 'trading', label: 'Handelsware' },
-                        { key: 'material_supplies', label: 'Material & Supplies' },
-
-                      ].map((module) => (
-                        <div key={module.key} className="border rounded-lg p-3 bg-gray-50">
-                          <div className="font-medium text-sm text-gray-900 mb-2">{module.label}</div>
-                          <div className="space-y-2">
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={formData[`can_read_${module.key}`]}
-                                onChange={(e) => setFormData({ ...formData, [`can_read_${module.key}`]: e.target.checked })}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Lesen</span>
-                            </label>
-                            <label className="flex items-center">
-                              <input
-                                type="checkbox"
-                                checked={formData[`can_write_${module.key}`]}
-                                onChange={(e) => setFormData({ ...formData, [`can_write_${module.key}`]: e.target.checked })}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Schreiben</span>
-                            </label>
+                    <p className="text-sm text-gray-500 mb-4">
+                      Änderungen am Hauptmodul werden automatisch auf alle Submodule übertragen.
+                    </p>
+                    
+                    <div className="space-y-2">
+                      {MODULE_HIERARCHY.map((module) => (
+                        <div key={module.key} className="border rounded-lg overflow-hidden">
+                          {/* Hauptmodul Header */}
+                          <div 
+                            className={`flex items-center justify-between px-4 py-3 bg-gray-100 ${module.submodules.length > 0 ? 'cursor-pointer hover:bg-gray-200' : ''}`}
+                            onClick={() => module.submodules.length > 0 && toggleModuleExpanded(module.key)}
+                          >
+                            <div className="flex items-center">
+                              {module.submodules.length > 0 && (
+                                expandedModules[module.key] 
+                                  ? <ChevronDownIcon className="h-5 w-5 text-gray-500 mr-2" />
+                                  : <ChevronRightIcon className="h-5 w-5 text-gray-500 mr-2" />
+                              )}
+                              {module.submodules.length === 0 && <span className="w-7" />}
+                              <span className="font-medium text-gray-900">{module.label}</span>
+                              {module.submodules.length > 0 && (
+                                <span className="ml-2 text-xs text-gray-500">({module.submodules.length} Submodule)</span>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center space-x-6" onClick={(e) => e.stopPropagation()}>
+                              <label className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={areAllSubmodulesChecked(module, 'read')}
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = areSomeSubmodulesChecked(module, 'read');
+                                  }}
+                                  onChange={(e) => handleMainModulePermissionChange(module.key, 'read', e.target.checked)}
+                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">Lesen</span>
+                              </label>
+                              <label className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  checked={areAllSubmodulesChecked(module, 'write')}
+                                  ref={(el) => {
+                                    if (el) el.indeterminate = areSomeSubmodulesChecked(module, 'write');
+                                  }}
+                                  onChange={(e) => handleMainModulePermissionChange(module.key, 'write', e.target.checked)}
+                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">Schreiben</span>
+                              </label>
+                            </div>
                           </div>
+                          
+                          {/* Submodule (ausgeklappt) */}
+                          {expandedModules[module.key] && module.submodules.length > 0 && (
+                            <div className="bg-white divide-y divide-gray-100">
+                              {module.submodules.map((sub) => (
+                                <div key={sub.key} className="flex items-center justify-between px-4 py-2 pl-12">
+                                  <span className="text-sm text-gray-700">{sub.label}</span>
+                                  <div className="flex items-center space-x-6">
+                                    <label className="flex items-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={formData[`can_read_${sub.key}`]}
+                                        onChange={(e) => handleSubModulePermissionChange(sub.key, 'read', e.target.checked)}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                      />
+                                      <span className="ml-2 text-sm text-gray-500">Lesen</span>
+                                    </label>
+                                    <label className="flex items-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={formData[`can_write_${sub.key}`]}
+                                        onChange={(e) => handleSubModulePermissionChange(sub.key, 'write', e.target.checked)}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                      />
+                                      <span className="ml-2 text-sm text-gray-500">Schreiben</span>
+                                    </label>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

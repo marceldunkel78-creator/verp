@@ -2252,53 +2252,107 @@ const PersonalDashboardTab = () => {
   const STORAGE_KEY = 'myverp_dashboard_modules';
   const MAIN_DASHBOARD_KEY = 'myverp_main_dashboard_widgets';
   
-  // MyVERP-spezifische Widgets für das Haupt-Dashboard
+  // MyVERP-spezifische Widgets für das Haupt-Dashboard (basierend auf MyVERP Tabs)
   const myverpWidgets = [
+    { id: 'dashboard', name: 'Dashboard', icon: '📊', description: 'Persönliches Dashboard' },
     { id: 'time-tracking', name: 'Zeiterfassung', icon: '⏱️', description: 'Arbeitszeitübersicht' },
+    { id: 'my-tickets', name: 'Meine Tickets', icon: '🎫', description: 'Zugewiesene Tickets' },
     { id: 'messages', name: 'Nachrichten', icon: '💬', description: 'Ungelesene Nachrichten' },
+    { id: 'reporting', name: 'Reporting', icon: '📈', description: 'Auswertungen & Berichte' },
     { id: 'reminders', name: 'Erinnerungen', icon: '🔔', description: 'Anstehende Erinnerungen' },
     { id: 'vacation', name: 'Urlaub', icon: '🏖️', description: 'Urlaubsanträge & Guthaben' },
     { id: 'travel-expenses', name: 'Reisekosten', icon: '✈️', description: 'Reisekostenabrechnungen' },
   ];
   
-  // Alle verfügbaren Module
+  // Alle verfügbaren Module - hierarchisch nach Hauptmodulen gegliedert
   const allModules = [
-    // Vertrieb
-    { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb' },
-    { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb' },
-    { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb' },
-    // Beschaffung
-    { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung' },
-    { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung' },
-    { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Beschaffung' },
-    { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung' },
-    // Produkte
-    { id: 'visiview', name: 'VisiView Produkte', route: '/products/visiview', icon: '🔬', category: 'Produkte' },
-    { id: 'vshardware', name: 'VS-Hardware', route: '/products/vs-hardware', icon: '🔧', category: 'Produkte' },
-    { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service' },
+    // Finance
+    { id: 'finance', name: 'Finance', route: '/finance', icon: '💰', category: 'Finance' },
+    
+    // Procurement
+    { id: 'procurement', name: 'Procurement', route: '/procurement', icon: '📦', category: 'Procurement' },
+    { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Procurement' },
+    { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Procurement' },
+    { id: 'materials-supplies', name: 'Material & Supplies', route: '/procurement/materials-supplies', icon: '🧪', category: 'Procurement' },
+    { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Procurement' },
+    { id: 'loans', name: 'Leihgeräte', route: '/procurement/loans', icon: '🔄', category: 'Procurement' },
+    { id: 'product-collections', name: 'Produktsammlungen', route: '/procurement/product-collections', icon: '📋', category: 'Procurement' },
+    
+    // Inventory
+    { id: 'inventory', name: 'Wareneingang & Lager', route: '/inventory/warehouse', icon: '🏭', category: 'Inventory' },
+    
+    // Sales / Orders
+    { id: 'sales', name: 'Sales / Orders', route: '/sales', icon: '💼', category: 'Sales / Orders' },
+    { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Sales / Orders' },
+    { id: 'dealers', name: 'Händler', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders' },
+    { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Sales / Orders' },
+    { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Sales / Orders' },
+    { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Sales / Orders' },
+    { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Sales / Orders' },
+    { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Sales / Orders' },
+    { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders' },
+    { id: 'sales-tickets', name: 'Sales Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders' },
+    
+    // HR
+    { id: 'hr', name: 'HR', route: '/hr', icon: '👥', category: 'HR' },
+    { id: 'employees', name: 'Mitarbeiter', route: '/hr/employees', icon: '👤', category: 'HR' },
+    
+    // Manufacturing
+    { id: 'manufacturing', name: 'Manufacturing', route: '/manufacturing', icon: '🏭', category: 'Manufacturing' },
+    { id: 'vs-hardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Manufacturing' },
+    { id: 'production-orders', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '⚙️', category: 'Manufacturing' },
+    
+    // VisiView
+    { id: 'visiview', name: 'VisiView', route: '/visiview', icon: '🔬', category: 'VisiView' },
+    { id: 'visiview-products', name: 'VisiView Produkte', route: '/visiview/products', icon: '🔬', category: 'VisiView' },
+    { id: 'visiview-licenses', name: 'Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'VisiView' },
+    { id: 'visiview-tickets', name: 'VisiView Tickets', route: '/visiview/tickets', icon: '🎫', category: 'VisiView' },
+    { id: 'visiview-macros', name: 'Macros', route: '/visiview/macros', icon: '📜', category: 'VisiView' },
+    
     // Service
+    { id: 'service', name: 'Service', route: '/service', icon: '🛠️', category: 'Service' },
+    { id: 'vs-service', name: 'VS-Service Produkte', route: '/service/vs-service', icon: '🛠️', category: 'Service' },
+    { id: 'service-tickets', name: 'Service Tickets', route: '/service/tickets', icon: '🎫', category: 'Service' },
     { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service' },
-    // Lager & Fertigung
-    { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager' },
-    { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung' },
-    // Projekte
-    { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte' },
-    // Einstellungen
-    { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System' },
-    { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System' },
-    { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System' },
-    { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'System' },
+    { id: 'troubleshooting', name: 'Troubleshooting', route: '/service/troubleshooting', icon: '🔍', category: 'Service' },
+    
+    // BI
+    { id: 'bi', name: 'BI', route: '/bi', icon: '📊', category: 'BI' },
+    
+    // Documents
+    { id: 'documents', name: 'Documents', route: '/documents', icon: '📄', category: 'Documents' },
+    
+    // Settings
+    { id: 'settings', name: 'Settings', route: '/settings', icon: '⚙️', category: 'Settings' },
+    { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'Settings' },
+    { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'Settings' },
+    { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'Settings' },
   ];
   
   // Standard-Module die initial aktiviert sind
   const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
   const defaultMainDashboardWidgets = ['time-tracking', 'messages', 'reminders'];
   
+  // Legacy-ID-Mapping für Abwärtskompatibilität (alte IDs -> neue IDs)
+  const LEGACY_MODULE_ID_MAP = {
+    'order-processing': 'orders',
+    'warehouse': 'inventory',
+    'purchase-orders': 'purchase-orders',
+    'materials-supplies': 'materials-supplies'
+  };
+
+  // Normalize saved module ids: map legacy ids and filter unknown ids
+  const normalizeModuleIds = (ids) => {
+    if (!Array.isArray(ids)) return [];
+    const validIds = new Set(allModules.map(m => m.id));
+    return Array.from(new Set(ids.map(id => LEGACY_MODULE_ID_MAP[id] || id).filter(i => validIds.has(i))));
+  };
+
   // Geladene Auswahl aus localStorage
   const loadSavedModules = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) return normalizeModuleIds(JSON.parse(saved));
     } catch (e) {
       console.warn('Fehler beim Laden der gespeicherten Module:', e);
     }
@@ -2352,14 +2406,17 @@ const PersonalDashboardTab = () => {
   const categories = [...new Set(allModules.map(m => m.category))];
   
   const colorClasses = {
-    'Vertrieb': 'bg-blue-500 hover:bg-blue-600',
-    'Beschaffung': 'bg-green-500 hover:bg-green-600',
-    'Produkte': 'bg-cyan-500 hover:bg-cyan-600',
-    'Service': 'bg-orange-500 hover:bg-orange-600',
-    'Lager': 'bg-violet-500 hover:bg-violet-600',
-    'Fertigung': 'bg-gray-500 hover:bg-gray-600',
-    'Projekte': 'bg-indigo-500 hover:bg-indigo-600',
-    'System': 'bg-purple-500 hover:bg-purple-600',
+    'Finance': 'bg-emerald-500 hover:bg-emerald-600',
+    'Procurement': 'bg-orange-500 hover:bg-orange-600',
+    'Inventory': 'bg-violet-500 hover:bg-violet-600',
+    'Sales / Orders': 'bg-blue-500 hover:bg-blue-600',
+    'HR': 'bg-pink-500 hover:bg-pink-600',
+    'Manufacturing': 'bg-gray-600 hover:bg-gray-700',
+    'VisiView': 'bg-cyan-500 hover:bg-cyan-600',
+    'Service': 'bg-amber-500 hover:bg-amber-600',
+    'BI': 'bg-indigo-500 hover:bg-indigo-600',
+    'Documents': 'bg-teal-500 hover:bg-teal-600',
+    'Settings': 'bg-purple-500 hover:bg-purple-600',
   };
 
   return (
