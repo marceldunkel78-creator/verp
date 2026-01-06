@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import OrderFileUpload from '../components/OrderFileUpload';
 import { 
   ArrowLeftIcon, PlusIcon, TrashIcon, Cog6ToothIcon,
   BuildingOfficeIcon, ClipboardDocumentListIcon,
@@ -1135,45 +1136,13 @@ const OrderFormNew = () => {
             </div>
 
             {/* Angebotsdokument Upload */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Angebotsdokument hochladen
-              </label>
-              {formData.offer_document && typeof formData.offer_document === 'string' && (
-                <div className="mb-2 flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <span className="text-sm text-blue-800">
-                    📄 {formData.offer_document.split('/').pop()}
-                  </span>
-                  <a
-                    href={formData.offer_document.startsWith('http') ? formData.offer_document : `http://localhost:8000${formData.offer_document}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    Öffnen
-                  </a>
-                </div>
-              )}
-              {formData.offer_document && typeof formData.offer_document !== 'string' && (
-                <div className="mb-2 flex items-center p-3 bg-green-50 border border-green-200 rounded-md">
-                  <span className="text-sm text-green-800">
-                    📄 {formData.offer_document.name} (neu hochgeladen)
-                  </span>
-                </div>
-              )}
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx"
-                onChange={(e) => {
-                  if (e.target.files[0]) {
-                    updateFormData('offer_document', e.target.files[0]);
-                  }
-                }}
-                disabled={isConfirmed}
-                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
-              />
-              <p className="mt-1 text-xs text-gray-500">PDF, DOC, DOCX (max. 10MB)</p>
-            </div>
+            <OrderFileUpload
+              currentFile={formData.offer_document}
+              onFileSelect={(file) => updateFormData('offer_document', file)}
+              label="Angebotsdokument hochladen"
+              accept=".pdf,.doc,.docx"
+              disabled={isConfirmed}
+            />
 
             {/* Besteller Auswahl */}
             <div>
@@ -1870,40 +1839,12 @@ const OrderFormNew = () => {
                 </div>
 
                 {/* Supplier AB Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Auftragsbestätigung (Lieferant) hochladen</label>
-
-                  {formData.supplier_confirmation_document && typeof formData.supplier_confirmation_document === 'string' && (
-                    <div className="mb-2 flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
-                      <span className="text-sm text-blue-800">📄 {formData.supplier_confirmation_document.split('/').pop()}</span>
-                      <a
-                        href={formData.supplier_confirmation_document.startsWith('http') ? formData.supplier_confirmation_document : `http://localhost:8000${formData.supplier_confirmation_document}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:text-blue-800"
-                      >
-                        Öffnen
-                      </a>
-                    </div>
-                  )}
-
-                  {formData.supplier_confirmation_document && typeof formData.supplier_confirmation_document !== 'string' && (
-                    <div className="mb-2 flex items-center p-3 bg-green-50 border border-green-200 rounded-md">
-                      <span className="text-sm text-green-800">📄 {formData.supplier_confirmation_document.name} (neu hochgeladen)</span>
-                    </div>
-                  )}
-
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => {
-                      if (e.target.files[0]) {
-                        updateFormData('supplier_confirmation_document', e.target.files[0]);
-                      }
-                    }}
-                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                </div>
+                <OrderFileUpload
+                  currentFile={formData.supplier_confirmation_document}
+                  onFileSelect={(file) => updateFormData('supplier_confirmation_document', file)}
+                  label="Auftragsbestätigung (Lieferant) hochladen"
+                  accept=".pdf,.doc,.docx"
+                />
 
                 {/* Voraussichtliches Lieferdatum */}
                 <div>

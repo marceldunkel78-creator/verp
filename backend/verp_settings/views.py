@@ -191,12 +191,12 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
         created_count = 0
         for code, name in ProductCategory.PRODUCT_CATEGORY_CHOICES:
             # Bestimme Standard-Eigenschaften basierend auf Kategorie
-            requires_serial = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF']
+            requires_serial = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF', 'SOFTWARE', 'SERVICE', 'DIENSTLEISTUNG']
             applies_to_ms = code in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF', 'KABEL', 'FILTER', 'SONSTIGES']
-            applies_to_tg = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF']
-            applies_to_vsh = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF', 'SERVICE', 'SOFTWARE']
+            applies_to_tg = code not in ['SOFTWARE', 'SERVICE', 'DIENSTLEISTUNG']
+            applies_to_vsh = code not in ['ROHSTOFF', 'HILFSSTOFF', 'BETRIEBSSTOFF', 'SOFTWARE', 'SERVICE', 'DIENSTLEISTUNG']
             applies_to_vss = code in ['SOFTWARE', 'VISIVIEW']
-            applies_to_service = code in ['SERVICE', 'SONSTIGES']
+            applies_to_service = code in ['SERVICE', 'DIENSTLEISTUNG', 'SONSTIGES']
             
             _, created = ProductCategory.objects.get_or_create(
                 code=code,

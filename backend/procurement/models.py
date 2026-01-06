@@ -11,11 +11,13 @@ User = get_user_model()
 def product_collection_manual_upload_path(instance, filename):
     """
     Upload-Pfad für Warensammlungs-Manuale
-    Format: ProductCollections/<WS-Nummer>/<filename>
+    Format: Procurement/ProductCollections/<WS-Nummer>/Manuals/<filename>
     """
     import os
-    collection_number = instance.collection_number or 'TEMP'
-    return os.path.join('ProductCollections', collection_number, filename)
+    from core.upload_paths import _sanitize_path_component
+    collection_number = _sanitize_path_component(instance.collection_number or 'TEMP')
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Procurement', 'ProductCollections', collection_number, 'Manuals', safe_filename)
 
 
 class ProductCollection(models.Model):

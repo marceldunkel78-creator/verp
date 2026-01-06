@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
+import axios from 'axios';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AddressSelector from '../components/AddressSelector';
@@ -105,7 +106,19 @@ const CustomerOrderEdit = () => {
     carrier: '',
     tracking_number: '',
     notes: '',
-    selectedItemIds: []
+    selectedItemIds: [],
+    itemSerialNumbers: {}  // NEW: { itemId: serialNumber }
+  });
+
+  // Serial Number Editor State
+  const [serialEditorOpen, setSerialEditorOpen] = useState(false);
+  const [serialEditorData, setSerialEditorData] = useState({
+    itemId: null,
+    itemName: '',
+    articleNumber: '',
+    currentSerial: '',
+    suggestions: [],
+    loading: false
   });
 
   // Invoice Draft State
@@ -279,6 +292,11 @@ const CustomerOrderEdit = () => {
         warranty_term: data.warranty_term || '',
         // Map customer_vat_id from backend to vat_id for frontend state
         vat_id: data.customer_vat_id || '',
+        // Explizit alle wichtigen Felder setzen
+        confirmation_address: data.confirmation_address || '',
+        confirmation_email: data.confirmation_email || '',
+        sales_person: data.sales_person || '',
+        order_notes: data.order_notes || '',
         items: data.items || [],
         delivery_notes: data.delivery_notes || [],
         invoices: data.invoices || []
@@ -311,6 +329,117 @@ const CustomerOrderEdit = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ============================================================================
+  // Serial Number Search & Helper Functions
+  // ============================================================================
+  
+  /**
+   * Determines product type based on article number prefix
+   * VSH-XXXXX = VS-Hardware
+   * VSS-XXXXX = VS-Service (no serial needed)
+   * VV-XXXXX = VisiView (search by customer)
+   * WS-XXXXX = Warensammlung (search warehouse)
+   * XXX-XXXXX = Trading Product (search warehouse)
+   */
+  const getProductType = (articleNumber) => {
+    if (!articleNumber) return 'UNKNOWN';
+    const upper = articleNumber.toUpperCase();
+    if (upper.startsWith('VSH-')) return 'VS_HARDWARE';
+    if (upper.startsWith('VSS-')) return 'VS_SERVICE';
+    if (upper.startsWith('VV-')) return 'VISIVIEW';
+    if (upper.startsWith('WS-')) return 'WARENSAMMLUNG';
+    // Trading products typically have format XXX-XXXXX (supplier number)
+    if (/^\d{3}-\d{5}$/.test(upper)) return 'TRADING_PRODUCT';
+    return 'UNKNOWN';
+  };
+
+  /**
+   * Opens serial number editor for a specific item
+   */
+  const openSerialEditor = async (item) => {
+    const productType = getProductType(item.article_number);
+    const currentSerial = deliveryNoteDraft.itemSerialNumbers[item.id] || item.serial_number || '';
+    
+    setSerialEditorData({
+      itemId: item.id,
+      itemName: item.name,
+      articleNumber: item.article_number,
+      currentSerial: currentSerial,
+      suggestions: [],
+      loading: true,
+      productType: productType
+    });
+    setSerialEditorOpen(true);
+
+    // Fetch suggestions based on product type
+    try {
+      let suggestions = [];
+      
+      if (productType === 'VS_SERVICE' || productType === 'WARENSAMMLUNG') {
+        // No serial number needed for service products or product collections
+        suggestions = [];
+      } else if (productType === 'VISIVIEW') {
+        // Search VisiView licenses by customer
+        if (order.customer) {
+          const BACKEND_BASE = 'http://localhost:8000';
+          const response = await axios.get(`${BACKEND_BASE}/api/visiview/licenses/search_by_customer/`, {
+            params: {
+              customer_id: order.customer,
+              article_number: item.article_number
+            },
+            withCredentials: true
+          });
+          suggestions = response.data.results.map(lic => ({
+            id: lic.id,
+            serial_number: lic.serial_number,
+            display: `${lic.serial_number} (${lic.license_number})`,
+            type: 'visiview_license'
+          }));
+        }
+      } else if (productType === 'VS_HARDWARE' || productType === 'TRADING_PRODUCT' || productType === 'WARENSAMMLUNG') {
+        // Search warehouse inventory
+        const BACKEND_BASE = 'http://localhost:8000';
+        const response = await axios.get(`${BACKEND_BASE}/api/inventory/inventory-items/search_by_article/`, {
+          params: {
+            article_number: item.article_number
+          },
+          withCredentials: true
+        });
+        suggestions = response.data.results.map(inv => ({
+          id: inv.id,
+          serial_number: inv.serial_number,
+          display: `${inv.serial_number} (${inv.status})`,
+          type: 'inventory_item',
+          status: inv.status
+        }));
+      }
+
+      setSerialEditorData(prev => ({
+        ...prev,
+        suggestions: suggestions,
+        loading: false
+      }));
+    } catch (err) {
+      console.error('Error fetching serial number suggestions:', err);
+      setSerialEditorData(prev => ({
+        ...prev,
+        suggestions: [],
+        loading: false
+      }));
+    }
+  };
+
+  const saveSerialNumber = (itemId, serialNumber) => {
+    setDeliveryNoteDraft(prev => ({
+      ...prev,
+      itemSerialNumbers: {
+        ...prev.itemSerialNumbers,
+        [itemId]: serialNumber
+      }
+    }));
+    setSerialEditorOpen(false);
   };
 
   // Search Functions
@@ -792,9 +921,12 @@ const CustomerOrderEdit = () => {
                 <div className="bg-white rounded-md p-4 border border-blue-300">
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="font-medium text-gray-900">
+                      <Link
+                        to={`/sales/quotations/${selectedQuotation.id}`}
+                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                      >
                         {selectedQuotation.quotation_number}
-                      </div>
+                      </Link>
                       <div className="text-sm text-gray-600">
                         {selectedQuotation.customer_name || selectedQuotation.customer?.company_name}
                       </div>
@@ -866,9 +998,12 @@ const CustomerOrderEdit = () => {
                   <div className="bg-gray-50 rounded-md p-4 border">
                     <div className="flex justify-between items-start">
                       <div>
-                        <div className="font-medium text-gray-900">
+                        <Link
+                          to={`/customers/${selectedCustomer.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        >
                           {selectedCustomer.company_name || selectedCustomer.full_name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`.trim() || 'Unbekannter Kunde'}
-                        </div>
+                        </Link>
                         {selectedCustomer.customer_number && (
                           <div className="text-xs text-gray-400">Kd.-Nr.: {selectedCustomer.customer_number}</div>
                         )}
@@ -1842,14 +1977,18 @@ const CustomerOrderEdit = () => {
                         </button>
                       </div>
                     </div>
-                    <div className="border rounded-md max-h-48 overflow-y-auto bg-white">
-                      {order.items.filter(item => !item.is_group_header).map((item, idx) => {
+                    <div className="border rounded-md max-h-96 overflow-y-auto bg-white">
+                      {order.items.map((item, idx) => {
                         const isDelivered = item.is_delivered;
                         const isSelected = deliveryNoteDraft.selectedItemIds.includes(item.id);
+                        // Enable serial number for ALL positions (not just specific product types)
+                        const needsSerial = true;
+                        const currentSerial = deliveryNoteDraft.itemSerialNumbers[item.id] || item.serial_number || '';
+                        
                         return (
-                          <label 
+                          <div
                             key={item.id || idx} 
-                            className={`flex items-center px-3 py-2 border-b last:border-b-0 cursor-pointer hover:bg-gray-50 ${isDelivered ? 'bg-green-50 opacity-60' : ''}`}
+                            className={`flex items-center px-3 py-2 border-b last:border-b-0 ${isDelivered ? 'bg-green-50' : ''} ${item.is_group_header ? 'bg-blue-50 font-medium' : ''}`}
                           >
                             <input
                               type="checkbox"
@@ -1870,17 +2009,55 @@ const CustomerOrderEdit = () => {
                               }}
                               className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                             />
-                            <span className="ml-3 text-sm flex-1">
-                              <span className="font-medium">{item.position || idx + 1}.</span>{' '}
-                              {item.name}
-                              <span className="text-gray-500 ml-2">({item.quantity} {item.unit})</span>
-                            </span>
+                            <div className="ml-3 flex-1">
+                              <div className="text-sm">
+                                <span className="font-medium">{item.position || idx + 1}.</span>{' '}
+                                {item.name}
+                                {item.is_group_header && <span className="ml-2 text-xs text-blue-600">[Warensammlung]</span>}
+                                <span className="text-gray-500 ml-2">({item.quantity} {item.unit})</span>
+                              </div>
+                              {/* Show serial number input for selected items OR display existing serial for delivered items */}
+                              {needsSerial && isSelected && !isDelivered && (
+                                <div className="flex items-center mt-1">
+                                  <span className="text-xs text-gray-500 mr-2">Seriennummer:</span>
+                                  <input
+                                    type="text"
+                                    value={currentSerial}
+                                    onChange={(e) => {
+                                      setDeliveryNoteDraft(prev => ({
+                                        ...prev,
+                                        itemSerialNumbers: {
+                                          ...prev.itemSerialNumbers,
+                                          [item.id]: e.target.value
+                                        }
+                                      }));
+                                    }}
+                                    placeholder="Seriennummer eingeben"
+                                    className="flex-1 text-xs rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-2 py-1"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => openSerialEditor(item)}
+                                    className="ml-2 text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap"
+                                  >
+                                    🔍 Suchen
+                                  </button>
+                                </div>
+                              )}
+                              {/* Always show serial number for delivered items */}
+                              {isDelivered && item.serial_number && (
+                                <div className="flex items-center mt-1">
+                                  <span className="text-xs text-gray-500 mr-2">Seriennummer:</span>
+                                  <span className="text-xs font-mono text-purple-700">{item.serial_number}</span>
+                                </div>
+                              )}
+                            </div>
                             {isDelivered && (
                               <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
                                 ✓ Geliefert ({item.delivery_note_number})
                               </span>
                             )}
-                          </label>
+                          </div>
                         );
                       })}
                     </div>
@@ -1897,7 +2074,29 @@ const CustomerOrderEdit = () => {
                           alert('Bitte wählen Sie mindestens eine Position aus.');
                           return;
                         }
+                        
                         try {
+                          // STEP 1: Update serial numbers for selected items
+                          const itemUpdates = [];
+                          for (const itemId of deliveryNoteDraft.selectedItemIds) {
+                            const serialNumber = deliveryNoteDraft.itemSerialNumbers[itemId];
+                            if (serialNumber) {
+                              itemUpdates.push(
+                                axios.patch(
+                                  `http://localhost:8000/api/customer-orders/items/${itemId}/`,
+                                  { serial_number: serialNumber },
+                                  { withCredentials: true }
+                                )
+                              );
+                            }
+                          }
+                          
+                          // Wait for all serial number updates to complete
+                          if (itemUpdates.length > 0) {
+                            await Promise.all(itemUpdates);
+                          }
+                          
+                          // STEP 2: Create delivery note
                           const response = await api.post('/customer-orders/delivery-notes/', {
                             order: order.id,
                             delivery_date: deliveryNoteDraft.delivery_date || null,
@@ -1908,7 +2107,8 @@ const CustomerOrderEdit = () => {
                             item_ids: deliveryNoteDraft.selectedItemIds
                           });
                           const data = response.data;
-                          // Reload order to get updated items
+                          
+                          // STEP 3: Reload order to get updated items
                           const orderRes = await api.get(`/customer-orders/customer-orders/${order.id}/`);
                           setOrder(prev => ({
                             ...prev,
@@ -1917,6 +2117,7 @@ const CustomerOrderEdit = () => {
                             delivery_notes: orderRes.data.delivery_notes || [],
                             invoices: orderRes.data.invoices || []
                           }));
+                          
                           // Reset draft
                           setDeliveryNoteDraft({
                             delivery_date: new Date().toISOString().split('T')[0],
@@ -1924,12 +2125,15 @@ const CustomerOrderEdit = () => {
                             carrier: '',
                             tracking_number: '',
                             notes: '',
-                            selectedItemIds: []
+                            selectedItemIds: [],
+                            itemSerialNumbers: {}
                           });
+                          
                           alert(`Lieferschein ${data.delivery_note_number} erstellt!`);
                         } catch (err) {
                           const errMsg = err.response?.data ? JSON.stringify(err.response.data) : 'Netzwerkfehler';
-                          alert(`Fehler: ${errMsg}`);
+                          alert(`Fehler beim Erstellen des Lieferscheins: ${errMsg}`);
+                          console.error('Error creating delivery note:', err);
                         }
                       }}
                       disabled={deliveryNoteDraft.selectedItemIds.length === 0}
@@ -1959,7 +2163,13 @@ const CustomerOrderEdit = () => {
                   <h3 className="text-sm font-medium text-gray-900">Erstellte Lieferscheine</h3>
                 </div>
                 <div className="divide-y divide-gray-200">
-                  {order.delivery_notes.map((dn, idx) => (
+                  {order.delivery_notes.map((dn, idx) => {
+                    // Filter items that belong to this delivery note
+                    const deliveredItems = order.items?.filter(item => 
+                      item.delivery_note_number === dn.sequence_number
+                    ) || [];
+                    
+                    return (
                     <div key={idx} className="p-4 hover:bg-gray-50">
                       <div className="flex justify-between items-start">
                         <div>
@@ -1993,8 +2203,63 @@ const CustomerOrderEdit = () => {
                           </button>
                         </div>
                       </div>
+                      
+                      {/* Delivered Items with Serial Numbers */}
+                      {deliveredItems.length > 0 && (
+                        <div className="mt-3 border-t pt-3">
+                          <p className="text-xs font-medium text-gray-700 mb-2">Gelieferte Positionen:</p>
+                          <div className="space-y-1">
+                            {deliveredItems.map((item, itemIdx) => (
+                              <div key={item.id || itemIdx} className="flex justify-between items-center text-xs bg-gray-50 px-2 py-1 rounded">
+                                <div className="flex-1">
+                                  <span className="font-medium">{item.position}.</span>{' '}
+                                  <span>{item.name}</span>
+                                  <span className="text-gray-500 ml-2">({item.quantity} {item.unit})</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  {item.serial_number ? (
+                                    <div className="text-right">
+                                      <span className="text-gray-500">SN:</span>{' '}
+                                      <span className="font-mono text-purple-700">{item.serial_number}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 italic">Keine SN</span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const newSerial = prompt(
+                                        `Seriennummer für "${item.name}" bearbeiten:`,
+                                        item.serial_number || ''
+                                      );
+                                      if (newSerial !== null) {
+                                        try {
+                                          await axios.patch(
+                                            `http://localhost:8000/api/customer-orders/items/${item.id}/`,
+                                            { serial_number: newSerial },
+                                            { withCredentials: true }
+                                          );
+                                          // Refresh order data
+                                          loadOrder(order.id);
+                                          alert('Seriennummer aktualisiert!');
+                                        } catch (err) {
+                                          alert('Fehler beim Speichern: ' + (err.response?.data?.detail || err.message));
+                                        }
+                                      }
+                                    }}
+                                    className="text-xs text-blue-600 hover:text-blue-800"
+                                    title="Seriennummer bearbeiten"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -2508,6 +2773,110 @@ const CustomerOrderEdit = () => {
           </div>
         )}
       </div>
+
+      {/* ==================== SERIAL NUMBER EDITOR MODAL ==================== */}
+      {serialEditorOpen && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" onClick={() => setSerialEditorOpen(false)}>
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white" onClick={(e) => e.stopPropagation()}>
+            <div className="mt-3">
+              {/* Header */}
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    Seriennummer zuweisen
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">{serialEditorData.itemName}</p>
+                  <p className="text-xs text-gray-400">Artikel: {serialEditorData.articleNumber}</p>
+                  {serialEditorData.productType === 'VS_SERVICE' && (
+                    <p className="text-xs text-blue-600 mt-2">ℹ️ VS-Service Produkte benötigen keine Seriennummer</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setSerialEditorOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XCircleIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Serial Number Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seriennummer
+                </label>
+                <input
+                  type="text"
+                  value={serialEditorData.currentSerial}
+                  onChange={(e) => setSerialEditorData(prev => ({ ...prev, currentSerial: e.target.value }))}
+                  placeholder="Seriennummer eingeben oder aus Vorschlägen wählen"
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  disabled={serialEditorData.productType === 'VS_SERVICE'}
+                />
+              </div>
+
+              {/* Suggestions */}
+              {serialEditorData.loading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-sm text-gray-500 mt-2">Suche nach verfügbaren Seriennummern...</p>
+                </div>
+              ) : serialEditorData.suggestions.length > 0 ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Vorschläge aus {serialEditorData.productType === 'VISIVIEW' ? 'VisiView-Lizenzen' : 'Warenlager'}
+                  </label>
+                  <div className="border rounded-md max-h-60 overflow-y-auto">
+                    {serialEditorData.suggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setSerialEditorData(prev => ({ ...prev, currentSerial: suggestion.serial_number }))}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0 text-sm"
+                      >
+                        <div className="font-medium">{suggestion.serial_number}</div>
+                        {suggestion.type === 'inventory_item' && suggestion.status && (
+                          <div className="text-xs text-gray-500">
+                            Status: {suggestion.status}
+                          </div>
+                        )}
+                        {suggestion.type === 'visiview_license' && (
+                          <div className="text-xs text-gray-500">
+                            VisiView Lizenz
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : serialEditorData.productType !== 'VS_SERVICE' && (
+                <div className="text-center py-4 bg-gray-50 rounded-md">
+                  <p className="text-sm text-gray-500">
+                    {serialEditorData.productType === 'VISIVIEW' 
+                      ? 'Keine VisiView-Lizenzen für diesen Kunden gefunden'
+                      : 'Keine verfügbaren Artikel im Warenlager gefunden'
+                    }
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setSerialEditorOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={() => saveSerialNumber(serialEditorData.itemId, serialEditorData.currentSerial)}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                >
+                  Übernehmen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

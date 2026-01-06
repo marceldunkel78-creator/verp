@@ -190,7 +190,10 @@ const OrderProcessing = () => {
   }
 
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+  // Generate years from 1995 (earliest legacy orders) to current year + 1
+  const startYear = 1995;
+  const endYear = currentYear + 1;
+  const years = Array.from({ length: endYear - startYear + 1 }, (_, i) => endYear - i);
 
   return (
     <div className="container mx-auto px-4 py-8">

@@ -140,7 +140,7 @@ const AddressSelector = ({
 
   // Save address to customer
   const saveAddressToCustomer = async () => {
-    if (!customer?.id || !value.trim()) {
+    if (!customer?.id || !value?.trim()) {
       alert('Kein Kunde ausgewählt oder Adresse leer.');
       return;
     }
@@ -242,7 +242,7 @@ const AddressSelector = ({
         <button
           type="button"
           onClick={saveAddressToCustomer}
-          disabled={saving || !value.trim()}
+          disabled={saving || !value?.trim()}
           className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border ${
             saveSuccess 
               ? 'text-green-700 bg-green-50 border-green-200' 

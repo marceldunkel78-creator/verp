@@ -23,6 +23,15 @@ const QuotationForm = () => {
   const [projects, setProjects] = useState([]);
   const [systems, setSystems] = useState([]);
   const [collapsedGroups, setCollapsedGroups] = useState({});
+
+  // Project/System autocomplete state (typeahead)
+  const [projectFilter, setProjectFilter] = useState('');
+  const [projectOptionsLocal, setProjectOptionsLocal] = useState([]);
+  const [searchingProjects, setSearchingProjects] = useState(false);
+
+  const [systemFilter, setSystemFilter] = useState('');
+  const [systemOptionsLocal, setSystemOptionsLocal] = useState([]);
+  const [searchingSystems, setSearchingSystems] = useState(false);
   const [activeTab, setActiveTab] = useState(1);
   
   // Customer search
@@ -151,6 +160,64 @@ const QuotationForm = () => {
       loadCustomerDetails(formData.customer);
     }
   }, [formData.customer]);
+
+  // Project autocomplete (after 3 chars)
+  useEffect(() => {
+    let active = true;
+    if (!projectFilter || projectFilter.length < 3) {
+      setProjectOptionsLocal([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setSearchingProjects(true);
+        const params = new URLSearchParams();
+        params.append('search', projectFilter);
+        params.append('is_active', 'true');
+        params.append('page_size', '20');
+        const res = await api.get(`/projects/projects/?${params.toString()}`);
+        const results = res.data.results || res.data || [];
+        if (active) setProjectOptionsLocal(Array.isArray(results) ? results : []);
+      } catch (err) {
+        console.error('Project search error in QuotationForm:', err);
+        if (active) setProjectOptionsLocal([]);
+      } finally {
+        if (active) setSearchingProjects(false);
+      }
+    }, 300);
+
+    return () => { active = false; clearTimeout(timer); };
+  }, [projectFilter]);
+
+  // System autocomplete (after 3 chars)
+  useEffect(() => {
+    let active = true;
+    if (!systemFilter || systemFilter.length < 3) {
+      setSystemOptionsLocal([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setSearchingSystems(true);
+        const params = new URLSearchParams();
+        params.append('search', systemFilter);
+        params.append('is_active', 'true');
+        params.append('page_size', '20');
+        const res = await api.get(`/systems/systems/?${params.toString()}`);
+        const results = res.data.results || res.data || [];
+        if (active) setSystemOptionsLocal(Array.isArray(results) ? results : []);
+      } catch (err) {
+        console.error('System search error in QuotationForm:', err);
+        if (active) setSystemOptionsLocal([]);
+      } finally {
+        if (active) setSearchingSystems(false);
+      }
+    }, 300);
+
+    return () => { active = false; clearTimeout(timer); };
+  }, [systemFilter]);
 
   const updatePositionNumbers = (items) => {
     let mainPosition = 0;
@@ -550,31 +617,31 @@ const QuotationForm = () => {
           if (model === 'tradingproduct') {
             frontendObjectId = `tp-${item.object_id}`;
             // Finde das Produkt und erstelle product_name (nur wenn Produkte geladen sind)
-            const product = tradingProducts.find(p => p.id === item.object_id);
+            const product = tradingResults.find(p => p.id === item.object_id);
             if (product) {
               productName = `${product.visitron_part_number || ''} - ${product.name || ''}`.trim();
             }
           } else if (model === 'visiviewproduct') {
             frontendObjectId = `vv-${item.object_id}`;
-            const product = visiviewProducts.find(p => p.id === item.object_id);
+            const product = visiviewResults.find(p => p.id === item.object_id);
             if (product) {
               productName = `${product.article_number || ''} - ${product.name || ''}`.trim();
             }
           } else if (model === 'vshardware') {
             frontendObjectId = `vs-${item.object_id}`;
-            const product = vsHardwareProducts.find(p => p.id === item.object_id);
+            const product = vsHardwareResults.find(p => p.id === item.object_id);
             if (product) {
               productName = `${product.part_number || ''} - ${product.name || ''}`.trim();
             }
           } else if (model === 'vsservice') {
             frontendObjectId = `vss-${item.object_id}`;
-            const product = vsServiceProducts.find(p => p.id === item.object_id);
+            const product = vsServiceResults.find(p => p.id === item.object_id);
             if (product) {
               productName = `${product.article_number || ''} - ${product.name || ''}`.trim();
             }
           } else if (model === 'productcollection') {
             frontendObjectId = `pc-${item.object_id}`;
-            const collection = productCollections.find(p => p.id === item.object_id);
+            const collection = collectionResults.find(p => p.id === item.object_id);
             if (collection) {
               productName = `${collection.collection_number || ''} - ${collection.title || ''}`.trim();
             }
@@ -600,7 +667,8 @@ const QuotationForm = () => {
           discount_percent: item.discount_percent,
           tax_rate: item.tax_rate,
           notes: item.notes || '',
-          custom_description: item.custom_description || ''
+          custom_description: item.custom_description || '',
+          item_article_number: item.item_article_number || ''
         };
       });
       
@@ -785,6 +853,7 @@ setCustomerAddresses(customer.addresses || []);
       newItem.unit_price = product.total_list_price || 0;
       newItem.purchase_price = product.total_purchase_price || 0;
       newItem.is_product_collection = true;
+      newItem.item_article_number = product.collection_number || ''; // WS-XXXXX als Artikelnummer
       newItem.product_name = `${product.collection_number || ''} - ${product.title || ''}`.trim();
       const isEnglish = formData.language === 'EN';
       newItem.custom_description = isEnglish 
@@ -909,7 +978,7 @@ setCustomerAddresses(customer.addresses || []);
             const numericId = parseInt(productId);
             
             if (productType === 'tp') {
-              const selectedProduct = tradingProducts.find(p => p.id === numericId);
+              const selectedProduct = tradingResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 updatedItem.unit_price = selectedProduct.visitron_list_price || 0;
                 updatedItem.purchase_price = selectedProduct.purchase_price_eur || selectedProduct.purchase_price || 0;
@@ -930,7 +999,7 @@ setCustomerAddresses(customer.addresses || []);
                 }
               }
             } else if (productType === 'vv') {
-              const selectedProduct = visiviewProducts.find(p => p.id === numericId);
+              const selectedProduct = visiviewResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 updatedItem.unit_price = selectedProduct.current_list_price || 0;
                 updatedItem.purchase_price = selectedProduct.current_purchase_price || 0;
@@ -945,7 +1014,7 @@ setCustomerAddresses(customer.addresses || []);
               }
             } else if (productType === 'vs') {
               // VS-Hardware
-              const selectedProduct = vsHardwareProducts.find(p => p.id === numericId);
+              const selectedProduct = vsHardwareResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 updatedItem.unit_price = selectedProduct.current_sales_price || 0;
                 updatedItem.purchase_price = selectedProduct.current_purchase_price || 0;
@@ -960,7 +1029,7 @@ setCustomerAddresses(customer.addresses || []);
               }
             } else if (productType === 'vss') {
               // VS-Service Produkte
-              const selectedProduct = vsServiceProducts.find(p => p.id === numericId);
+              const selectedProduct = vsServiceResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 updatedItem.unit_price = selectedProduct.current_list_price || selectedProduct.current_sales_price || 0;
                 updatedItem.purchase_price = selectedProduct.current_purchase_price || 0;
@@ -982,14 +1051,17 @@ setCustomerAddresses(customer.addresses || []);
               }
             } else if (productType === 'pc') {
               // Product Collection (Warensammlung)
-              const selectedCollection = productCollections.find(p => p.id === numericId);
+              const selectedCollection = collectionResults.find(p => p.id === numericId);
               if (selectedCollection) {
                 updatedItem.unit_price = selectedCollection.total_list_price || 0;
                 updatedItem.purchase_price = selectedCollection.total_purchase_price || 0;
                 updatedItem.content_type = { app_label: 'procurement', model: 'productcollection' };
                 updatedItem.actual_object_id = numericId;
                 updatedItem.is_product_collection = true;
-                
+                // Set the article number to the collection number so it is recognized everywhere
+                updatedItem.item_article_number = selectedCollection.collection_number || '';
+                updatedItem.item_article_number_display = selectedCollection.collection_number || '';
+
                 // Lade Beschreibung basierend auf Sprache und Beschreibungstyp
                 const isEnglish = prev.language === 'EN';
                 const isShort = updatedItem.description_type === 'SHORT';
@@ -1014,7 +1086,7 @@ setCustomerAddresses(customer.addresses || []);
             const isShort = value === 'SHORT';
             
             if (productType === 'tp') {
-              const selectedProduct = tradingProducts.find(p => p.id === numericId);
+              const selectedProduct = tradingResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 if (isShort) {
                   updatedItem.custom_description = isEnglish 
@@ -1027,7 +1099,7 @@ setCustomerAddresses(customer.addresses || []);
                 }
               }
             } else if (productType === 'vv') {
-              const selectedProduct = visiviewProducts.find(p => p.id === numericId);
+              const selectedProduct = visiviewResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 updatedItem.custom_description = isEnglish 
                   ? (selectedProduct.description_en || selectedProduct.description || '')
@@ -1035,7 +1107,7 @@ setCustomerAddresses(customer.addresses || []);
               }
             } else if (productType === 'vs') {
               // VS-Hardware - hat keine Kurzbeschreibung, nur description
-              const selectedProduct = vsHardwareProducts.find(p => p.id === numericId);
+              const selectedProduct = vsHardwareResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 updatedItem.custom_description = isEnglish 
                   ? (selectedProduct.description_en || selectedProduct.description || '')
@@ -1043,7 +1115,7 @@ setCustomerAddresses(customer.addresses || []);
               }
             } else if (productType === 'vss') {
               // VS-Service - hat short/long description
-              const selectedProduct = vsServiceProducts.find(p => p.id === numericId);
+              const selectedProduct = vsServiceResults.find(p => p.id === numericId);
               if (selectedProduct) {
                 if (isShort) {
                   updatedItem.custom_description = isEnglish 
@@ -1244,7 +1316,8 @@ setCustomerAddresses(customer.addresses || []);
           discount_percent: parseFloat(item.discount_percent),
           tax_rate: parseFloat(item.tax_rate) || 19,
           notes: item.notes || '',
-          custom_description: item.custom_description || ''
+          custom_description: item.custom_description || '',
+          item_article_number: item.item_article_number || ''
         };
       });
       
@@ -1748,38 +1821,48 @@ setCustomerAddresses(customer.addresses || []);
               </select>
             </div>
 
-            {/* Projekt-Dropdown */}
+            {/* Projekt - Suche */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Projekt zuordnen</label>
-              <select
-                value={formData.project_reference}
-                onChange={(e) => updateFormData(prev => ({ ...prev, project_reference: e.target.value }))}
+              <input
+                type="text"
+                value={projectFilter || projects.find(p => String(p.id) === String(formData.project_reference))?.project_number || ''}
+                onChange={(e) => setProjectFilter(e.target.value)}
+                placeholder="Projektnummer oder Name (ab 3 Zeichen)..."
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">Kein Projekt</option>
-                {projects.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.project_number || project.id} - {project.name} {project.customer_name && `(${project.customer_name})`}
-                  </option>
-                ))}
-              </select>
+              />
+              {projectOptionsLocal.length > 0 && (
+                <div className="mt-1 bg-white border border-gray-200 rounded-md shadow-sm max-h-40 overflow-y-auto">
+                  {projectOptionsLocal.map(p => (
+                    <div key={p.id} className="px-3 py-2 hover:bg-gray-100 cursor-pointer" onClick={() => { updateFormData(prev => ({ ...prev, project_reference: p.id })); setProjectFilter(''); setProjectOptionsLocal([]); }}>
+                      <div className="text-sm font-medium">{p.project_number || p.id} — {p.name}</div>
+                      <div className="text-xs text-gray-500">{p.customer_name}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* System-Dropdown */}
+            {/* System - Suche */}
             <div>
               <label className="block text-sm font-medium text-gray-700">System zuordnen</label>
-              <select
-                value={formData.system_reference}
-                onChange={(e) => updateFormData(prev => ({ ...prev, system_reference: e.target.value }))}
+              <input
+                type="text"
+                value={systemFilter || systems.find(s => String(s.id) === String(formData.system_reference))?.system_number || ''}
+                onChange={(e) => setSystemFilter(e.target.value)}
+                placeholder="Systemnummer oder Name (ab 3 Zeichen)..."
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
-              >
-                <option value="">Kein System</option>
-                {systems.map(system => (
-                  <option key={system.id} value={system.id}>
-                    {system.system_number || system.id} - {system.name} {system.customer_name && `(${system.customer_name})`}
-                  </option>
-                ))}
-              </select>
+              />
+              {systemOptionsLocal.length > 0 && (
+                <div className="mt-1 bg-white border border-gray-200 rounded-md shadow-sm max-h-40 overflow-y-auto">
+                  {systemOptionsLocal.map(s => (
+                    <div key={s.id} className="px-3 py-2 hover:bg-gray-100 cursor-pointer" onClick={() => { updateFormData(prev => ({ ...prev, system_reference: s.id })); setSystemFilter(''); setSystemOptionsLocal([]); }}>
+                      <div className="text-sm font-medium">{s.system_number || s.id} — {s.name}</div>
+                      <div className="text-xs text-gray-500">{s.customer_name}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

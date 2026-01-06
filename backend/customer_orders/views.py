@@ -1,7 +1,8 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet
+from django_filters import CharFilter
 from django.utils import timezone
 from django.http import FileResponse
 from django.conf import settings
@@ -25,7 +26,18 @@ from rest_framework.pagination import PageNumberPagination
 
 
 class CustomerOrderPagination(PageNumberPagination):
-    page_size = 20
+    page_size = 9
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class CustomerOrderFilter(FilterSet):
+    """Custom filter for customer orders with year support"""
+    year = CharFilter(field_name='order_date', lookup_expr='year')
+    
+    class Meta:
+        model = CustomerOrder
+        fields = ['status', 'customer', 'year']
 
 
 class CustomerOrderViewSet(viewsets.ModelViewSet):
@@ -46,8 +58,11 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
     ).prefetch_related('items', 'delivery_notes', 'invoices')
     
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'customer']
-    search_fields = ['order_number', 'project_reference', 'system_reference', 'customer__company_name']
+    filterset_class = CustomerOrderFilter
+    search_fields = ['order_number', 'project_reference', 'system_reference', 
+                     'customer__first_name', 'customer__last_name', 
+                     'customer__addresses__university', 'customer__addresses__institute',
+                     'customer_contact_name']
     ordering_fields = ['order_number', 'order_date', 'created_at', 'status']
     ordering = ['-created_at']
     pagination_class = CustomerOrderPagination
@@ -114,6 +129,17 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
                 order.order_notes = serializer.validated_data['notes']
         
         order.save()
+        
+        # Verknüpftes Angebot auf Status ORDERED setzen
+        if order.quotation:
+            from sales.models import Quotation
+            try:
+                quotation = Quotation.objects.get(id=order.quotation.id)
+                if quotation.status != 'ORDERED':
+                    quotation.status = 'ORDERED'
+                    quotation.save()
+            except Quotation.DoesNotExist:
+                pass
         
         return Response({
             'status': 'success',

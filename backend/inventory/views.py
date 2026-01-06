@@ -342,3 +342,28 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         item.qm_data = request.data.get('qm_data', {})
         item.save()
         return Response({'status': 'success', 'qm_data': item.qm_data})
+    
+    @action(detail=False, methods=['get'])
+    def search_by_article(self, request):
+        """
+        Sucht nach verfügbaren Warenlager-Artikeln für Lieferscheine
+        basierend auf VS-Artikelnummer. Nur freie oder reservierte Artikel.
+        """
+        article_number = request.query_params.get('article_number', '')
+        
+        if not article_number:
+            return Response({'results': []})
+        
+        # Suche nach artikel_number oder visitron_part_number
+        queryset = InventoryItem.objects.filter(
+            Q(article_number__iexact=article_number) |
+            Q(visitron_part_number__iexact=article_number)
+        ).filter(
+            # Nur freie oder reservierte Artikel
+            Q(status='FREI') | Q(status='RESERVIERT') | Q(status='AUF_LAGER')
+        ).select_related(
+            'supplier', 'product_category', 'customer'
+        ).order_by('-stored_date')[:20]  # Neueste zuerst, max 20
+        
+        serializer = InventoryItemSerializer(queryset, many=True)
+        return Response({'results': serializer.data})

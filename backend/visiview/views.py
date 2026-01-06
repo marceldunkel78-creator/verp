@@ -156,6 +156,31 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
         licenses = self.queryset.filter(customer_id=customer_id)
         serializer = VisiViewLicenseListSerializer(licenses, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def search_by_customer(self, request):
+        """
+        Sucht VisiView-Lizenzen für Lieferscheine basierend auf Kunde.
+        Gibt Seriennummern und Lizenzinformationen zurück.
+        """
+        customer_id = request.query_params.get('customer_id')
+        article_number = request.query_params.get('article_number', '')
+        
+        if not customer_id:
+            return Response({'results': []})
+        
+        # Suche nach Lizenzen dieses Kunden
+        queryset = VisiViewLicense.objects.filter(
+            customer_id=customer_id
+        ).select_related('customer').order_by('-created_at')[:20]
+        
+        # Wenn article_number angegeben, filtere nach Produkt
+        if article_number:
+            # TODO: Verknüpfung zwischen VisiViewProduct und Lizenz wenn vorhanden
+            pass
+        
+        serializer = VisiViewLicenseListSerializer(queryset, many=True)
+        return Response({'results': serializer.data})
 
     # ============================================================
     # Maintenance Time Credits & Expenditures

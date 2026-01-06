@@ -160,6 +160,15 @@ class Order(models.Model):
         help_text='Hochgeladenes Bestelldokument (z.B. PDF von Online-Bestellung)'
     )
     
+    # Angebotsdokument
+    offer_document = models.FileField(
+        upload_to=order_document_upload_path,
+        blank=True,
+        null=True,
+        verbose_name='Angebotsdokument',
+        help_text='Hochgeladenes Angebotsdokument vom Lieferanten'
+    )
+    
     # Metadaten
     created_by = models.ForeignKey(
         User,

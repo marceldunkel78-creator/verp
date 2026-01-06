@@ -203,9 +203,11 @@ class InventoryItem(models.Model):
     """
     
     STATUS_CHOICES = [
-        ('AUF_LAGER', 'Auf Lager'),
-        ('RMA', 'RMA'),
-        ('BEI_KUNDE', 'Bei Kunde'),
+        ('FREI', 'Frei'),
+        ('RESERVIERT', 'Reserviert'),
+        ('GELIEFERT', 'Geliefert'),
+        ('RMA_IN_HOUSE', 'RMA in house'),
+        ('RMA_OUT_HOUSE', 'RMA out house'),
     ]
     
     ITEM_FUNCTION_CHOICES = [
@@ -395,6 +397,14 @@ class InventoryItem(models.Model):
         verbose_name='Projektnummer'
     )
     
+    # Lieferdatum
+    delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Lieferdatum',
+        help_text='Datum der Warenlieferung'
+    )
+    
     # Firmware Info
     firmware_version = models.CharField(
         max_length=100,
@@ -487,8 +497,29 @@ class InventoryItem(models.Model):
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='AUF_LAGER',
+        default='FREI',
         verbose_name='Status'
+    )
+    
+    # Reservierungsfelder
+    reserved_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reserved_inventory_items',
+        verbose_name='Reserviert durch'
+    )
+    
+    reserved_until = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Reserviert bis'
+    )
+    
+    reservation_reason = models.TextField(
+        blank=True,
+        verbose_name='Reservierungsgrund'
     )
     
     # Notizen

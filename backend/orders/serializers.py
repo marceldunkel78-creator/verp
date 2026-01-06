@@ -76,7 +76,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'payment_term', 'payment_term_display',
             'delivery_term', 'delivery_term_display',
             'delivery_instruction', 'delivery_instruction_display',
-            'offer_reference', 'custom_text', 'order_document', 'supplier_confirmation_document',
+            'offer_reference', 'custom_text', 'offer_document', 'order_document', 'supplier_confirmation_document',
             'notes', 'items', 'total_amount', 'confirmed_total',
             'incoming_recorded',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
@@ -159,7 +159,7 @@ class OrderCreateUpdateSerializer(serializers.ModelSerializer):
             'status', 'supplier',
             'order_date', 'confirmation_date', 'expected_delivery_date', 'delivery_date', 'payment_date',
             'payment_term', 'delivery_term', 'delivery_instruction',
-            'offer_reference', 'custom_text', 'order_document', 'supplier_confirmation_document',
+            'offer_reference', 'custom_text', 'offer_document', 'order_document', 'supplier_confirmation_document',
             'notes', 'items'
             , 'incoming_recorded'
         ]

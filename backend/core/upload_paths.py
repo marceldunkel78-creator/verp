@@ -89,28 +89,28 @@ def visiview_ticket_attachment_path(instance, filename):
 
 def order_upload_path(instance, filename):
     """
-    Upload-Pfad: /orders/Jahr/Bestellnummer/filename
+    Upload-Pfad: /Procurement/orders/Jahr/Bestellnummer/filename
     """
     year = _get_year_from_instance(instance)
     order_number = _sanitize_path_component(getattr(instance, 'order_number', ''))
     safe_filename = _sanitize_path_component(filename)
-    
+
     if order_number:
-        return f"orders/{year}/{order_number}/{safe_filename}"
-    return f"orders/{year}/unknown/{safe_filename}"
+        return f"Procurement/orders/{year}/{order_number}/{safe_filename}"
+    return f"Procurement/orders/{year}/unknown/{safe_filename}"
 
 
 def quotation_upload_path(instance, filename):
     """
-    Upload-Pfad: /quotations/Jahr/Angebotsnummer/filename
+    Upload-Pfad: /Sales/quotations/Jahr/Angebotsnummer/filename
     """
     year = _get_year_from_instance(instance)
     quotation_number = _sanitize_path_component(getattr(instance, 'quotation_number', ''))
     safe_filename = _sanitize_path_component(filename)
     
     if quotation_number:
-        return f"quotations/{year}/{quotation_number}/{safe_filename}"
-    return f"quotations/{year}/unknown/{safe_filename}"
+        return f"Sales/quotations/{year}/{quotation_number}/{safe_filename}"
+    return f"Sales/quotations/{year}/unknown/{safe_filename}"
 
 
 def system_upload_path(instance, filename):
