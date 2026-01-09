@@ -715,11 +715,15 @@ class TravelExpenseItem(models.Model):
 
 class TravelPerDiemRate(models.Model):
     """
-    Reisekostenpauschalen pro Land (aktualisierbar)
-    Basierend auf deutschen Steuerrichtlinien
+    Reisekostenpauschalen pro Land oder Stadt (aktualisierbar)
+    Basierend auf deutschen Steuerrichtlinien (BMF-Schreiben)
+    
+    Wenn 'city' angegeben ist, gilt dieser Satz für die spezifische Stadt,
+    andernfalls gilt der Ländersatz für das gesamte Land.
     """
-    country = models.CharField(max_length=100, unique=True, verbose_name='Land')
+    country = models.CharField(max_length=100, verbose_name='Land')
     country_code = models.CharField(max_length=3, blank=True, verbose_name='Ländercode')
+    city = models.CharField(max_length=100, blank=True, null=True, verbose_name='Stadt (optional)')
     full_day_rate = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Tagespauschale (24h)')
     partial_day_rate = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Tagespauschale (>8h)')
     overnight_rate = models.DecimalField(max_digits=8, decimal_places=2, verbose_name='Übernachtungspauschale')
@@ -732,20 +736,43 @@ class TravelPerDiemRate(models.Model):
     class Meta:
         verbose_name = 'Reisekostenpauschale'
         verbose_name_plural = 'Reisekostenpauschalen'
-        ordering = ['country']
+        ordering = ['country', 'city']
+        # Eindeutigkeit: Land + Stadt (oder nur Land wenn Stadt NULL)
+        unique_together = [['country', 'city']]
 
     def __str__(self):
+        if self.city:
+            return f"{self.city}, {self.country} - {self.full_day_rate}€/Tag"
         return f"{self.country} - {self.full_day_rate}€/Tag"
 
     @classmethod
-    def get_rate_for_country(cls, country, date=None):
-        """Gibt die aktuell gültige Pauschale für ein Land zurück"""
+    def get_rate_for_country(cls, country, city=None, date=None):
+        """
+        Gibt die aktuell gültige Pauschale für ein Land oder eine Stadt zurück.
+        Priorität: Stadt > Land > Deutschland (Fallback)
+        """
         from django.utils import timezone
         if date is None:
             date = timezone.now().date()
         
+        # Zuerst nach Stadt suchen, wenn angegeben
+        if city:
+            rate = cls.objects.filter(
+                country__iexact=country,
+                city__iexact=city,
+                is_active=True,
+                valid_from__lte=date
+            ).filter(
+                models.Q(valid_until__isnull=True) | models.Q(valid_until__gte=date)
+            ).first()
+            
+            if rate:
+                return rate
+        
+        # Dann nach Land suchen (ohne Stadt)
         rate = cls.objects.filter(
             country__iexact=country,
+            city__isnull=True,
             is_active=True,
             valid_from__lte=date
         ).filter(
@@ -754,7 +781,11 @@ class TravelPerDiemRate(models.Model):
         
         if not rate:
             # Fallback auf Deutschland
-            rate = cls.objects.filter(country='Deutschland', is_active=True).first()
+            rate = cls.objects.filter(
+                country='Deutschland',
+                city__isnull=True,
+                is_active=True
+            ).first()
         
         return rate
 

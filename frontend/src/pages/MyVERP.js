@@ -1647,8 +1647,9 @@ const TravelExpensesTab = ({ onRefresh }) => {
 
   const fetchPerDiemRates = async () => {
     try {
-      const res = await api.get('/users/travel-per-diem-rates/');
-      setPerDiemRates(res.data.results || res.data || []);
+      const res = await api.get('/users/travel-per-diem-rates/country_city_options/');
+      // API returns { options: [...] } (strings like 'Country' or 'Country - City')
+      setPerDiemRates(res.data.options || res.data.results || res.data || []);
     } catch (err) {
       console.error('Fehler beim Laden der Pauschalen:', err);
     }
@@ -2080,13 +2081,22 @@ const DayExpenseCard = ({ day, reportId, onAddExpense, onRemoveDay, onUpdateDay,
                 <div>
                   <label className="block text-xs text-gray-500">Land</label>
                   <select
-                    value={dayForm.country}
-                    onChange={e => setDayForm({ ...dayForm, country: e.target.value })}
+                    value={dayForm.country + (dayForm.location ? ' - ' + dayForm.location : '')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val.includes(' - ')) {
+                        const [c, ...rest] = val.split(' - ');
+                        const city = rest.join(' - ');
+                        setDayForm({ ...dayForm, country: c, location: city });
+                      } else {
+                        setDayForm({ ...dayForm, country: val, location: '' });
+                      }
+                    }}
                     className="mt-1 block w-full rounded-md border-gray-300 text-sm"
                   >
                     <option value="Deutschland">Deutschland</option>
-                    {perDiemRates.map(r => (
-                      <option key={r.country} value={r.country}>{r.country}</option>
+                    {perDiemRates.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
                     ))}
                   </select>
                 </div>

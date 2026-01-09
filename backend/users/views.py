@@ -945,7 +945,9 @@ class TravelExpenseReportViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             # Pauschalen automatisch setzen
             country = serializer.validated_data.get('country', 'Deutschland')
-            rate = TravelPerDiemRate.get_rate_for_country(country, serializer.validated_data['date'])
+            # location enthält (optional) die Stadt; übergeben wir als city-Parameter
+            city = serializer.validated_data.get('location')
+            rate = TravelPerDiemRate.get_rate_for_country(country, city=city, date=serializer.validated_data['date'])
             
             day = serializer.save(
                 report=report,
@@ -955,11 +957,17 @@ class TravelExpenseReportViewSet(viewsets.ModelViewSet):
             )
             
             # Automatisch Pauschale anwenden basierend auf Reisezeit
-            if day.travel_hours > 16:
+            travel_hours = float(day.travel_hours or 0)
+            # Regeln: ab 8h -> Teilpauschale, bei 24h oder mehr -> volle Tagespauschale
+            if travel_hours >= 24:
                 day.per_diem_applied = day.per_diem_full
                 day.is_full_day = True
-            else:
+            elif travel_hours >= 8:
                 day.per_diem_applied = day.per_diem_partial
+                day.is_full_day = False
+            else:
+                # Unter 8 Stunden: keine Pauschale
+                day.per_diem_applied = 0
                 day.is_full_day = False
             day.save()
             
@@ -1129,8 +1137,9 @@ class TravelExpenseDayViewSet(viewsets.ModelViewSet):
         """Beim Update: Pauschalen neu berechnen basierend auf travel_hours und country"""
         instance = serializer.save()
         
-        # Pauschale für das Land holen
-        rate = TravelPerDiemRate.get_rate_for_country(instance.country, instance.date)
+        # Pauschale für das Land/Stadt holen (city aus location)
+        city = getattr(instance, 'location', None)
+        rate = TravelPerDiemRate.get_rate_for_country(instance.country, city=city, date=instance.date)
         if rate:
             instance.per_diem_full = rate.full_day_rate
             instance.per_diem_partial = rate.partial_day_rate
@@ -1138,11 +1147,15 @@ class TravelExpenseDayViewSet(viewsets.ModelViewSet):
         
         # Angewendete Pauschale basierend auf Reisestunden setzen
         travel_hours = float(instance.travel_hours or 0)
-        if travel_hours > 8:
+        # Regeln: ab 8h -> Teilpauschale, bei 24h oder mehr -> volle Tagespauschale
+        if travel_hours >= 24:
             instance.per_diem_applied = instance.per_diem_full
             instance.is_full_day = True
-        else:
+        elif travel_hours >= 8:
             instance.per_diem_applied = instance.per_diem_partial
+            instance.is_full_day = False
+        else:
+            instance.per_diem_applied = 0
             instance.is_full_day = False
         instance.save()
         
@@ -1187,6 +1200,31 @@ class TravelPerDiemRateViewSet(viewsets.ModelViewSet):
         if rate:
             return Response(TravelPerDiemRateSerializer(rate).data)
         return Response({'error': 'Keine Pauschale gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'])
+    def countries(self, request):
+        """Gibt die Liste der verfügbaren Länder (distinct) zurück"""
+        qs = TravelPerDiemRate.objects.filter(is_active=True).order_by('country')
+        countries = list(qs.values_list('country', flat=True).distinct())
+        return Response({'countries': countries})
+
+    @action(detail=False, methods=['get'])
+    def country_city_options(self, request):
+        """Gibt eine flache Liste von Auswahl-Strings zurück: 'Country' oder 'Country - City'"""
+        qs = TravelPerDiemRate.objects.filter(is_active=True).order_by('country', 'city')
+        options = []
+        seen = set()
+        for row in qs.values('country', 'city'):
+            country = row['country']
+            city = row['city']
+            if city and city.strip():
+                opt = f"{country} - {city}"
+            else:
+                opt = country
+            if opt not in seen:
+                options.append(opt)
+                seen.add(opt)
+        return Response({'options': options})
 
 
 class MessageViewSet(viewsets.ModelViewSet):
