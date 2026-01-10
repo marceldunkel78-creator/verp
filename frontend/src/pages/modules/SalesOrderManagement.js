@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { 
   UserIcon,
   BriefcaseIcon, 
@@ -11,7 +12,16 @@ import {
   ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
 
+// Helper für Berechtigungsprüfung
+const hasPermission = (user, permission) => {
+  if (!permission) return true;
+  if (user?.is_superuser) return true;
+  return user?.[permission] === true;
+};
+
 const SalesOrderManagement = () => {
+  const { user } = useAuth();
+  
   const modules = [
     {
       name: 'Customers',
@@ -19,7 +29,8 @@ const SalesOrderManagement = () => {
       icon: UserIcon,
       path: '/sales/customers',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_customers',
     },
     {
       name: 'Dealers',
@@ -27,7 +38,8 @@ const SalesOrderManagement = () => {
       icon: BuildingStorefrontIcon,
       path: '/sales/dealers',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_dealers',
     },
     {
       name: 'Price Lists',
@@ -35,7 +47,8 @@ const SalesOrderManagement = () => {
       icon: ClipboardDocumentListIcon,
       path: '/sales/pricelists',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_pricelists',
     },
     {
       name: 'Projects',
@@ -43,7 +56,8 @@ const SalesOrderManagement = () => {
       icon: BriefcaseIcon,
       path: '/sales/projects',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_projects',
     },
     {
       name: 'Quotations',
@@ -51,7 +65,8 @@ const SalesOrderManagement = () => {
       icon: DocumentTextIcon,
       path: '/sales/quotations',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_quotations',
     },
     {
       name: 'Order Processing',
@@ -59,7 +74,8 @@ const SalesOrderManagement = () => {
       icon: ClipboardDocumentCheckIcon,
       path: '/sales/order-processing',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_order_processing',
     },
     {
       name: 'Sales Tickets',
@@ -67,7 +83,8 @@ const SalesOrderManagement = () => {
       icon: ClipboardDocumentCheckIcon,
       path: '/sales/tickets',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_tickets',
     },
     {
       name: 'Marketing',
@@ -75,7 +92,8 @@ const SalesOrderManagement = () => {
       icon: MegaphoneIcon,
       path: '/sales/marketing',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_marketing',
     },
     {
       name: 'Systems',
@@ -83,9 +101,13 @@ const SalesOrderManagement = () => {
       icon: ComputerDesktopIcon,
       path: '/sales/systems',
       color: 'blue',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_sales_systems',
     }
   ];
+
+  // Filter modules based on user permissions
+  const filteredModules = modules.filter(m => hasPermission(user, m.permission));
 
   return (
     <div>
@@ -97,7 +119,7 @@ const SalesOrderManagement = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modules.map((module) => (
+        {filteredModules.map((module) => (
           module.disabled ? (
             <div
               key={module.name}

@@ -4,21 +4,24 @@
   "private": true,
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
-    "@heroicons/react": "^2.1.0",
+    "@heroicons/react": "^2.2.0",
     "axios": "^1.6.0",
+    "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^6.20.0",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "recharts": "^3.6.0"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "set \"NODE_OPTIONS=--no-deprecation\" && react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
+    "postinstall": "node scripts/patch-react-scripts.js",
     "generate-favicons": "node scripts/generate-favicons.js"
   },
   "eslintConfig": {

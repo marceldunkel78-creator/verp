@@ -1,40 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import api from '../services/api';
+import storage from '../utils/sessionStore';
 import SupplierSearch from '../components/SupplierSearch';
 import {
   FunnelIcon,
-  InboxArrowDownIcon,
   ArchiveBoxIcon,
   PencilSquareIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  XMarkIcon,
+  InboxArrowDownIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
+
+const SESSION_KEY = 'inventory_search_state';
 
 const Inventory = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [activeView, setActiveView] = useState('incoming'); // 'incoming' | 'stock'
-  
-  // Incoming Goods State
-  const [incomingGoods, setIncomingGoods] = useState([]);
-  const [incomingFilters, setIncomingFilters] = useState({
-    supplier: '',
-    item_function: '',
-    product_category: '',
-    search: ''
-  });
   
   // Inventory Items State
   const [inventoryItems, setInventoryItems] = useState([]);
-  const [inventoryFilters, setInventoryFilters] = useState({
+  const [filters, setFilters] = useState({
     status: '',
     supplier: '',
     item_function: '',
     product_category: '',
     search: ''
   });
-  const [inventorySearched, setInventorySearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   
   // Pagination for inventory cards
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,6 +39,32 @@ const Inventory = () => {
   // Common Data
   const [suppliers, setSuppliers] = useState([]);
   const [productCategories, setProductCategories] = useState([]);
+
+  // Load search state from localStorage
+  const loadSearchState = useCallback(() => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return null;
+      return st;
+    } catch (e) {
+      console.warn('Failed to load inventory search state', e);
+      return null;
+    }
+  }, []);
+
+  const saveSearchState = useCallback((filtersToSave, itemsToSave, pageToSave, searched) => {
+    try {
+      const st = { 
+        filters: filtersToSave, 
+        inventoryItems: itemsToSave, 
+        currentPage: pageToSave,
+        hasSearched: searched
+      };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save inventory search state', e);
+    }
+  }, []);
   
   const fetchSuppliers = useCallback(async () => {
     try {
@@ -62,94 +84,153 @@ const Inventory = () => {
     }
   }, []);
 
-  const fetchIncomingGoods = useCallback(async () => {
+  const fetchInventoryItems = useCallback(async (filtersToUse = null, pageToUse = null) => {
     setLoading(true);
+    setHasSearched(true);
+    const useFilters = filtersToUse || filters;
+    const usePage = pageToUse || 1;
+    setCurrentPage(usePage);
+    
     try {
       const params = new URLSearchParams();
-      if (incomingFilters.supplier) params.append('supplier', incomingFilters.supplier);
-      if (incomingFilters.item_function) params.append('item_function', incomingFilters.item_function);
-      if (incomingFilters.product_category) params.append('product_category', incomingFilters.product_category);
-      if (incomingFilters.search) params.append('search', incomingFilters.search);
-
-      const res = await api.get(`/inventory/incoming-goods/?${params.toString()}`);
-      setIncomingGoods(res.data.results || res.data);
-    } catch (error) {
-      console.error('Error fetching incoming goods:', error);
-      alert('Fehler beim Laden der Wareneingänge');
-    } finally {
-      setLoading(false);
-    }
-  }, [incomingFilters]);
-
-  const fetchInventoryItems = useCallback(async () => {
-    setLoading(true);
-    setInventorySearched(true);
-    setCurrentPage(1); // Reset to first page on new search
-    try {
-      const params = new URLSearchParams();
-      if (inventoryFilters.status) params.append('status', inventoryFilters.status);
-      if (inventoryFilters.supplier) params.append('supplier', inventoryFilters.supplier);
-      if (inventoryFilters.item_function) params.append('item_function', inventoryFilters.item_function);
-      if (inventoryFilters.product_category) params.append('product_category', inventoryFilters.product_category);
-      if (inventoryFilters.search) params.append('search', inventoryFilters.search);
+      if (useFilters.status) params.append('status', useFilters.status);
+      if (useFilters.supplier) params.append('supplier', useFilters.supplier);
+      if (useFilters.item_function) params.append('item_function', useFilters.item_function);
+      if (useFilters.product_category) params.append('product_category', useFilters.product_category);
+      if (useFilters.search) params.append('search', useFilters.search);
 
       const res = await api.get(`/inventory/inventory-items/?${params.toString()}`);
-      setInventoryItems(res.data.results || res.data);
+      const items = res.data.results || res.data;
+      setInventoryItems(items);
+      saveSearchState(useFilters, items, usePage, true);
     } catch (error) {
       console.error('Error fetching inventory items:', error);
       alert('Fehler beim Laden des Warenlagers');
     } finally {
       setLoading(false);
     }
-  }, [inventoryFilters]);
+  }, [filters, saveSearchState]);
 
+  // Initialize from URL params or localStorage
   useEffect(() => {
     fetchSuppliers();
     fetchProductCategories();
-    if (activeView === 'incoming') {
-      fetchIncomingGoods();
-    } else {
-      // Only fetch inventory items automatically when a search term exists.
-      if (inventoryFilters.search) {
-        fetchInventoryItems();
-      } else {
-        // reset list until a search is performed
-        setInventoryItems([]);
-        setInventorySearched(false);
-      }
-    }
-  }, [activeView, fetchSuppliers, fetchProductCategories, fetchIncomingGoods, fetchInventoryItems, inventoryFilters.search]);
-  
-  const handleTransferToInventory = async (incomingGoodId) => {
-    if (!window.confirm('Möchten Sie diese Position wirklich ins Lager überführen?')) {
+    
+    // Check URL params first
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      const newFilters = {
+        status: urlParams.status || '',
+        supplier: urlParams.supplier || '',
+        item_function: urlParams.item_function || '',
+        product_category: urlParams.product_category || '',
+        search: urlParams.search || ''
+      };
+      const page = urlParams.page ? parseInt(urlParams.page, 10) : 1;
+      setFilters(newFilters);
+      setCurrentPage(page);
+      fetchInventoryItems(newFilters, page);
       return;
     }
     
-    try {
-      const res = await api.post(`/inventory/incoming-goods/${incomingGoodId}/transfer_to_inventory/`);
-      alert(res.data.message);
-      fetchIncomingGoods(); // Refresh list
-    } catch (error) {
-      console.error('Error transferring to inventory:', error);
-      const errorMsg = error.response?.data?.error || 'Fehler beim Überführen ins Lager';
-      alert(errorMsg);
+    // Fall back to localStorage
+    const restored = loadSearchState();
+    if (restored && restored.hasSearched) {
+      setFilters(restored.filters || filters);
+      if (restored.inventoryItems) {
+        setInventoryItems(restored.inventoryItems);
+      }
+      if (restored.currentPage) {
+        setCurrentPage(restored.currentPage);
+      }
+      setHasSearched(true);
+      
+      // Update URL with restored filters
+      const params = {};
+      if (restored.filters?.status) params.status = restored.filters.status;
+      if (restored.filters?.supplier) params.supplier = restored.filters.supplier;
+      if (restored.filters?.item_function) params.item_function = restored.filters.item_function;
+      if (restored.filters?.product_category) params.product_category = restored.filters.product_category;
+      if (restored.filters?.search) params.search = restored.filters.search;
+      if (restored.currentPage && restored.currentPage > 1) params.page = String(restored.currentPage);
+      if (Object.keys(params).length > 0) {
+        setSearchParams(params);
+      }
+      
+      // Refresh data
+      fetchInventoryItems(restored.filters, restored.currentPage);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // React to URL query param changes (back/forward navigation)
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newFilters = {
+        status: params.status || '',
+        supplier: params.supplier || '',
+        item_function: params.item_function || '',
+        product_category: params.product_category || '',
+        search: params.search || ''
+      };
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setFilters(newFilters);
+      setCurrentPage(page);
+      fetchInventoryItems(newFilters, page);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleSearch = () => {
+    // Update URL params
+    const params = {};
+    if (filters.status) params.status = filters.status;
+    if (filters.supplier) params.supplier = filters.supplier;
+    if (filters.item_function) params.item_function = filters.item_function;
+    if (filters.product_category) params.product_category = filters.product_category;
+    if (filters.search) params.search = filters.search;
+    params.page = '1';
+    setSearchParams(params);
+    setCurrentPage(1);
+    fetchInventoryItems(filters, 1);
   };
-  
-  const handleUpdateIncomingGood = async (id, updates) => {
-    try {
-      await api.patch(`/inventory/incoming-goods/${id}/`, updates);
-      fetchIncomingGoods();
-    } catch (error) {
-      console.error('Error updating incoming good:', error);
-      alert('Fehler beim Aktualisieren');
-    }
+
+  const handleReset = () => {
+    const emptyFilters = {
+      status: '',
+      supplier: '',
+      item_function: '',
+      product_category: '',
+      search: ''
+    };
+    setFilters(emptyFilters);
+    setInventoryItems([]);
+    setCurrentPage(1);
+    setHasSearched(false);
+    setSearchParams({});
+    try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
+  };
+
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    // Update URL with new page
+    const params = {};
+    if (filters.status) params.status = filters.status;
+    if (filters.supplier) params.supplier = filters.supplier;
+    if (filters.item_function) params.item_function = filters.item_function;
+    if (filters.product_category) params.product_category = filters.product_category;
+    if (filters.search) params.search = filters.search;
+    if (newPage > 1) params.page = String(newPage);
+    setSearchParams(params);
+    saveSearchState(filters, inventoryItems, newPage, hasSearched);
   };
   
   const handleUpdateInventoryItem = async (id, updates) => {
     try {
       await api.patch(`/inventory/inventory-items/${id}/`, updates);
-      fetchInventoryItems();
+      fetchInventoryItems(filters, currentPage);
     } catch (error) {
       console.error('Error updating inventory item:', error);
       alert('Fehler beim Aktualisieren');
@@ -160,7 +241,7 @@ const Inventory = () => {
     if (!window.confirm('Möchten Sie diesen Lagerartikel wirklich löschen?')) return;
     try {
       await api.delete(`/inventory/inventory-items/${id}/`);
-      fetchInventoryItems();
+      fetchInventoryItems(filters, currentPage);
       alert('Lagerartikel wurde gelöscht');
     } catch (error) {
       console.error('Error deleting inventory item:', error);
@@ -180,7 +261,7 @@ const Inventory = () => {
     return productCategories.filter(cat => {
       if (itemFunction === 'TRADING_GOOD') return cat.applies_to_trading_goods;
       if (itemFunction === 'MATERIAL') return cat.applies_to_material_supplies;
-      if (itemFunction === 'ASSET') return cat.applies_to_trading_goods; // Assets use same categories as trading goods
+      if (itemFunction === 'ASSET') return cat.applies_to_trading_goods;
       return true;
     });
   };
@@ -195,344 +276,228 @@ const Inventory = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Warenverwaltung</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Verwalten Sie Wareneingänge und Lagerbestand
-        </p>
-      </div>
-      
-      {/* View Toggle */}
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="tab-scroll -mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveView('incoming')}
-            className={`${
-              activeView === 'incoming'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
-          >
-            <InboxArrowDownIcon className="h-5 w-5 mr-2" />
-            Wareneingang
-            {incomingGoods.length > 0 && (
-              <span className="ml-2 bg-blue-100 text-blue-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
-                {incomingGoods.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveView('stock')}
-            className={`${
-              activeView === 'stock'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
-          >
-            <ArchiveBoxIcon className="h-5 w-5 mr-2" />
-            Warenlager
-            {inventorySearched && inventoryItems.length > 0 && (
-              <span className="ml-2 bg-gray-100 text-gray-600 py-0.5 px-2.5 rounded-full text-xs font-medium">
-                {inventoryItems.length}
-              </span>
-            )}
-          </button>
-        </nav>
-      </div>
-      
-      {/* Incoming Goods View */}
-      {activeView === 'incoming' && (
+      <div className="mb-8 flex justify-between items-start">
         <div>
-          {/* Filters */}
-          <div className="mb-6 bg-white p-4 rounded-lg shadow">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Suche</label>
-                <input
-                  type="text"
-                  placeholder="Name, Artikelnr., Bestellnr..."
-                  value={incomingFilters.search}
-                  onChange={(e) => setIncomingFilters({ ...incomingFilters, search: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant</label>
-                <SupplierSearch
-                  value={incomingFilters.supplier || null}
-                  onChange={(supplierId) => setIncomingFilters({ ...incomingFilters, supplier: supplierId || '' })}
-                  placeholder="Alle Lieferanten"
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warenfunktion</label>
-                <select
-                  value={incomingFilters.item_function}
-                  onChange={(e) => setIncomingFilters({ ...incomingFilters, item_function: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Alle</option>
-                  <option value="TRADING_GOOD">Handelsware</option>
-                  <option value="ASSET">Asset</option>
-                  <option value="MATERIAL">Material & Supplies</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
-                <select
-                  value={incomingFilters.product_category}
-                  onChange={(e) => setIncomingFilters({ ...incomingFilters, product_category: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Alle Kategorien</option>
-                  {getFilteredCategories(incomingFilters.item_function).map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button
-                  onClick={fetchIncomingGoods}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium flex items-center justify-center"
-                >
-                  <FunnelIcon className="h-4 w-4 mr-2" />
-                  Filtern
-                </button>
-              </div>
-            </div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+            <ArchiveBoxIcon className="h-8 w-8 mr-3 text-blue-600" />
+            Warenlager
+          </h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Verwalten Sie Ihren Lagerbestand
+          </p>
+        </div>
+        <Link
+          to="/inventory/goods-receipt"
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+        >
+          <InboxArrowDownIcon className="h-5 w-5 mr-2" />
+          Wareneingang
+        </Link>
+      </div>
+      
+      {/* Filters */}
+      <div className="mb-6 bg-white p-4 rounded-lg shadow">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Suche</label>
+            <input
+              type="text"
+              placeholder="Name, Inventarnr., Kunde..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            />
           </div>
-          
-          {/* Incoming Goods Table */}
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Artikel
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Lieferant
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Menge
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Warenfunktion
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Warenkategorie
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Seriennummer
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aktion
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-500">
-                      Lädt...
-                    </td>
-                  </tr>
-                ) : incomingGoods.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-500">
-                      Keine Wareneingänge vorhanden
-                    </td>
-                  </tr>
-                ) : (
-                  incomingGoods.map((item) => (
-                    <IncomingGoodRow
-                      key={item.id}
-                      item={item}
-                      suppliers={suppliers}
-                      productCategories={productCategories}
-                      onUpdate={handleUpdateIncomingGood}
-                      onTransfer={handleTransferToInventory}
-                      getFilteredCategories={getFilteredCategories}
-                    />
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Alle</option>
+              <option value="FREI">Frei</option>
+              <option value="RESERVIERT">Reserviert</option>
+              <option value="GELIEFERT">Geliefert</option>
+              <option value="RMA_IN_HOUSE">RMA in house</option>
+              <option value="RMA_OUT_HOUSE">RMA out house</option>
+            </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant</label>
+            <SupplierSearch
+              value={filters.supplier || null}
+              onChange={(supplierId) => setFilters({ ...filters, supplier: supplierId || '' })}
+              placeholder="Alle Lieferanten"
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Warenfunktion</label>
+            <select
+              value={filters.item_function}
+              onChange={(e) => setFilters({ ...filters, item_function: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Alle</option>
+              <option value="TRADING_GOOD">Handelsware</option>
+              <option value="ASSET">Asset</option>
+              <option value="MATERIAL">Material & Supplies</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
+            <select
+              value={filters.product_category}
+              onChange={(e) => setFilters({ ...filters, product_category: e.target.value })}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Alle Kategorien</option>
+              {getFilteredCategories(filters.item_function).map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end space-x-2">
+            <button
+              onClick={handleSearch}
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium flex items-center justify-center"
+            >
+              <FunnelIcon className="h-4 w-4 mr-2" />
+              Suchen
+            </button>
+            <button
+              onClick={handleReset}
+              className="px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm"
+              title="Filter zurücksetzen"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Results Count */}
+      {hasSearched && inventoryItems.length > 0 && (
+        <div className="mb-4 text-sm text-gray-600">
+          {inventoryItems.length} Artikel gefunden
         </div>
       )}
       
-      {/* Inventory Stock View */}
-      {activeView === 'stock' && (
-        <div>
-          {/* Filters */}
-          <div className="mb-6 bg-white p-4 rounded-lg shadow">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Suche</label>
-                <input
-                  type="text"
-                  placeholder="Name, Inventarnr., Kunde..."
-                  value={inventoryFilters.search}
-                  onChange={(e) => setInventoryFilters({ ...inventoryFilters, search: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={inventoryFilters.status}
-                  onChange={(e) => setInventoryFilters({ ...inventoryFilters, status: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Alle</option>
-                  <option value="FREI">Frei</option>
-                  <option value="RESERVIERT">Reserviert</option>
-                  <option value="GELIEFERT">Geliefert</option>
-                  <option value="RMA_IN_HOUSE">RMA in house</option>
-                  <option value="RMA_OUT_HOUSE">RMA out house</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant</label>
-                <SupplierSearch
-                  value={inventoryFilters.supplier || null}
-                  onChange={(supplierId) => setInventoryFilters({ ...inventoryFilters, supplier: supplierId || '' })}
-                  placeholder="Alle Lieferanten"
-                  className="text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warenfunktion</label>
-                <select
-                  value={inventoryFilters.item_function}
-                  onChange={(e) => setInventoryFilters({ ...inventoryFilters, item_function: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Alle</option>
-                  <option value="TRADING_GOOD">Handelsware</option>
-                  <option value="ASSET">Asset</option>
-                  <option value="MATERIAL">Material & Supplies</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
-                <select
-                  value={inventoryFilters.product_category}
-                  onChange={(e) => setInventoryFilters({ ...inventoryFilters, product_category: e.target.value })}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Alle Kategorien</option>
-                  {getFilteredCategories(inventoryFilters.item_function).map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button
-                  onClick={fetchInventoryItems}
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium flex items-center justify-center"
-                >
-                  <FunnelIcon className="h-4 w-4 mr-2" />
-                  Filtern
-                </button>
-              </div>
-            </div>
+      {/* Inventory Items Grid */}
+      {loading ? (
+        <div className="bg-white shadow-md rounded-lg p-12 text-center text-gray-500">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          Lädt...
+        </div>
+      ) : !hasSearched ? (
+        <div className="bg-white shadow-md rounded-lg p-12 text-center text-gray-500">
+          <ArchiveBoxIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+          Starten Sie eine Suche, um Lagerartikel anzuzeigen.
+        </div>
+      ) : inventoryItems.length === 0 ? (
+        <div className="bg-white shadow-md rounded-lg p-12 text-center text-gray-500">
+          Keine Lagerartikel gefunden
+        </div>
+      ) : (
+        <>
+          {/* Card Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            {paginatedInventoryItems.map((item) => (
+              <InventoryItemCard
+                key={item.id}
+                item={item}
+                onUpdate={handleUpdateInventoryItem}
+                onEdit={handleEditInventoryItem}
+                onDelete={handleDeleteInventoryItem}
+              />
+            ))}
           </div>
           
-          {/* Inventory Items Grid */}
-          {loading ? (
-            <div className="bg-white shadow-md rounded-lg p-12 text-center text-gray-500">
-              Lädt...
-            </div>
-          ) : !inventorySearched ? (
-            <div className="bg-white shadow-md rounded-lg p-12 text-center text-gray-500">
-              Starten Sie eine Suche, um Lagerartikel anzuzeigen.
-            </div>
-          ) : inventoryItems.length === 0 ? (
-            <div className="bg-white shadow-md rounded-lg p-12 text-center text-gray-500">
-              Keine Lagerartikel gefunden
-            </div>
-          ) : (
-            <>
-              {/* Card Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-                {paginatedInventoryItems.map((item) => (
-                  <InventoryItemCard
-                    key={item.id}
-                    item={item}
-                    onUpdate={handleUpdateInventoryItem}
-                    onEdit={handleEditInventoryItem}
-                    onDelete={handleDeleteInventoryItem}
-                  />
-                ))}
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white px-4 py-3 shadow-md rounded-lg">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Zurück
+                </button>
+                <button
+                  onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Weiter
+                </button>
               </div>
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between bg-white px-4 py-3 shadow-md rounded-lg">
-                  <div className="flex-1 flex justify-between sm:hidden">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Zurück
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Weiter
-                    </button>
-                  </div>
-                  <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">
-                        Zeige <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> bis{' '}
-                        <span className="font-medium">{Math.min(currentPage * itemsPerPage, inventoryItems.length)}</span> von{' '}
-                        <span className="font-medium">{inventoryItems.length}</span> Ergebnissen
-                      </p>
-                    </div>
-                    <div>
-                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                        <button
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          disabled={currentPage === 1}
-                          className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <ChevronLeftIcon className="h-5 w-5" />
-                        </button>
-                        {[...Array(totalPages)].map((_, i) => (
-                          <button
-                            key={i + 1}
-                            onClick={() => setCurrentPage(i + 1)}
-                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                              currentPage === i + 1
-                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            {i + 1}
-                          </button>
-                        ))}
-                        <button
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={currentPage === totalPages}
-                          className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <ChevronRightIcon className="h-5 w-5" />
-                        </button>
-                      </nav>
-                    </div>
-                  </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Zeige <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> bis{' '}
+                    <span className="font-medium">{Math.min(currentPage * itemsPerPage, inventoryItems.length)}</span> von{' '}
+                    <span className="font-medium">{inventoryItems.length}</span> Ergebnissen
+                  </p>
                 </div>
-              )}
-            </>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <button
+                      onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeftIcon className="h-5 w-5" />
+                    </button>
+                    {[...Array(Math.min(totalPages, 7))].map((_, i) => {
+                      let pageNum = i + 1;
+                      if (totalPages > 7) {
+                        if (currentPage <= 4) {
+                          if (i === 5) return <span key="ellipsis" className="px-4 py-2 border border-gray-300 bg-white text-gray-700">...</span>;
+                          if (i === 6) pageNum = totalPages;
+                          else pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 3) {
+                          if (i === 0) pageNum = 1;
+                          else if (i === 1) return <span key="ellipsis" className="px-4 py-2 border border-gray-300 bg-white text-gray-700">...</span>;
+                          else pageNum = totalPages - (6 - i);
+                        } else {
+                          if (i === 0) pageNum = 1;
+                          else if (i === 1) return <span key="ellipsis1" className="px-4 py-2 border border-gray-300 bg-white text-gray-700">...</span>;
+                          else if (i === 5) return <span key="ellipsis2" className="px-4 py-2 border border-gray-300 bg-white text-gray-700">...</span>;
+                          else if (i === 6) pageNum = totalPages;
+                          else pageNum = currentPage + (i - 3);
+                        }
+                      }
+                      
+                      return (
+                        <button
+                          key={`page-${pageNum}`}
+                          onClick={() => handlePageChange(pageNum)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                            currentPage === pageNum
+                              ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRightIcon className="h-5 w-5" />
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );
@@ -573,6 +538,16 @@ const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
         return status;
     }
   };
+
+  // Get customer display name
+  const getCustomerDisplay = () => {
+    if (item.customer_display) return item.customer_display;
+    if (item.customer_name) return item.customer_name;
+    if (item.customer) return `Kunde #${item.customer}`;
+    return null;
+  };
+
+  const customerDisplay = getCustomerDisplay();
   
   return (
     <div className="bg-white shadow-md rounded-lg p-5 hover:shadow-lg transition-shadow">
@@ -618,8 +593,22 @@ const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
         )}
         <div className="flex justify-between">
           <span className="text-gray-500">Wert:</span>
-          <span className="text-gray-900 font-semibold">{item.total_value.toFixed(2)} {item.currency}</span>
+          <span className="text-gray-900 font-semibold">{item.total_value?.toFixed(2) || '0.00'} {item.currency}</span>
         </div>
+
+        {/* Customer Info */}
+        {customerDisplay && (
+          <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+            <span className="text-gray-500 flex items-center">
+              <UserIcon className="h-4 w-4 mr-1" />
+              Kunde:
+            </span>
+            <span className="text-gray-900 font-medium truncate ml-2" title={customerDisplay}>
+              {customerDisplay}
+            </span>
+          </div>
+        )}
+
         {item.status === 'RESERVIERT' && item.reserved_by && (
           <div className="pt-2 border-t border-gray-200">
             <div className="text-xs text-gray-500 mb-1">Reservierung</div>
@@ -647,128 +636,6 @@ const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
         </button>
       </div>
     </div>
-  );
-};
-
-// Sub-component for Incoming Good Row
-const IncomingGoodRow = ({ item, suppliers, productCategories, onUpdate, onTransfer, getFilteredCategories }) => {
-  const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState({
-    item_function: item.item_function,
-    product_category: item.product_category,
-    serial_number: item.serial_number
-  });
-  
-  const handleSave = () => {
-    onUpdate(item.id, editData);
-    setEditing(false);
-  };
-  
-  const filteredCategories = getFilteredCategories(editData.item_function);
-  const selectedCategory = productCategories.find(c => c.id === editData.product_category);
-  const requiresSerial = selectedCategory ? selectedCategory.requires_serial_number : 
-    (editData.item_function === 'TRADING_GOOD' || editData.item_function === 'ASSET');
-  
-  return (
-    <tr>
-      <td className="px-6 py-4">
-        <div className="text-sm font-medium text-gray-900">{item.name}</div>
-        <div className="text-sm text-gray-500">Art.-Nr.: {item.article_number}</div>
-        <div className="text-sm text-gray-500">Bestellung: {item.order_number}</div>
-      </td>
-      <td className="px-6 py-4 text-sm text-gray-500">
-        {item.supplier_name}
-      </td>
-      <td className="px-6 py-4 text-sm text-gray-900">
-        {item.delivered_quantity} {item.unit}
-      </td>
-      <td className="px-6 py-4">
-        {editing ? (
-          <select
-            value={editData.item_function}
-            onChange={(e) => setEditData({ ...editData, item_function: e.target.value, product_category: '' })}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-          >
-            <option value="TRADING_GOOD">Handelsware</option>
-            <option value="ASSET">Asset</option>
-            <option value="MATERIAL">Material & Supplies</option>
-          </select>
-        ) : (
-          <span className="text-sm text-gray-900">
-            {item.item_function === 'TRADING_GOOD' ? 'Handelsware' : item.item_function === 'ASSET' ? 'Asset' : 'Material'}
-          </span>
-        )}
-      </td>
-      <td className="px-6 py-4">
-        {editing ? (
-          <select
-            value={editData.product_category || ''}
-            onChange={(e) => setEditData({ ...editData, product_category: e.target.value ? parseInt(e.target.value) : null })}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-          >
-            <option value="">Wählen...</option>
-            {filteredCategories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-sm text-gray-900">{item.product_category_name || item.item_category || '-'}</span>
-        )}
-      </td>
-      <td className="px-6 py-4">
-        {editing ? (
-          <input
-            type="text"
-            value={editData.serial_number}
-            onChange={(e) => setEditData({ ...editData, serial_number: e.target.value })}
-            placeholder={requiresSerial ? "Erforderlich" : "Optional"}
-            className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-          />
-        ) : (
-          <span className="text-sm text-gray-900">{item.serial_number || '-'}</span>
-        )}
-      </td>
-      <td className="px-6 py-4 text-sm">
-        {editing ? (
-          <div className="flex space-x-2">
-            <button
-              onClick={handleSave}
-              className="text-green-600 hover:text-green-900 font-medium"
-            >
-              Speichern
-            </button>
-            <button
-              onClick={() => {
-                setEditData({
-                  item_function: item.item_function,
-                  product_category: item.product_category,
-                  serial_number: item.serial_number
-                });
-                setEditing(false);
-              }}
-              className="text-gray-600 hover:text-gray-900"
-            >
-              Abbrechen
-            </button>
-          </div>
-        ) : (
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setEditing(true)}
-              className="text-blue-600 hover:text-blue-900 font-medium"
-            >
-              Bearbeiten
-            </button>
-            <button
-              onClick={() => onTransfer(item.id)}
-              className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 font-medium"
-            >
-              Ins Lager
-            </button>
-          </div>
-        )}
-      </td>
-    </tr>
   );
 };
 

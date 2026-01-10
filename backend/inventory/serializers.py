@@ -134,15 +134,25 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             return 0.0
     
     def get_customer_display(self, obj):
-        """Gibt den Kundennamen zurück"""
+        """Gibt den Kundennamen zurück (Nummer - Vorname Nachname)"""
         if obj.customer:
-            # Customer model uses first_name/last_name; fall back to string representation
-            if hasattr(obj.customer, 'get_full_name'):
-                try:
-                    return obj.customer.get_full_name()
-                except Exception:
-                    return str(obj.customer)
-            return str(obj.customer)
+            parts = []
+            if obj.customer.customer_number:
+                parts.append(obj.customer.customer_number)
+            name_parts = []
+            if obj.customer.title:
+                name_parts.append(obj.customer.title)
+            if obj.customer.first_name:
+                name_parts.append(obj.customer.first_name)
+            if obj.customer.last_name:
+                name_parts.append(obj.customer.last_name)
+            if name_parts:
+                name = ' '.join(name_parts)
+                if parts:
+                    parts.append(name)
+                else:
+                    parts.append(name)
+            return ' - '.join(parts) if len(parts) > 1 else (parts[0] if parts else str(obj.customer))
         return obj.customer_name
 
 
@@ -186,14 +196,25 @@ class InventoryItemDetailSerializer(serializers.ModelSerializer):
         return QM_TEMPLATES.get(category_code, QM_TEMPLATES.get('DEFAULT', {}))
     
     def get_customer_display(self, obj):
-        """Gibt den Kundennamen zurück"""
+        """Gibt den Kundennamen zurück (Nummer - Vorname Nachname)"""
         if obj.customer:
-            if hasattr(obj.customer, 'get_full_name'):
-                try:
-                    return obj.customer.get_full_name()
-                except Exception:
-                    return str(obj.customer)
-            return str(obj.customer)
+            parts = []
+            if obj.customer.customer_number:
+                parts.append(obj.customer.customer_number)
+            name_parts = []
+            if obj.customer.title:
+                name_parts.append(obj.customer.title)
+            if obj.customer.first_name:
+                name_parts.append(obj.customer.first_name)
+            if obj.customer.last_name:
+                name_parts.append(obj.customer.last_name)
+            if name_parts:
+                name = ' '.join(name_parts)
+                if parts:
+                    parts.append(name)
+                else:
+                    parts.append(name)
+            return ' - '.join(parts) if len(parts) > 1 else (parts[0] if parts else str(obj.customer))
         return obj.customer_name
 
 

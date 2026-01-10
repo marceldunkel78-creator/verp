@@ -25,6 +25,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_read_settings', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_read_finance', 'can_read_procurement', 'can_read_inventory',
             'can_read_visiview', 'can_read_bi', 'can_read_documents',
+            'can_read_development',
             # Submodule - Lesen
             'can_read_procurement_orders', 'can_read_procurement_loans', 'can_read_procurement_product_collections',
             'can_read_sales_dealers', 'can_read_sales_pricelists', 'can_read_sales_projects',
@@ -32,14 +33,17 @@ class UserSerializer(serializers.ModelSerializer):
             'can_read_sales_marketing', 'can_read_sales_tickets',
             'can_read_manufacturing_vs_hardware', 'can_read_manufacturing_production_orders',
             'can_read_visiview_products', 'can_read_visiview_licenses', 'can_read_visiview_tickets', 'can_read_visiview_macros',
+            'can_read_visiview_maintenance_time',
             'can_read_service_vs_service', 'can_read_service_tickets', 'can_read_service_rma', 'can_read_service_troubleshooting',
             'can_read_hr_employees', 'can_read_inventory_warehouse',
+            'can_read_development_projects',
             # Hauptmodule - Schreiben
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
             'can_write_customers', 'can_write_manufacturing', 'can_write_service',
             'can_write_settings', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'can_write_finance', 'can_write_procurement', 'can_write_inventory',
             'can_write_visiview', 'can_write_bi', 'can_write_documents',
+            'can_write_development',
             # Submodule - Schreiben
             'can_write_procurement_orders', 'can_write_procurement_loans', 'can_write_procurement_product_collections',
             'can_write_sales_dealers', 'can_write_sales_pricelists', 'can_write_sales_projects',
@@ -47,8 +51,10 @@ class UserSerializer(serializers.ModelSerializer):
             'can_write_sales_marketing', 'can_write_sales_tickets',
             'can_write_manufacturing_vs_hardware', 'can_write_manufacturing_production_orders',
             'can_write_visiview_products', 'can_write_visiview_licenses', 'can_write_visiview_tickets', 'can_write_visiview_macros',
+            'can_write_visiview_maintenance_time',
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse',
+            'can_write_development_projects',
             'is_active', 'is_staff', 'date_joined', 'last_login'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login']
@@ -76,6 +82,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_read_settings', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_read_finance', 'can_read_procurement', 'can_read_inventory',
             'can_read_visiview', 'can_read_bi', 'can_read_documents',
+            'can_read_development',
             # Submodule - Lesen
             'can_read_procurement_orders', 'can_read_procurement_loans', 'can_read_procurement_product_collections',
             'can_read_sales_dealers', 'can_read_sales_pricelists', 'can_read_sales_projects',
@@ -83,14 +90,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_read_sales_marketing', 'can_read_sales_tickets',
             'can_read_manufacturing_vs_hardware', 'can_read_manufacturing_production_orders',
             'can_read_visiview_products', 'can_read_visiview_licenses', 'can_read_visiview_tickets', 'can_read_visiview_macros',
+            'can_read_visiview_maintenance_time',
             'can_read_service_vs_service', 'can_read_service_tickets', 'can_read_service_rma', 'can_read_service_troubleshooting',
             'can_read_hr_employees', 'can_read_inventory_warehouse',
+            'can_read_development_projects',
             # Hauptmodule - Schreiben
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
             'can_write_customers', 'can_write_manufacturing', 'can_write_service',
             'can_write_settings', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'can_write_finance', 'can_write_procurement', 'can_write_inventory',
             'can_write_visiview', 'can_write_bi', 'can_write_documents',
+            'can_write_development',
             # Submodule - Schreiben
             'can_write_procurement_orders', 'can_write_procurement_loans', 'can_write_procurement_product_collections',
             'can_write_sales_dealers', 'can_write_sales_pricelists', 'can_write_sales_projects',
@@ -98,8 +108,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_write_sales_marketing', 'can_write_sales_tickets',
             'can_write_manufacturing_vs_hardware', 'can_write_manufacturing_production_orders',
             'can_write_visiview_products', 'can_write_visiview_licenses', 'can_write_visiview_tickets', 'can_write_visiview_macros',
+            'can_write_visiview_maintenance_time',
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse',
+            'can_write_development_projects',
         ]
     
     def validate(self, attrs):
@@ -127,6 +139,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_read_settings', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_read_finance', 'can_read_procurement', 'can_read_inventory',
             'can_read_visiview', 'can_read_bi', 'can_read_documents',
+            'can_read_development',
             # Submodule - Lesen
             'can_read_procurement_orders', 'can_read_procurement_loans', 'can_read_procurement_product_collections',
             'can_read_sales_dealers', 'can_read_sales_pricelists', 'can_read_sales_projects',
@@ -134,14 +147,17 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_read_sales_marketing', 'can_read_sales_tickets',
             'can_read_manufacturing_vs_hardware', 'can_read_manufacturing_production_orders',
             'can_read_visiview_products', 'can_read_visiview_licenses', 'can_read_visiview_tickets', 'can_read_visiview_macros',
+            'can_read_visiview_maintenance_time',
             'can_read_service_vs_service', 'can_read_service_tickets', 'can_read_service_rma', 'can_read_service_troubleshooting',
             'can_read_hr_employees', 'can_read_inventory_warehouse',
+            'can_read_development_projects',
             # Hauptmodule - Schreiben
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
             'can_write_customers', 'can_write_manufacturing', 'can_write_service',
             'can_write_settings', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'can_write_finance', 'can_write_procurement', 'can_write_inventory',
             'can_write_visiview', 'can_write_bi', 'can_write_documents',
+            'can_write_development',
             # Submodule - Schreiben
             'can_write_procurement_orders', 'can_write_procurement_loans', 'can_write_procurement_product_collections',
             'can_write_sales_dealers', 'can_write_sales_pricelists', 'can_write_sales_projects',
@@ -149,8 +165,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_write_sales_marketing', 'can_write_sales_tickets',
             'can_write_manufacturing_vs_hardware', 'can_write_manufacturing_production_orders',
             'can_write_visiview_products', 'can_write_visiview_licenses', 'can_write_visiview_tickets', 'can_write_visiview_macros',
+            'can_write_visiview_maintenance_time',
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse',
+            'can_write_development_projects',
             'password', 'password_confirm',
             'is_active' 
         ]

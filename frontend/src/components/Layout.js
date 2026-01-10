@@ -20,6 +20,7 @@ import {
   ChartBarIcon,
   DocumentDuplicateIcon,
   ClockIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 
 const Layout = () => {
@@ -43,22 +44,25 @@ const Layout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'MyVERP', href: '/myverp', icon: ClockIcon },
-    { name: 'Finance', href: '/finance', icon: BanknotesIcon },
-    { name: 'Procurement', href: '/procurement', icon: TruckIcon },
-    { name: 'Inventory', href: '/inventory', icon: CubeIcon },
-    { name: 'Sales/Orders', href: '/sales', icon: ShoppingCartIcon },
-    { name: 'HR', href: '/hr', icon: UserGroupIcon },
-    { name: 'Manufacturing', href: '/manufacturing', icon: WrenchScrewdriverIcon },
-    { name: 'VisiView', href: '/visiview', icon: EyeIcon },
-    { name: 'Service', href: '/service', icon: ClipboardDocumentCheckIcon },
-    { name: 'BI', href: '/bi', icon: ChartBarIcon },
-    { name: 'Documents', href: '/documents', icon: DocumentDuplicateIcon },
-    { name: 'Settings', href: '/settings', icon: CogIcon },
+    { name: 'Finance', href: '/finance', icon: BanknotesIcon, permission: 'can_read_finance' },
+    { name: 'Procurement', href: '/procurement', icon: TruckIcon, permission: 'can_read_procurement' },
+    { name: 'Inventory', href: '/inventory', icon: CubeIcon, permission: 'can_read_inventory' },
+    { name: 'Sales/Orders', href: '/sales', icon: ShoppingCartIcon, permission: 'can_read_sales' },
+    { name: 'HR', href: '/hr', icon: UserGroupIcon, permission: 'can_read_hr' },
+    { name: 'Manufacturing', href: '/manufacturing', icon: WrenchScrewdriverIcon, permission: 'can_read_manufacturing' },
+    { name: 'Development', href: '/development', icon: BeakerIcon, permission: 'can_read_development' },
+    { name: 'VisiView', href: '/visiview', icon: EyeIcon, permission: 'can_read_visiview' },
+    { name: 'Service', href: '/service', icon: ClipboardDocumentCheckIcon, permission: 'can_read_service' },
+    { name: 'BI', href: '/bi', icon: ChartBarIcon, permission: 'can_read_bi' },
+    { name: 'Documents', href: '/documents', icon: DocumentDuplicateIcon, permission: 'can_read_documents' },
+    { name: 'Settings', href: '/settings', icon: CogIcon, permission: 'can_read_settings' },
   ];
 
   const filteredNavigation = navigation.filter((item) => {
     if (item.adminOnly && !user?.is_staff) return false;
     if (item.settingsOnly && !(user?.can_read_settings || user?.is_superuser)) return false;
+    // Prüfe Berechtigung wenn angegeben
+    if (item.permission && !(user?.[item.permission] || user?.is_superuser)) return false;
     return true;
   });
 

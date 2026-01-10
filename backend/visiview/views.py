@@ -9,6 +9,14 @@ from django.utils import timezone
 from datetime import date
 from decimal import Decimal
 
+from core.permissions import (
+    VisiViewProductPermission,
+    VisiViewLicensePermission,
+    VisiViewTicketPermission,
+    VisiViewMacroPermission,
+    VisiViewMaintenanceTimePermission,
+)
+
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
@@ -32,6 +40,7 @@ from .serializers import (
     VisiViewTicketTimeEntrySerializer,
     MaintenanceTimeCreditSerializer,
     MaintenanceTimeExpenditureSerializer,
+    MaintenanceTimeExpenditureListSerializer,
     calculate_maintenance_balance,
     calculate_interim_settlements,
     process_expenditure_deduction,
@@ -45,7 +54,7 @@ class VisiViewProductViewSet(viewsets.ModelViewSet):
     from verp.pagination import InfinitePagination
     pagination_class = InfinitePagination
     queryset = VisiViewProduct.objects.all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VisiViewProductPermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active', 'product_category']
     search_fields = ['article_number', 'name', 'description']
@@ -67,7 +76,7 @@ class VisiViewProductPriceViewSet(viewsets.ModelViewSet):
     """ViewSet für VisiView Produkt Preise"""
     queryset = VisiViewProductPrice.objects.all()
     serializer_class = VisiViewProductPriceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VisiViewProductPermission]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['product']
     ordering = ['-valid_from']
@@ -80,7 +89,7 @@ class VisiViewOptionViewSet(viewsets.ModelViewSet):
     """ViewSet für VisiView Optionen"""
     queryset = VisiViewOption.objects.all()
     serializer_class = VisiViewOptionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VisiViewProductPermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active']
     search_fields = ['name', 'description']
@@ -93,7 +102,7 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     from verp.pagination import InfinitePagination
     pagination_class = InfinitePagination
     queryset = VisiViewLicense.objects.select_related('customer', 'created_by').all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VisiViewLicensePermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'is_demo', 'is_loaner', 'customer', 'is_outdated']
     search_fields = ['license_number', 'serial_number', 'customer_name_legacy', 'customer__last_name', 'distributor']
@@ -513,7 +522,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
     queryset = VisiViewTicket.objects.select_related(
         'parent_ticket', 'author_user', 'assigned_to', 'created_by'
     ).all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, VisiViewTicketPermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['tracker', 'status', 'priority', 'category', 'assigned_to', 'is_private', 'target_version']
     search_fields = ['ticket_number', 'title', 'description', 'author', 'target_version', 'affected_version']
@@ -1123,3 +1132,19 @@ class VisiViewMacroChangeLogViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(changed_by=self.request.user)
+
+
+class MaintenanceTimeEntryViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet für alle Maintenance-Zeitaufwendungen (lizenzübergreifend)"""
+    queryset = MaintenanceTimeExpenditure.objects.all().select_related('license', 'user', 'created_by')
+    serializer_class = MaintenanceTimeExpenditureListSerializer
+    permission_classes = [IsAuthenticated, VisiViewMaintenanceTimePermission]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['license', 'user', 'activity', 'task_type', 'is_goodwill']
+    search_fields = ['license__serial_number', 'license__customer_name_legacy', 'comment']
+    ordering_fields = ['date', 'hours_spent', 'activity', 'created_at']
+    ordering = ['-date', '-time']
+    
+    # Pagination
+    from verp.pagination import InfinitePagination
+    pagination_class = InfinitePagination

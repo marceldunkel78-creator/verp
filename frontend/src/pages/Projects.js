@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TrashIcon, PencilIcon, UserIcon, CpuChipIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
+import SystemSearch from '../components/SystemSearch';
 
 const Projects = () => {
   const [searchParams] = useSearchParams();
@@ -28,11 +29,13 @@ const Projects = () => {
     if (urlCustomerId) {
       // Pre-fill customer and open create modal
       setSelectedCustomer(urlCustomerId);
-      setNewProject(prev => ({ 
-        ...prev, 
+      setNewProject({ 
+        name: '', 
         customer: urlCustomerId,
-        linked_system: urlSystemId || ''
-      }));
+        systems: [],  // Always reset systems
+        linked_system: urlSystemId || '',
+        description: ''
+      });
       setShowCreateModal(true);
       // Fetch systems for this customer
       fetchCustomerSystems(urlCustomerId);
@@ -94,13 +97,40 @@ const Projects = () => {
       return;
     }
     try {
-      const response = await api.post('/projects/projects/', newProject);
+      // Prepare payload - only include fields that have values
+      const payload = {
+        customer: newProject.customer,
+        name: newProject.name || '',
+        description: newProject.description || ''
+      };
+      
+      // Only include systems if there are valid selections
+      if (newProject.systems && newProject.systems.length > 0) {
+        payload.systems = newProject.systems;
+      }
+      
+      // Only include linked_system if it's set
+      if (newProject.linked_system) {
+        payload.linked_system = newProject.linked_system;
+      }
+      
+      console.log('Sending payload:', payload); // Debug log
+      
+      const response = await api.post('/projects/projects/', payload);
+      console.log('Created project:', response.data); // Debug
       setShowCreateModal(false);
-      // Navigiere zur Edit-Seite des neuen Projekts
-      window.location.href = `/sales/projects/${response.data.id}`;
+      // Ensure we have an id before navigating
+      if (response.data?.id) {
+        window.location.href = `/sales/projects/${response.data.id}`;
+      } else {
+        alert('Projekt wurde erstellt, aber die Server-Antwort enthält keine ID. Bitte Seite neu laden oder im Admin prüfen.');
+      }
     } catch (error) {
       console.error('Error creating project:', error);
-      alert('Fehler beim Erstellen des Projekts.');
+      const errorMsg = error.response?.data?.systems?.[0] || 
+                       error.response?.data?.detail || 
+                       'Fehler beim Erstellen des Projekts.';
+      alert(errorMsg);
     }
   };
 
@@ -304,31 +334,11 @@ const Projects = () => {
                 {customerSystems.length > 0 && (
                   <div>
                     <label className="block text-sm font-medium mb-1">Systemauswahl (optional)</label>
-                    <div className="border rounded p-3 max-h-40 overflow-y-auto">
-                      {customerSystems.map(system => (
-                        <label key={system.id} className="flex items-center mb-2">
-                          <input
-                            type="checkbox"
-                            checked={newProject.systems.includes(system.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setNewProject({
-                                  ...newProject,
-                                  systems: [...newProject.systems, system.id]
-                                });
-                              } else {
-                                setNewProject({
-                                  ...newProject,
-                                  systems: newProject.systems.filter(id => id !== system.id)
-                                });
-                              }
-                            }}
-                            className="mr-2"
-                          />
-                          {system.system_number} - {system.name}
-                        </label>
-                      ))}
-                    </div>
+                    <SystemSearch
+                      customerId={selectedCustomer}
+                      selectedSystems={newProject.systems}
+                      onChange={(systemIds) => setNewProject({ ...newProject, systems: systemIds })}
+                    />
                   </div>
                 )}
 

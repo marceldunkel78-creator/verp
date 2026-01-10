@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     'service',
     'procurement',
     'notifications',
+    'development',
+    'bi',
 ]
 
 MIDDLEWARE = [

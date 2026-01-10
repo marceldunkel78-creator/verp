@@ -62,6 +62,13 @@ const MODULE_HIERARCHY = [
     ]
   },
   {
+    key: 'development',
+    label: 'Entwicklung',
+    submodules: [
+      { key: 'development_projects', label: 'Entwicklungsprojekte' },
+    ]
+  },
+  {
     key: 'visiview',
     label: 'VisiView',
     submodules: [
@@ -69,6 +76,7 @@ const MODULE_HIERARCHY = [
       { key: 'visiview_licenses', label: 'Lizenzen' },
       { key: 'visiview_tickets', label: 'Tickets' },
       { key: 'visiview_macros', label: 'Macros' },
+      { key: 'visiview_maintenance_time', label: 'Maintenance Zeiterfassung' },
     ]
   },
   {

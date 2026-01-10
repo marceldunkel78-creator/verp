@@ -5,8 +5,15 @@ import { InboxArrowDownIcon, ArchiveBoxIcon, ClipboardDocumentListIcon, ArrowPat
 const InventoryManagement = () => {
   const modules = [
     {
-      name: 'Wareneingang & Lager',
-      description: 'Wareneingänge erfassen und Lagerbestand verwalten',
+      name: 'Wareneingang',
+      description: 'Eingehende Waren erfassen und ins Lager überführen',
+      icon: InboxArrowDownIcon,
+      path: '/inventory/goods-receipt',
+      color: 'green'
+    },
+    {
+      name: 'Warenlager',
+      description: 'Lagerbestand verwalten und Artikel bearbeiten',
       icon: ArchiveBoxIcon,
       path: '/inventory/warehouse',
       color: 'violet'

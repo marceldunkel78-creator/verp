@@ -236,7 +236,13 @@ class DatabaseRestoreView(APIView):
                                         # Typ-Konvertierung durchführen
                                         field_obj = model_fields_dict[field_name]
                                         converted_value = convert_field_value(field_obj, field_value)
-                                        cleaned_fields[field_name] = converted_value
+                                        
+                                        # ForeignKey: Verwende field_name_id statt field_name
+                                        if isinstance(field_obj, models.ForeignKey):
+                                            actual_field_name = f"{field_name}_id"
+                                            cleaned_fields[actual_field_name] = converted_value
+                                        else:
+                                            cleaned_fields[field_name] = converted_value
                                 
                                 # Prüfen ob Objekt existiert
                                 if pk and model.objects.filter(pk=pk).exists():

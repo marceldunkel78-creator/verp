@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const MAIN_DASHBOARD_KEY = 'myverp_main_dashboard_widgets';
 const MODULE_STORAGE_KEY = 'myverp_dashboard_modules';
@@ -15,26 +16,29 @@ const myverpTabMapping = {
 };
 
 // Alle verfügbaren Module (gleiche Definition wie in MyVERP)
+// permission: null oder undefined = immer sichtbar
+// permission: 'can_read_xyz' = nur sichtbar wenn User diese Berechtigung hat
 const allModules = [
-  { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb' },
-  { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb' },
-  { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb' },
-  { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung' },
-  { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung' },
-  { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Beschaffung' },
-  { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung' },
-  { id: 'visiview', name: 'VisiView Produkte', route: '/products/visiview', icon: '🔬', category: 'Produkte' },
-  { id: 'vshardware', name: 'VS-Hardware', route: '/products/vs-hardware', icon: '🔧', category: 'Produkte' },
-  { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service' },
-  { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service' },
-  { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager' },
-  { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung' },
-  { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte' },
-  { id: 'documents', name: 'Dokumente', route: '/documents', icon: '📄', category: 'System' },
-  { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System' },
-  { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System' },
-  { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System' },
-  { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'System' },
+  { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb', permission: 'can_read_customers' },
+  { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb', permission: 'can_read_sales_quotations' },
+  { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb', permission: 'can_read_sales_order_processing' },
+  { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung', permission: 'can_read_procurement' },
+  { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung', permission: 'can_read_suppliers' },
+  { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Beschaffung', permission: 'can_read_trading' },
+  { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung', permission: 'can_read_procurement_orders' },
+  { id: 'visiview', name: 'VisiView Produkte', route: '/products/visiview', icon: '🔬', category: 'Produkte', permission: 'can_read_visiview_products' },
+  { id: 'vshardware', name: 'VS-Hardware', route: '/products/vs-hardware', icon: '🔧', category: 'Produkte', permission: 'can_read_manufacturing_vs_hardware' },
+  { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service', permission: 'can_read_service_vs_service' },
+  { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service', permission: 'can_read_service_rma' },
+  { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager', permission: 'can_read_inventory' },
+  { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung', permission: 'can_read_manufacturing_production_orders' },
+  { id: 'development-projects', name: 'Entwicklung', route: '/development/projects', icon: '🧪', category: 'Entwicklung', permission: 'can_read_development_projects' },
+  { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte', permission: 'can_read_sales_projects' },
+  { id: 'documents', name: 'Dokumente', route: '/documents', icon: '📄', category: 'System', permission: 'can_read_documents' },
+  { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System', permission: 'can_read_settings' },
+  { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System', permission: 'can_read_settings' },
+  { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System', permission: 'can_read_finance' },
+  { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'System', permission: 'can_read_settings' },
 ];
 
 const categoryColors = {
@@ -51,12 +55,20 @@ const categoryColors = {
 const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
 
 const Dashboard = () => {
+  const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [myverpSelection, setMyverpSelection] = useState([]);
   const [myverpData, setMyverpData] = useState({});
   const [loadingMyVerp, setLoadingMyVerp] = useState(false);
   const [selectedModules, setSelectedModules] = useState([]);
+
+  // Filtere Module basierend auf Benutzerberechtigungen
+  const permittedModules = allModules.filter(module => {
+    if (!module.permission) return true; // Keine Berechtigung erforderlich
+    if (user?.is_superuser) return true; // Superuser kann alles sehen
+    return user?.[module.permission] === true;
+  });
 
   useEffect(() => {
     fetchDashboardData();
@@ -179,8 +191,8 @@ const Dashboard = () => {
     );
   }
 
-  // Aktive Module aus der Benutzerauswahl
-  const activeModules = allModules.filter(m => selectedModules.includes(m.id));
+  // Aktive Module aus der Benutzerauswahl (nur erlaubte Module)
+  const activeModules = permittedModules.filter(m => selectedModules.includes(m.id));
 
   return (
     <div>

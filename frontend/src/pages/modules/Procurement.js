@@ -1,29 +1,42 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { TruckIcon, CubeIcon, ShoppingCartIcon, WrenchScrewdriverIcon, BeakerIcon, ArrowUturnLeftIcon, RectangleStackIcon } from '@heroicons/react/24/outline';
 
+// Helper für Berechtigungsprüfung
+const hasPermission = (user, permission) => {
+  if (!permission) return true;
+  if (user?.is_superuser) return true;
+  return user?.[permission] === true;
+};
+
 const Procurement = () => {
+  const { user } = useAuth();
+  
   const modules = [
     {
       name: 'Suppliers',
       description: 'Lieferantenverwaltung und Kontakte',
       icon: TruckIcon,
       path: '/procurement/suppliers',
-      color: 'orange'
+      color: 'orange',
+      permission: 'can_read_suppliers',
     },
     {
       name: 'Trading Goods',
       description: 'Handelswaren und Preislisten',
       icon: CubeIcon,
       path: '/procurement/trading-goods',
-      color: 'orange'
+      color: 'orange',
+      permission: 'can_read_trading',
     },
     {
       name: 'Warensammlungen',
       description: 'Produktbündel für Angebote verwalten',
       icon: RectangleStackIcon,
       path: '/procurement/product-collections',
-      color: 'orange'
+      color: 'orange',
+      permission: 'can_read_procurement_product_collections',
     },
     {
       name: 'Orders',
@@ -31,23 +44,29 @@ const Procurement = () => {
       icon: ShoppingCartIcon,
       path: '/procurement/orders',
       color: 'orange',
-      disabled: false
+      disabled: false,
+      permission: 'can_read_procurement_orders',
     },
     {
       name: 'Leihungen',
       description: 'Leihgeräte und -materialien verwalten',
       icon: ArrowUturnLeftIcon,
       path: '/procurement/loans',
-      color: 'purple'
+      color: 'purple',
+      permission: 'can_read_procurement_loans',
     },
     {
       name: 'M&S',
       description: 'Roh-, Hilfs- und Betriebsstoffe',
       icon: BeakerIcon,
       path: '/procurement/materials-supplies',
-      color: 'green'
+      color: 'green',
+      permission: 'can_read_material_supplies',
     }
   ];
+
+  // Filter modules based on user permissions
+  const filteredModules = modules.filter(m => hasPermission(user, m.permission));
 
   return (
     <div>
@@ -59,7 +78,7 @@ const Procurement = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modules.map((module) => (
+        {filteredModules.map((module) => (
           module.disabled ? (
             <div
               key={module.name}

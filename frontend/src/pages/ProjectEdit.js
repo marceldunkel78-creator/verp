@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
+import SystemSearch from '../components/SystemSearch';
 
 const ProjectEdit = () => {
   const { id } = useParams();
@@ -37,15 +38,40 @@ const ProjectEdit = () => {
   ];
 
   useEffect(() => {
+    if (!id || id === 'new') {
+      // If id is missing or we're creating a new project, don't attempt to fetch
+      setLoading(false);
+      return;
+    }
     fetchProject();
   }, [id]);
+
+  const [customerSystems, setCustomerSystems] = useState([]);
+
+  const fetchCustomerSystems = async (customerId) => {
+    try {
+      const response = await api.get(`/customers/customers/${customerId}/systems/`);
+      setCustomerSystems(response.data);
+    } catch (error) {
+      console.error('Error fetching customer systems:', error);
+      setCustomerSystems([]);
+    }
+  };
 
   const fetchProject = async () => {
     try {
       setLoading(true);
       const response = await api.get(`/projects/projects/${id}/`);
       setProject(response.data);
-      setEditedProject(response.data);
+      // Normalize systems into editedProject for editing mode
+      const initial = response.data;
+      setEditedProject({
+        ...initial,
+        systems: initial.systems || (initial.systems_data ? initial.systems_data.map(s => s.id) : [])
+      });
+      if (initial.customer) {
+        fetchCustomerSystems(initial.customer);
+      }
     } catch (error) {
       console.error('Error fetching project:', error);
     } finally {
@@ -64,15 +90,33 @@ const ProjectEdit = () => {
 
   const handleSave = async () => {
     try {
-      const response = await api.patch(`/projects/projects/${id}/`, {
+      // Build payload and only include fields that are present
+      const payload = {
         status: editedProject.status,
-        forecast_quarter: editedProject.forecast_quarter,
+        forecast_date: editedProject.forecast_date,
         forecast_revenue: editedProject.forecast_revenue,
         forecast_probability: editedProject.forecast_probability
-      });
+      };
+
+      if (editedProject.systems && editedProject.systems.length > 0) {
+        payload.systems = editedProject.systems;
+      }
+
+      const response = await api.patch(`/projects/projects/${id}/`, payload);
       setProject(response.data);
-      setEditedProject(response.data);
+      // Re-normalize systems for editedProject
+      const updated = response.data;
+      setEditedProject({
+        ...updated,
+        systems: updated.systems || (updated.systems_data ? updated.systems_data.map(s => s.id) : [])
+      });
       setIsEditing(false);
+      
+      // Reload customer systems if customer changed
+      if (updated.customer) {
+        fetchCustomerSystems(updated.customer);
+      }
+      
       alert('Projekt erfolgreich aktualisiert');
     } catch (error) {
       console.error('Error updating project:', error);
@@ -141,7 +185,7 @@ const ProjectEdit = () => {
             </div>
           </div>
           <button
-            onClick={() => window.location.href = '/projects'}
+            onClick={() => window.location.href = '/sales/projects'}
             className="px-4 py-2 border rounded hover:bg-gray-50"
           >
             Zurück zur Liste
@@ -236,18 +280,29 @@ const ProjectEdit = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Projektname</label>
                   <p className="text-gray-900">{project.name || '-'}</p>
                 </div>
-                {project.systems_data && project.systems_data.length > 0 && (
+                {isEditing ? (
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Zugeordnete Systeme</label>
-                    <div className="space-y-2">
-                      {project.systems_data.map(sys => (
-                        <div key={sys.id} className="bg-gray-50 p-3 rounded">
-                          <p className="font-medium">{sys.system_number}</p>
-                          <p className="text-sm text-gray-600">{sys.name}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Systemauswahl</label>
+                    <SystemSearch
+                      customerId={project.customer}
+                      selectedSystems={editedProject.systems || []}
+                      onChange={(systemIds) => setEditedProject(prev => ({ ...prev, systems: systemIds }))}
+                    />
                   </div>
+                ) : (
+                  project.systems_data && project.systems_data.length > 0 && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Zugeordnete Systeme</label>
+                      <div className="space-y-2">
+                        {project.systems_data.map(sys => (
+                          <div key={sys.id} className="bg-gray-50 p-3 rounded">
+                            <p className="font-medium">{sys.system_number}</p>
+                            <p className="text-sm text-gray-600">{sys.name}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
                 )}
                 {project.description && (
                   <div className="col-span-2">
@@ -263,18 +318,19 @@ const ProjectEdit = () => {
                 <div className="grid grid-cols-3 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Erwartetes Quartal/Jahr
+                      Erwartetes Auftragsdatum
                     </label>
                     {isEditing ? (
                       <input
-                        type="text"
-                        value={editedProject.forecast_quarter || ''}
-                        onChange={(e) => handleInputChange('forecast_quarter', e.target.value)}
-                        placeholder="z.B. Q2 2026"
+                        type="date"
+                        value={editedProject.forecast_date || ''}
+                        onChange={(e) => handleInputChange('forecast_date', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                       />
                     ) : (
-                      <p className="text-gray-900">{project.forecast_quarter || '-'}</p>
+                      <p className="text-gray-900">
+                        {project.forecast_date ? new Date(project.forecast_date).toLocaleDateString('de-DE') : '-'}
+                      </p>
                     )}
                   </div>
                   <div>

@@ -8,7 +8,8 @@ from .views import (
     VisiViewTicketViewSet,
     VisiViewMacroViewSet,
     VisiViewMacroExampleImageViewSet,
-    VisiViewMacroChangeLogViewSet
+    VisiViewMacroChangeLogViewSet,
+    MaintenanceTimeEntryViewSet
 )
 
 router = DefaultRouter()
@@ -20,6 +21,7 @@ router.register(r'tickets', VisiViewTicketViewSet, basename='visiview-tickets')
 router.register(r'macros', VisiViewMacroViewSet, basename='visiview-macros')
 router.register(r'macro-images', VisiViewMacroExampleImageViewSet, basename='visiview-macro-images')
 router.register(r'macro-changelog', VisiViewMacroChangeLogViewSet, basename='visiview-macro-changelog')
+router.register(r'maintenance-time-entries', MaintenanceTimeEntryViewSet, basename='maintenance-time-entries')
 
 urlpatterns = [
     path('', include(router.urls)),

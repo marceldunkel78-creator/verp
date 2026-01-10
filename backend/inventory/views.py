@@ -272,7 +272,11 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
                 Q(customer_order_number__icontains=search) |
                 Q(customer_name__icontains=search) |
                 Q(system_number__icontains=search) |
-                Q(project_number__icontains=search)
+                Q(project_number__icontains=search) |
+                # Suche nach Kundennummer und Kundenname über Relation
+                Q(customer__customer_number__icontains=search) |
+                Q(customer__first_name__icontains=search) |
+                Q(customer__last_name__icontains=search)
             )
         
         return queryset.select_related('supplier', 'product_category', 'customer', 'project', 'system')

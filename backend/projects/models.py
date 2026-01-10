@@ -45,22 +45,12 @@ class Project(models.Model):
         verbose_name='Kunde'
     )
 
-    # Many-to-Many zu Customer Systems (CustomerSystem model in customers app)
+    # Many-to-Many zu Systems (System model in systems app)
     systems = models.ManyToManyField(
-        'customers.CustomerSystem',
+        'systems.System',
         blank=True,
         related_name='projects',
         verbose_name='Systeme'
-    )
-    
-    # Direkte Verknüpfung zu System (aus systems app)
-    linked_system = models.ForeignKey(
-        'systems.System',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='projects',
-        verbose_name='Verknüpftes System'
     )
 
     description = models.TextField(
@@ -76,11 +66,11 @@ class Project(models.Model):
     )
 
     # Forecast Felder
-    forecast_quarter = models.CharField(
-        max_length=10,
+    forecast_date = models.DateField(
+        null=True,
         blank=True,
-        verbose_name='Forecast Quartal',
-        help_text='z.B. Q1 2026'
+        verbose_name='Erwartetes Auftragsdatum',
+        help_text='Voraussichtliches Datum des Auftragseingangs'
     )
     
     forecast_revenue = models.DecimalField(

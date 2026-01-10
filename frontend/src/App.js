@@ -29,6 +29,7 @@ import EmployeeEdit from './pages/EmployeeEdit';
 import MyVERP from './pages/MyVERP';
 import Layout from './components/Layout';
 import Inventory from './pages/Inventory';
+import GoodsReceipt from './pages/GoodsReceipt';
 import Projects from './pages/Projects';
 import ProjectEdit from './pages/ProjectEdit';
 import Systems from './pages/Systems';
@@ -69,12 +70,16 @@ import MarketingItemEdit from './pages/MarketingItemEdit';
 import SalesTickets from './pages/SalesTickets';
 import SalesTicketEdit from './pages/SalesTicketEdit';
 import NotificationSettings from './pages/NotificationSettings';
+import DevelopmentProjects from './pages/DevelopmentProjects';
+import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
+import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
 import Procurement from './pages/modules/Procurement';
 import Settings from './pages/modules/Settings';
 import SalesOrderManagement from './pages/modules/SalesOrderManagement';
+import Development from './pages/modules/Development';
 import {
   InventoryManagement,
   HumanResources,
@@ -100,6 +105,7 @@ function App() {
             <Route path="inventory" element={<InventoryManagement />} />
             <Route path="inventory/warehouse" element={<Inventory />} />
             <Route path="inventory/warehouse/:id" element={<InventoryItemEdit />} />
+            <Route path="inventory/goods-receipt" element={<GoodsReceipt />} />
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<HumanResources />} />
             <Route path="hr/employees" element={<EmployeeList />} />
@@ -120,6 +126,7 @@ function App() {
             <Route path="visiview/tickets/:id" element={<VisiViewTicketEdit />} />
             <Route path="visiview/macros" element={<VisiViewMacros />} />
             <Route path="visiview/macros/:id" element={<VisiViewMacroEdit />} />
+            <Route path="visiview/maintenance-time" element={<VisiViewMaintenanceTime />} />
             <Route path="service" element={<Service />} />
             <Route path="service/vs-service" element={<VSServiceProducts />} />
             <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />
@@ -135,6 +142,12 @@ function App() {
             <Route path="bi" element={<BusinessIntelligence />} />
             <Route path="documents" element={<Documents />} />
             <Route path="settings" element={<Settings />} />
+            
+            {/* Development Module */}
+            <Route path="development" element={<Development />} />
+            <Route path="development/projects" element={<DevelopmentProjects />} />
+            <Route path="development/projects/new" element={<DevelopmentProjectEdit />} />
+            <Route path="development/projects/:id" element={<DevelopmentProjectEdit />} />
             
             {/* Procurement Submodules */}
             <Route path="procurement/suppliers" element={<Suppliers />} />

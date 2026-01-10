@@ -307,3 +307,17 @@ def marketing_upload_path(instance, filename):
     category = getattr(mi, 'category', '')
     category_folder = _sanitize_path_component(category or 'marketing')
     return f"Sales/Marketing/{category_folder}/{mi_id}/{safe_filename}"
+
+
+def development_project_attachment_path(instance, filename):
+    """
+    Upload-Pfad für Entwicklungsprojekt-Anhänge: /Entwicklung/Projektnummer/filename
+    """
+    safe_filename = _sanitize_path_component(filename)
+    # instance is DevelopmentProjectAttachment with .project
+    project = getattr(instance, 'project', None) or instance
+    project_number = _sanitize_path_component(getattr(project, 'project_number', '') or '')
+    
+    if project_number:
+        return f"Entwicklung/{project_number}/{safe_filename}"
+    return f"Entwicklung/unknown/{safe_filename}"

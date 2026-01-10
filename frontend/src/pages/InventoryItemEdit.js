@@ -645,15 +645,20 @@ const InstanceTab = ({ data, onChange, customers, projects, systems, users }) =>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Kunde (Suche) */}
-        <div>
+        <div className="md:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Kunde
           </label>
           
-          {/* Selected badge */}
+          {/* Selected badge - show customer number AND name */}
           {data.customer && (
             <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md mb-2">
-              <div className="text-sm text-blue-800 truncate">{data.customer_name || data.customer}</div>
+              <div className="text-sm text-blue-800">
+                <span className="font-mono font-medium">#{data.customer}</span>
+                {data.customer_name && (
+                  <span className="ml-2">- {data.customer_name}</span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => { onChange('customer', null); onChange('customer_name', ''); }}
@@ -675,7 +680,7 @@ const InstanceTab = ({ data, onChange, customers, projects, systems, users }) =>
           
           {/* Suggestions */}
           {customerOptions.length > 0 && (
-            <div className="border border-gray-200 rounded bg-white mt-1 max-h-44 overflow-auto">
+            <div className="border border-gray-200 rounded bg-white mt-1 max-h-44 overflow-auto shadow-lg z-10 relative">
               {customerOptions.map(c => (
                 <div
                   key={c.id}
@@ -694,8 +699,6 @@ const InstanceTab = ({ data, onChange, customers, projects, systems, users }) =>
             </div>
           )}
         </div>
-        
-        {/* removed manual customer_name field per request */}
         
         {/* Seriennummer */}
         <div>

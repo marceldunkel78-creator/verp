@@ -768,6 +768,39 @@ class MaintenanceTimeExpenditureSerializer(serializers.ModelSerializer):
     def get_task_type_display(self, obj):
         return obj.get_task_type_display()
 
+
+class MaintenanceTimeExpenditureListSerializer(serializers.ModelSerializer):
+    """Serializer für Zeitaufwendungen-Liste (mit Lizenz- und Kundeninfo)"""
+    user_name = serializers.SerializerMethodField()
+    activity_display = serializers.SerializerMethodField()
+    task_type_display = serializers.SerializerMethodField()
+    license_serial = serializers.CharField(source='license.serial_number', read_only=True)
+    customer_name = serializers.CharField(source='license.customer_name_legacy', read_only=True)
+    
+    class Meta:
+        model = MaintenanceTimeExpenditure
+        fields = [
+            'id', 'license', 'license_serial', 'customer_name',
+            'date', 'time',
+            'user', 'user_name',
+            'activity', 'activity_display',
+            'task_type', 'task_type_display',
+            'hours_spent', 'comment', 'is_goodwill',
+            'created_at'
+        ]
+    
+    def get_user_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+    
+    def get_activity_display(self, obj):
+        return obj.get_activity_display()
+    
+    def get_task_type_display(self, obj):
+        return obj.get_task_type_display()
+
+
 class MaintenanceSummarySerializer(serializers.Serializer):
     """Serializer für die Maintenance-Zusammenfassung einer Lizenz"""
     total_expenditures = serializers.DecimalField(max_digits=8, decimal_places=2)
