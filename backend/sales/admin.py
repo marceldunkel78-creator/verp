@@ -27,7 +27,7 @@ class QuotationAdmin(admin.ModelAdmin):
             'fields': ('delivery_time_weeks', 'payment_term', 'delivery_term', 'delivery_instruction')
         }),
         ('Empfängeradresse', {
-            'fields': ('recipient_company', 'recipient_name', 'recipient_street', 'recipient_postal_code', 'recipient_city', 'recipient_country')
+            'fields': ('recipient_salutation', 'recipient_title', 'recipient_company', 'recipient_name', 'recipient_street', 'recipient_postal_code', 'recipient_city', 'recipient_country')
         }),
         ('Verwaltung', {
             'fields': ('project_reference', 'system_reference', 'notes', 'show_terms_conditions', 'quotation_document')

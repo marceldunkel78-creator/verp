@@ -134,6 +134,18 @@ class Quotation(models.Model):
     )
     
     # Empfängeradresse (editierbar, nicht zwingend Kundenadresse)
+    recipient_salutation = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Empfänger Anrede',
+        help_text='Anrede des Empfängers (z.B. Herr, Frau)'
+    )
+    recipient_title = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Empfänger Titel',
+        help_text='Titel des Empfängers (z.B. Dr., Prof.)'
+    )
     recipient_company = models.CharField(
         max_length=200,
         blank=True,

@@ -273,7 +273,7 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
             'payment_term', 'payment_term_display',
             'delivery_term', 'delivery_term_display',
             'show_terms_conditions', 'show_group_item_prices', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
-            'recipient_company', 'recipient_name', 'recipient_street',
+            'recipient_salutation', 'recipient_title', 'recipient_company', 'recipient_name', 'recipient_street',
             'recipient_postal_code', 'recipient_city', 'recipient_country',
             'description_text', 'footer_text', 'pdf_file', 'pdf_file_url',
             'notes',
@@ -399,7 +399,7 @@ class QuotationCreateUpdateSerializer(serializers.ModelSerializer):
             'date', 'valid_until', 'delivery_time_weeks', 'status', 'language',
             'payment_term', 'delivery_term',
             'show_terms_conditions', 'show_group_item_prices', 'system_price', 'delivery_cost', 'tax_enabled', 'tax_rate',
-            'recipient_company', 'recipient_name', 'recipient_street',
+            'recipient_salutation', 'recipient_title', 'recipient_company', 'recipient_name', 'recipient_street',
             'recipient_postal_code', 'recipient_city', 'recipient_country',
             'description_text', 'footer_text',
             'notes', 'created_by', 'commission_user'

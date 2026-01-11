@@ -65,6 +65,40 @@ def _product_description_snippet(product, lang='DE', length=150):
     return (desc[:length] + ('...' if len(desc) > length else '')) if desc else ''
 
 
+def _wrap_text(text, max_length=35):
+    """
+    Wrap text at word boundaries to fit within max_length characters.
+    Used for address fields to prevent overly long lines.
+    """
+    if not text or len(text) <= max_length:
+        return [text]
+    
+    words = text.split()
+    lines = []
+    current_line = ""
+    
+    for word in words:
+        # If adding this word would exceed max_length
+        if len(current_line) + len(word) + 1 > max_length:  # +1 for space
+            if current_line:
+                lines.append(current_line.rstrip())
+                current_line = word
+            else:
+                # Word itself is longer than max_length, force break
+                lines.append(word[:max_length])
+                current_line = word[max_length:]
+        else:
+            if current_line:
+                current_line += " " + word
+            else:
+                current_line = word
+    
+    if current_line:
+        lines.append(current_line.rstrip())
+    
+    return lines
+
+
 class QuotationDocTemplate(BaseDocTemplate):
     """
     Custom DocTemplate für Angebote mit Header und Footer auf jeder Seite
@@ -301,9 +335,22 @@ def generate_quotation_pdf(quotation):
     # === KUNDENADRESSE ===
     recipient_lines = []
     if quotation.recipient_company:
-        recipient_lines.append(quotation.recipient_company)
+        # Wrap long company names to prevent overly wide address lines
+        company_lines = _wrap_text(quotation.recipient_company, max_length=35)
+        recipient_lines.extend(company_lines)
+    
+    # Name mit Anrede und Titel
+    name_parts = []
+    if quotation.recipient_salutation:
+        name_parts.append(quotation.recipient_salutation)
+    if quotation.recipient_title:
+        name_parts.append(quotation.recipient_title)
     if quotation.recipient_name:
-        recipient_lines.append(quotation.recipient_name)
+        name_parts.append(quotation.recipient_name)
+    
+    if name_parts:
+        recipient_lines.append(' '.join(name_parts))
+    
     if quotation.recipient_street:
         recipient_lines.append(quotation.recipient_street)
     if quotation.recipient_postal_code or quotation.recipient_city:
@@ -342,21 +389,24 @@ def generate_quotation_pdf(quotation):
     
     # === ANREDE ===
     salutation_text = ""
-    if quotation.customer:
-        customer = quotation.customer
-        customer_salutation = getattr(customer, 'salutation', '') or ''
-        customer_title = getattr(customer, 'title', '') or ''
-        customer_lastname = getattr(customer, 'last_name', '') or ''
-        
-        parts = [L['dear']]
-        if customer_salutation:
-            parts.append(customer_salutation)
-        if customer_title:
-            parts.append(customer_title)
-        if customer_lastname:
-            parts.append(customer_lastname)
-        
+    # Verwende die Empfängeradresse für die Anrede
+    recipient_salutation = getattr(quotation, 'recipient_salutation', '') or ''
+    recipient_title = getattr(quotation, 'recipient_title', '') or ''
+    recipient_name = getattr(quotation, 'recipient_name', '') or ''
+    
+    parts = [L['dear']]
+    if recipient_salutation:
+        parts.append(recipient_salutation)
+    if recipient_title:
+        parts.append(recipient_title)
+    if recipient_name:
+        parts.append(recipient_name)
+    
+    if len(parts) > 1:  # Nur wenn mehr als nur "Sehr geehrte(r)" vorhanden ist
         salutation_text = ' '.join(parts) + ','
+    else:
+        # Fallback wenn keine Empfängeradresse vorhanden ist
+        salutation_text = L['dear'] + ' Damen und Herren,'
     
     if salutation_text:
         elements.append(Paragraph(salutation_text, normal_style))
