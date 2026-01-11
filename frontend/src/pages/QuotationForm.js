@@ -333,7 +333,7 @@ const QuotationForm = () => {
         api.get('/projects/projects/?is_active=true'),
         api.get('/systems/systems/?is_active=true'),
         api.get('/users/me/'),
-        api.get('/suppliers/suppliers/?is_active=true'),
+        api.get('/suppliers/suppliers/?is_active=true&page_size=500'),
         api.get('/settings/product-categories/')
       ]);
       

@@ -257,7 +257,7 @@ const TradingProducts = () => {
 
   const fetchSuppliers = async () => {
     try {
-      const response = await api.get('/suppliers/suppliers/');
+      const response = await api.get('/suppliers/suppliers/?page_size=500');
       const data = response.data.results || response.data;
       setSuppliers(Array.isArray(data) ? data : []);
     } catch (error) {
