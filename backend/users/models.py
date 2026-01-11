@@ -245,6 +245,15 @@ class Employee(models.Model):
         help_text='Name der Bank'
     )
     
+    # Provisionssatz in Prozent
+    commission_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        verbose_name='Provisionssatz (%)',
+        help_text='Provisionssatz in Prozent (z.B. 1.75 für 1,75%)'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -271,6 +280,18 @@ class Employee(models.Model):
         else:
             new_number = 1
         return f"EMP{new_number:03d}"
+
+    def get_full_name(self):
+        """Returns full name for employee"""
+        return f"{self.first_name} {self.last_name}"
+
+    def __str__(self):
+        return self.get_full_name()
+
+    class Meta:
+        verbose_name = 'Mitarbeiter'
+        verbose_name_plural = 'Mitarbeiter'
+        ordering = ['last_name', 'first_name']
 
 
 class TimeEntry(models.Model):

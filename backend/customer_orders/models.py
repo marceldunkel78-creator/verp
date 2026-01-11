@@ -6,6 +6,8 @@ from datetime import datetime
 from decimal import Decimal
 from django.conf import settings
 import os
+from company.models import CompanySettings
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 User = get_user_model()
 
@@ -164,6 +166,44 @@ class CustomerOrder(models.Model):
         if self.order_number:
             return f'Auftrag {self.order_number}'
         return f'Auftrag (Entwurf #{self.id})'
+
+    def save(self, *args, **kwargs):
+        """Override save to generate order number on confirmation"""
+        # Save first (commission calculation now handled in serializer)
+        super().save(*args, **kwargs)
+
+    def _calculate_commissions(self):
+        """Calculate and save commissions for this order"""
+        from users.models import Employee
+        
+        # Get company settings for fiscal year
+        company_settings = CompanySettings.get_settings()
+        fiscal_year = company_settings.get_current_fiscal_year()
+        
+        # Get order net total
+        order_net_total = self.total_net
+        
+        # Get commission recipients
+        recipients = self.commission_recipients.all()
+        
+        if not recipients.exists():
+            # No recipients defined, skip commission calculation
+            return
+        
+        for recipient in recipients:
+            # Calculate commission amount
+            commission_amount = (order_net_total * recipient.commission_percentage / 100) * (recipient.employee.commission_rate / 100)
+            
+            # Create commission record
+            EmployeeCommission.objects.create(
+                employee=recipient.employee,
+                customer_order=self,
+                fiscal_year=fiscal_year,
+                commission_amount=commission_amount,
+                order_net_total=order_net_total,
+                commission_rate=recipient.employee.commission_rate,
+                commission_percentage=recipient.commission_percentage,
+            )
 
     def generate_order_number(self):
         """
@@ -466,3 +506,109 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'Zahlung {self.amount}€ für {self.invoice}'
+
+
+class CustomerOrderCommissionRecipient(models.Model):
+    """
+    Provisionsempfänger für Kundenaufträge mit prozentualer Aufteilung
+    """
+    customer_order = models.ForeignKey(
+        CustomerOrder,
+        on_delete=models.CASCADE,
+        related_name='commission_recipients',
+        verbose_name='Kundenauftrag'
+    )
+    
+    employee = models.ForeignKey(
+        'users.Employee',
+        on_delete=models.CASCADE,
+        related_name='commission_assignments',
+        verbose_name='Provisionsempfänger'
+    )
+    
+    # Prozentuale Aufteilung (0.00 - 100.00)
+    commission_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='Provisionsanteil (%)',
+        help_text='Prozentualer Anteil an der Gesamtprovision (0-100%)'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Provisionsempfänger'
+        verbose_name_plural = 'Provisionsempfänger'
+        unique_together = ['customer_order', 'employee']
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f'{self.employee} - {self.commission_percentage}% für {self.customer_order}'
+
+
+class EmployeeCommission(models.Model):
+    """
+    Erzielte Provisionen von Mitarbeitern nach Geschäftsjahr
+    """
+    employee = models.ForeignKey(
+        'users.Employee',
+        on_delete=models.CASCADE,
+        related_name='commissions',
+        verbose_name='Mitarbeiter'
+    )
+    
+    customer_order = models.ForeignKey(
+        CustomerOrder,
+        on_delete=models.CASCADE,
+        related_name='commissions',
+        verbose_name='Kundenauftrag'
+    )
+    
+    # Geschäftsjahr (z.B. 2025 für 1.4.2025 - 31.3.2026)
+    fiscal_year = models.PositiveIntegerField(verbose_name='Geschäftsjahr')
+    
+    # Provisionsbetrag
+    commission_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Provisionsbetrag',
+        help_text='Berechneter Provisionsbetrag in €'
+    )
+    
+    # Berechnungsgrundlage
+    order_net_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name='Auftrags-Netto-Gesamt',
+        help_text='Netto-Gesamtbetrag des Auftrags als Berechnungsgrundlage'
+    )
+    
+    # Provisionssatz zum Zeitpunkt der Berechnung
+    commission_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Provisionssatz (%)',
+        help_text='Provisionssatz des Mitarbeiters zum Zeitpunkt der Berechnung'
+    )
+    
+    # Provisionsanteil bei mehreren Empfängern
+    commission_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name='Provisionsanteil (%)',
+        help_text='Prozentualer Anteil des Mitarbeiters an diesem Auftrag'
+    )
+    
+    # Berechnungsdatum
+    calculated_at = models.DateTimeField(auto_now_add=True, verbose_name='Berechnet am')
+    
+    class Meta:
+        verbose_name = 'Mitarbeiterprovision'
+        verbose_name_plural = 'Mitarbeiterprovisionen'
+        unique_together = ['employee', 'customer_order']
+        ordering = ['-fiscal_year', '-calculated_at']
+    
+    def __str__(self):
+        return f'{self.employee} - {self.commission_amount}€ ({self.fiscal_year})'

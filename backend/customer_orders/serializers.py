@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from decimal import Decimal
-from .models import CustomerOrder, CustomerOrderItem, DeliveryNote, Invoice, Payment
+from .models import CustomerOrder, CustomerOrderItem, DeliveryNote, Invoice, Payment, CustomerOrderCommissionRecipient, EmployeeCommission
 
 
 # =============================================================================
@@ -347,6 +347,67 @@ class DeliveryNoteCreateSerializer(serializers.ModelSerializer):
 
 
 # =============================================================================
+# Commission Serializers
+# =============================================================================
+
+class CustomerOrderCommissionRecipientSerializer(serializers.ModelSerializer):
+    """Serializer für Provisionsempfänger"""
+    employee_name = serializers.SerializerMethodField()
+    employee_commission_rate = serializers.DecimalField(
+        source='employee.commission_rate', 
+        max_digits=5, 
+        decimal_places=2, 
+        read_only=True
+    )
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}"
+        return f"Mitarbeiter {obj.employee_id}"
+    
+    class Meta:
+        model = CustomerOrderCommissionRecipient
+        fields = [
+            'id', 'employee', 'employee_name', 'employee_commission_rate',
+            'commission_percentage', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class EmployeeCommissionSerializer(serializers.ModelSerializer):
+    """Serializer für Mitarbeiterprovisionen"""
+    employee_name = serializers.SerializerMethodField()
+    order_number = serializers.CharField(source='customer_order.order_number', read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}"
+        return f"Mitarbeiter {obj.employee_id}"
+    
+    class Meta:
+        model = EmployeeCommission
+        fields = [
+            'id', 'employee', 'employee_name', 'customer_order', 'order_number',
+            'customer_name', 'fiscal_year', 'commission_amount', 'order_net_total',
+            'commission_rate', 'commission_percentage', 'calculated_at'
+        ]
+        read_only_fields = ['id', 'calculated_at']
+    
+    def get_customer_name(self, obj):
+        customer = obj.customer_order.customer
+        # Customer model doesn't have company_name - use university/institute from primary address if available
+        primary_address = customer.addresses.first()
+        if primary_address:
+            if primary_address.university:
+                return primary_address.university
+            if primary_address.institute:
+                return primary_address.institute
+        # Fall back to customer name
+        return f"{customer.first_name} {customer.last_name}".strip()
+
+
+# =============================================================================
 # Customer Order Serializers
 # =============================================================================
 
@@ -386,6 +447,7 @@ class CustomerOrderDetailSerializer(serializers.ModelSerializer):
     items = CustomerOrderItemSerializer(many=True, read_only=True)
     delivery_notes = DeliveryNoteListSerializer(many=True, read_only=True)
     invoices = InvoiceListSerializer(many=True, read_only=True)
+    commission_recipients = CustomerOrderCommissionRecipientSerializer(many=True, read_only=True)
     customer_name = serializers.SerializerMethodField()
     customer_data = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -427,6 +489,7 @@ class CustomerOrderDetailSerializer(serializers.ModelSerializer):
             'tax_rate', 'tax_included',
             'order_notes', 'production_notes', 'delivery_notes_text',
             'confirmation_pdf', 'sales_person', 'sales_person_name',
+            'commission_recipients',
             'total_net', 'total_tax', 'total_gross', 'total_paid', 'open_amount',
             'items', 'delivery_notes', 'invoices',
             'created_by', 'created_by_name', 'confirmed_by', 'confirmed_by_name',
@@ -540,6 +603,7 @@ class CustomerOrderDetailSerializer(serializers.ModelSerializer):
 class CustomerOrderCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer zum Erstellen und Bearbeiten von Aufträgen"""
     items = CustomerOrderItemCreateSerializer(many=True, required=False)
+    commission_recipients = CustomerOrderCommissionRecipientSerializer(many=True, required=False)
     customer_document = serializers.FileField(required=False, allow_null=True, allow_empty_file=True)
 
     class Meta:
@@ -555,6 +619,7 @@ class CustomerOrderCreateUpdateSerializer(serializers.ModelSerializer):
             'tax_rate', 'tax_included',
             'order_notes', 'production_notes', 'delivery_notes_text',
             'sales_person',
+            'commission_recipients',
             'items'
         ]
     
@@ -567,6 +632,7 @@ class CustomerOrderCreateUpdateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
+        commission_recipients_data = validated_data.pop('commission_recipients', [])
         import json
         if isinstance(items_data, str):
             try:
@@ -579,6 +645,14 @@ class CustomerOrderCreateUpdateSerializer(serializers.ModelSerializer):
             validated_data['customer_vat_id'] = validated_data.pop('vat_id')
 
         order = CustomerOrder.objects.create(**validated_data)
+        
+        # Create commission recipients
+        for recipient_data in commission_recipients_data:
+            CustomerOrderCommissionRecipient.objects.create(
+                customer_order=order,
+                **recipient_data
+            )
+        
         # If this order was created from a quotation, mark that quotation as ORDERED
         quotation = validated_data.get('quotation') or getattr(order, 'quotation', None)
         try:
@@ -605,6 +679,7 @@ class CustomerOrderCreateUpdateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', None)
+        commission_recipients_data = validated_data.pop('commission_recipients', None)
         import json
         if isinstance(items_data, str):
             try:
@@ -616,9 +691,32 @@ class CustomerOrderCreateUpdateSerializer(serializers.ModelSerializer):
         if 'vat_id' in validated_data and 'customer_vat_id' not in validated_data:
             validated_data['customer_vat_id'] = validated_data.pop('vat_id')
 
+        # Check if status is changing to 'bestaetigt' (for commission calculation)
+        old_status = instance.status
+        new_status = validated_data.get('status', old_status)
+        should_calculate_commissions = (old_status == 'angelegt' and new_status == 'bestaetigt')
+
         for attr, val in validated_data.items():
             setattr(instance, attr, val)
         instance.save()
+        
+        # Update commission recipients
+        if commission_recipients_data is not None:
+            # Delete old recipients and create new ones
+            instance.commission_recipients.all().delete()
+            for recipient_data in commission_recipients_data:
+                CustomerOrderCommissionRecipient.objects.create(
+                    customer_order=instance,
+                    **recipient_data
+                )
+        
+        # Calculate commissions AFTER recipients are saved
+        if should_calculate_commissions:
+            # Delete old commissions for this order
+            from customer_orders.models import EmployeeCommission
+            EmployeeCommission.objects.filter(customer_order=instance).delete()
+            # Recalculate
+            instance._calculate_commissions()
         
         if items_data is not None:
             # Lösche alte Positionen und erstelle neue

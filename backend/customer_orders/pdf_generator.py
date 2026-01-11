@@ -61,6 +61,40 @@ def get_customer_display_name(customer):
     return ' '.join(parts).strip()
 
 
+def _wrap_text(text, max_length=35):
+    """
+    Wrap text at word boundaries to fit within max_length characters.
+    Used for address fields to prevent overly long lines.
+    """
+    if not text or len(text) <= max_length:
+        return [text]
+    
+    words = text.split()
+    lines = []
+    current_line = ""
+    
+    for word in words:
+        # If adding this word would exceed max_length
+        if len(current_line) + len(word) + 1 > max_length:  # +1 for space
+            if current_line:
+                lines.append(current_line.rstrip())
+                current_line = word
+            else:
+                # Word itself is longer than max_length, force break
+                lines.append(word[:max_length])
+                current_line = word[max_length:]
+        else:
+            if current_line:
+                current_line += " " + word
+            else:
+                current_line = word
+    
+    if current_line:
+        lines.append(current_line.rstrip())
+    
+    return lines
+
+
 def get_customer_address_lines(customer):
     """
     Returns a list of address lines for a customer.
@@ -528,13 +562,22 @@ def generate_order_confirmation_pdf(order, language='DE'):
     
     for line in address_lines:
         if line:
-            elements.append(Paragraph(line, styles['normal']))
+            # Wrap long lines to max 35 characters
+            wrapped_lines = _wrap_text(line, max_length=35)
+            for wrapped in wrapped_lines:
+                elements.append(Paragraph(wrapped, styles['normal']))
     elements.append(Spacer(1, 1*cm))
     
     # === DOKUMENTTITEL UND METADATEN ===
     # 2-spaltige Tabelle: Links Titel, rechts Metadaten
     meta_data = []
     meta_data.append([L['order_number'], order.order_number or '---'])
+    # Angebotsreferenz und Kundenbestellnummer hinzufügen
+    if order.quotation:
+        quotation_ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
+        meta_data.append(['Angebot' if language == 'DE' else 'Quotation', quotation_ref])
+    if order.customer_document:
+        meta_data.append(['Bestellnummer' if language == 'DE' else 'PO Number', order.customer_document])
     meta_data.append([L['date'], (order.confirmation_date or order.order_date or timezone.now().date()).strftime('%d.%m.%Y')])
     if order.customer_order_number:
         meta_data.append([L['customer_order'], order.customer_order_number])
@@ -816,17 +859,29 @@ def generate_delivery_note_pdf(delivery_note, language='DE'):
     shipping_addr = delivery_note.shipping_address or order.shipping_address
     if shipping_addr:
         for line in shipping_addr.split('\n'):
-            elements.append(Paragraph(line, styles['normal']))
+            # Wrap long lines to max 35 characters
+            wrapped_lines = _wrap_text(line, max_length=35)
+            for wrapped in wrapped_lines:
+                elements.append(Paragraph(wrapped, styles['normal']))
     elif order.customer:
         customer = order.customer
         for line in get_customer_address_lines(customer):
-            elements.append(Paragraph(line, styles['normal']))
+            # Wrap long lines to max 35 characters
+            wrapped_lines = _wrap_text(line, max_length=35)
+            for wrapped in wrapped_lines:
+                elements.append(Paragraph(wrapped, styles['normal']))
     elements.append(Spacer(1, 1*cm))
     
     # === DOKUMENTTITEL UND METADATEN ===
     meta_data = []
     meta_data.append([L['delivery_note_number'], delivery_note.delivery_note_number])
     meta_data.append([L['order_number'], order.order_number or '---'])
+    # Angebotsreferenz und Kundenbestellnummer hinzufügen
+    if order.quotation:
+        quotation_ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
+        meta_data.append(['Angebot' if language == 'DE' else 'Quotation', quotation_ref])
+    if order.customer_document:
+        meta_data.append(['Bestellnummer' if language == 'DE' else 'PO Number', order.customer_document])
     meta_data.append([L['date'], delivery_note.delivery_date.strftime('%d.%m.%Y') if getattr(delivery_note, 'delivery_date', None) else '---'])
     sd = getattr(delivery_note, 'shipping_date', None)
     if sd:
@@ -993,17 +1048,29 @@ def generate_invoice_pdf(invoice, language='DE'):
     billing_addr = invoice.billing_address or order.billing_address
     if billing_addr:
         for line in billing_addr.split('\n'):
-            elements.append(Paragraph(line, styles['normal']))
+            # Wrap long lines to max 35 characters
+            wrapped_lines = _wrap_text(line, max_length=35)
+            for wrapped in wrapped_lines:
+                elements.append(Paragraph(wrapped, styles['normal']))
     elif order.customer:
         customer = order.customer
         for line in get_customer_address_lines(customer):
-            elements.append(Paragraph(line, styles['normal']))
+            # Wrap long lines to max 35 characters
+            wrapped_lines = _wrap_text(line, max_length=35)
+            for wrapped in wrapped_lines:
+                elements.append(Paragraph(wrapped, styles['normal']))
     elements.append(Spacer(1, 1*cm))
     
     # === DOKUMENTTITEL UND METADATEN ===
     meta_data = []
     meta_data.append([L['invoice_number'], invoice.invoice_number])
     meta_data.append([L['order_number'], order.order_number or '---'])
+    # Angebotsreferenz und Kundenbestellnummer hinzufügen
+    if order.quotation:
+        quotation_ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
+        meta_data.append(['Angebot' if language == 'DE' else 'Quotation', quotation_ref])
+    if order.customer_document:
+        meta_data.append(['Bestellnummer' if language == 'DE' else 'PO Number', order.customer_document])
     meta_data.append([L['invoice_date'], invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '---'])
     meta_data.append([L['due_date'], invoice.due_date.strftime('%d.%m.%Y') if invoice.due_date else '---'])
     if getattr(order, 'customer_vat_id', None):

@@ -118,6 +118,8 @@ const QuotationForm = () => {
     tax_rate: 19,
     system_price: '',
     delivery_cost: 0,
+    recipient_salutation: '',
+    recipient_title: '',
     recipient_company: '',
     recipient_name: '',
     recipient_street: '',
@@ -699,6 +701,8 @@ const QuotationForm = () => {
         tax_rate: quotation.tax_rate || 19,
         system_price: quotation.system_price || '',
         delivery_cost: quotation.delivery_cost || 0,
+        recipient_salutation: quotation.recipient_salutation || '',
+        recipient_title: quotation.recipient_title || '',
         recipient_company: quotation.recipient_company || '',
         recipient_name: quotation.recipient_name || '',
         recipient_street: quotation.recipient_street || '',
@@ -751,6 +755,8 @@ setCustomerAddresses(customer.addresses || []);
         const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || customer.company || '';
         setFormData(prev => ({
           ...prev,
+          recipient_salutation: customer.salutation || '',
+          recipient_title: customer.title || '',
           recipient_name: customerName,
           recipient_company: customer.company || ''
         }));
@@ -770,6 +776,8 @@ setCustomerAddresses(customer.addresses || []);
 
       updateFormData(prev => ({
         ...prev,
+        recipient_salutation: selectedCustomer ? selectedCustomer.salutation || '' : '',
+        recipient_title: selectedCustomer ? selectedCustomer.title || '' : '',
         recipient_company: address.institute || (selectedCustomer ? selectedCustomer.company || '' : ''),
         recipient_name: combinedName || (selectedCustomer ? (selectedCustomer.company || '') : ''),
         recipient_street: `${address.street || ''} ${address.house_number || ''}`.trim(),
@@ -1262,6 +1270,8 @@ setCustomerAddresses(customer.addresses || []);
       if (formData.delivery_term) submitData.append('delivery_term', formData.delivery_term);
       
       // Empfängeradresse
+      submitData.append('recipient_salutation', formData.recipient_salutation);
+      submitData.append('recipient_title', formData.recipient_title);
       submitData.append('recipient_company', formData.recipient_company);
       submitData.append('recipient_name', formData.recipient_name);
       submitData.append('recipient_street', formData.recipient_street);
@@ -1889,6 +1899,28 @@ setCustomerAddresses(customer.addresses || []);
           )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Anrede</label>
+              <input
+                type="text"
+                value={formData.recipient_salutation}
+                onChange={(e) => updateFormData(prev => ({ ...prev, recipient_salutation: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+                placeholder="z.B. Herr, Frau, Dr."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Titel</label>
+              <input
+                type="text"
+                value={formData.recipient_title}
+                onChange={(e) => updateFormData(prev => ({ ...prev, recipient_title: e.target.value }))}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-green-500 focus:border-green-500"
+                placeholder="z.B. Prof., Dr."
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Firma/Institut</label>
               <input

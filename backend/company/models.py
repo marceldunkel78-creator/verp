@@ -1,5 +1,7 @@
 from django.db import models
 from core.upload_paths import company_upload_path
+from datetime import date, datetime
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class CompanySettings(models.Model):
@@ -71,6 +73,20 @@ class CompanySettings(models.Model):
         help_text='Logo/Header für Bestelldokumente (empfohlen: PNG, ca. 800x150px)'
     )
     
+    # Geschäftsjahr Einstellungen
+    fiscal_year_start_month = models.PositiveIntegerField(
+        default=4,
+        choices=[(i, f'{i:02d}') for i in range(1, 13)],
+        verbose_name='Geschäftsjahr Startmonat',
+        help_text='Monat, in dem das Geschäftsjahr beginnt (1-12)'
+    )
+    fiscal_year_start_day = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        verbose_name='Geschäftsjahr Starttag',
+        help_text='Tag, an dem das Geschäftsjahr beginnt (1-31)'
+    )
+    
     # Metadaten
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -81,6 +97,28 @@ class CompanySettings(models.Model):
     
     def __str__(self):
         return self.company_name
+    
+    def get_current_fiscal_year(self):
+        """Berechne das aktuelle Geschäftsjahr basierend auf den Einstellungen"""
+        today = date.today()
+        fiscal_start = date(today.year, self.fiscal_year_start_month, self.fiscal_year_start_day)
+        
+        if today >= fiscal_start:
+            return today.year
+        else:
+            return today.year - 1
+    
+    def get_fiscal_year_for_date(self, target_date):
+        """Berechne das Geschäftsjahr für ein bestimmtes Datum"""
+        if isinstance(target_date, datetime):
+            target_date = target_date.date()
+        
+        fiscal_start = date(target_date.year, self.fiscal_year_start_month, self.fiscal_year_start_day)
+        
+        if target_date >= fiscal_start:
+            return target_date.year
+        else:
+            return target_date.year - 1
     
     @classmethod
     def get_settings(cls):

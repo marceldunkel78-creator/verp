@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon } from '@heroicons/react/24/outline';
+import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon, CurrencyEuroIcon } from '@heroicons/react/24/outline';
 import CalendarMonth from '../components/CalendarMonth';
 
 // Funktion: gibt die ISO-Datumsstrings (YYYY-MM-DD) für eine Kalenderwoche zurück (Mo-So)
@@ -880,42 +880,214 @@ const MessagesTab = ({ messages: initialMessages, onRefresh, errors }) => {
   );
 };
 
-const ReportingTab = ({ weeklyReport, monthlyReport, errors }) => (
-  <div>
-    <h2 className="text-lg font-medium text-gray-900 mb-4">Reporting</h2>
-    {errors?.report && (
-      <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.report}</div>
-    )}
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <h3 className="text-md font-medium text-gray-900 mb-2">Aktuelle Woche</h3>
-        {weeklyReport ? (
-          <div className="bg-white shadow rounded-lg p-4">
-            <div className="flex justify-between"><span>Gearbeitete Stunden</span><span className="font-bold">{weeklyReport.actual_hours}h</span></div>
-            <div className="flex justify-between"><span>Erwartet bis heute</span><span className="font-bold">{weeklyReport.expected_hours_to_date}h</span></div>
-            <div className="flex justify-between"><span>Wöchentliches Soll</span><span className="font-bold">{weeklyReport.weekly_target}h</span></div>
-            <div className="flex justify-between mt-2"><span>Differenz</span><span className={`font-bold ${weeklyReport.difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>{weeklyReport.difference >= 0 ? '+' : ''}{weeklyReport.difference}h</span></div>
-          </div>
-        ) : (
-          <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-500">Keine Wochen-Daten verfügbar.</div>
-        )}
+const ReportingTab = ({ weeklyReport, monthlyReport, errors }) => {
+  const [commissions, setCommissions] = useState([]);
+  const [selectedYear, setSelectedYear] = useState(null); // Will be set after fiscal year settings load
+  const [totalCommission, setTotalCommission] = useState(0);
+  const [fiscalYearStart, setFiscalYearStart] = useState({ month: 4, day: 1 });
+  const [loadingCommissions, setLoadingCommissions] = useState(true);
+
+  // Calculate current fiscal year based on settings
+  const getCurrentFiscalYear = (month, day) => {
+    const today = new Date();
+    const fiscalYearStartDate = new Date(today.getFullYear(), month - 1, day);
+    
+    if (today >= fiscalYearStartDate) {
+      return today.getFullYear();
+    } else {
+      return today.getFullYear() - 1;
+    }
+  };
+
+  // Generate year options dynamically (current + 1 future + 9 past years)
+  const getYearOptions = () => {
+    const currentFiscalYear = getCurrentFiscalYear(fiscalYearStart.month, fiscalYearStart.day);
+    const years = [];
+    // Include next fiscal year, current, and past 9 years
+    for (let i = -1; i <= 9; i++) {
+      years.push(currentFiscalYear - i);
+    }
+    return years;
+  };
+
+  // Format fiscal year as "2025/2026"
+  const formatFiscalYear = (year) => `${year}/${year + 1}`;
+
+  useEffect(() => {
+    fetchFiscalYearSettings();
+  }, []);
+
+  useEffect(() => {
+    if (selectedYear !== null && fiscalYearStart.month) {
+      fetchCommissions();
+    }
+  }, [selectedYear, fiscalYearStart]);
+
+  const fetchFiscalYearSettings = async () => {
+    try {
+      const response = await api.get('/company-info/');
+      if (response.data && response.data.length > 0) {
+        const settings = response.data[0];
+        const month = settings.fiscal_year_start_month || 4;
+        const day = settings.fiscal_year_start_day || 1;
+        setFiscalYearStart({ month, day });
+        
+        // Set selected year to current fiscal year after loading settings
+        if (selectedYear === null) {
+          setSelectedYear(getCurrentFiscalYear(month, day));
+        }
+      } else {
+        // If no settings, use default and set year
+        if (selectedYear === null) {
+          setSelectedYear(getCurrentFiscalYear(4, 1));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading fiscal year settings:', error);
+      // On error, still set a default year
+      if (selectedYear === null) {
+        setSelectedYear(getCurrentFiscalYear(4, 1));
+      }
+    }
+  };
+
+  const fetchCommissions = async () => {
+    setLoadingCommissions(true);
+    try {
+      // Get current user
+      const meRes = await api.get('/users/me/');
+      const userId = meRes.data.id;
+      
+      // Get employee ID from user
+      const userDetails = await api.get(`/users/${userId}/`);
+      const employeeId = userDetails.data.employee;
+      
+      if (!employeeId) {
+        console.warn('User has no linked employee');
+        setCommissions([]);
+        setTotalCommission(0);
+        setLoadingCommissions(false);
+        return;
+      }
+
+      // Fetch commissions for the selected fiscal year
+      const response = await api.get(`/customer-orders/employee-commissions/?employee=${employeeId}&fiscal_year=${selectedYear}`);
+      const commissionsData = response.data.results || response.data || [];
+      setCommissions(commissionsData);
+      
+      // Calculate total
+      const total = commissionsData.reduce((sum, c) => sum + parseFloat(c.commission_amount || 0), 0);
+      setTotalCommission(total);
+    } catch (error) {
+      console.error('Error loading commissions:', error);
+      setCommissions([]);
+      setTotalCommission(0);
+    } finally {
+      setLoadingCommissions(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="text-lg font-medium text-gray-900 mb-4">Reporting</h2>
+      {errors?.report && (
+        <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.report}</div>
+      )}
+      
+      {/* Working Hours Reports */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+          <h3 className="text-md font-medium text-gray-900 mb-2">Aktuelle Woche</h3>
+          {weeklyReport ? (
+            <div className="bg-white shadow rounded-lg p-4">
+              <div className="flex justify-between"><span>Gearbeitete Stunden</span><span className="font-bold">{weeklyReport.actual_hours}h</span></div>
+              <div className="flex justify-between"><span>Erwartet bis heute</span><span className="font-bold">{weeklyReport.expected_hours_to_date}h</span></div>
+              <div className="flex justify-between"><span>Wöchentliches Soll</span><span className="font-bold">{weeklyReport.weekly_target}h</span></div>
+              <div className="flex justify-between mt-2"><span>Differenz</span><span className={`font-bold ${weeklyReport.difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>{weeklyReport.difference >= 0 ? '+' : ''}{weeklyReport.difference}h</span></div>
+            </div>
+          ) : (
+            <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-500">Keine Wochen-Daten verfügbar.</div>
+          )}
+        </div>
+        <div>
+          <h3 className="text-md font-medium text-gray-900 mb-2">Aktueller Monat</h3>
+          {monthlyReport ? (
+            <div className="bg-white shadow rounded-lg p-4">
+              <div className="flex justify-between"><span>Gearbeitete Stunden</span><span className="font-bold">{monthlyReport.actual_hours}h</span></div>
+              <div className="flex justify-between"><span>Erwartet bis heute</span><span className="font-bold">{monthlyReport.expected_hours_to_date}h</span></div>
+              <div className="flex justify-between mt-2"><span>Differenz</span><span className={`font-bold ${monthlyReport.difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>{monthlyReport.difference >= 0 ? '+' : ''}{monthlyReport.difference}h</span></div>
+              <div className="text-xs text-gray-500 mt-2">Arbeitstage bis heute: {monthlyReport.workdays_count_to_date}</div>
+            </div>
+          ) : (
+            <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-500">Keine Monats-Daten verfügbar.</div>
+          )}
+        </div>
       </div>
-      <div>
-        <h3 className="text-md font-medium text-gray-900 mb-2">Aktueller Monat</h3>
-        {monthlyReport ? (
-          <div className="bg-white shadow rounded-lg p-4">
-            <div className="flex justify-between"><span>Gearbeitete Stunden</span><span className="font-bold">{monthlyReport.actual_hours}h</span></div>
-            <div className="flex justify-between"><span>Erwartet bis heute</span><span className="font-bold">{monthlyReport.expected_hours_to_date}h</span></div>
-            <div className="flex justify-between mt-2"><span>Differenz</span><span className={`font-bold ${monthlyReport.difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>{monthlyReport.difference >= 0 ? '+' : ''}{monthlyReport.difference}h</span></div>
-            <div className="text-xs text-gray-500 mt-2">Arbeitstage bis heute: {monthlyReport.workdays_count_to_date}</div>
+
+      {/* Commission Report */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-md font-medium text-gray-900 flex items-center">
+            <CurrencyEuroIcon className="h-5 w-5 mr-2 text-orange-600" />
+            Provisionsbilanz
+          </h3>
+          {selectedYear !== null && (
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+            >
+              {getYearOptions().map(year => (
+                <option key={year} value={year}>
+                  Geschäftsjahr {formatFiscalYear(year)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {loadingCommissions || selectedYear === null ? (
+          <div className="bg-white shadow rounded-lg p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           </div>
         ) : (
-          <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-500">Keine Monats-Daten verfügbar.</div>
+          <div className="bg-white shadow rounded-lg p-4">
+            <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
+              <span className="text-lg font-medium text-gray-700">Gesamtprovision {formatFiscalYear(selectedYear)}</span>
+              <span className="text-2xl font-bold text-orange-600">€ {totalCommission.toFixed(2)}</span>
+            </div>
+
+            {commissions.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <CurrencyEuroIcon className="mx-auto h-12 w-12 mb-3" />
+                <p className="text-sm">Keine Provisionen für das Geschäftsjahr {formatFiscalYear(selectedYear)}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {commissions.map((commission, index) => (
+                  <div key={index} className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded hover:bg-gray-100">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        Auftrag #{commission.order_number || commission.customer_order}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {commission.customer_name} • {commission.commission_percentage}% von € {parseFloat(commission.order_net_total || 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-orange-600">€ {parseFloat(commission.commission_amount || 0).toFixed(2)}</p>
+                      <p className="text-xs text-gray-500">{commission.commission_rate}% Satz</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const RemindersTab = ({ reminders, onRefresh, errors }) => {
   const [showModal, setShowModal] = useState(false);

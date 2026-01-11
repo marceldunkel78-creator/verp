@@ -5,7 +5,9 @@ from .views import (
     CustomerOrderItemViewSet,
     DeliveryNoteViewSet,
     InvoiceViewSet,
-    PaymentViewSet
+    PaymentViewSet,
+    CustomerOrderCommissionRecipientViewSet,
+    EmployeeCommissionViewSet
 )
 
 router = DefaultRouter()
@@ -14,6 +16,8 @@ router.register(r'items', CustomerOrderItemViewSet, basename='customerorderitem'
 router.register(r'delivery-notes', DeliveryNoteViewSet, basename='deliverynote')
 router.register(r'invoices', InvoiceViewSet, basename='invoice')
 router.register(r'payments', PaymentViewSet, basename='payment')
+router.register(r'commission-recipients', CustomerOrderCommissionRecipientViewSet, basename='commissionrecipient')
+router.register(r'employee-commissions', EmployeeCommissionViewSet, basename='employeecommission')
 
 urlpatterns = [
     path('', include(router.urls)),

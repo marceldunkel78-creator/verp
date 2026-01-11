@@ -38,6 +38,8 @@ const CompanyInfo = () => {
     register_court: '',
     tax_number: '',
     vat_id: '',
+    fiscal_year_start_month: 4,
+    fiscal_year_start_day: 1,
     document_header: null
   });
 
@@ -581,6 +583,70 @@ const CompanyInfo = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Geschäftsjahr Einstellungen */}
+        <div className="bg-white rounded-lg shadow mb-6 p-6">
+          <div className="flex items-center mb-4">
+            <DocumentTextIcon className="h-6 w-6 text-blue-600 mr-2" />
+            <h2 className="text-xl font-semibold text-gray-900">Geschäftsjahr</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Startmonat *
+              </label>
+              <select
+                name="fiscal_year_start_month"
+                value={formData.fiscal_year_start_month}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="1">Januar</option>
+                <option value="2">Februar</option>
+                <option value="3">März</option>
+                <option value="4">April</option>
+                <option value="5">Mai</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Dezember</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Monat, in dem das Geschäftsjahr beginnt
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Starttag *
+              </label>
+              <input
+                type="number"
+                name="fiscal_year_start_day"
+                value={formData.fiscal_year_start_day}
+                onChange={handleChange}
+                min="1"
+                max="31"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Tag, an dem das Geschäftsjahr beginnt (1-31)
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 p-4 bg-blue-50 rounded-md">
+            <p className="text-sm text-blue-800">
+              <strong>Beispiel:</strong> Wenn das Geschäftsjahr am 1. April beginnt, wird das Jahr 2025/2026 vom 01.04.2025 bis 31.03.2026 laufen.
+            </p>
           </div>
         </div>
 

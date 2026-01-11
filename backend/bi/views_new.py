@@ -640,10 +640,23 @@ class CombinedForecastView(APIView):
         for quote in quotations:
             period = quote.valid_until.strftime('%Y-%m') if quote.valid_until else None
             if period:
-                items_total = quote.items.aggregate(
-                    total=Sum(F('quantity') * F('sale_price'))
-                )['total'] or Decimal('0')
-                quote_value = float(items_total + (quote.shipping_cost or Decimal('0')) + (quote.system_price or Decimal('0')))
+                # Calculate total value correctly using subtotal logic
+                quote_value = Decimal('0')
+                for item in quote.items.all():
+                    if item.uses_system_price and quote.system_price:
+                        # Item uses system price
+                        quote_value += quote.system_price
+                    elif item.is_group_header and item.sale_price:
+                        # Group header with manual sale price
+                        quote_value += item.sale_price
+                    else:
+                        # Normal item: quantity * unit_price * (1 - discount_percent/100)
+                        price_after_discount = item.unit_price * (Decimal('1') - item.discount_percent / Decimal('100'))
+                        quote_value += item.quantity * price_after_discount
+                
+                # Add delivery cost
+                quote_value += (quote.delivery_cost or Decimal('0'))
+                quote_value = float(quote_value)
                 
                 if period not in quotation_by_month:
                     quotation_by_month[period] = 0

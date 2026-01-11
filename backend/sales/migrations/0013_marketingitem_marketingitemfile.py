@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('sales', '0012_alter_quotation_date_field'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('users', '__latest__'),
+        ('users', '0028_user_can_read_development_and_more'),
     ]
 
     operations = [

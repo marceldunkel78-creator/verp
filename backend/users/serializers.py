@@ -225,6 +225,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'annual_vacation_days', 'vacation_balance',
             'signature_image', 'signature_image_url', 'closing_greeting',
             'bank_account_holder', 'bank_iban', 'bank_bic', 'bank_name',
+            'commission_rate',
             'created_at', 'updated_at', 'user_id'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id', 'signature_image_url', 'user_id']

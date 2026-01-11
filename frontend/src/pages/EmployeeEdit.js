@@ -42,7 +42,8 @@ const EmployeeEdit = () => {
     bank_account_holder: '',
     bank_iban: '',
     bank_bic: '',
-    bank_name: ''
+    bank_name: '',
+    commission_rate: 0.00
   });
   const [signatureFile, setSignatureFile] = useState(null);
   const [signaturePreview, setSignaturePreview] = useState(null);
@@ -100,7 +101,8 @@ const EmployeeEdit = () => {
         bank_account_holder: response.data.bank_account_holder || '',
         bank_iban: response.data.bank_iban || '',
         bank_bic: response.data.bank_bic || '',
-        bank_name: response.data.bank_name || ''
+        bank_name: response.data.bank_name || '',
+        commission_rate: response.data.commission_rate ? parseFloat(response.data.commission_rate) : 0.00
       });
       setSignaturePreview(response.data.signature_image_url || null);
     } catch (error) {
@@ -530,6 +532,19 @@ const BasisinfosTab = ({ formData, setFormData, signatureFile, setSignatureFile,
               <option value="krank">Krank</option>
               <option value="aufkündigung">Aufkündigung</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Provisionssatz (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={formData.commission_rate}
+              onChange={(e) => setFormData({...formData, commission_rate: parseFloat(e.target.value)})}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              placeholder="0.00"
+            />
           </div>
         </div>
 
@@ -1080,13 +1095,200 @@ const KrankheitTab = ({ employeeId }) => {
   );
 };
 
-// ==================== Provision Tab (Placeholder) ====================
-const ProvisionTab = ({ employeeId }) => {
+// ==================== Provision Tab ====================
+  const ProvisionTab = ({ employeeId }) => {
+  const [commissions, setCommissions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(null); // Will be set after fiscal year settings load
+  const [yearlyTotal, setYearlyTotal] = useState(0);
+  const [fiscalYearStart, setFiscalYearStart] = useState({ month: 4, day: 1 }); // Default April 1
+
+  // Calculate current fiscal year based on settings
+  const getCurrentFiscalYear = (month, day) => {
+    const today = new Date();
+    const fiscalYearStartDate = new Date(today.getFullYear(), month - 1, day);
+    
+    if (today >= fiscalYearStartDate) {
+      return today.getFullYear();
+    } else {
+      return today.getFullYear() - 1;
+    }
+  };
+
+  // Generate year options dynamically (current + 1 future + 9 past years)
+  const getYearOptions = () => {
+    const currentFiscalYear = getCurrentFiscalYear(fiscalYearStart.month, fiscalYearStart.day);
+    const years = [];
+    // Include next fiscal year, current, and past 9 years
+    for (let i = -1; i <= 9; i++) {
+      years.push(currentFiscalYear - i);
+    }
+    return years;
+  };
+
+  useEffect(() => {
+    // Load fiscal year settings
+    const fetchFiscalYearSettings = async () => {
+      try {
+        const response = await api.get('/company-info/');
+        if (response.data && response.data.length > 0) {
+          const settings = response.data[0];
+          const month = settings.fiscal_year_start_month || 4;
+          const day = settings.fiscal_year_start_day || 1;
+          setFiscalYearStart({ month, day });
+          
+          // Set selected year to current fiscal year after loading settings
+          if (selectedYear === null) {
+            setSelectedYear(getCurrentFiscalYear(month, day));
+          }
+        } else {
+          // If no settings, use default and set year
+          if (selectedYear === null) {
+            setSelectedYear(getCurrentFiscalYear(4, 1));
+          }
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Geschäftsjahr-Einstellungen:', error);
+        // On error, still set a default year
+        if (selectedYear === null) {
+          setSelectedYear(getCurrentFiscalYear(4, 1));
+        }
+      }
+    };
+    fetchFiscalYearSettings();
+  }, []);
+
+  useEffect(() => {
+    if (selectedYear !== null) {
+      fetchCommissions();
+    }
+  }, [employeeId, selectedYear]);
+
+  // Format fiscal year display (e.g., "2025/2026")
+  const formatFiscalYear = (year) => {
+    return `${year}/${year + 1}`;
+  };
+
+  const fetchCommissions = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/customer-orders/employee-commissions/?employee=${employeeId}&fiscal_year=${selectedYear}`);
+      const data = response.data.results || response.data;
+      setCommissions(Array.isArray(data) ? data : []);
+      
+      // Calculate yearly total
+      const total = data.reduce((sum, commission) => sum + parseFloat(commission.commission_amount || 0), 0);
+      setYearlyTotal(total);
+    } catch (error) {
+      console.error('Fehler beim Laden der Provisionsdaten:', error);
+      setCommissions([]);
+      setYearlyTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('de-DE');
+  };
+
+  if (loading || selectedYear === null) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="text-center py-12 text-gray-400">
-      <CurrencyEuroIcon className="mx-auto h-12 w-12 mb-4" />
-      <p className="text-lg font-medium mb-2">Provisionen</p>
-      <p>Dieser Bereich befindet sich in Entwicklung</p>
+    <div className="space-y-6">
+      {/* Jahresauswahl */}
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Geschäftsjahr</label>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+          >
+            {getYearOptions().map(year => (
+              <option key={year} value={year}>
+                {formatFiscalYear(year)}
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="text-right">
+          <div className="text-sm text-gray-500">Gesamtprovision</div>
+          <div className="text-2xl font-bold text-green-600">
+            {formatCurrency(yearlyTotal)}
+          </div>
+        </div>
+      </div>
+
+      {/* Provisionsliste */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+          <h3 className="text-lg leading-6 font-medium text-gray-900">
+            Provisionsübersicht {formatFiscalYear(selectedYear)}
+          </h3>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            Alle berechneten Provisionen für das ausgewählte Geschäftsjahr
+          </p>
+        </div>
+
+        {commissions.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <CurrencyEuroIcon className="mx-auto h-12 w-12 mb-4" />
+            <p className="text-lg font-medium mb-2">Keine Provisionen gefunden</p>
+            <p>Für das Geschäftsjahr {formatFiscalYear(selectedYear)} wurden noch keine Provisionen berechnet.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-200">
+            {commissions.map((commission) => (
+              <li key={commission.id} className="px-4 py-4 sm:px-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          {commission.order_number || `Auftrag #${commission.customer_order}`}
+                        </h4>
+                        <p className="text-sm text-gray-500">
+                          {commission.customer_name}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Berechnet am {formatDate(commission.calculated_at)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-gray-900">
+                      {formatCurrency(commission.commission_amount)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {commission.commission_percentage}% von {formatCurrency(commission.order_net_total)}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Satz: {commission.commission_rate}%
+                    </div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 };

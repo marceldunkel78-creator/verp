@@ -20,7 +20,8 @@ import {
   ExclamationTriangleIcon,
   DocumentArrowDownIcon,
   ArrowUpTrayIcon,
-  EyeIcon
+  EyeIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 /**
@@ -62,6 +63,9 @@ const CustomerOrderEdit = () => {
   const [searchingQuotations, setSearchingQuotations] = useState(false);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
 
+  // Commission States
+  const [newRecipient, setNewRecipient] = useState({ employee: '', commission_percentage: 100 }); // Force reload
+
   // Order Data
   const [order, setOrder] = useState({
     id: null,
@@ -90,6 +94,7 @@ const CustomerOrderEdit = () => {
     production_notes: '',
     delivery_notes_text: '',
     sales_person: '',
+    commission_recipients: [],
     items: [],
     delivery_notes: [],
     invoices: []
@@ -235,13 +240,55 @@ const CustomerOrderEdit = () => {
             project_reference: quotation.project_reference || '',
             system_reference: quotation.system_reference || '',
             tax_rate: quotation.tax_rate?.toString() || '19.00',
-            items: orderItems
+            items: orderItems,
+            // Provisionsempfänger aus Angebot übernehmen
+            commission_recipients: quotation.commission_user ? [{
+              employee: quotation.commission_user,
+              employee_name: quotation.commission_user_name || `Mitarbeiter ${quotation.commission_user}`,
+              commission_percentage: 100,
+              employee_commission_rate: 0 // Wird später aus der DB geladen
+            }] : []
           }));
 
           // Load customer details
           if (quotation.customer) {
             const custRes = await api.get(`/customers/customers/${quotation.customer}/`);
             setSelectedCustomer(custRes.data);
+          }
+
+          // Load commission rate for the recipient from quotation
+          if (quotation.commission_user) {
+            try {
+              // commission_user is a User ID, get the employee linked to this user
+              const userRes = await api.get(`/users/${quotation.commission_user}/`);
+              const user = userRes.data;
+              
+              let commissionRate = 0;
+              let employeeId = null;
+              let employeeName = quotation.commission_user_name || `Mitarbeiter ${quotation.commission_user}`;
+              
+              if (user.employee) {
+                // User has linked employee, get commission_rate and full name from employee
+                const empRes = await api.get(`/users/employees/${user.employee}/`);
+                commissionRate = empRes.data.commission_rate || 0;
+                employeeId = user.employee;
+                employeeName = `${empRes.data.first_name} ${empRes.data.last_name}`;
+              }
+              
+              if (employeeId) {
+                setOrder(prev => ({
+                  ...prev,
+                  commission_recipients: [{
+                    employee: employeeId,  // Use Employee ID, not User ID
+                    employee_name: employeeName,
+                    commission_percentage: 100,
+                    employee_commission_rate: commissionRate
+                  }]
+                }));
+              }
+            } catch (error) {
+              console.error('Error loading employee commission rate:', error);
+            }
           }
         } catch (error) {
           console.error('Error loading quotation:', error);
@@ -297,6 +344,7 @@ const CustomerOrderEdit = () => {
         confirmation_email: data.confirmation_email || '',
         sales_person: data.sales_person || '',
         order_notes: data.order_notes || '',
+        commission_recipients: data.commission_recipients || [],
         items: data.items || [],
         delivery_notes: data.delivery_notes || [],
         invoices: data.invoices || []
@@ -662,6 +710,49 @@ const CustomerOrderEdit = () => {
     }));
   };
 
+  // Commission Handlers
+  const addCommissionRecipient = async () => {
+    if (!newRecipient.employee || !newRecipient.commission_percentage) {
+      alert('Bitte wählen Sie einen Mitarbeiter und geben Sie einen Provisionsanteil ein.');
+      return;
+    }
+
+    try {
+      // Load employee details to get name and commission rate
+      const empRes = await api.get(`/users/employees/${newRecipient.employee}/`);
+      const employee = empRes.data;
+      
+      const recipient = {
+        employee: newRecipient.employee,  // Use employee_id directly
+        employee_name: `${employee.first_name} ${employee.last_name}`,
+        commission_percentage: newRecipient.commission_percentage,
+        employee_commission_rate: employee.commission_rate || 0
+      };
+
+      setOrder(prev => ({
+        ...prev,
+        commission_recipients: [...prev.commission_recipients, recipient]
+      }));
+
+      // Reset form
+      setNewRecipient({ employee: '', commission_percentage: 100 });
+    } catch (error) {
+      console.error('Error adding commission recipient:', error);
+      if (error?.response?.status === 404) {
+        alert('Der Mitarbeiter oder Benutzer wurde nicht gefunden. Bitte wählen Sie einen existierenden Mitarbeiter.');
+      } else {
+        alert('Fehler beim Hinzufügen des Provisionsempfängers: ' + (error?.response?.data?.detail || error.message));
+      }
+    }
+  };
+
+  const removeCommissionRecipient = (index) => {
+    setOrder(prev => ({
+      ...prev,
+      commission_recipients: prev.commission_recipients.filter((_, i) => i !== index)
+    }));
+  };
+
   // Save Order
   const handleSave = async () => {
     if (!order.customer) {
@@ -697,6 +788,10 @@ const CustomerOrderEdit = () => {
         production_notes: order.production_notes,
         delivery_notes_text: order.delivery_notes_text,
         sales_person: order.sales_person ? parseInt(order.sales_person) : null,
+        commission_recipients: order.commission_recipients.map(recipient => ({
+          employee: recipient.employee,
+          commission_percentage: recipient.commission_percentage
+        })),
         items: order.items.map((item, idx) => ({
           position: item.position || idx + 1,
           position_display: item.position_display || String(item.position || idx + 1),
@@ -1141,6 +1236,196 @@ const CustomerOrderEdit = () => {
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                 />
               </div>
+            </div>
+
+            {/* Provisionsempfänger - Orange hinterlegter Bereich */}
+            <div className="mt-8 p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <h3 className="text-lg font-medium text-orange-900 mb-4 flex items-center">
+                <CurrencyEuroIcon className="h-5 w-5 mr-2" />
+                Provisionsempfänger
+              </h3>
+              
+              {order.commission_recipients.length === 0 ? (
+                <div className="mb-4">
+                  <p className="text-orange-700 text-sm mb-4">
+                    Keine Provisionsempfänger definiert. Fügen Sie mindestens einen Provisionsempfänger hinzu.
+                  </p>
+                  
+                  {/* Formular zum Hinzufügen von Provisionsempfängern */}
+                  <div className="bg-white p-4 rounded border space-y-3">
+                    <h4 className="font-medium text-gray-900">Neuen Provisionsempfänger hinzufügen</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Mitarbeiter</label>
+                        <select
+                          value={newRecipient?.employee || ''}
+                          onChange={(e) => setNewRecipient(prev => ({ ...prev, employee: e.target.value }))}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">-- Mitarbeiter auswählen --</option>
+                          {employees.map(emp => (
+                            <option key={emp.id} value={emp.id}>
+                              {emp.first_name} {emp.last_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Provisionsanteil (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={newRecipient?.commission_percentage || ''}
+                          onChange={(e) => setNewRecipient(prev => ({ ...prev, commission_percentage: parseFloat(e.target.value) || 0 }))}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                          placeholder="100"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          onClick={addCommissionRecipient}
+                          disabled={!newRecipient?.employee || !newRecipient?.commission_percentage}
+                          className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <PlusIcon className="h-4 w-4 mr-2" />
+                          Hinzufügen
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 mb-4">
+                  {order.commission_recipients.map((recipient, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-white rounded border">
+                      <div className="flex-1 flex items-center space-x-4">
+                        <div>
+                          <span className="font-medium text-gray-900">
+                            {recipient.employee_name || `Mitarbeiter ${recipient.employee}`}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <label className="text-sm text-gray-600">Anteil:</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={recipient.commission_percentage}
+                            onChange={(e) => {
+                              const newPercentage = parseFloat(e.target.value) || 0;
+                              setOrder(prev => ({
+                                ...prev,
+                                commission_recipients: prev.commission_recipients.map((r, i) => 
+                                  i === index ? { ...r, commission_percentage: newPercentage } : r
+                                )
+                              }));
+                            }}
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                          />
+                          <span className="text-sm text-gray-600">%</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <div className="text-sm text-gray-600">
+                          Provisionssatz: {recipient.employee_commission_rate}%
+                        </div>
+                        <button
+                          onClick={() => removeCommissionRecipient(index)}
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Entfernen"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Formular zum Hinzufügen weiterer Empfänger */}
+                  <div className="bg-gray-50 p-4 rounded border space-y-3">
+                    <h4 className="font-medium text-gray-900">Weiteren Provisionsempfänger hinzufügen</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Mitarbeiter</label>
+                        <select
+                          value={newRecipient?.employee || ''}
+                          onChange={(e) => setNewRecipient(prev => ({ ...prev, employee: e.target.value }))}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                        >
+                          <option value="">-- Mitarbeiter auswählen --</option>
+                          {employees.map(emp => (
+                            <option key={emp.id} value={emp.id}>
+                              {emp.first_name} {emp.last_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Provisionsanteil (%)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={newRecipient?.commission_percentage || ''}
+                          onChange={(e) => setNewRecipient(prev => ({ ...prev, commission_percentage: parseFloat(e.target.value) || 0 }))}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                          placeholder="25"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          onClick={addCommissionRecipient}
+                          disabled={!newRecipient?.employee || !newRecipient?.commission_percentage}
+                          className="inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <PlusIcon className="h-4 w-4 mr-2" />
+                          Hinzufügen
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Button zum manuellen Triggern der Provisionsberechnung */}
+              {isEditMode && order.status === 'bestaetigt' && order.commission_recipients.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-orange-200">
+                  <button
+                    onClick={async () => {
+                      if (window.confirm('Möchten Sie die Provisionsberechnung neu ausführen? Bestehende Provisionseinträge werden aktualisiert.')) {
+                        try {
+                          // First save the current order to ensure recipients are up to date
+                          const currentRecipients = order.commission_recipients.map(r => ({
+                            employee: r.employee,
+                            commission_percentage: r.commission_percentage
+                          }));
+                          
+                          // Save recipients first
+                          await api.patch(`/customer-orders/customer-orders/${id}/`, { 
+                            commission_recipients: currentRecipients
+                          });
+                          
+                          // Then call the dedicated recalculate endpoint
+                          const response = await api.post(`/customer-orders/customer-orders/${id}/recalculate_commissions/`);
+                          
+                          alert(`Provisionsberechnung wurde neu ausgeführt. ${response.data.created} Provisionen berechnet.`);
+                          await loadOrder(id); // Reload order data
+                        } catch (error) {
+                          console.error('Fehler bei Provisionsberechnung:', error);
+                          alert('Fehler bei der Provisionsberechnung: ' + (error.response?.data?.error || error.message));
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center px-3 py-2 border border-orange-300 rounded-md text-sm font-medium text-orange-700 bg-orange-100 hover:bg-orange-200"
+                  >
+                    <CurrencyEuroIcon className="h-4 w-4 mr-2" />
+                    Provision neu berechnen
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}

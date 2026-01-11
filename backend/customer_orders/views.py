@@ -6,7 +6,7 @@ from django_filters import CharFilter
 from django.utils import timezone
 from django.http import FileResponse
 from django.conf import settings
-from .models import CustomerOrder, CustomerOrderItem, DeliveryNote, Invoice, Payment
+from .models import CustomerOrder, CustomerOrderItem, DeliveryNote, Invoice, Payment, CustomerOrderCommissionRecipient, EmployeeCommission
 from .serializers import (
     CustomerOrderListSerializer, 
     CustomerOrderDetailSerializer, 
@@ -21,6 +21,8 @@ from .serializers import (
     InvoiceCreateSerializer,
     PaymentSerializer,
     PaymentCreateSerializer,
+    CustomerOrderCommissionRecipientSerializer,
+    EmployeeCommissionSerializer,
 )
 from rest_framework.pagination import PageNumberPagination
 
@@ -191,6 +193,50 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
             return Response({
                 'status': 'pending',
                 'message': 'PDF-Generator wird noch implementiert.'
+            })
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'])
+    def recalculate_commissions(self, request, pk=None):
+        """
+        Berechnet die Provisionen für diesen Auftrag neu
+        
+        POST /api/customer-orders/{id}/recalculate_commissions/
+        """
+        order = self.get_object()
+        
+        if order.status != 'bestaetigt':
+            return Response(
+                {'error': 'Provisionen können nur für bestätigte Aufträge berechnet werden.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not order.commission_recipients.exists():
+            return Response(
+                {'error': 'Keine Provisionsempfänger definiert.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Delete old commissions for this order
+            from .models import EmployeeCommission
+            deleted_count = EmployeeCommission.objects.filter(customer_order=order).delete()[0]
+            
+            # Recalculate commissions
+            order._calculate_commissions()
+            
+            # Get new commission count
+            new_count = EmployeeCommission.objects.filter(customer_order=order).count()
+            
+            return Response({
+                'status': 'success',
+                'message': f'Provisionen neu berechnet.',
+                'deleted': deleted_count,
+                'created': new_count
             })
         except Exception as e:
             return Response(
@@ -598,3 +644,56 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+class CustomerOrderCommissionRecipientViewSet(viewsets.ModelViewSet):
+    """ViewSet für Provisionsempfänger von Kundenaufträgen"""
+    queryset = CustomerOrderCommissionRecipient.objects.select_related(
+        'customer_order', 'employee'
+    )
+    serializer_class = CustomerOrderCommissionRecipientSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['customer_order', 'employee']
+    ordering_fields = ['created_at', 'commission_percentage']
+    ordering = ['-created_at']
+
+
+class EmployeeCommissionViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet für Mitarbeiterprovisionen (nur lesen)"""
+    queryset = EmployeeCommission.objects.select_related(
+        'employee', 'customer_order', 'customer_order__customer'
+    )
+    serializer_class = EmployeeCommissionSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['employee', 'fiscal_year', 'customer_order']
+    ordering_fields = ['fiscal_year', 'calculated_at', 'commission_amount']
+    ordering = ['-fiscal_year', '-calculated_at']
+
+    @action(detail=False, methods=['get'])
+    def by_employee_and_year(self, request):
+        """Aggregierte Provisionen pro Mitarbeiter und Geschäftsjahr"""
+        employee_id = request.query_params.get('employee')
+        fiscal_year = request.query_params.get('year')
+        
+        if not employee_id or not fiscal_year:
+            return Response(
+                {'error': 'employee und year Parameter erforderlich'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        commissions = self.queryset.filter(
+            employee_id=employee_id,
+            fiscal_year=fiscal_year
+        )
+        
+        total_commission = commissions.aggregate(
+            total=models.Sum('commission_amount')
+        )['total'] or 0
+        
+        return Response({
+            'employee_id': employee_id,
+            'fiscal_year': fiscal_year,
+            'total_commission': float(total_commission),
+            'commission_count': commissions.count(),
+            'commissions': self.get_serializer(commissions, many=True).data
+        })

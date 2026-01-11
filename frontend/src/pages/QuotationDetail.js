@@ -271,7 +271,11 @@ const QuotationDetail = () => {
           <div className="px-4 py-5 sm:p-6">
             <div className="text-sm text-gray-900">
               {quotation.recipient_company && <div className="font-medium">{quotation.recipient_company}</div>}
-              {quotation.recipient_name && <div>{quotation.recipient_name}</div>}
+              {(quotation.recipient_salutation || quotation.recipient_title || quotation.recipient_name) && (
+                <div>
+                  {[quotation.recipient_salutation, quotation.recipient_title, quotation.recipient_name].filter(Boolean).join(' ')}
+                </div>
+              )}
               {quotation.recipient_street && <div>{quotation.recipient_street}</div>}
               {(quotation.recipient_postal_code || quotation.recipient_city) && (
                 <div>{quotation.recipient_postal_code} {quotation.recipient_city}</div>
