@@ -133,7 +133,7 @@ const MyVERP = () => {
   const tabs = [
     { id: 'dashboard', name: 'Dashboard', icon: Squares2X2Icon },
     { id: 'time-tracking', name: 'Zeiterfassung', icon: ClockIcon },
-    { id: 'my-tickets', name: 'Meine Tickets', icon: ChatBubbleLeftIcon },
+    { id: 'my-tickets', name: 'MyTickets', icon: ChatBubbleLeftIcon },
     { id: 'messages', name: 'Nachrichtencenter', icon: ChatBubbleLeftIcon },
     { id: 'reporting', name: 'Reporting', icon: ChartBarIcon },
     { id: 'reminders', name: 'Erinnerungen', icon: BellIcon },
@@ -994,35 +994,7 @@ const ReportingTab = ({ weeklyReport, monthlyReport, errors }) => {
         <div className="mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-800">Fehler beim Laden: {errors.report}</div>
       )}
       
-      {/* Working Hours Reports */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
-          <h3 className="text-md font-medium text-gray-900 mb-2">Aktuelle Woche</h3>
-          {weeklyReport ? (
-            <div className="bg-white shadow rounded-lg p-4">
-              <div className="flex justify-between"><span>Gearbeitete Stunden</span><span className="font-bold">{weeklyReport.actual_hours}h</span></div>
-              <div className="flex justify-between"><span>Erwartet bis heute</span><span className="font-bold">{weeklyReport.expected_hours_to_date}h</span></div>
-              <div className="flex justify-between"><span>Wöchentliches Soll</span><span className="font-bold">{weeklyReport.weekly_target}h</span></div>
-              <div className="flex justify-between mt-2"><span>Differenz</span><span className={`font-bold ${weeklyReport.difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>{weeklyReport.difference >= 0 ? '+' : ''}{weeklyReport.difference}h</span></div>
-            </div>
-          ) : (
-            <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-500">Keine Wochen-Daten verfügbar.</div>
-          )}
-        </div>
-        <div>
-          <h3 className="text-md font-medium text-gray-900 mb-2">Aktueller Monat</h3>
-          {monthlyReport ? (
-            <div className="bg-white shadow rounded-lg p-4">
-              <div className="flex justify-between"><span>Gearbeitete Stunden</span><span className="font-bold">{monthlyReport.actual_hours}h</span></div>
-              <div className="flex justify-between"><span>Erwartet bis heute</span><span className="font-bold">{monthlyReport.expected_hours_to_date}h</span></div>
-              <div className="flex justify-between mt-2"><span>Differenz</span><span className={`font-bold ${monthlyReport.difference >= 0 ? 'text-green-600' : 'text-red-600'}`}>{monthlyReport.difference >= 0 ? '+' : ''}{monthlyReport.difference}h</span></div>
-              <div className="text-xs text-gray-500 mt-2">Arbeitstage bis heute: {monthlyReport.workdays_count_to_date}</div>
-            </div>
-          ) : (
-            <div className="bg-white shadow rounded-lg p-4 text-sm text-gray-500">Keine Monats-Daten verfügbar.</div>
-          )}
-        </div>
-      </div>
+      {/* Zeiterfassungsbilanz entfernt - befindet sich im Tab 'Zeiterfassung' */}
 
       {/* Commission Report */}
       <div className="mt-6">
@@ -2784,8 +2756,14 @@ const MyTicketsTab = ({ onRefresh, errors }) => {
     service: [],
     sales: []
   });
+  const [createdTickets, setCreatedTickets] = useState({
+    visiview: [],
+    service: [],
+    sales: []
+  });
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all'); // all, visiview, service, sales
+  const [activeCreatedFilter, setActiveCreatedFilter] = useState('all'); // Filter für erstellte Tickets
 
   useEffect(() => {
     fetchMyTickets();
@@ -2809,6 +2787,18 @@ const MyTicketsTab = ({ onRefresh, errors }) => {
         visiview: vvRes.status === 'fulfilled' ? (vvRes.value.data.results || vvRes.value.data || []) : [],
         service: serviceRes.status === 'fulfilled' ? (serviceRes.value.data.results || serviceRes.value.data || []) : [],
         sales: salesRes.status === 'fulfilled' ? (salesRes.value.data.results || salesRes.value.data || []) : []
+      });
+      // Hole zusätzlich alle Tickets, die vom User erstellt wurden
+      const [vvCreatedRes, serviceCreatedRes, salesCreatedRes] = await Promise.allSettled([
+        api.get(`/visiview/tickets/?created_by=${userId}`),
+        api.get(`/service/tickets/?created_by=${userId}`),
+        api.get(`/sales/sales-tickets/?created_by=${userId}`)
+      ]);
+
+      setCreatedTickets({
+        visiview: vvCreatedRes.status === 'fulfilled' ? (vvCreatedRes.value.data.results || vvCreatedRes.value.data || []) : [],
+        service: serviceCreatedRes.status === 'fulfilled' ? (serviceCreatedRes.value.data.results || serviceCreatedRes.value.data || []) : [],
+        sales: salesCreatedRes.status === 'fulfilled' ? (salesCreatedRes.value.data.results || salesCreatedRes.value.data || []) : []
       });
     } catch (error) {
       console.error('Fehler beim Laden der Tickets:', error);
@@ -2867,6 +2857,21 @@ const MyTicketsTab = ({ onRefresh, errors }) => {
     new Date(b.created_at) - new Date(a.created_at)
   );
 
+  // Erstellte Tickets - gleiche Logik
+  const allCreatedTickets = [
+    ...createdTickets.visiview.map(t => ({ ...t, type: 'visiview', link: `/visiview/tickets/${t.id}` })),
+    ...createdTickets.service.map(t => ({ ...t, type: 'service', link: `/service/tickets/${t.id}` })),
+    ...createdTickets.sales.map(t => ({ ...t, type: 'sales', link: `/sales/tickets/${t.id}` }))
+  ];
+
+  const filteredCreatedTickets = activeCreatedFilter === 'all'
+    ? allCreatedTickets
+    : allCreatedTickets.filter(t => t.type === activeCreatedFilter);
+
+  const sortedCreatedTickets = [...filteredCreatedTickets].sort((a, b) => 
+    new Date(b.created_at) - new Date(a.created_at)
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -2880,7 +2885,7 @@ const MyTicketsTab = ({ onRefresh, errors }) => {
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-gray-900">
-            Meine Tickets ({sortedTickets.length})
+            mir zugewiesene Tickets ({sortedTickets.length})
           </h2>
           <button
             onClick={fetchMyTickets}
@@ -2955,6 +2960,131 @@ const MyTicketsTab = ({ onRefresh, errors }) => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedTickets.map((ticket) => (
+                  <tr key={`${ticket.type}-${ticket.id}`} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${
+                        ticket.type === 'visiview' ? 'bg-indigo-100 text-indigo-800' :
+                        ticket.type === 'service' ? 'bg-blue-100 text-blue-800' :
+                        'bg-purple-100 text-purple-800'
+                      }`}>
+                        {ticket.type === 'visiview' ? 'VisiView' :
+                         ticket.type === 'service' ? 'Service' : 'Sales'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                      #{ticket.ticket_number}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {ticket.title}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(ticket.status)}`}>
+                        {ticket.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {ticket.priority && (
+                        <span className={`text-sm font-medium ${getPriorityColor(ticket.priority)}`}>
+                          {ticket.priority}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(ticket.created_at)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm">
+                      <a
+                        href={ticket.link}
+                        className="text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Öffnen
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Von mir erstellte Tickets */}
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">von mir erstellte Tickets ({sortedCreatedTickets.length})</h2>
+          <button
+            onClick={fetchMyTickets}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Aktualisieren
+          </button>
+        </div>
+
+        {/* Filter */}
+        <div className="mb-6 flex gap-2">
+          <button
+            onClick={() => setActiveCreatedFilter('all')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeCreatedFilter === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Alle ({allCreatedTickets.length})
+          </button>
+          <button
+            onClick={() => setActiveCreatedFilter('visiview')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeCreatedFilter === 'visiview'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            VisiView ({createdTickets.visiview.length})
+          </button>
+          <button
+            onClick={() => setActiveCreatedFilter('service')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeCreatedFilter === 'service'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Service ({createdTickets.service.length})
+          </button>
+          <button
+            onClick={() => setActiveCreatedFilter('sales')}
+            className={`px-4 py-2 text-sm rounded-md ${
+              activeCreatedFilter === 'sales'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Sales ({createdTickets.sales.length})
+          </button>
+        </div>
+
+        {/* Tickets Liste */}
+        {sortedCreatedTickets.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            Keine Tickets erstellt
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Typ</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket #</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Titel</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priorität</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Erstellt</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sortedCreatedTickets.map((ticket) => (
                   <tr key={`${ticket.type}-${ticket.id}`} className="hover:bg-gray-50">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-1 text-xs font-medium rounded ${
