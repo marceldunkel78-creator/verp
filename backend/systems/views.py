@@ -84,12 +84,10 @@ class SystemViewSet(viewsets.ModelViewSet):
         
         # Projekte mit diesem System
         from projects.models import Project
-        # projects reference the customers.CustomerSystem model; match by system_number/name
+        # Project.systems is M2M to systems.System
         projects = Project.objects.filter(
-            Q(systems__system_number=system.system_number) |
-            Q(systems__name__icontains=system.system_name) |
-            Q(description__icontains=system.system_number) |
-            Q(linked_system=system)
+            Q(systems=system) |
+            Q(description__icontains=system.system_number)
         ).distinct().values('id', 'project_number', 'name', 'status', 'created_at')[:20]
         
         # Customer Orders für diesen Kunden (später: direkte Verknüpfung)
@@ -118,7 +116,7 @@ class SystemViewSet(viewsets.ModelViewSet):
         # Projekte mit diesem System
         from projects.models import Project
         projects = Project.objects.filter(
-            Q(linked_system=system) |
+            Q(systems=system) |
             Q(customer=system.customer, description__icontains=system.system_number)
         ).distinct().values('id', 'project_number', 'name', 'status', 'created_at')[:50]
         

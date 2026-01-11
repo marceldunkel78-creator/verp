@@ -85,7 +85,7 @@ class SystemListSerializer(serializers.ModelSerializer):
         from projects.models import Project
         from django.db.models import Q
         return Project.objects.filter(
-            Q(linked_system=obj) |
+            Q(systems=obj) |
             Q(customer=obj.customer, description__icontains=obj.system_number)
         ).distinct().count()
     
