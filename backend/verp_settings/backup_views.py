@@ -10,7 +10,7 @@ from django.http import HttpResponse, JsonResponse
 from django.core import serializers
 from django.core.management import call_command
 from django.apps import apps
-from django.db import transaction, models
+from django.db import transaction, models, connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -82,21 +82,26 @@ class DatabaseBackupView(APIView):
             # Alle App-Labels sammeln (nur unsere eigenen Apps)
             our_apps = [
                 'company',
+                'core',
                 'customers', 
+                'customer_orders',
                 'dealers',
+                'development',
                 'inventory',
                 'loans',
                 'manufacturing',
+                'notifications',
                 'orders',
                 'pricelists',
+                'procurement',
                 'projects',
+                'sales',
                 'service',
                 'suppliers',
                 'systems',
                 'users',
                 'verp_settings',
                 'visiview',
-                'customer_orders',
             ]
             
             # Daten sammeln
@@ -198,9 +203,163 @@ class DatabaseRestoreView(APIView):
                 'models_processed': []
             }
             
-            # Import durchführen
+            # Definiere die Import-Reihenfolge (abhängige Tabellen zuletzt)
+            # Tabellen ohne Fremdschlüssel zuerst, dann mit FK
+            import_order = [
+                # Basis-Einstellungen (keine FKs oder nur auf sich selbst)
+                'verp_settings.CompanySettings',
+                'verp_settings.CompanyAddress',
+                'verp_settings.CompanyManager',
+                'verp_settings.CompanyBankAccount',
+                'verp_settings.ExchangeRate',
+                'verp_settings.PaymentTerm',
+                'verp_settings.DeliveryTerm',
+                'verp_settings.DeliveryInstruction',
+                'verp_settings.ProductCategory',
+                'verp_settings.WarrantyTerm',
+                'company.CompanySettings',
+                # Users (Basis für viele FKs)
+                'users.User',
+                'users.Employee',
+                'users.TravelPerDiemRate',
+                # Kunden/Lieferanten/Händler
+                'customers.Customer',
+                'customers.CustomerAddress',
+                'customers.CustomerPhone',
+                'customers.CustomerEmail',
+                'dealers.Dealer',
+                'suppliers.Supplier',
+                'suppliers.SupplierContact',
+                'suppliers.ProductGroup',
+                'suppliers.PriceList',
+                # Produkte
+                'suppliers.TradingProduct',
+                'suppliers.TradingProductPrice',
+                'suppliers.SupplierProduct',
+                'suppliers.MaterialSupply',
+                'manufacturing.VSHardware',
+                'manufacturing.VSHardwarePrice',
+                'manufacturing.VSHardwareMaterialItem',
+                'manufacturing.VSHardwareDocument',
+                'service.VSService',
+                'service.VSServicePrice',
+                'visiview.VisiViewProduct',
+                'visiview.VisiViewProductPrice',
+                'visiview.VisiViewOption',
+                # Inventory
+                'inventory.InventoryItem',
+                # Systeme
+                'systems.System',
+                # VisiView
+                'visiview.VisiViewLicense',
+                'visiview.MaintenanceTimeCredit',
+                'visiview.MaintenanceTimeExpenditure',
+                'visiview.MaintenanceInvoice',
+                'visiview.VisiViewTicket',
+                'visiview.VisiViewTicketComment',
+                'visiview.VisiViewTicketChangeLog',
+                'visiview.VisiViewTicketAttachment',
+                'visiview.VisiViewTicketTimeEntry',
+                'visiview.VisiViewMacro',
+                # Projekte
+                'projects.Project',
+                # Preislisten
+                'pricelists.SalesPriceList',
+                # Procurement (vor Sales/CustomerOrders, nach Suppliers!)
+                'procurement.ProductCollection',
+                'procurement.ProductCollectionItem',
+                # Sales/Quotations (vor CustomerOrders!)
+                'sales.Quotation',
+                'sales.QuotationItem',
+                'sales.MarketingItem',
+                'sales.MarketingItemFile',
+                'sales.SalesTicket',
+                'sales.SalesTicketAttachment',
+                'sales.SalesTicketComment',
+                'sales.SalesTicketChangeLog',
+                # Orders
+                'orders.Order',
+                'orders.OrderItem',
+                # Customer Orders (nach Quotations!)
+                'customer_orders.CustomerOrder',
+                'customer_orders.CustomerOrderItem',
+                'customer_orders.CustomerOrderCommissionRecipient',
+                'customer_orders.EmployeeCommission',
+                # Inventory (mit FKs)
+                'inventory.IncomingGoods',
+                # Loans
+                'loans.Loan',
+                'loans.LoanItem',
+                'loans.LoanReceipt',
+                'loans.LoanItemReceipt',
+                'loans.LoanReturn',
+                'loans.LoanReturnItem',
+                # Manufacturing Orders
+                'manufacturing.ProductionOrder',
+                # Service Tickets
+                'service.ServiceTicket',
+                'service.TicketComment',
+                'service.TicketChangeLog',
+                'service.ServiceTicketTimeEntry',
+                'service.ServiceTicketAttachment',
+                'service.RMACase',
+                'service.TroubleshootingTicket',
+                # User-bezogene Daten
+                'users.TimeEntry',
+                'users.VacationYearBalance',
+                'users.VacationAdjustment',
+                'users.VacationRequest',
+                'users.Message',
+                'users.TravelExpenseReport',
+                'users.TravelExpenseDay',
+                'users.TravelExpenseItem',
+                'users.Reminder',
+                'users.Notification',
+                # Core - Audit/Trash Logs
+                'core.MediaTrash',
+                'core.DeletionLog',
+                # Notifications
+                'notifications.NotificationTask',
+                'notifications.NotificationTaskRecipient',
+            ]
+            
+            # Import durchführen mit deaktivierten Constraints
             with transaction.atomic():
+                # Fremdschlüssel-Constraints temporär deaktivieren (PostgreSQL)
+                cursor = connection.cursor()
+                cursor.execute("SET CONSTRAINTS ALL DEFERRED;")
+                
+                # Sortiere die Daten nach der definierten Reihenfolge
+                sorted_data = []
+                processed_models = set()
+                
+                # Erst die Modelle in der definierten Reihenfolge
+                for model_name in import_order:
+                    if model_name in backup_data['data']:
+                        sorted_data.append((model_name, backup_data['data'][model_name]))
+                        processed_models.add(model_name)
+                
+                # Dann alle restlichen Modelle (die nicht in der Liste sind)
                 for model_name, records in backup_data['data'].items():
+                    if model_name not in processed_models:
+                        sorted_data.append((model_name, records))
+                
+                # Bei clear_existing: Erst alle Daten in UMGEKEHRTER Reihenfolge löschen
+                if clear_existing:
+                    # Lösche in umgekehrter Reihenfolge (abhängige Tabellen zuerst)
+                    for model_name, records in reversed(sorted_data):
+                        try:
+                            app_label, model_class_name = model_name.split('.')
+                            model = apps.get_model(app_label, model_class_name)
+                            deleted_count = model.objects.all().delete()[0]
+                            if deleted_count > 0:
+                                results['models_processed'].append(
+                                    f"{model_name}: {deleted_count} gelöscht"
+                                )
+                        except Exception as e:
+                            results['errors'].append(f"{model_name} (delete): {str(e)}")
+                
+                for model_name, records in sorted_data:
                     try:
                         app_label, model_class_name = model_name.split('.')
                         model = apps.get_model(app_label, model_class_name)
@@ -210,15 +369,7 @@ class DatabaseRestoreView(APIView):
                         # Mapping von Feldname zu Feld-Objekt
                         model_fields_dict = {f.name: f for f in model._meta.fields}
                         
-                        if clear_existing:
-                            # Bestehende Daten löschen
-                            deleted_count = model.objects.all().delete()[0]
-                            if deleted_count > 0:
-                                results['models_processed'].append(
-                                    f"{model_name}: {deleted_count} gelöscht"
-                                )
-                        
-                        # Daten importieren
+                        # Daten importieren (Löschen wurde bereits oben durchgeführt)
                         created_count = 0
                         updated_count = 0
                         error_count = 0
@@ -240,6 +391,14 @@ class DatabaseRestoreView(APIView):
                                         # ForeignKey: Verwende field_name_id statt field_name
                                         if isinstance(field_obj, models.ForeignKey):
                                             actual_field_name = f"{field_name}_id"
+                                            # Prüfe ob das referenzierte Objekt existiert
+                                            if converted_value is not None:
+                                                related_model = field_obj.related_model
+                                                if not related_model.objects.filter(pk=converted_value).exists():
+                                                    # FK-Ziel existiert nicht - setze auf NULL wenn erlaubt
+                                                    if field_obj.null:
+                                                        converted_value = None
+                                                    # Sonst: Fehler wird beim Speichern auftreten
                                             cleaned_fields[actual_field_name] = converted_value
                                         else:
                                             cleaned_fields[field_name] = converted_value
