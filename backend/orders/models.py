@@ -220,8 +220,8 @@ class Order(models.Model):
     
     def __str__(self):
         if self.order_number:
-            return f"{self.order_number} - {self.supplier.name}"
-        return f"Bestellung #{self.id} - {self.supplier.name}"
+            return f"{self.order_number} - {self.supplier.company_name}"
+        return f"Bestellung #{self.id} - {self.supplier.company_name}"
     
     def save(self, *args, **kwargs):
         if not self.order_number:
