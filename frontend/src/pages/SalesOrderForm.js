@@ -200,8 +200,9 @@ const SalesOrderForm = () => {
 
   const loadProducts = async () => {
     try {
+      // Lade eine größere Seite vor (max. 100) damit erste Suchen schneller sind
       const [tradingRes] = await Promise.all([
-        api.get('/suppliers/products/'),
+        api.get('/suppliers/products/?page_size=100'),
       ]);
       
       const tradingData = tradingRes.data.results || tradingRes.data || [];
@@ -212,24 +213,36 @@ const SalesOrderForm = () => {
     }
   };
 
-  // Product search functionality
-  const searchProducts = (term) => {
+  // Product search functionality - use server-side search so all items are searchable
+  const searchProducts = async (term) => {
     setProductSearchTerm(term);
-    if (!term.trim()) {
+    if (!term || !term.trim()) {
       setFilteredProducts([]);
       return;
     }
-    
-    const allProducts = [
-      ...tradingProducts.map(p => ({ ...p, type: 'trading', displayName: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Handelsware)` }))
-    ];
-    
-    const filtered = allProducts.filter(p => 
-      p.displayName.toLowerCase().includes(term.toLowerCase()) ||
-      (p.article_number && p.article_number.toLowerCase().includes(term.toLowerCase()))
-    );
-    
-    setFilteredProducts(filtered);
+
+    try {
+      const params = new URLSearchParams();
+      params.append('search', term);
+      // request a larger page to include more matches (backend caps to max_page_size)
+      params.append('page_size', '100');
+
+      const res = await api.get(`/suppliers/products/?${params.toString()}`);
+      const data = res.data.results || res.data || [];
+      const list = Array.isArray(data) ? data : [];
+
+      // Map for UI compatibility (displayName + type)
+      const mapped = list.map(p => ({
+        ...p,
+        type: 'trading',
+        displayName: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Handelsware)`
+      }));
+
+      setFilteredProducts(mapped);
+    } catch (err) {
+      console.error('Fehler bei Produktsuche:', err);
+      setFilteredProducts([]);
+    }
   };
 
   const addProductToOrder = (product) => {

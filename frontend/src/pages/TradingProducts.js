@@ -26,6 +26,11 @@ const TradingProducts = () => {
     visitronListPrice: 0
   });
   
+  // Paginierung
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_trading || user?.can_write_suppliers;
 
   const SESSION_KEY = 'trading_products_search_state';
@@ -66,6 +71,7 @@ const TradingProducts = () => {
     if (search) params.search = search;
     setSearchParams(params);
     setHasSearched(true);
+    setCurrentPage(1); // Zurück zur ersten Seite bei neuer Suche
     setRefreshKey(prev => prev + 1);
   };
 
@@ -101,14 +107,16 @@ const TradingProducts = () => {
       const newSupplier = params.supplier || '';
       const newActive = params.is_active || 'all';
       const newSearch = params.search || '';
+      const newPage = parseInt(params.page) || 1;
       setSortBy(newSort);
       setFilterSupplier(newSupplier);
       setFilterActive(newActive);
       setSearch(newSearch);
+      setCurrentPage(newPage);
       setHasSearched(true);
       setRefreshKey(prev => prev + 1);
       // fetch to restore the list immediately when navigating back/forward
-      fetchProducts();
+      fetchProducts(newPage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
@@ -157,11 +165,11 @@ const TradingProducts = () => {
     // Only fetch products after the user initiated a search/filter
     if (hasSearched) {
       setLoading(true);
-      fetchProducts();
+      fetchProducts(currentPage);
     } else {
       setLoading(false);
     }
-  }, [sortBy, filterSupplier, filterActive, refreshKey, hasSearched]);
+  }, [sortBy, filterSupplier, filterActive, refreshKey, hasSearched, currentPage]);
 
   // Berechne Preise live bei Formular-Änderungen
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,7 +234,7 @@ const TradingProducts = () => {
     });
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (page = 1) => {
     try {
       let url = '/suppliers/products/';
       const params = new URLSearchParams();
@@ -235,6 +243,7 @@ const TradingProducts = () => {
       if (filterSupplier) params.append('supplier', filterSupplier);
       if (search) params.append('search', search);
       if (filterActive !== 'all') params.append('is_active', filterActive === 'active');
+      params.append('page', page);
       
       // Cache-Buster mit zufälligem Wert
       params.append('_t', `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
@@ -244,6 +253,13 @@ const TradingProducts = () => {
       const response = await api.get(url);
       const data = response.data.results || response.data;
       setProducts(Array.isArray(data) ? data : []);
+      
+      // Paginierungsinformationen setzen
+      if (response.data.count !== undefined) {
+        setTotalCount(response.data.count);
+        setTotalPages(Math.ceil(response.data.count / 9));
+      }
+      setCurrentPage(page);
 
       // Persist immediately so localStorage is updated even if React effects are delayed
       try { saveSearchState(); } catch (e) { console.warn('Could not persist trading products search state', e); }
@@ -325,7 +341,7 @@ const TradingProducts = () => {
     if (window.confirm('Möchten Sie diese Handelsware wirklich löschen?')) {
       try {
         await api.delete(`/suppliers/products/${id}/`);
-        fetchProducts();
+        fetchProducts(currentPage);
       } catch (error) {
         console.error('Fehler beim Löschen:', error);
         alert('Fehler beim Löschen der Handelsware');
@@ -567,6 +583,105 @@ const TradingProducts = () => {
           </div>
         ))}
       </div>
+
+      {/* Paginierung */}
+      {hasSearched && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white px-4 py-3 sm:px-6 mt-4 rounded-lg shadow">
+          <div className="flex justify-between flex-1 sm:hidden">
+            <button
+              onClick={() => {
+                const newPage = Math.max(1, currentPage - 1);
+                setCurrentPage(newPage);
+                setSearchParams({ ...Object.fromEntries(searchParams), page: newPage });
+              }}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Zurück
+            </button>
+            <button
+              onClick={() => {
+                const newPage = Math.min(totalPages, currentPage + 1);
+                setCurrentPage(newPage);
+                setSearchParams({ ...Object.fromEntries(searchParams), page: newPage });
+              }}
+              disabled={currentPage === totalPages}
+              className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Weiter
+            </button>
+          </div>
+          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700">
+                Zeige <span className="font-medium">{(currentPage - 1) * 9 + 1}</span> bis{' '}
+                <span className="font-medium">{Math.min(currentPage * 9, totalCount)}</span> von{' '}
+                <span className="font-medium">{totalCount}</span> Ergebnissen
+              </p>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => {
+                    const newPage = Math.max(1, currentPage - 1);
+                    setCurrentPage(newPage);
+                    setSearchParams({ ...Object.fromEntries(searchParams), page: newPage });
+                  }}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Zurück</span>
+                  &larr;
+                </button>
+                
+                {/* Seitenzahlen */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => {
+                        setCurrentPage(pageNum);
+                        setSearchParams({ ...Object.fromEntries(searchParams), page: pageNum });
+                      }}
+                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                        pageNum === currentPage
+                          ? 'z-10 bg-orange-50 border-orange-500 text-orange-600'
+                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={() => {
+                    const newPage = Math.min(totalPages, currentPage + 1);
+                    setCurrentPage(newPage);
+                    setSearchParams({ ...Object.fromEntries(searchParams), page: newPage });
+                  }}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Weiter</span>
+                  &rarr;
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!hasSearched && (
         <div className="bg-white shadow rounded-lg p-12 text-center mt-4">

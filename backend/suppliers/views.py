@@ -10,7 +10,7 @@ from .models import (
     Supplier, SupplierContact, TradingProduct, TradingProductPrice,
     SupplierProduct, ProductGroup, PriceList, MaterialSupply
 )
-from verp.pagination import InfinitePagination
+from verp.pagination import InfinitePagination, TradingProductPagination
 from .serializers import (
     SupplierSerializer, SupplierCreateUpdateSerializer,
     SupplierContactSerializer, SupplierProductSerializer,
@@ -93,8 +93,8 @@ class TradingProductViewSet(viewsets.ModelViewSet):
     """
     ViewSet für Handelswaren
     """
-    # Pagination für infinite scroll
-    pagination_class = InfinitePagination
+    # Pagination für Trading Products: 9 pro Seite
+    pagination_class = TradingProductPagination
     queryset = TradingProduct.objects.select_related('supplier').all()
     permission_classes = [IsAuthenticated, SupplierPermission]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
