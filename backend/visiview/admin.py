@@ -4,6 +4,9 @@ from .models import (
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
     VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction
 )
+from .production_orders import (
+    VisiViewProductionOrder, VisiViewProductionOrderItem, VisiViewLicenseHistory
+)
 
 
 class VisiViewProductPriceInline(admin.TabularInline):
@@ -320,3 +323,69 @@ class MaintenanceTimeExpenditureAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
+
+# ============================================================
+# VisiView Production Orders & License History
+# ============================================================
+
+class VisiViewProductionOrderItemInline(admin.TabularInline):
+    model = VisiViewProductionOrderItem
+    extra = 0
+    fields = ['customer_order_item', 'selected_options', 'maintenance_months']
+    readonly_fields = []
+
+
+@admin.register(VisiViewProductionOrder)
+class VisiViewProductionOrderAdmin(admin.ModelAdmin):
+    list_display = ['order_number', 'customer', 'status', 'processing_type', 'created_at', 'completed_at']
+    list_filter = ['status', 'processing_type', 'created_at']
+    search_fields = ['order_number', 'customer__last_name', 'customer_order__order_number']
+    readonly_fields = ['order_number', 'created_by', 'created_at', 'updated_at', 'completed_at']
+    inlines = [VisiViewProductionOrderItemInline]
+    
+    fieldsets = (
+        ('Auftragsinformationen', {
+            'fields': ('order_number', 'customer_order', 'customer')
+        }),
+        ('Bearbeitungstyp', {
+            'fields': ('processing_type', 'target_license', 'status')
+        }),
+        ('Notizen', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+        ('Metadaten', {
+            'fields': ('created_by', 'created_at', 'updated_at', 'completed_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(VisiViewLicenseHistory)
+class VisiViewLicenseHistoryAdmin(admin.ModelAdmin):
+    list_display = ['license', 'change_type', 'description', 'changed_by', 'changed_at']
+    list_filter = ['change_type', 'changed_at']
+    search_fields = ['license__serial_number', 'description', 'changed_by__username']
+    readonly_fields = ['changed_at']
+    
+    fieldsets = (
+        ('Lizenz', {
+            'fields': ('license',)
+        }),
+        ('Änderung', {
+            'fields': ('change_type', 'description', 'old_value', 'new_value')
+        }),
+        ('Verknüpfung', {
+            'fields': ('production_order',),
+            'classes': ('collapse',)
+        }),
+        ('Metadaten', {
+            'fields': ('changed_by', 'changed_at'),
+            'classes': ('collapse',)
+        }),
+    )

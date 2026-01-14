@@ -7,6 +7,14 @@ from core.upload_paths import visiview_ticket_attachment_path
 User = get_user_model()
 
 
+# Import production order models to make them available via visiview app
+from .production_orders import (
+    VisiViewProductionOrder,
+    VisiViewProductionOrderItem,
+    VisiViewLicenseHistory
+)
+
+
 class VisiViewProduct(models.Model):
     """
     VisiView Produkte - Software-Produkte für Angebote und Aufträge

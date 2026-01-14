@@ -47,6 +47,8 @@ import VisiViewTickets from './pages/VisiViewTickets';
 import VisiViewTicketEdit from './pages/VisiViewTicketEdit';
 import VisiViewMacros from './pages/VisiViewMacros';
 import VisiViewMacroEdit from './pages/VisiViewMacroEdit';
+import VisiViewProductionOrders from './pages/VisiViewProductionOrders';
+import VisiViewProductionOrderEdit from './pages/VisiViewProductionOrderEdit';
 import VSServiceProducts from './pages/VSServiceProducts';
 import VSServiceProductEdit from './pages/VSServiceProductEdit';
 import RMACases from './pages/RMACases';
@@ -73,6 +75,7 @@ import NotificationSettings from './pages/NotificationSettings';
 import DevelopmentProjects from './pages/DevelopmentProjects';
 import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
 import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
+import VisiViewDashboard from './pages/VisiView';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -116,7 +119,7 @@ function App() {
             <Route path="manufacturing/vs-hardware/:id" element={<VSHardwareEdit />} />
             <Route path="manufacturing/production-orders" element={<ProductionOrders />} />
             <Route path="manufacturing/production-orders/:id" element={<ProductionOrderEdit />} />
-            <Route path="visiview" element={<VisiView />} />
+            <Route path="visiview" element={<VisiViewDashboard />} />
             <Route path="visiview/products" element={<VisiViewProducts />} />
             <Route path="visiview/products/:id" element={<VisiViewProductEdit />} />
             <Route path="visiview/licenses" element={<VisiViewLicenses />} />
@@ -126,6 +129,9 @@ function App() {
             <Route path="visiview/tickets/:id" element={<VisiViewTicketEdit />} />
             <Route path="visiview/macros" element={<VisiViewMacros />} />
             <Route path="visiview/macros/:id" element={<VisiViewMacroEdit />} />
+            <Route path="visiview/production-orders" element={<VisiViewProductionOrders />} />
+            <Route path="visiview/production-orders/new" element={<VisiViewProductionOrderEdit />} />
+            <Route path="visiview/production-orders/:id" element={<VisiViewProductionOrderEdit />} />
             <Route path="visiview/maintenance-time" element={<VisiViewMaintenanceTime />} />
             <Route path="service" element={<Service />} />
             <Route path="service/vs-service" element={<VSServiceProducts />} />

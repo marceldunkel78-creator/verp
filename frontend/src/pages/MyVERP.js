@@ -2424,10 +2424,10 @@ const PersonalDashboardTab = () => {
     { id: 'finance', name: 'Finance', route: '/finance', icon: '💰', category: 'Finance' },
     
     // Procurement
-    { id: 'procurement', name: 'Procurement', route: '/procurement', icon: '📦', category: 'Procurement' },
+    { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Procurement' },
     { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Procurement' },
     { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Procurement' },
-    { id: 'materials-supplies', name: 'Material & Supplies', route: '/procurement/materials-supplies', icon: '🧪', category: 'Procurement' },
+    { id: 'materials-supplies', name: 'Material & Verbrauchsmaterial', route: '/procurement/materials-supplies', icon: '🧪', category: 'Procurement' },
     { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Procurement' },
     { id: 'loans', name: 'Leihgeräte', route: '/procurement/loans', icon: '🔄', category: 'Procurement' },
     { id: 'product-collections', name: 'Produktsammlungen', route: '/procurement/product-collections', icon: '📋', category: 'Procurement' },
@@ -2436,16 +2436,16 @@ const PersonalDashboardTab = () => {
     { id: 'inventory', name: 'Wareneingang & Lager', route: '/inventory/warehouse', icon: '🏭', category: 'Inventory' },
     
     // Sales / Orders
-    { id: 'sales', name: 'Sales / Orders', route: '/sales', icon: '💼', category: 'Sales / Orders' },
+    { id: 'sales', name: 'Vertrieb & Aufträge', route: '/sales', icon: '💼', category: 'Sales / Orders' },
     { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Sales / Orders' },
-    { id: 'dealers', name: 'Händler', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders' },
+    { id: 'dealers', name: 'Distributoren', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders' },
     { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Sales / Orders' },
     { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Sales / Orders' },
     { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Sales / Orders' },
     { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Sales / Orders' },
     { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Sales / Orders' },
     { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders' },
-    { id: 'sales-tickets', name: 'Sales Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders' },
+    { id: 'sales-tickets', name: 'Vertriebs-Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders' },
     
     // HR
     { id: 'hr', name: 'HR', route: '/hr', icon: '👥', category: 'HR' },

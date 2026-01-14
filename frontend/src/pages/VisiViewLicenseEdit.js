@@ -12,7 +12,8 @@ import {
   LinkIcon,
   ClockIcon,
   PlusIcon,
-  TrashIcon
+  TrashIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
 
 const VisiViewLicenseEdit = () => {
@@ -92,14 +93,21 @@ const VisiViewLicenseEdit = () => {
   const [invoiceForm, setInvoiceForm] = useState({
     start_date: '', end_date: '', invoice_number: ''
   });
+  
+  // History state
+  const [historyData, setHistoryData] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     fetchOptions();
     fetchEmployees();
     if (!isNew) {
       fetchLicense();
+      if (activeTab === 'history') {
+        fetchHistory();
+      }
     }
-  }, [id]);
+  }, [id, activeTab]);
 
   const fetchLicense = async () => {
     try {
@@ -154,6 +162,20 @@ const VisiViewLicenseEdit = () => {
       setEmployees(response.data.results || response.data || []);
     } catch (error) {
       console.error('Error fetching employees:', error);
+    }
+  };
+  
+  const fetchHistory = async () => {
+    if (isNew) return;
+    
+    try {
+      setLoadingHistory(true);
+      const response = await api.get(`/visiview/licenses/${id}/history/`);
+      setHistoryData(response.data || []);
+    } catch (error) {
+      console.error('Error fetching license history:', error);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -413,6 +435,7 @@ const VisiViewLicenseEdit = () => {
     { id: 'options', name: 'Optionen', icon: CogIcon },
     { id: 'customer', name: 'Kunde', icon: UserIcon },
     { id: 'maintenance', name: 'Maintenance', icon: ClockIcon },
+    { id: 'history', name: 'History', icon: ClipboardDocumentListIcon },
   ];
 
   if (loading) {
@@ -1113,6 +1136,96 @@ const VisiViewLicenseEdit = () => {
         {activeTab === 'maintenance' && isNew && (
           <div className="text-center py-12 text-gray-500">
             Maintenance-Daten sind erst nach dem Speichern der Lizenz verfügbar.
+          </div>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && !isNew && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Lizenz-Historie</h3>
+            </div>
+
+            {loadingHistory ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              </div>
+            ) : historyData.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                Keine Änderungen vorhanden.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {historyData.map((entry) => (
+                  <div key={entry.id} className="border-l-4 border-indigo-500 pl-4 py-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            ${entry.change_type === 'CREATED' ? 'bg-green-100 text-green-800' :
+                              entry.change_type === 'OPTION_ADDED' ? 'bg-blue-100 text-blue-800' :
+                              entry.change_type === 'OPTION_REMOVED' ? 'bg-red-100 text-red-800' :
+                              entry.change_type === 'MAINTENANCE_EXTENDED' ? 'bg-purple-100 text-purple-800' :
+                              entry.change_type === 'MAJOR_VERSION_UPDATE' ? 'bg-indigo-100 text-indigo-800' :
+                              entry.change_type === 'STATUS_CHANGED' ? 'bg-yellow-100 text-yellow-800' :
+                              entry.change_type === 'CUSTOMER_CHANGED' ? 'bg-orange-100 text-orange-800' :
+                              'bg-gray-100 text-gray-800'}`}>
+                            {entry.change_type_display}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {new Date(entry.changed_at).toLocaleString('de-DE', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        
+                        <p className="text-sm text-gray-900 mb-1">{entry.description}</p>
+                        
+                        {(entry.old_value || entry.new_value) && (
+                          <div className="text-xs text-gray-600 space-y-1 mt-2">
+                            {entry.old_value && (
+                              <div>
+                                <span className="font-medium">Alt:</span> {entry.old_value}
+                              </div>
+                            )}
+                            {entry.new_value && (
+                              <div>
+                                <span className="font-medium">Neu:</span> {entry.new_value}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                          {entry.changed_by_name && (
+                            <div className="flex items-center gap-1">
+                              <UserIcon className="h-3 w-3" />
+                              <span>{entry.changed_by_name}</span>
+                            </div>
+                          )}
+                          {entry.production_order_number && (
+                            <div className="flex items-center gap-1">
+                              <LinkIcon className="h-3 w-3" />
+                              <span>Fertigungsauftrag: {entry.production_order_number}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'history' && isNew && (
+          <div className="text-center py-12 text-gray-500">
+            History-Daten sind erst nach dem Speichern der Lizenz verfügbar.
           </div>
         )}
       </div>

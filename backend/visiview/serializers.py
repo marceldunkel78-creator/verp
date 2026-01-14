@@ -7,8 +7,9 @@ from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
     VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction,
-    MaintenanceInvoice
+    MaintenanceInvoice, VisiViewLicenseHistory
 )
+from .production_orders import VisiViewProductionOrder, VisiViewProductionOrderItem
 
 User = get_user_model()
 
@@ -1017,4 +1018,33 @@ class MaintenanceInvoiceSerializer(serializers.ModelSerializer):
             request = self.context.get('request')
             if request:
                 return request.build_absolute_uri(obj.pdf_file.url)
+        return None
+
+
+class VisiViewLicenseHistorySerializer(serializers.ModelSerializer):
+    """Serializer für VisiView Lizenz History/Changelog"""
+    changed_by_name = serializers.SerializerMethodField()
+    production_order_number = serializers.CharField(
+        source='production_order.order_number',
+        read_only=True,
+        allow_null=True
+    )
+    change_type_display = serializers.CharField(
+        source='get_change_type_display',
+        read_only=True
+    )
+    
+    class Meta:
+        model = VisiViewLicenseHistory
+        fields = [
+            'id', 'license', 'change_type', 'change_type_display',
+            'description', 'old_value', 'new_value',
+            'production_order', 'production_order_number',
+            'changed_by', 'changed_by_name', 'changed_at'
+        ]
+        read_only_fields = ['changed_at', 'changed_by']
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip() or obj.changed_by.username
         return None

@@ -154,6 +154,62 @@ const QuotationForm = () => {
       fetchQuotation();
     }
   }, [id]);
+
+  // Prefill from query params when creating a new quotation (customer, project)
+  useEffect(() => {
+    if (isEditMode) return; // only for new quotations
+
+    const params = new URLSearchParams(window.location.search);
+    const customerParam = params.get('customer');
+    const projectParam = params.get('project');
+
+    if (customerParam) {
+      // Set customer and load its details
+      setFormData(prev => ({ ...prev, customer: customerParam }));
+      (async () => {
+        try {
+          const res = await api.get(`/customers/customers/${customerParam}/`);
+          const customer = res.data;
+          setSelectedCustomer(customer);
+          setCustomerAddresses(customer.addresses || []);
+
+          if (customer.language) {
+            setFormData(prev => ({ ...prev, language: customer.language }));
+          }
+
+          const customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || customer.company || '';
+          setFormData(prev => ({
+            ...prev,
+            recipient_salutation: customer.salutation || '',
+            recipient_title: customer.title || '',
+            recipient_name: customerName,
+            recipient_company: customer.company || ''
+          }));
+        } catch (err) {
+          console.warn('Failed to prefill customer from query param:', err);
+        }
+      })();
+    }
+
+    if (projectParam) {
+      // Set project reference and try to select a sensible system
+      setFormData(prev => ({ ...prev, project_reference: projectParam }));
+      (async () => {
+        try {
+          const resp = await api.get(`/projects/projects/${projectParam}/`);
+          const project = resp.data;
+          // If the project has systems, pre-select the first system
+          if (project.systems && project.systems.length > 0) {
+            setFormData(prev => ({ ...prev, system_reference: project.systems[0] }));
+          } else if (project.systems_data && project.systems_data.length > 0) {
+            setFormData(prev => ({ ...prev, system_reference: project.systems_data[0].id }));
+          }
+        } catch (err) {
+          console.warn('Failed to prefill project from query param:', err);
+        }
+      })();
+    }
+  }, [isEditMode]);
   
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {

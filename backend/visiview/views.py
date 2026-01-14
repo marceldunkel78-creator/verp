@@ -20,7 +20,7 @@ from core.permissions import (
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
-    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure
+    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, VisiViewLicenseHistory
 )
 from .serializers import (
     VisiViewProductListSerializer,
@@ -41,6 +41,7 @@ from .serializers import (
     MaintenanceTimeCreditSerializer,
     MaintenanceTimeExpenditureSerializer,
     MaintenanceTimeExpenditureListSerializer,
+    VisiViewLicenseHistorySerializer,
     calculate_maintenance_balance,
     calculate_interim_settlements,
     process_expenditure_deduction,
@@ -119,6 +120,48 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
+    @action(detail=False, methods=['get'])
+    def next_serial(self, request):
+        """Gibt die nächste freie Seriennummer zurück.
+        Optional: prefix, width, start Query-Parameter zur Formatierung.
+        - prefix: Seriennummern mit diesem Prefix berücksichtigen
+        - width: Mindestanzahl Stellen für numerischen Teil (mit führenden Nullen)
+        - start: Startwert, wenn keine existierende gefunden wurde (Default 1)
+        """
+        prefix = request.query_params.get('prefix', '') or ''
+        try:
+            width = int(request.query_params.get('width', 0))
+        except (TypeError, ValueError):
+            width = 0
+        try:
+            start = int(request.query_params.get('start', 1))
+        except (TypeError, ValueError):
+            start = 1
+
+        # Sammle vorhandene Seriennummern mit Prefix und extrahiere numerischen Rest
+        qs = VisiViewLicense.objects.filter(serial_number__startswith=prefix)
+        numbers = []
+        for s in qs.values_list('serial_number', flat=True):
+            rest = s[len(prefix):]
+            if rest.isdigit():
+                try:
+                    numbers.append(int(rest))
+                except ValueError:
+                    continue
+
+        base_next = (max(numbers) + 1) if numbers else start
+        if width and width > 0:
+            next_serial = f"{prefix}{base_next:0{width}d}"
+        else:
+            next_serial = f"{prefix}{base_next}"
+
+        return Response({
+            'next_serial': next_serial,
+            'prefix': prefix,
+            'width': width,
+            'base_next': base_next
+        })
+
     @action(detail=True, methods=['post'])
     def toggle_option(self, request, pk=None):
         """Aktiviert oder deaktiviert eine Option für die Lizenz"""
@@ -194,6 +237,17 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     # ============================================================
     # Maintenance Time Credits & Expenditures
     # ============================================================
+    
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        """Gibt alle History-Einträge für eine Lizenz zurück"""
+        license = self.get_object()
+        history_entries = license.history.select_related(
+            'changed_by', 'production_order'
+        ).order_by('-changed_at')
+        
+        serializer = VisiViewLicenseHistorySerializer(history_entries, many=True)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def maintenance(self, request, pk=None):
