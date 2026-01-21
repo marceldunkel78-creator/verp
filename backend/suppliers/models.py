@@ -118,10 +118,12 @@ class SupplierContact(models.Model):
     Kontaktinformationen für verschiedene Bereiche eines Lieferanten
     """
     CONTACT_TYPE_CHOICES = [
+        ('main', 'Hauptansprechpartner'),
         ('service', 'Service'),
         ('sales', 'Vertrieb'),
         ('orders', 'Bestellungen'),
         ('order_processing', 'Auftragsabwicklung'),
+        ('ceo', 'Geschäftsführung'),
     ]
     
     supplier = models.ForeignKey(
@@ -134,6 +136,11 @@ class SupplierContact(models.Model):
         max_length=20, 
         choices=CONTACT_TYPE_CHOICES,
         verbose_name='Kontakttyp'
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        verbose_name='Hauptkontakt',
+        help_text='Ist dies der Hauptkontakt in dieser Kategorie?'
     )
     
     # Kontaktperson
@@ -149,43 +156,45 @@ class SupplierContact(models.Model):
     state = models.CharField(max_length=100, blank=True, verbose_name='Bundesland/Provinz')
     country = models.CharField(max_length=2, blank=True, default='DE', verbose_name='Land', help_text='ISO 3166-1 Alpha-2 Code')
     
+    # Geo-Koordinaten für Kartenanzeige
+    latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        verbose_name='Breitengrad'
+    )
+    longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True,
+        verbose_name='Längengrad'
+    )
+    
     # Legacy field
     address = models.TextField(blank=True, verbose_name='Adresse (veraltet)', help_text='Wird durch neue Adressfelder ersetzt')
     
     email = models.EmailField(blank=True, verbose_name='E-Mail')
     phone = models.CharField(max_length=50, blank=True, verbose_name='Telefonnummer')
+    mobile = models.CharField(max_length=50, blank=True, verbose_name='Mobilnummer')
     
     notes = models.TextField(blank=True, verbose_name='Notizen')
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         verbose_name = 'Lieferanten-Kontakt'
         verbose_name_plural = 'Lieferanten-Kontakte'
         ordering = ['contact_type', 'contact_person']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['supplier', 'contact_type'],
-                condition=models.Q(contact_type='orders'),
-                name='unique_orders_contact_per_supplier'
-            )
-        ]
     
     def __str__(self):
         return f"{self.supplier.company_name} - {self.get_contact_type_display()}: {self.contact_person}"
     
-    def clean(self):
-        from django.core.exceptions import ValidationError
-        # Prüfe ob bereits ein Bestellungen-Kontakt existiert
-        if self.contact_type == 'orders':
-            existing = SupplierContact.objects.filter(
+    def save(self, *args, **kwargs):
+        # Wenn dieser Kontakt als Hauptkontakt markiert wird, alle anderen im gleichen Typ deaktivieren
+        if self.is_primary:
+            SupplierContact.objects.filter(
                 supplier=self.supplier,
-                contact_type='orders'
-            ).exclude(pk=self.pk if self.pk else None)
-            
-            if existing.exists():
-                raise ValidationError({
-                    'contact_type': 'Es kann nur ein Bestellungen-Kontakt pro Lieferant existieren.'
-                })
+                contact_type=self.contact_type,
+                is_primary=True
+            ).exclude(pk=self.pk if self.pk else None).update(is_primary=False)
+        super().save(*args, **kwargs)
 
 
 class ProductGroup(models.Model):
@@ -218,6 +227,89 @@ class ProductGroup(models.Model):
     
     def __str__(self):
         return f"{self.supplier.company_name} - {self.name} ({self.discount_percent}%)"
+
+
+def supplier_attachment_upload_path(instance, filename):
+    """Upload path für Lieferanten-Anhänge"""
+    return f"suppliers/{instance.supplier.supplier_number}/{filename}"
+
+
+class SupplierAttachment(models.Model):
+    """
+    Anhänge für Lieferanten (Preislisten-PDFs, Prospekte, etc.)
+    """
+    ATTACHMENT_TYPE_CHOICES = [
+        ('price_list', 'Preisliste'),
+        ('brochure', 'Prospekt'),
+        ('contract', 'Vertrag'),
+        ('certificate', 'Zertifikat'),
+        ('other', 'Sonstiges'),
+    ]
+    
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='Lieferant'
+    )
+    attachment_type = models.CharField(
+        max_length=20,
+        choices=ATTACHMENT_TYPE_CHOICES,
+        default='other',
+        verbose_name='Dateityp'
+    )
+    name = models.CharField(max_length=200, verbose_name='Name/Beschreibung')
+    file = models.FileField(
+        upload_to=supplier_attachment_upload_path,
+        verbose_name='Datei'
+    )
+    filename = models.CharField(max_length=255, blank=True, verbose_name='Dateiname')
+    file_size = models.PositiveIntegerField(default=0, verbose_name='Dateigröße (Bytes)')
+    mime_type = models.CharField(max_length=100, blank=True, verbose_name='MIME-Type')
+    
+    # Verknüpfung mit Preisliste (optional)
+    price_list = models.ForeignKey(
+        'PriceList',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attachments',
+        verbose_name='Zugehörige Preisliste'
+    )
+    
+    valid_from = models.DateField(null=True, blank=True, verbose_name='Gültig von')
+    valid_until = models.DateField(null=True, blank=True, verbose_name='Gültig bis')
+    notes = models.TextField(blank=True, verbose_name='Notizen')
+    
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='supplier_attachments_uploaded',
+        verbose_name='Hochgeladen von'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Lieferanten-Anhang'
+        verbose_name_plural = 'Lieferanten-Anhänge'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.supplier.company_name} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        if self.file:
+            self.filename = self.file.name.split('/')[-1]
+            self.file_size = self.file.size
+        super().save(*args, **kwargs)
+    
+    @property
+    def file_url(self):
+        if self.file:
+            return self.file.url
+        return None
 
 
 class PriceList(models.Model):

@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
 import Suppliers from './pages/Suppliers';
 import SupplierDetail from './pages/SupplierDetail';
+import SupplierEdit from './pages/SupplierEdit';
 import TradingProducts from './pages/TradingProducts';
 import TradingProductEdit from './pages/TradingProductEdit';
 import MaterialSupplies from './pages/MaterialSupplies';
@@ -76,6 +77,11 @@ import DevelopmentProjects from './pages/DevelopmentProjects';
 import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
 import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
 import VisiViewDashboard from './pages/VisiView';
+import MondayMeeting from './pages/MondayMeeting';
+import SalesMeeting from './pages/SalesMeeting';
+import VisiViewMeeting from './pages/VisiViewMeeting';
+import Meetings from './pages/modules/Meetings';
+import CompanyCalendar from './pages/CompanyCalendar';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -155,9 +161,20 @@ function App() {
             <Route path="development/projects/new" element={<DevelopmentProjectEdit />} />
             <Route path="development/projects/:id" element={<DevelopmentProjectEdit />} />
             
+            {/* Meetings Module */}
+            <Route path="meetings" element={<Meetings />} />
+            <Route path="meetings/monday" element={<MondayMeeting />} />
+            <Route path="meetings/sales" element={<SalesMeeting />} />
+            <Route path="meetings/visiview" element={<VisiViewMeeting />} />
+            
+            {/* Company Calendar Module */}
+            <Route path="calendar" element={<CompanyCalendar />} />
+            
             {/* Procurement Submodules */}
             <Route path="procurement/suppliers" element={<Suppliers />} />
+            <Route path="procurement/suppliers/new" element={<SupplierEdit />} />
             <Route path="procurement/suppliers/:id" element={<SupplierDetail />} />
+            <Route path="procurement/suppliers/:id/edit" element={<SupplierEdit />} />
             <Route path="procurement/trading-goods" element={<TradingProducts />} />
             <Route path="procurement/trading-goods/new" element={<TradingProductEdit />} />
             <Route path="procurement/trading-goods/:id" element={<TradingProductEdit />} />

@@ -25,7 +25,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_read_settings', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_read_finance', 'can_read_procurement', 'can_read_inventory',
             'can_read_visiview', 'can_read_bi', 'can_read_documents',
-            'can_read_development',
+            'can_read_development', 'can_read_meetings',
             # Submodule - Lesen
             'can_read_procurement_orders', 'can_read_procurement_loans', 'can_read_procurement_product_collections',
             'can_read_sales_dealers', 'can_read_sales_pricelists', 'can_read_sales_projects',
@@ -43,7 +43,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_write_settings', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'can_write_finance', 'can_write_procurement', 'can_write_inventory',
             'can_write_visiview', 'can_write_bi', 'can_write_documents',
-            'can_write_development',
+            'can_write_development', 'can_write_meetings',
             # Submodule - Schreiben
             'can_write_procurement_orders', 'can_write_procurement_loans', 'can_write_procurement_product_collections',
             'can_write_sales_dealers', 'can_write_sales_pricelists', 'can_write_sales_projects',
@@ -82,7 +82,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_read_settings', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_read_finance', 'can_read_procurement', 'can_read_inventory',
             'can_read_visiview', 'can_read_bi', 'can_read_documents',
-            'can_read_development',
+            'can_read_development', 'can_read_meetings',
             # Submodule - Lesen
             'can_read_procurement_orders', 'can_read_procurement_loans', 'can_read_procurement_product_collections',
             'can_read_sales_dealers', 'can_read_sales_pricelists', 'can_read_sales_projects',
@@ -100,7 +100,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_write_settings', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'can_write_finance', 'can_write_procurement', 'can_write_inventory',
             'can_write_visiview', 'can_write_bi', 'can_write_documents',
-            'can_write_development',
+            'can_write_development', 'can_write_meetings',
             # Submodule - Schreiben
             'can_write_procurement_orders', 'can_write_procurement_loans', 'can_write_procurement_product_collections',
             'can_write_sales_dealers', 'can_write_sales_pricelists', 'can_write_sales_projects',
@@ -139,7 +139,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_read_settings', 'can_read_sales', 'can_read_trading', 'can_read_material_supplies',
             'can_read_finance', 'can_read_procurement', 'can_read_inventory',
             'can_read_visiview', 'can_read_bi', 'can_read_documents',
-            'can_read_development',
+            'can_read_development', 'can_read_meetings',
             # Submodule - Lesen
             'can_read_procurement_orders', 'can_read_procurement_loans', 'can_read_procurement_product_collections',
             'can_read_sales_dealers', 'can_read_sales_pricelists', 'can_read_sales_projects',
@@ -157,7 +157,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_write_settings', 'can_write_sales', 'can_write_trading', 'can_write_material_supplies',
             'can_write_finance', 'can_write_procurement', 'can_write_inventory',
             'can_write_visiview', 'can_write_bi', 'can_write_documents',
-            'can_write_development',
+            'can_write_development', 'can_write_meetings',
             # Submodule - Schreiben
             'can_write_procurement_orders', 'can_write_procurement_loans', 'can_write_procurement_product_collections',
             'can_write_sales_dealers', 'can_write_sales_pricelists', 'can_write_sales_projects',

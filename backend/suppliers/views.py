@@ -3,18 +3,21 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.http import FileResponse
+import mimetypes
 
 from .models import (
     Supplier, SupplierContact, TradingProduct, TradingProductPrice,
-    SupplierProduct, ProductGroup, PriceList, MaterialSupply
+    SupplierProduct, ProductGroup, PriceList, MaterialSupply, SupplierAttachment
 )
 from verp.pagination import InfinitePagination, TradingProductPagination
 from .serializers import (
     SupplierSerializer, SupplierCreateUpdateSerializer,
     SupplierContactSerializer, SupplierProductSerializer,
-    ProductGroupSerializer, PriceListSerializer
+    ProductGroupSerializer, PriceListSerializer, SupplierAttachmentSerializer
 )
 from .trading_serializers import (
     TradingProductListSerializer,
@@ -179,6 +182,42 @@ class PriceListViewSet(viewsets.ModelViewSet):
     search_fields = ['name']
     ordering_fields = ['name', 'supplier__company_name', 'valid_from', 'valid_until', 'created_at']
     ordering = ['supplier', '-valid_from']
+
+
+class SupplierAttachmentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Lieferanten-Anhänge (Preislisten, Prospekte, etc.)
+    """
+    queryset = SupplierAttachment.objects.select_related('supplier', 'price_list', 'uploaded_by').all()
+    serializer_class = SupplierAttachmentSerializer
+    permission_classes = [IsAuthenticated, SupplierPermission]
+    parser_classes = [MultiPartParser, FormParser]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['supplier', 'attachment_type', 'price_list']
+    search_fields = ['name', 'filename', 'notes']
+    ordering_fields = ['name', 'attachment_type', 'created_at', 'valid_from']
+    ordering = ['-created_at']
+    
+    def perform_create(self, serializer):
+        # MIME-Type ermitteln
+        file_obj = self.request.FILES.get('file')
+        mime_type = ''
+        if file_obj:
+            mime_type = mimetypes.guess_type(file_obj.name)[0] or ''
+        serializer.save(uploaded_by=self.request.user, mime_type=mime_type)
+    
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Download eines Attachments"""
+        attachment = self.get_object()
+        if attachment.file:
+            response = FileResponse(
+                attachment.file.open('rb'),
+                as_attachment=True,
+                filename=attachment.filename
+            )
+            return response
+        return Response({'error': 'Keine Datei vorhanden'}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MaterialSupplyViewSet(viewsets.ModelViewSet):

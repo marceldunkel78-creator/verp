@@ -307,6 +307,55 @@ class CustomerOrderItem(models.Model):
     # Status der Position
     is_delivered = models.BooleanField(default=False, verbose_name='Geliefert')
     is_invoiced = models.BooleanField(default=False, verbose_name='Berechnet')
+    
+    # Beschaffungs-Status (für Tab "Beschaffung")
+    procurement_status = models.CharField(
+        max_length=30,
+        choices=[
+            ('pending', 'Ausstehend'),
+            ('ordered', 'Bestellt'),
+            ('in_production', 'In Fertigung'),
+            ('completed', 'Abgeschlossen'),
+        ],
+        default='pending',
+        verbose_name='Beschaffungsstatus'
+    )
+    
+    # Lieferanten-Referenz (aus Produktstamm oder manuell)
+    supplier = models.ForeignKey(
+        'suppliers.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='customer_order_items',
+        verbose_name='Lieferant'
+    )
+    
+    # Verknüpfungen zu erstellten Aufträgen
+    supplier_order = models.ForeignKey(
+        'orders.Order',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='customer_order_items',
+        verbose_name='Lieferantenbestellung'
+    )
+    visiview_production_order = models.ForeignKey(
+        'visiview.VisiViewProductionOrder',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='customer_order_items',
+        verbose_name='VisiView Fertigungsauftrag'
+    )
+    hardware_production_order = models.ForeignKey(
+        'manufacturing.ProductionOrder',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='customer_order_items',
+        verbose_name='Hardware Fertigungsauftrag'
+    )
 
     class Meta:
         verbose_name = 'Auftragsposition'

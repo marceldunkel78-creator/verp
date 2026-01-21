@@ -10,6 +10,10 @@ from .models import CustomerOrder, CustomerOrderItem, DeliveryNote, Invoice, Pay
 class CustomerOrderItemSerializer(serializers.ModelSerializer):
     """Serializer für Auftragspositionen"""
     total_price = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
+    supplier_order_number = serializers.CharField(source='supplier_order.order_number', read_only=True)
+    visiview_production_order_number = serializers.CharField(source='visiview_production_order.order_number', read_only=True)
+    hardware_production_order_number = serializers.CharField(source='hardware_production_order.order_number', read_only=True)
     
     class Meta:
         model = CustomerOrderItem
@@ -18,7 +22,12 @@ class CustomerOrderItemSerializer(serializers.ModelSerializer):
             'quantity', 'unit', 'purchase_price', 'list_price', 'discount_percent', 'final_price',
             'currency', 'quotation_position', 'serial_number',
             'delivery_note_number', 'invoice_number', 'is_delivered', 'is_invoiced',
-            'is_group_header', 'group_id', 'total_price'
+            'is_group_header', 'group_id', 'total_price',
+            # Procurement fields
+            'procurement_status', 'supplier', 'supplier_name',
+            'supplier_order', 'supplier_order_number',
+            'visiview_production_order', 'visiview_production_order_number',
+            'hardware_production_order', 'hardware_production_order_number'
         ]
     
     def get_total_price(self, obj):

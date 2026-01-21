@@ -87,7 +87,8 @@ const CustomerOrderSearch = ({
           url += `&customer=${customerId}`;
         }
         const res = await api.get(url);
-        setResults(res.data.results || res.data);
+        const data = res.data.results || res.data || [];
+        setResults(Array.isArray(data) ? data : []);
         setIsOpen(true);
       } catch (error) {
         console.error('Error searching orders:', error);

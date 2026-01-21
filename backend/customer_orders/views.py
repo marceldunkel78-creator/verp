@@ -304,7 +304,7 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
             'order_number': order.order_number,
             'status': order.status,
             'status_display': order.get_status_display(),
-            'customer_name': order.customer.company_name if order.customer else None,
+            'customer_name': str(order.customer) if order.customer else None,
             'items': {
                 'total': total_items,
                 'delivered': delivered_items,
@@ -323,6 +323,314 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
                 'invoices': order.invoices.count(),
                 'has_confirmation_pdf': bool(order.confirmation_pdf),
             }
+        })
+    
+    # =========================================================================
+    # PROCUREMENT ACTIONS (Beschaffung)
+    # =========================================================================
+    
+    @action(detail=True, methods=['post'], url_path='create-visiview-production-order')
+    def create_visiview_production_order(self, request, pk=None):
+        """
+        Erstellt einen VisiView Fertigungsauftrag für ausgewählte Positionen
+        
+        POST /api/customer-orders/{id}/create-visiview-production-order/
+        Body: { "item_ids": [1, 2, 3], "processing_type": "NEW_LICENSE", "notes": "" }
+        """
+        from visiview.models import VisiViewProductionOrder
+        from visiview.production_orders import VisiViewProductionOrderItem
+        
+        order = self.get_object()
+        item_ids = request.data.get('item_ids', [])
+        processing_type = request.data.get('processing_type', 'NEW_LICENSE')
+        notes = request.data.get('notes', '')
+        
+        if not item_ids:
+            return Response(
+                {'error': 'Keine Positionen ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        items = order.items.filter(id__in=item_ids)
+        
+        # Validate all items are VisiView products
+        for item in items:
+            if not item.article_number.upper().startswith('VV-'):
+                return Response(
+                    {'error': f'Position {item.position} ({item.article_number}) ist kein VisiView-Produkt'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Create VisiView production order
+        production_order = VisiViewProductionOrder.objects.create(
+            customer_order=order,
+            customer=order.customer,
+            status='DRAFT',
+            processing_type=processing_type,
+            notes=notes,
+            created_by=request.user
+        )
+        
+        # Add items to production order
+        for item in items:
+            VisiViewProductionOrderItem.objects.create(
+                production_order=production_order,
+                customer_order_item=item,
+                notes=f"Artikelnr: {item.article_number}, Menge: {item.quantity}, Produkt: {item.name}"
+            )
+            
+            # Update item procurement status
+            item.visiview_production_order = production_order
+            item.procurement_status = 'in_production'
+            item.save()
+        
+        return Response({
+            'status': 'success',
+            'message': f'VisiView Fertigungsauftrag {production_order.order_number} wurde erstellt.',
+            'production_order_id': production_order.id,
+            'production_order_number': production_order.order_number
+        })
+    
+    @action(detail=True, methods=['post'], url_path='create-supplier-order')
+    def create_supplier_order(self, request, pk=None):
+        """
+        Erstellt eine Lieferantenbestellung für ausgewählte Positionen
+        
+        POST /api/customer-orders/{id}/create-supplier-order/
+        Body: { "item_ids": [1, 2, 3], "supplier_id": 123, "notes": "" }
+        """
+        from orders.models import Order, OrderItem
+        from suppliers.models import Supplier
+        
+        order = self.get_object()
+        item_ids = request.data.get('item_ids', [])
+        supplier_id = request.data.get('supplier_id')
+        notes = request.data.get('notes', '')
+        
+        if not item_ids:
+            return Response(
+                {'error': 'Keine Positionen ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not supplier_id:
+            return Response(
+                {'error': 'Kein Lieferant ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            supplier = Supplier.objects.get(id=supplier_id)
+        except Supplier.DoesNotExist:
+            return Response(
+                {'error': 'Lieferant nicht gefunden'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        items = order.items.filter(id__in=item_ids)
+        
+        # Create supplier order
+        supplier_order = Order.objects.create(
+            supplier=supplier,
+            order_type='customer_order',
+            status='angelegt',
+            order_date=timezone.now().date(),
+            notes=f"Aus Kundenauftrag {order.order_number or order.id}\n{notes}".strip(),
+            created_by=request.user
+        )
+        
+        # Add items to supplier order
+        for idx, item in enumerate(items, start=1):
+            OrderItem.objects.create(
+                order=supplier_order,
+                position=idx,
+                article_number=item.article_number,
+                name=item.name,
+                description=item.description,
+                quantity=item.quantity,
+                unit=item.unit,
+                list_price=item.purchase_price,
+                final_price=item.purchase_price,
+                customer_order_number=order.order_number or str(order.id)
+            )
+            
+            # Update item procurement status
+            item.supplier_order = supplier_order
+            item.supplier = supplier
+            item.procurement_status = 'ordered'
+            item.save()
+        
+        return Response({
+            'status': 'success',
+            'message': f'Lieferantenbestellung {supplier_order.order_number} wurde erstellt.',
+            'supplier_order_id': supplier_order.id,
+            'supplier_order_number': supplier_order.order_number
+        })
+    
+    @action(detail=True, methods=['post'], url_path='create-hardware-production-order')
+    def create_hardware_production_order(self, request, pk=None):
+        """
+        Erstellt einen VS-Hardware Fertigungsauftrag für eine Position
+        
+        POST /api/customer-orders/{id}/create-hardware-production-order/
+        Body: { "item_id": 123, "vs_hardware_id": 456, "quantity": 1, "notes": "" }
+        """
+        from manufacturing.models import ProductionOrder, VSHardware
+        
+        order = self.get_object()
+        item_id = request.data.get('item_id')
+        vs_hardware_id = request.data.get('vs_hardware_id')
+        quantity = request.data.get('quantity', 1)
+        notes = request.data.get('notes', '')
+        
+        if not item_id:
+            return Response(
+                {'error': 'Keine Position ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not vs_hardware_id:
+            return Response(
+                {'error': 'Kein VS-Hardware Produkt ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            item = order.items.get(id=item_id)
+        except CustomerOrderItem.DoesNotExist:
+            return Response(
+                {'error': 'Position nicht gefunden'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            vs_hardware = VSHardware.objects.get(id=vs_hardware_id)
+        except VSHardware.DoesNotExist:
+            return Response(
+                {'error': 'VS-Hardware Produkt nicht gefunden'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Create hardware production order
+        production_order = ProductionOrder.objects.create(
+            vs_hardware=vs_hardware,
+            customer_order=order,
+            quantity=quantity,
+            status='created',
+            notes=f"Aus Kundenauftrag {order.order_number or order.id}\nPosition: {item.name}\n{notes}".strip(),
+            created_by=request.user
+        )
+        
+        # Try to get project from order references
+        if order.project_reference:
+            from projects.models import Project
+            try:
+                project = Project.objects.filter(name__icontains=order.project_reference).first()
+                if project:
+                    production_order.project = project
+                    production_order.save()
+            except Exception:
+                pass
+        
+        # Update item procurement status
+        item.hardware_production_order = production_order
+        item.procurement_status = 'in_production'
+        item.save()
+        
+        return Response({
+            'status': 'success',
+            'message': f'Fertigungsauftrag {production_order.order_number} wurde erstellt.',
+            'production_order_id': production_order.id,
+            'production_order_number': production_order.order_number
+        })
+    
+    @action(detail=True, methods=['get'], url_path='procurement-data')
+    def procurement_data(self, request, pk=None):
+        """
+        Liefert Beschaffungsdaten für alle Positionen des Auftrags
+        
+        GET /api/customer-orders/{id}/procurement-data/
+        """
+        from suppliers.models import Supplier, TradingProduct
+        from manufacturing.models import VSHardware
+        
+        order = self.get_object()
+        items_data = []
+        
+        for item in order.items.all():
+            item_data = {
+                'id': item.id,
+                'position': item.position,
+                'position_display': item.position_display,
+                'article_number': item.article_number,
+                'name': item.name,
+                'quantity': float(item.quantity),
+                'unit': item.unit,
+                'is_group_header': item.is_group_header,
+                'procurement_status': item.procurement_status,
+                'supplier': None,
+                'supplier_name': None,
+                'product_type': None,
+                'supplier_order': None,
+                'supplier_order_number': None,
+                'visiview_production_order': None,
+                'visiview_production_order_number': None,
+                'hardware_production_order': None,
+                'hardware_production_order_number': None,
+            }
+            
+            # Determine product type and supplier
+            article_upper = (item.article_number or '').upper()
+            if article_upper.startswith('VV-'):
+                item_data['product_type'] = 'VISIVIEW'
+            elif article_upper.startswith('VSH-'):
+                item_data['product_type'] = 'VS_HARDWARE'
+                # Try to find VS-Hardware product
+                try:
+                    vs_hw = VSHardware.objects.filter(article_number__iexact=item.article_number).first()
+                    if vs_hw:
+                        item_data['vs_hardware_id'] = vs_hw.id
+                except Exception:
+                    pass
+            elif article_upper.startswith('VSS-'):
+                item_data['product_type'] = 'VS_SERVICE'
+            else:
+                # Trading product - try to find supplier
+                item_data['product_type'] = 'TRADING'
+                try:
+                    trading = TradingProduct.objects.filter(
+                        article_number__iexact=item.article_number
+                    ).select_related('supplier').first()
+                    if trading and trading.supplier:
+                        item_data['supplier'] = trading.supplier.id
+                        item_data['supplier_name'] = trading.supplier.company_name
+                except Exception:
+                    pass
+            
+            # Fill in existing order references
+            if item.supplier:
+                item_data['supplier'] = item.supplier.id
+                item_data['supplier_name'] = item.supplier.company_name
+            if item.supplier_order:
+                item_data['supplier_order'] = item.supplier_order.id
+                item_data['supplier_order_number'] = item.supplier_order.order_number
+            if item.visiview_production_order:
+                item_data['visiview_production_order'] = item.visiview_production_order.id
+                item_data['visiview_production_order_number'] = item.visiview_production_order.order_number
+            if item.hardware_production_order:
+                item_data['hardware_production_order'] = item.hardware_production_order.id
+                item_data['hardware_production_order_number'] = item.hardware_production_order.order_number
+            
+            items_data.append(item_data)
+        
+        return Response({
+            'order_id': order.id,
+            'order_number': order.order_number,
+            'customer_id': order.customer.id if order.customer else None,
+            'customer_name': str(order.customer) if order.customer else None,
+            'project_reference': order.project_reference,
+            'system_reference': order.system_reference,
+            'items': items_data
         })
 
 

@@ -91,7 +91,8 @@ const VisiViewTicketEdit = () => {
     attachments: [],
     time_entries: [],
     total_hours_spent: 0,
-    percent_done: 0
+    percent_done: 0,
+    add_to_worklist: false
   });
   
   const [systemSearch, setSystemSearch] = useState('');
@@ -673,6 +674,25 @@ const VisiViewTicketEdit = () => {
                       rows={6}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     />
+                  </div>
+                  
+                  {/* Worklist Checkbox */}
+                  <div className="md:col-span-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="add_to_worklist"
+                        checked={ticket.add_to_worklist || false}
+                        onChange={(e) => setTicket(prev => ({ ...prev, add_to_worklist: e.target.checked }))}
+                        className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        Zur Worklist hinzufügen
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        (Ticket wird im VisiView-Meeting angezeigt)
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>

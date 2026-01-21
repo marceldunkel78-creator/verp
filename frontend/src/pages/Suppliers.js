@@ -521,16 +521,13 @@ const Suppliers = () => {
           )}
         </div>
         {canWrite && (
-          <button
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
+          <Link
+            to="/procurement/suppliers/new"
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
             Neuer Lieferant
-          </button>
+          </Link>
         )}
       </div>
 
@@ -693,13 +690,13 @@ const Suppliers = () => {
                   </Link>
                   {canWrite && (
                     <>
-                      <button
-                        onClick={() => openEditModal(supplier)}
+                      <Link
+                        to={`/procurement/suppliers/${supplier.id}/edit`}
                         className="text-blue-600 hover:text-blue-900 p-1"
                         title="Bearbeiten"
                       >
                         <PencilIcon className="h-5 w-5" />
-                      </button>
+                      </Link>
                       <button
                         onClick={() => handleDelete(supplier.id)}
                         className="text-red-600 hover:text-red-900 p-1"

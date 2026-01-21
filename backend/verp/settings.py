@@ -59,6 +59,8 @@ INSTALLED_APPS = [
     'notifications',
     'development',
     'bi',
+    'meetings',
+    'company_calendar',
 ]
 
 MIDDLEWARE = [

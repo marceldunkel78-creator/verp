@@ -21,6 +21,8 @@ import {
   DocumentDuplicateIcon,
   ClockIcon,
   BeakerIcon,
+  CalendarDaysIcon,
+  CalendarIcon,
 } from '@heroicons/react/24/outline';
 
 const Layout = () => {
@@ -44,6 +46,8 @@ const Layout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'MyVERP', href: '/myverp', icon: ClockIcon },
+    { name: 'Kalender', href: '/calendar', icon: CalendarIcon },
+    { name: 'Meetings', href: '/meetings', icon: CalendarDaysIcon, permission: 'can_read_meetings' },
     { name: 'Finance', href: '/finance', icon: BanknotesIcon, permission: 'can_read_finance' },
     { name: 'Procurement', href: '/procurement', icon: TruckIcon, permission: 'can_read_procurement' },
     { name: 'Inventory', href: '/inventory', icon: CubeIcon, permission: 'can_read_inventory' },

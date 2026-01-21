@@ -21,7 +21,10 @@ import {
   DocumentArrowDownIcon,
   ArrowUpTrayIcon,
   EyeIcon,
-  XMarkIcon
+  XMarkIcon,
+  CubeIcon,
+  BuildingStorefrontIcon,
+  WrenchScrewdriverIcon
 } from '@heroicons/react/24/outline';
 
 /**
@@ -135,11 +138,19 @@ const CustomerOrderEdit = () => {
     selectedItemIds: []
   });
 
+  // Procurement State (Beschaffung Tab)
+  const [procurementData, setProcurementData] = useState(null);
+  const [procurementLoading, setProcurementLoading] = useState(false);
+  const [procurementSelectedItems, setProcurementSelectedItems] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [vsHardwareProducts, setVsHardwareProducts] = useState([]);
+
   // Tab Configuration
   const tabs = [
     { id: 'basisinfos', name: 'Basisinfos', icon: DocumentTextIcon, enabled: true },
     { id: 'positionen', name: 'Positionen', icon: ClipboardDocumentListIcon, enabled: true },
     { id: 'auftragsbestaetigung', name: 'Auftragsbestätigung', icon: ClipboardDocumentCheckIcon, enabled: isEditMode },
+    { id: 'beschaffung', name: 'Beschaffung', icon: CubeIcon, enabled: isEditMode && order.status !== 'angelegt' },
     { id: 'lieferschein', name: 'Lieferschein', icon: TruckIcon, enabled: isEditMode && order.status !== 'angelegt' },
     { id: 'rechnung', name: 'Rechnung', icon: CurrencyEuroIcon, enabled: isEditMode && order.status !== 'angelegt' },
     { id: 'zahlung', name: 'Zahlung', icon: BanknotesIcon, enabled: isEditMode && order.status !== 'angelegt' }
@@ -751,6 +762,245 @@ const CustomerOrderEdit = () => {
       ...prev,
       commission_recipients: prev.commission_recipients.filter((_, i) => i !== index)
     }));
+  };
+
+  // ============================================================================
+  // Procurement Functions (Beschaffung Tab)
+  // ============================================================================
+
+  const loadProcurementData = async () => {
+    if (!order.id) return;
+    
+    setProcurementLoading(true);
+    try {
+      const [procRes, suppliersRes, vsHardwareRes] = await Promise.all([
+        api.get(`/customer-orders/customer-orders/${order.id}/procurement-data/`),
+        api.get('/suppliers/suppliers/?is_active=true&page_size=200'),
+        api.get('/manufacturing/vs-hardware/?is_active=true&page_size=200')
+      ]);
+      
+      setProcurementData(procRes.data);
+      setSuppliers(suppliersRes.data.results || suppliersRes.data || []);
+      setVsHardwareProducts(vsHardwareRes.data.results || vsHardwareRes.data || []);
+    } catch (err) {
+      console.error('Error loading procurement data:', err);
+    } finally {
+      setProcurementLoading(false);
+    }
+  };
+
+  // Load procurement data when switching to Beschaffung tab
+  useEffect(() => {
+    if (activeTab === 'beschaffung' && order.id && !procurementData) {
+      loadProcurementData();
+    }
+  }, [activeTab, order.id]);
+
+  const toggleProcurementItem = (itemId) => {
+    setProcurementSelectedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const selectAllProcurementItems = (productType) => {
+    if (!procurementData) return;
+    
+    const matchingItems = procurementData.items
+      .filter(item => !item.is_group_header && item.product_type === productType && item.procurement_status === 'pending')
+      .map(item => item.id);
+    
+    setProcurementSelectedItems(prev => {
+      const allSelected = matchingItems.every(id => prev.includes(id));
+      if (allSelected) {
+        return prev.filter(id => !matchingItems.includes(id));
+      } else {
+        return [...new Set([...prev, ...matchingItems])];
+      }
+    });
+  };
+
+  const createVisiViewProductionOrder = async () => {
+    // Collect all selected VisiView items including group members
+    const selectedVisiViewItems = [];
+    const processedGroupIds = new Set();
+
+    procurementSelectedItems.forEach(itemId => {
+      const item = procurementData?.items?.find(i => i.id === itemId);
+      if (!item || item.procurement_status !== 'pending') return;
+
+      // If it's a group header, add all group members
+      if (item.is_group_header && item.group_id) {
+        if (!processedGroupIds.has(item.group_id)) {
+          processedGroupIds.add(item.group_id);
+          // Find all items in this group
+          procurementData.items.forEach(groupItem => {
+            if (groupItem.group_id === item.group_id && 
+                !groupItem.is_group_header && 
+                groupItem.product_type === 'VISIVIEW' && 
+                groupItem.procurement_status === 'pending') {
+              selectedVisiViewItems.push(groupItem.id);
+            }
+          });
+        }
+      } else if (item.product_type === 'VISIVIEW') {
+        // Regular item
+        selectedVisiViewItems.push(item.id);
+      }
+    });
+
+    if (selectedVisiViewItems.length === 0) {
+      alert('Bitte wählen Sie mindestens ein VisiView-Produkt aus.');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/customer-orders/customer-orders/${order.id}/create-visiview-production-order/`, {
+        item_ids: selectedVisiViewItems,
+        processing_type: 'NEW_LICENSE',
+        notes: ''
+      });
+
+      alert(`VisiView Fertigungsauftrag ${response.data.production_order_number} wurde erstellt.`);
+      setProcurementSelectedItems([]);
+      await loadProcurementData();
+    } catch (err) {
+      console.error('Error creating VisiView production order:', err);
+      alert('Fehler beim Erstellen des VisiView Fertigungsauftrags: ' + (err?.response?.data?.error || err.message));
+    }
+  };
+
+  const createSupplierOrder = async (supplierId) => {
+    // Collect all selected trading items including group members
+    const selectedTradingItems = [];
+    const processedGroupIds = new Set();
+
+    procurementSelectedItems.forEach(itemId => {
+      const item = procurementData?.items?.find(i => i.id === itemId);
+      if (!item || item.procurement_status !== 'pending') return;
+
+      // If it's a group header, add all group members
+      if (item.is_group_header && item.group_id) {
+        if (!processedGroupIds.has(item.group_id)) {
+          processedGroupIds.add(item.group_id);
+          // Find all items in this group
+          procurementData.items.forEach(groupItem => {
+            if (groupItem.group_id === item.group_id && 
+                !groupItem.is_group_header && 
+                groupItem.product_type === 'TRADING' && 
+                groupItem.procurement_status === 'pending' &&
+                groupItem.supplier === supplierId) {
+              selectedTradingItems.push(groupItem.id);
+            }
+          });
+        }
+      } else if (item.product_type === 'TRADING' && item.supplier === supplierId) {
+        // Regular item
+        selectedTradingItems.push(item.id);
+      }
+    });
+
+    if (selectedTradingItems.length === 0) {
+      alert('Bitte wählen Sie mindestens ein Handelsprodukt dieses Lieferanten aus.');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/customer-orders/customer-orders/${order.id}/create-supplier-order/`, {
+        item_ids: selectedTradingItems,
+        supplier_id: supplierId,
+        notes: ''
+      });
+
+      alert(`Lieferantenbestellung ${response.data.supplier_order_number} wurde erstellt.`);
+      setProcurementSelectedItems([]);
+      await loadProcurementData();
+    } catch (err) {
+      console.error('Error creating supplier order:', err);
+      alert('Fehler beim Erstellen der Lieferantenbestellung: ' + (err?.response?.data?.error || err.message));
+    }
+  };
+
+  const createHardwareProductionOrder = async (itemId, vsHardwareId) => {
+    if (!itemId || !vsHardwareId) {
+      alert('Bitte wählen Sie eine Position und ein VS-Hardware Produkt aus.');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/customer-orders/customer-orders/${order.id}/create-hardware-production-order/`, {
+        item_id: itemId,
+        vs_hardware_id: vsHardwareId,
+        quantity: 1,
+        notes: ''
+      });
+
+      alert(`Fertigungsauftrag ${response.data.production_order_number} wurde erstellt.`);
+      setProcurementSelectedItems([]);
+      await loadProcurementData();
+    } catch (err) {
+      console.error('Error creating hardware production order:', err);
+      alert('Fehler beim Erstellen des Fertigungsauftrags: ' + (err?.response?.data?.error || err.message));
+    }
+  };
+
+  // Helper to get procurement status display
+  const getProcurementStatusDisplay = (status) => {
+    const statusMap = {
+      'pending': { text: 'Ausstehend', color: 'bg-yellow-100 text-yellow-800' },
+      'ordered': { text: 'Bestellt', color: 'bg-blue-100 text-blue-800' },
+      'in_production': { text: 'In Fertigung', color: 'bg-purple-100 text-purple-800' },
+      'completed': { text: 'Abgeschlossen', color: 'bg-green-100 text-green-800' }
+    };
+    return statusMap[status] || { text: status, color: 'bg-gray-100 text-gray-800' };
+  };
+
+  // Group selected items by supplier for trading products
+  const getSelectedItemsBySupplier = () => {
+    if (!procurementData) return {};
+    
+    const grouped = {};
+    const processedGroupIds = new Set();
+
+    procurementSelectedItems.forEach(itemId => {
+      const item = procurementData.items.find(i => i.id === itemId);
+      if (!item || item.procurement_status !== 'pending') return;
+
+      // If it's a group header, add all trading group members
+      if (item.is_group_header && item.group_id) {
+        if (!processedGroupIds.has(item.group_id)) {
+          processedGroupIds.add(item.group_id);
+          // Find all trading items in this group
+          procurementData.items.forEach(groupItem => {
+            if (groupItem.group_id === item.group_id && 
+                !groupItem.is_group_header && 
+                groupItem.product_type === 'TRADING' && 
+                groupItem.procurement_status === 'pending') {
+              const supplierId = groupItem.supplier || 'unknown';
+              if (!grouped[supplierId]) {
+                grouped[supplierId] = {
+                  supplier_name: groupItem.supplier_name || 'Unbekannter Lieferant',
+                  items: []
+                };
+              }
+              grouped[supplierId].items.push(groupItem);
+            }
+          });
+        }
+      } else if (item.product_type === 'TRADING') {
+        // Regular trading item
+        const supplierId = item.supplier || 'unknown';
+        if (!grouped[supplierId]) {
+          grouped[supplierId] = {
+            supplier_name: item.supplier_name || 'Unbekannter Lieferant',
+            items: []
+          };
+        }
+        grouped[supplierId].items.push(item);
+      }
+    });
+    return grouped;
   };
 
   // Save Order
@@ -2151,10 +2401,10 @@ const CustomerOrderEdit = () => {
                       AB als PDF
                     </button>
                     <button
-                      onClick={() => setActiveTab('lieferschein')}
+                      onClick={() => setActiveTab('beschaffung')}
                       className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                     >
-                      Weiter zu Lieferschein →
+                      Weiter zu Beschaffung →
                     </button>
                   </>
                 )}
@@ -2163,7 +2413,245 @@ const CustomerOrderEdit = () => {
           </div>
         )}
 
-        {/* ==================== TAB 4: LIEFERSCHEIN ==================== */}
+        {/* ==================== TAB 4: BESCHAFFUNG ==================== */}
+        {activeTab === 'beschaffung' && (
+          <div className="p-6">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Beschaffung</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Positionen für Fertigung oder Bestellung auswählen
+                </p>
+              </div>
+              <button
+                onClick={loadProcurementData}
+                disabled={procurementLoading}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                {procurementLoading ? 'Laden...' : 'Aktualisieren'}
+              </button>
+            </div>
+
+            {procurementLoading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : procurementData ? (
+              <>
+                {/* Positions Table */}
+                <div className="bg-white border rounded-lg overflow-hidden mb-6">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10">
+                          <input
+                            type="checkbox"
+                            checked={procurementData.items.filter(i => !i.is_group_header && i.procurement_status === 'pending').every(i => procurementSelectedItems.includes(i.id))}
+                            onChange={() => {
+                              const pendingItems = procurementData.items.filter(i => !i.is_group_header && i.procurement_status === 'pending');
+                              const allSelected = pendingItems.every(i => procurementSelectedItems.includes(i.id));
+                              if (allSelected) {
+                                setProcurementSelectedItems([]);
+                              } else {
+                                setProcurementSelectedItems(pendingItems.map(i => i.id));
+                              }
+                            }}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pos</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Artikelnr.</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bezeichnung</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Menge</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Typ</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lieferant</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {procurementData.items.map((item, idx) => {
+                        const statusInfo = getProcurementStatusDisplay(item.procurement_status);
+                        const isProcessed = item.procurement_status !== 'pending';
+                        const isSelected = procurementSelectedItems.includes(item.id);
+                        
+                        return (
+                          <tr 
+                            key={item.id} 
+                            className={`${item.is_group_header ? 'bg-gray-100 font-medium' : ''} ${isProcessed ? 'opacity-60' : ''}`}
+                          >
+                            <td className="px-4 py-3">
+                              {!item.is_group_header && (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleProcurementItem(item.id)}
+                                  disabled={isProcessed}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {item.position_display || item.position}
+                            </td>
+                            <td className={`px-4 py-3 text-sm font-mono text-gray-600 ${isProcessed ? 'line-through' : ''}`}>
+                              {item.article_number}
+                            </td>
+                            <td className={`px-4 py-3 text-sm text-gray-900 ${isProcessed ? 'line-through' : ''}`}>
+                              {item.name}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {!item.is_group_header && `${item.quantity} ${item.unit}`}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {!item.is_group_header && (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  item.product_type === 'VISIVIEW' ? 'bg-purple-100 text-purple-800' :
+                                  item.product_type === 'VS_HARDWARE' ? 'bg-orange-100 text-orange-800' :
+                                  item.product_type === 'TRADING' ? 'bg-blue-100 text-blue-800' :
+                                  item.product_type === 'VS_SERVICE' ? 'bg-green-100 text-green-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {item.product_type === 'VISIVIEW' && 'VisiView'}
+                                  {item.product_type === 'VS_HARDWARE' && 'VS-Hardware'}
+                                  {item.product_type === 'TRADING' && 'Handelsware'}
+                                  {item.product_type === 'VS_SERVICE' && 'Service'}
+                                  {!['VISIVIEW', 'VS_HARDWARE', 'TRADING', 'VS_SERVICE'].includes(item.product_type) && 'Sonstige'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {item.supplier_name || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {!item.is_group_header && (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusInfo.color}`}>
+                                  {statusInfo.text}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Action Buttons based on selection */}
+                {procurementSelectedItems.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <h3 className="text-md font-medium text-blue-900 mb-4">
+                      Aktionen für ausgewählte Positionen ({procurementSelectedItems.length})
+                    </h3>
+                    
+                    <div className="flex flex-wrap gap-3">
+                      {/* VisiView Production Order Button */}
+                      {procurementSelectedItems.some(itemId => {
+                        const item = procurementData.items.find(i => i.id === itemId);
+                        return item?.product_type === 'VISIVIEW' && item?.procurement_status === 'pending';
+                      }) && (
+                        <button
+                          onClick={createVisiViewProductionOrder}
+                          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
+                        >
+                          <CubeIcon className="h-5 w-5 mr-2" />
+                          VisiView Fertigungsauftrag erstellen
+                        </button>
+                      )}
+
+                      {/* Supplier Order Buttons (grouped by supplier) */}
+                      {Object.entries(getSelectedItemsBySupplier()).map(([supplierId, data]) => (
+                        supplierId !== 'unknown' && (
+                          <button
+                            key={supplierId}
+                            onClick={() => createSupplierOrder(parseInt(supplierId))}
+                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                          >
+                            <BuildingStorefrontIcon className="h-5 w-5 mr-2" />
+                            Bestellung bei {data.supplier_name} ({data.items.length})
+                          </button>
+                        )
+                      ))}
+
+                      {/* VS-Hardware Production Order (single item selection) */}
+                      {procurementSelectedItems.length === 1 && (() => {
+                        const item = procurementData.items.find(i => i.id === procurementSelectedItems[0]);
+                        return item?.product_type === 'VS_HARDWARE' && item?.procurement_status === 'pending' && item?.vs_hardware_id;
+                      })() && (
+                        <button
+                          onClick={() => {
+                            const item = procurementData.items.find(i => i.id === procurementSelectedItems[0]);
+                            if (item?.vs_hardware_id) {
+                              createHardwareProductionOrder(item.id, item.vs_hardware_id);
+                            }
+                          }}
+                          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700"
+                        >
+                          <WrenchScrewdriverIcon className="h-5 w-5 mr-2" />
+                          Hardware Fertigungsauftrag erstellen
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Clear Selection */}
+                    <button
+                      onClick={() => setProcurementSelectedItems([])}
+                      className="mt-3 inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      Auswahl aufheben
+                    </button>
+                  </div>
+                )}
+
+                {/* Quick Filters */}
+                <div className="bg-gray-50 border rounded-lg p-4 mb-6">
+                  <h3 className="text-md font-medium text-gray-900 mb-3">Schnellauswahl nach Typ</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => selectAllProcurementItems('VISIVIEW')}
+                      className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-purple-100 text-purple-800 hover:bg-purple-200"
+                    >
+                      Alle VisiView
+                    </button>
+                    <button
+                      onClick={() => selectAllProcurementItems('TRADING')}
+                      className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                    >
+                      Alle Handelsware
+                    </button>
+                    <button
+                      onClick={() => selectAllProcurementItems('VS_HARDWARE')}
+                      className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium bg-orange-100 text-orange-800 hover:bg-orange-200"
+                    >
+                      Alle VS-Hardware
+                    </button>
+                  </div>
+                </div>
+
+                {/* Navigation */}
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={() => setActiveTab('auftragsbestaetigung')}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    ← Zurück zu Auftragsbestätigung
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('lieferschein')}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Weiter zu Lieferschein →
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                Keine Beschaffungsdaten verfügbar. Bitte laden Sie die Daten.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================== TAB 5: LIEFERSCHEIN ==================== */}
         {activeTab === 'lieferschein' && (
           <div className="p-6">
             <div className="flex justify-between items-start mb-6">
@@ -2567,7 +3055,7 @@ const CustomerOrderEdit = () => {
           </div>
         )}
 
-        {/* ==================== TAB 5: RECHNUNG ==================== */}
+        {/* ==================== TAB 6: RECHNUNG ==================== */}
         {activeTab === 'rechnung' && (
           <div className="p-6">
             <div className="flex justify-between items-start mb-6">
@@ -2865,7 +3353,7 @@ const CustomerOrderEdit = () => {
           </div>
         )}
 
-        {/* ==================== TAB 6: ZAHLUNG ==================== */}
+        {/* ==================== TAB 7: ZAHLUNG ==================== */}
         {activeTab === 'zahlung' && (
           <div className="p-6">
             <div className="flex justify-between items-start mb-6">

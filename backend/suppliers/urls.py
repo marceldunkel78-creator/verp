@@ -3,12 +3,13 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     SupplierViewSet, SupplierContactViewSet,
     TradingProductViewSet, TradingProductPriceViewSet, SupplierProductViewSet,
-    ProductGroupViewSet, PriceListViewSet, MaterialSupplyViewSet
+    ProductGroupViewSet, PriceListViewSet, MaterialSupplyViewSet, SupplierAttachmentViewSet
 )
 
 router = DefaultRouter()
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
 router.register(r'contacts', SupplierContactViewSet, basename='supplier-contact')
+router.register(r'attachments', SupplierAttachmentViewSet, basename='supplier-attachment')
 router.register(r'products', TradingProductViewSet, basename='trading-product')
 router.register(r'product-prices', TradingProductPriceViewSet, basename='trading-product-price')
 router.register(r'supplier-products', SupplierProductViewSet, basename='supplier-product')

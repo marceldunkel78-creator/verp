@@ -69,6 +69,11 @@ const MODULE_HIERARCHY = [
     ]
   },
   {
+    key: 'meetings',
+    label: 'Meetings',
+    submodules: []
+  },
+  {
     key: 'visiview',
     label: 'VisiView',
     submodules: [

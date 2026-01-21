@@ -92,9 +92,13 @@ class User(AbstractUser):
     can_read_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Lesen')
     # VisiView Maintenance
     can_read_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Lesen')
+    # Meetings Modul
+    can_read_meetings = models.BooleanField(default=True, verbose_name='Meetings - Lesen')
     
     # Berechtigungen für Module - Schreiben
     can_write_accounting = models.BooleanField(default=False, verbose_name='Buchhaltung - Schreiben')
+    # Meetings Module - Schreiben
+    can_write_meetings = models.BooleanField(default=False, verbose_name='Meetings - Schreiben')
     can_write_hr = models.BooleanField(default=False, verbose_name='HR - Schreiben')
     can_write_suppliers = models.BooleanField(default=False, verbose_name='Lieferanten - Schreiben')
     can_write_customers = models.BooleanField(default=False, verbose_name='Kunden - Schreiben')
