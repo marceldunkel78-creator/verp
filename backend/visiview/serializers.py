@@ -401,6 +401,7 @@ class VisiViewTicketListSerializer(serializers.ModelSerializer):
     assigned_to_display = serializers.SerializerMethodField()
     is_open = serializers.BooleanField(read_only=True)
     comment_count = serializers.SerializerMethodField()
+    linked_system_name = serializers.SerializerMethodField()
     
     class Meta:
         model = VisiViewTicket
@@ -413,6 +414,7 @@ class VisiViewTicketListSerializer(serializers.ModelSerializer):
             'target_version', 'affected_version',
             'percent_done', 'is_open', 'is_private',
             'customers', 'comment_count',
+            'linked_system', 'linked_system_name',
             'created_at', 'updated_at', 'imported_created_at', 'imported_updated_at'
         ]
     
@@ -423,6 +425,13 @@ class VisiViewTicketListSerializer(serializers.ModelSerializer):
     
     def get_comment_count(self, obj):
         return obj.comments.count()
+    
+    def get_linked_system_name(self, obj):
+        if obj.linked_system:
+            if getattr(obj.linked_system, 'system_number', None):
+                return f"{obj.linked_system.system_number} - {obj.linked_system.system_name}"
+            return obj.linked_system.system_name
+        return None
 
 
 class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
@@ -444,6 +453,7 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
     child_tickets = serializers.SerializerMethodField()
     watchers_list = serializers.SerializerMethodField()
     visiview_license_display = serializers.SerializerMethodField()
+    linked_system_name = serializers.SerializerMethodField()
     
     class Meta:
         model = VisiViewTicket
@@ -458,6 +468,7 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
             'assigned_to', 'assigned_to_name', 'assigned_to_display',
             'last_changed_by',
             'target_version', 'affected_version', 'visiview_id', 'visiview_license', 'visiview_license_display',
+            'linked_system', 'linked_system_name',
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',
@@ -529,6 +540,13 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
                 'customer_name': getattr(customer, 'company_name', None) if customer else lic.customer_name_legacy
             }
         return None
+    
+    def get_linked_system_name(self, obj):
+        if obj.linked_system:
+            if getattr(obj.linked_system, 'system_number', None):
+                return f"{obj.linked_system.system_number} - {obj.linked_system.system_name}"
+            return obj.linked_system.system_name
+        return None
 
 
 class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
@@ -543,6 +561,7 @@ class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
             'status', 'priority', 'category',
             'author', 'author_user', 'assigned_to', 'assigned_to_name',
             'target_version', 'affected_version', 'visiview_id', 'visiview_license',
+            'linked_system',
             'start_date', 'due_date',
             'estimated_hours', 'total_estimated_hours', 'spent_hours',
             'percent_done',

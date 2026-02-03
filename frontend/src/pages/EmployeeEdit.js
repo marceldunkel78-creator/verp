@@ -33,6 +33,8 @@ const EmployeeEdit = () => {
     contract_type: 'vollzeit',
     job_title: '',
     department: '',
+    sales_territory_countries: [],
+    sales_territory_postal_codes: [],
     working_time_percentage: 100,
     weekly_work_hours: 40.00,
     work_days: ['mon','tue','wed','thu','fri'],
@@ -47,6 +49,10 @@ const EmployeeEdit = () => {
   });
   const [signatureFile, setSignatureFile] = useState(null);
   const [signaturePreview, setSignaturePreview] = useState(null);
+  
+  // Temporäre Textfeld-States für Vertriebsgebiet
+  const [countriesText, setCountriesText] = useState('');
+  const [postalCodesText, setPostalCodesText] = useState('');
 
   // Tab-spezifische State
   const [timeEntries, setTimeEntries] = useState([]);
@@ -92,6 +98,8 @@ const EmployeeEdit = () => {
         contract_type: response.data.contract_type || 'vollzeit',
         job_title: response.data.job_title || '',
         department: response.data.department || '',
+        sales_territory_countries: response.data.sales_territory_countries || [],
+        sales_territory_postal_codes: response.data.sales_territory_postal_codes || [],
         working_time_percentage: parseFloat(response.data.working_time_percentage) || 100,
         weekly_work_hours: response.data.weekly_work_hours ? parseFloat(response.data.weekly_work_hours) : 40.00,
         annual_vacation_days: response.data.annual_vacation_days || 30,
@@ -105,6 +113,10 @@ const EmployeeEdit = () => {
         commission_rate: response.data.commission_rate ? parseFloat(response.data.commission_rate) : 0.00
       });
       setSignaturePreview(response.data.signature_image_url || null);
+      
+      // Initialisiere Text-States für Vertriebsgebiet
+      setCountriesText((response.data.sales_territory_countries || []).join(', '));
+      setPostalCodesText((response.data.sales_territory_postal_codes || []).join(', '));
     } catch (error) {
       console.error('Fehler beim Laden des Mitarbeiters:', error);
       alert('Fehler beim Laden der Mitarbeiterdaten');
@@ -285,6 +297,10 @@ const EmployeeEdit = () => {
             setSignatureFile={setSignatureFile}
             signaturePreview={signaturePreview}
             setSignaturePreview={setSignaturePreview}
+            countriesText={countriesText}
+            setCountriesText={setCountriesText}
+            postalCodesText={postalCodesText}
+            setPostalCodesText={setPostalCodesText}
             handleSave={handleSave}
             saving={saving}
           />
@@ -339,7 +355,20 @@ const EmployeeEdit = () => {
 };
 
 // ==================== Basisinfos Tab ====================
-const BasisinfosTab = ({ formData, setFormData, signatureFile, setSignatureFile, signaturePreview, setSignaturePreview, handleSave, saving }) => {
+const BasisinfosTab = ({ 
+  formData, 
+  setFormData, 
+  signatureFile, 
+  setSignatureFile, 
+  signaturePreview, 
+  setSignaturePreview, 
+  countriesText,
+  setCountriesText,
+  postalCodesText,
+  setPostalCodesText,
+  handleSave, 
+  saving 
+}) => {
   return (
     <form onSubmit={handleSave} className="space-y-6">
       <div>
@@ -479,13 +508,63 @@ const BasisinfosTab = ({ formData, setFormData, signatureFile, setSignatureFile,
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Abteilung</label>
-            <input
-              type="text"
+            <select
               value={formData.department}
               onChange={(e) => setFormData({...formData, department: e.target.value})}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-            />
+            >
+              <option value="">-- Bitte wählen --</option>
+              <option value="vertrieb">Vertrieb</option>
+              <option value="geschaeftsfuehrung">Geschäftsführung</option>
+              <option value="entwicklung">Entwicklung</option>
+              <option value="fertigung">Fertigung</option>
+              <option value="verwaltung">Verwaltung</option>
+            </select>
           </div>
+          
+          {/* Vertriebsgebiet-Felder (nur bei Abteilung Vertrieb) */}
+          {formData.department === 'vertrieb' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Vertriebsgebiet Länder</label>
+                <input
+                  type="text"
+                  value={countriesText}
+                  onChange={(e) => setCountriesText(e.target.value)}
+                  onBlur={(e) => {
+                    const countries = e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+                    setFormData({
+                      ...formData, 
+                      sales_territory_countries: countries
+                    });
+                    setCountriesText(countries.join(', '));
+                  }}
+                  placeholder="z.B. DE, AT, CH"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">Länder-ISO-Codes, kommagetrennt</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Vertriebsgebiet PLZ-Bereiche</label>
+                <input
+                  type="text"
+                  value={postalCodesText}
+                  onChange={(e) => setPostalCodesText(e.target.value)}
+                  onBlur={(e) => {
+                    const codes = e.target.value.split(',').map(s => s.trim()).filter(s => s);
+                    setFormData({
+                      ...formData, 
+                      sales_territory_postal_codes: codes
+                    });
+                    setPostalCodesText(codes.join(', '));
+                  }}
+                  placeholder="z.B. 8, 9 für PLZ 80000-99999"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500">PLZ-Präfixe, kommagetrennt</p>
+              </div>
+            </>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700">Beschäftigungsumfang (%)</label>
             <input

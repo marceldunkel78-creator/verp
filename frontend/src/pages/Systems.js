@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import storage from '../utils/sessionStore';
 import {
   PlusIcon,
   PencilIcon,
@@ -13,19 +14,250 @@ import {
   SparklesIcon,
   CubeIcon,
   WrenchScrewdriverIcon,
-  FolderIcon
+  FolderIcon,
+  Squares2X2Icon,
+  ListBulletIcon,
+  MapPinIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
+
+// Simple Map Component using Leaflet (if available) or placeholder
+const SystemsMap = ({ systems, onSystemClick }) => {
+  const [mapError, setMapError] = useState(false);
+  const mapRef = useRef(null);
+  const isInitializingRef = useRef(false);
+  
+  // Filter systems with valid coordinates
+  const systemsWithCoords = useMemo(() => {
+    console.log('Total systems received:', systems.length);
+    const filtered = systems.filter(s => {
+      const lat = s.location_latitude;
+      const lng = s.location_longitude;
+      
+      // Skip if coordinates are null or undefined
+      if (lat == null || lng == null) return false;
+      
+      // Convert to string and trim
+      const latStr = String(lat).trim();
+      const lngStr = String(lng).trim();
+      
+      // Skip if empty strings
+      if (latStr === '' || lngStr === '') return false;
+      
+      // Try to parse as float
+      const latNum = parseFloat(latStr);
+      const lngNum = parseFloat(lngStr);
+      
+      // Check if valid numbers and finite
+      const hasValidLat = !isNaN(latNum) && isFinite(latNum);
+      const hasValidLng = !isNaN(lngNum) && isFinite(lngNum);
+      const isValid = hasValidLat && hasValidLng;
+      
+      if (!isValid) {
+        console.log('Invalid coordinates for system:', s.system_number, { lat, lng, latStr, lngStr, latNum, lngNum });
+      }
+      
+      return isValid;
+    });
+    console.log('Systems with valid coordinates:', filtered.length, 'out of', systems.length);
+    if (filtered.length > 0) {
+      console.log('Sample system with coords:', filtered[0].system_number, {
+        lat: filtered[0].location_latitude,
+        lng: filtered[0].location_longitude
+      });
+    }
+    return filtered;
+  }, [systems]);
+
+  useEffect(() => {
+    // Cleanup function to remove map when component unmounts
+    return () => {
+      if (mapRef.current) {
+        try {
+          mapRef.current.off();
+          mapRef.current.remove();
+          mapRef.current = null;
+        } catch (e) {
+          console.log('Error removing map on cleanup:', e);
+        }
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Prevent multiple simultaneous initializations
+    if (isInitializingRef.current) {
+      console.log('Map initialization already in progress, skipping');
+      return;
+    }
+    
+    // Check if Leaflet is available
+    if (typeof window !== 'undefined' && !window.L) {
+      // Load Leaflet CSS and JS dynamically
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = () => initMap();
+      script.onerror = () => setMapError(true);
+      document.head.appendChild(script);
+    } else if (window.L && systemsWithCoords.length > 0) {
+      initMap();
+    }
+  }, [systemsWithCoords]);
+
+  const initMap = () => {
+    if (!window.L || systemsWithCoords.length === 0) return;
+    if (isInitializingRef.current) return;
+    
+    isInitializingRef.current = true;
+    
+    const container = document.getElementById('systems-map');
+    if (!container) {
+      isInitializingRef.current = false;
+      return;
+    }
+    
+    // Remove existing map instance if it exists
+    if (mapRef.current) {
+      try {
+        mapRef.current.off();
+        mapRef.current.remove();
+        mapRef.current = null;
+      } catch (e) {
+        console.log('Error removing old map:', e);
+      }
+    }
+    
+    // Clear container completely
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+    container.className = 'w-full h-[500px] rounded-lg border';
+    
+    // Remove any Leaflet state
+    if (container._leaflet_id) {
+      delete container._leaflet_id;
+    }
+    
+    // Small delay to ensure cleanup is complete
+    setTimeout(() => {
+      try {
+        // Double check container still exists and is clean
+        const freshContainer = document.getElementById('systems-map');
+        if (!freshContainer) {
+          isInitializingRef.current = false;
+          return;
+        }
+        
+        // One more cleanup just to be sure
+        if (freshContainer._leaflet_id) {
+          delete freshContainer._leaflet_id;
+        }
+        
+        // Calculate center
+        const avgLat = systemsWithCoords.reduce((sum, s) => sum + parseFloat(s.location_latitude), 0) / systemsWithCoords.length;
+        const avgLng = systemsWithCoords.reduce((sum, s) => sum + parseFloat(s.location_longitude), 0) / systemsWithCoords.length;
+        
+        const map = window.L.map('systems-map', {
+          center: [avgLat || 50.0, avgLng || 10.0],
+          zoom: 5,
+          scrollWheelZoom: true
+        });
+        
+        mapRef.current = map;
+        
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19
+        }).addTo(map);
+        
+        // Add markers
+        systemsWithCoords.forEach(system => {
+          const marker = window.L.marker([
+            parseFloat(system.location_latitude),
+            parseFloat(system.location_longitude)
+          ]).addTo(map);
+          
+          marker.bindPopup(`
+            <div style="min-width: 200px">
+              <strong>${system.system_number}</strong><br/>
+              <span style="font-size: 14px">${system.system_name}</span><br/>
+              <span style="font-size: 12px; color: #666">${system.customer_name || 'Kein Kunde'}</span><br/>
+              <span style="font-size: 11px; color: #888">${system.location_city || ''}</span>
+            </div>
+          `);
+          
+          marker.on('click', () => onSystemClick && onSystemClick(system.id));
+        });
+        
+        // Fit bounds if multiple systems
+        if (systemsWithCoords.length > 1) {
+          const bounds = window.L.latLngBounds(
+            systemsWithCoords.map(s => [parseFloat(s.location_latitude), parseFloat(s.location_longitude)])
+          );
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+        
+        isInitializingRef.current = false;
+      } catch (e) {
+        console.error('Map init error:', e);
+        setMapError(true);
+        isInitializingRef.current = false;
+      }
+    }, 50);
+  };
+
+  if (systemsWithCoords.length === 0) {
+    return (
+      <div className="bg-gray-100 rounded-lg p-12 text-center">
+        <MapPinIcon className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <p className="text-gray-600">Keine Systeme mit Koordinaten vorhanden</p>
+        <p className="text-sm text-gray-500 mt-2">
+          Fügen Sie Koordinaten in den Systemdetails hinzu, um sie auf der Karte anzuzeigen.
+        </p>
+      </div>
+    );
+  }
+
+  if (mapError) {
+    return (
+      <div className="bg-gray-100 rounded-lg p-12 text-center">
+        <MapPinIcon className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <p className="text-gray-600">Karte konnte nicht geladen werden</p>
+      </div>
+    );
+  }
+
+  return (
+    <div id="systems-map" className="w-full h-[500px] rounded-lg border" />
+  );
+};
 
 const Systems = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
+  const [employeeFilter, setEmployeeFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  
+  // View mode: 'cards', 'list', 'map'
+  const [viewMode, setViewMode] = useState('cards');
+  
+  // Filter data
+  const [employees, setEmployees] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [countries, setCountries] = useState([]);
   
   // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,42 +273,165 @@ const Systems = () => {
   const [showStarSearch, setShowStarSearch] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
 
+  const SESSION_KEY = 'systems_search_state';
+
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.searchTerm !== undefined) setSearchTerm(st.searchTerm);
+      if (st.statusFilter !== undefined) setStatusFilter(st.statusFilter);
+      if (st.cityFilter !== undefined) setCityFilter(st.cityFilter);
+      if (st.countryFilter !== undefined) setCountryFilter(st.countryFilter);
+      if (st.employeeFilter !== undefined) setEmployeeFilter(st.employeeFilter);
+      if (st.viewMode !== undefined) setViewMode(st.viewMode);
+      const page = st.currentPage || 1;
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.systems) setSystems(st.systems);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.totalCount !== undefined) setTotalCount(st.totalCount);
+      return { page, filters: { searchTerm: st.searchTerm, statusFilter: st.statusFilter, cityFilter: st.cityFilter, countryFilter: st.countryFilter, employeeFilter: st.employeeFilter } };
+    } catch (e) {
+      console.warn('Failed to load systems search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { searchTerm, statusFilter, cityFilter, countryFilter, employeeFilter, viewMode, currentPage, systems, totalPages, totalCount };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save systems search state', e);
+    }
+  };
+
   // Check for customer URL parameter on mount
   useEffect(() => {
     const urlCustomerId = searchParams.get('customer');
     if (urlCustomerId) {
-      // Pre-fill customer and open create modal
       setNewSystem(prev => ({ ...prev, customer: urlCustomerId }));
       setShowCreateModal(true);
-      // Fetch customers to populate the dropdown
-      fetchCustomers();
+      return;
     }
+
+    // On mount prefer URL params; otherwise restore from sessionStorage
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.page) {
+      const params = {};
+      if (restored.filters.searchTerm) params.search = restored.filters.searchTerm;
+      if (restored.filters.statusFilter) params.status = restored.filters.statusFilter;
+      if (restored.filters.cityFilter) params.city = restored.filters.cityFilter;
+      if (restored.filters.countryFilter) params.country = restored.filters.countryFilter;
+      if (restored.filters.employeeFilter) params.employee = restored.filters.employeeFilter;
+      params.page = String(restored.page);
+      setSearchParams(params);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist state whenever relevant parts change
+  useEffect(() => {
+    saveSearchState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, cityFilter, countryFilter, employeeFilter, viewMode, currentPage, systems, totalPages, totalCount]);
+
+  // React to URL query param changes
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0 && !params.customer;
+    if (hasParams) {
+      setSearchTerm(params.search || '');
+      setStatusFilter(params.status || '');
+      setCityFilter(params.city || '');
+      setCountryFilter(params.country || '');
+      setEmployeeFilter(params.employee || '');
+      const page = params.page ? parseInt(params.page, 10) : 1;
+      setCurrentPage(page);
+      fetchSystems();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
     fetchSystems();
-  }, [currentPage, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, statusFilter, cityFilter, countryFilter, employeeFilter]);
 
   useEffect(() => {
-    if (showCreateModal && customers.length === 0) {
+    fetchFilters();
+  }, []);
+
+  useEffect(() => {
+    if (showCreateModal) {
       fetchCustomers();
     }
   }, [showCreateModal]);
+
+  const fetchFilters = async () => {
+    try {
+      const empRes = await api.get('/users/employees/?employment_status=aktiv');
+      const allEmployees = empRes.data.results || empRes.data || [];
+      
+      // Filter nur Vertrieb und Geschäftsführung
+      const filteredEmployees = allEmployees.filter(emp => 
+        emp.department === 'vertrieb' || emp.department === 'geschaeftsfuehrung'
+      );
+      setEmployees(filteredEmployees);
+      
+      // Get unique cities and countries from systems
+      const systemsRes = await api.get('/systems/systems/?page_size=1000');
+      const allSystems = systemsRes.data.results || systemsRes.data || [];
+      
+      const uniqueCities = [...new Set(allSystems.map(s => s.location_city).filter(Boolean))].sort();
+      const uniqueCountries = [...new Set(allSystems.map(s => s.location_country).filter(Boolean))].sort();
+      
+      setCities(uniqueCities);
+      setCountries(uniqueCountries);
+    } catch (error) {
+      console.error('Error fetching filters:', error);
+    }
+  };
 
   const fetchSystems = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      // For map view, load ALL systems (no pagination)
+      const pageSize = viewMode === 'map' ? 10000 : 12;
       params.append('page', currentPage);
-      params.append('page_size', '10');
+      params.append('page_size', pageSize);
       if (searchTerm) params.append('search', searchTerm);
       if (statusFilter) params.append('status', statusFilter);
+      if (cityFilter) params.append('location_city', cityFilter);
+      if (countryFilter) params.append('location_country', countryFilter);
+      if (employeeFilter) params.append('responsible_employee', employeeFilter);
       
+      console.log(`Fetching systems for ${viewMode} view with pageSize:`, pageSize);
       const response = await api.get(`/systems/systems/?${params.toString()}`);
-      setSystems(response.data.results || response.data);
+      const systemsData = response.data.results || response.data;
+      console.log(`API returned ${systemsData.length} systems (total count: ${response.data.count})`);
+      setSystems(systemsData);
+      
+      // Debug: Log first system to check coordinate fields
+      const withCoords = systemsData.filter(s => s.location_latitude && s.location_longitude);
+      console.log(`Systems with coordinates in response: ${withCoords.length}`);
+      if (systemsData.length > 0) {
+        console.log('First system data:', systemsData[0]);
+        console.log('Sample coordinates:', {
+          lat: systemsData[0].location_latitude,
+          lng: systemsData[0].location_longitude
+        });
+      }
+      
       if (response.data.count) {
         setTotalCount(response.data.count);
-        setTotalPages(Math.ceil(response.data.count / 10));
+        setTotalPages(Math.ceil(response.data.count / pageSize));
       }
     } catch (error) {
       console.error('Error fetching systems:', error);
@@ -87,7 +442,7 @@ const Systems = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await api.get('/customers/customers/?is_active=true');
+      const response = await api.get('/customers/customers/?is_active=true&page_size=1000');
       setCustomers(response.data.results || response.data);
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -96,8 +451,27 @@ const Systems = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
+    const params = {};
+    if (searchTerm) params.search = searchTerm;
+    if (statusFilter) params.status = statusFilter;
+    if (cityFilter) params.city = cityFilter;
+    if (countryFilter) params.country = countryFilter;
+    if (employeeFilter) params.employee = employeeFilter;
+    params.page = '1';
+    setSearchParams(params);
     setCurrentPage(1);
-    fetchSystems();
+  };
+
+  const handleReset = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setCityFilter('');
+    setCountryFilter('');
+    setEmployeeFilter('');
+    setCurrentPage(1);
+    setSystems([]);
+    setSearchParams({});
+    try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
   };
 
   const suggestStarName = async () => {
@@ -117,7 +491,7 @@ const Systems = () => {
     }
     try {
       const response = await api.get(`/systems/systems/search_star_names/?q=${encodeURIComponent(query)}`);
-      setStarNameSuggestions(response.data.results || []);
+      setStarNameSuggestions(response.data.names || []);
     } catch (error) {
       console.error('Error searching star names:', error);
     }
@@ -186,16 +560,22 @@ const Systems = () => {
   };
 
   const handleDelete = async (systemId, systemName) => {
-    if (window.confirm(`Möchten Sie das System "${systemName || systemId}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+    if (window.confirm(`Möchten Sie das System "${systemName || systemId}" wirklich löschen?`)) {
       try {
         await api.delete(`/systems/systems/${systemId}/`);
         setSystems(systems.filter(s => s.id !== systemId));
       } catch (error) {
         console.error('Error deleting system:', error);
-        alert('Fehler beim Löschen des Systems. Möglicherweise ist es mit anderen Daten verknüpft.');
+        alert('Fehler beim Löschen des Systems.');
       }
     }
   };
+
+  const clearFilters = () => {
+    handleReset();
+  };
+
+  const hasActiveFilters = statusFilter || cityFilter || countryFilter || employeeFilter || searchTerm;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -204,56 +584,154 @@ const Systems = () => {
         <div className="flex items-center gap-3">
           <ComputerDesktopIcon className="h-8 w-8 text-blue-600" />
           <h1 className="text-3xl font-bold text-gray-900">Systeme</h1>
+          <span className="text-gray-500">({totalCount})</span>
         </div>
-        <button
-          onClick={() => {
-            setShowCreateModal(true);
-            suggestStarName();
-          }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <PlusIcon className="h-5 w-5" />
-          Neues System
-        </button>
-      </div>
-
-      {/* Search and Filter */}
-      <form onSubmit={handleSearch} className="mb-6">
-        <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              placeholder="Suche nach Systemnummer, Name oder Kunde..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-2.5" />
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => { setViewMode('map'); setCurrentPage(1); }}
+              className={`p-2 ${viewMode === 'map' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kartenansicht"
+            >
+              <MapPinIcon className="h-5 w-5" />
+            </button>
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Alle Status</option>
-            <option value="active">Aktiv</option>
-            <option value="inactive">Inaktiv</option>
-            <option value="maintenance">In Wartung</option>
-            <option value="decommissioned">Außer Betrieb</option>
-          </select>
+          
           <button
-            type="submit"
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+            onClick={() => {
+              setShowCreateModal(true);
+              suggestStarName();
+            }}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Suchen
+            <PlusIcon className="h-5 w-5" />
+            Neues System
           </button>
         </div>
-      </form>
+      </div>
 
-      {/* Systems Grid (Kachelansicht) */}
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <form onSubmit={handleSearch}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Search */}
+            <div className="lg:col-span-2 relative">
+              <input
+                type="text"
+                placeholder="Suche nach Name, Nummer, Kunde..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-2.5" />
+            </div>
+            
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Alle Status</option>
+              <option value="active">Aktiv</option>
+              <option value="inactive">Inaktiv</option>
+              <option value="maintenance">In Wartung</option>
+              <option value="decommissioned">Außer Betrieb</option>
+            </select>
+            
+            {/* City Filter */}
+            <select
+              value={cityFilter}
+              onChange={(e) => {
+                setCityFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Alle Städte</option>
+              {cities.map(city => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+            
+            {/* Country Filter */}
+            <select
+              value={countryFilter}
+              onChange={(e) => {
+                setCountryFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Alle Länder</option>
+              {countries.map(country => (
+                <option key={country} value={country}>
+                  {country}
+                </option>
+              ))}
+            </select>
+            
+            {/* Employee Filter */}
+            <select
+              value={employeeFilter}
+              onChange={(e) => {
+                setEmployeeFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Alle Mitarbeiter</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.first_name} {emp.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="flex justify-between items-center mt-4">
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              >
+                Suchen
+              </button>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50"
+                >
+                  Filter zurücksetzen
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {/* Content based on view mode */}
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -267,83 +745,170 @@ const Systems = () => {
               <p>Keine Systeme gefunden</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {systems.map((system) => (
-                  <div
-                    key={system.id}
-                    onClick={() => navigate(`/sales/systems/${system.id}`)}
-                    className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
-                  >
-                  {/* Header mit Systemnummer und Status */}
-                  <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
-                    <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
-                      {getStatusLabel(system.status)}
-                    </span>
-                  </div>
-                  
-                  {/* Inhalt */}
-                  <div className="p-4">
-                    <h3 className="font-semibold text-lg mb-1 truncate" title={system.system_name}>
-                      {system.system_name}
-                    </h3>
-                    <p className="text-sm text-gray-600 mb-2 truncate" title={system.customer_name}>
-                      {system.customer_name || 'Kein Kunde'}
-                    </p>
-                    {system.description && (
-                      <p className="text-sm text-gray-500 line-clamp-2 mb-3" title={system.description}>
-                        {system.description}
-                      </p>
-                    )}
-                    
-                    {/* Counts */}
-                    <div className="flex items-center gap-4 pt-3 border-t">
-                      <div className="flex items-center gap-1" title="Komponenten">
-                        <CubeIcon className="h-4 w-4 text-purple-500" />
-                        <span className="text-sm font-medium">{system.component_count || 0}</span>
+            <>
+              {/* Cards View */}
+              {viewMode === 'cards' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {systems.map((system) => (
+                    <div
+                      key={system.id}
+                      onClick={() => navigate(`/sales/systems/${system.id}`)}
+                      className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
+                    >
+                      <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
+                        <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
+                          {getStatusLabel(system.status)}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1" title="Service-Tickets">
-                        <WrenchScrewdriverIcon className="h-4 w-4 text-orange-500" />
-                        <span className="text-sm font-medium">{system.service_ticket_count || 0}</span>
-                      </div>
-                      <div className="flex items-center gap-1" title="Projekte">
-                        <FolderIcon className="h-4 w-4 text-blue-500" />
-                        <span className="text-sm font-medium">{system.project_count || 0}</span>
+                      
+                      <div className="p-4">
+                        <h3 className="font-semibold text-lg mb-1 truncate" title={system.system_name}>
+                          {system.system_name}
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-1 truncate" title={system.customer_name}>
+                          {system.customer_name || 'Kein Kunde'}
+                        </p>
+                        {system.responsible_employee_name && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mb-2">
+                            <UserIcon className="h-3 w-3" />
+                            {system.responsible_employee_name}
+                          </p>
+                        )}
+                        {system.location_city && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mb-2">
+                            <MapPinIcon className="h-3 w-3" />
+                            {system.location_city}
+                          </p>
+                        )}
+                        
+                        <div className="flex items-center gap-4 pt-3 border-t">
+                          <div className="flex items-center gap-1" title="Komponenten">
+                            <CubeIcon className="h-4 w-4 text-purple-500" />
+                            <span className="text-sm font-medium">{system.component_count || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1" title="Service-Tickets">
+                            <WrenchScrewdriverIcon className="h-4 w-4 text-orange-500" />
+                            <span className="text-sm font-medium">{system.service_ticket_count || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1" title="Projekte">
+                            <FolderIcon className="h-4 w-4 text-blue-500" />
+                            <span className="text-sm font-medium">{system.project_count || 0}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    
-                    {/* Actions (Edit / Delete) */}
-                    <div className="mt-4 flex justify-end gap-2">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleEdit(system.id); }}
-                        className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors duration-200"
-                      >
-                        <PencilIcon className="h-4 w-4 mr-1" />
-                        Bearbeiten
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(system.id, system.system_name); }}
-                        className="flex items-center px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors duration-200"
-                      >
-                        <TrashIcon className="h-4 w-4 mr-1" />
-                        Löschen
-                      </button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+
+              {/* List View */}
+              {viewMode === 'list' && (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          System
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Kunde
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Standort
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Zuständig
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Aktionen
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {systems.map((system) => (
+                        <tr
+                          key={system.id}
+                          onClick={() => navigate(`/sales/systems/${system.id}`)}
+                          className="hover:bg-gray-50 cursor-pointer"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div>
+                                <div className="text-sm font-medium text-blue-600">{system.system_number}</div>
+                                <div className="text-sm text-gray-900">{system.system_name}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{system.customer_name || '-'}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{system.location_city || '-'}</div>
+                            <div className="text-xs text-gray-500">{system.location_university || ''}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{system.responsible_employee_name || '-'}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
+                              {getStatusLabel(system.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleEdit(system.id); }}
+                              className="text-blue-600 hover:text-blue-900 mr-3"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDelete(system.id, system.system_name); }}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Map View */}
+              {viewMode === 'map' && (
+                <SystemsMap 
+                  systems={systems} 
+                  onSystemClick={(id) => navigate(`/sales/systems/${id}`)} 
+                />
+              )}
+            </>
           )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
+          {/* Pagination (not for map view) */}
+          {viewMode !== 'map' && totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
               <p className="text-sm text-gray-600">
-                Zeige {(currentPage - 1) * 10 + 1} - {Math.min(currentPage * 10, totalCount)} von {totalCount} Systemen
+                Zeige {(currentPage - 1) * 12 + 1} - {Math.min(currentPage * 12, totalCount)} von {totalCount} Systemen
               </p>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  onClick={() => {
+                    const newPage = Math.max(1, currentPage - 1);
+                    setCurrentPage(newPage);
+                    const params = {};
+                    if (searchTerm) params.search = searchTerm;
+                    if (statusFilter) params.status = statusFilter;
+                    if (cityFilter) params.city = cityFilter;
+                    if (countryFilter) params.country = countryFilter;
+                    if (employeeFilter) params.employee = employeeFilter;
+                    params.page = String(newPage);
+                    setSearchParams(params);
+                  }}
                   disabled={currentPage === 1}
                   className="p-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
@@ -353,7 +918,18 @@ const Systems = () => {
                   {currentPage} / {totalPages}
                 </span>
                 <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => {
+                    const newPage = Math.min(totalPages, currentPage + 1);
+                    setCurrentPage(newPage);
+                    const params = {};
+                    if (searchTerm) params.search = searchTerm;
+                    if (statusFilter) params.status = statusFilter;
+                    if (cityFilter) params.city = cityFilter;
+                    if (countryFilter) params.country = countryFilter;
+                    if (employeeFilter) params.employee = employeeFilter;
+                    params.page = String(newPage);
+                    setSearchParams(params);
+                  }}
                   disabled={currentPage === totalPages}
                   className="p-2 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                 >
@@ -383,7 +959,6 @@ const Systems = () => {
               </div>
 
               <form onSubmit={handleCreateSystem}>
-                {/* Kunde */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Kunde *
@@ -403,7 +978,6 @@ const Systems = () => {
                   </select>
                 </div>
 
-                {/* Systemname */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Systemname (IAU Sternname) *
@@ -427,7 +1001,6 @@ const Systems = () => {
                     </button>
                   </div>
                   
-                  {/* Star Name Search */}
                   <div className="mt-2">
                     <button
                       type="button"
@@ -465,7 +1038,6 @@ const Systems = () => {
                   </div>
                 </div>
 
-                {/* Beschreibung */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Beschreibung

@@ -578,7 +578,7 @@ class VisiViewTicketViewSet(viewsets.ModelViewSet):
     ).all()
     permission_classes = [IsAuthenticated, VisiViewTicketPermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['tracker', 'status', 'priority', 'category', 'assigned_to', 'is_private', 'target_version']
+    filterset_fields = ['tracker', 'status', 'priority', 'category', 'assigned_to', 'is_private', 'target_version', 'linked_system']
     search_fields = ['ticket_number', 'title', 'description', 'author', 'target_version', 'affected_version']
     ordering_fields = ['ticket_number', 'priority', 'status', 'created_at', 'updated_at', 'target_version', 'assigned_to']
     ordering = ['-ticket_number']

@@ -9,6 +9,9 @@ import json
 
 User = get_user_model()
 
+# Import Travel Report Models
+from .models_travel_report import TravelReport, TravelReportMeasurement, TravelReportPhoto
+
 
 class VSService(models.Model):
     """

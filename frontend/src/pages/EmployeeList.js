@@ -243,7 +243,11 @@ const EmployeeList = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {employees.map((employee) => (
-                    <tr key={employee.id}>
+                    <tr 
+                      key={employee.id}
+                      onClick={() => handleEdit(employee)}
+                      className="cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
                       <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
                         {employee.employee_id}
                       </td>
@@ -268,18 +272,32 @@ const EmployeeList = () => {
                           }`}>
                             {employee.employment_status}
                           </span>
-                          <button onClick={() => toggleStatus(employee)} className="text-sm text-blue-600 hover:text-blue-900">Toggle</button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleStatus(employee);
+                            }} 
+                            className="text-sm text-blue-600 hover:text-blue-900"
+                          >
+                            Toggle
+                          </button>
                         </div>
                       </td>
                       <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                         <button
-                          onClick={() => handleEdit(employee)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(employee);
+                          }}
                           className="text-blue-600 hover:text-blue-900 mr-4"
                         >
                           <PencilIcon className="h-5 w-5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(employee.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(employee.id);
+                          }}
                           className="text-red-600 hover:text-red-900"
                         >
                           <TrashIcon className="h-5 w-5" />

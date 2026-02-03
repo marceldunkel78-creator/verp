@@ -42,6 +42,10 @@ class CustomerListSerializer(serializers.ModelSerializer):
     responsible_user_name = serializers.CharField(source='responsible_user.get_full_name', read_only=True)
     primary_email = serializers.SerializerMethodField()
     primary_phone = serializers.SerializerMethodField()
+    primary_address_city = serializers.SerializerMethodField()
+    primary_address_country = serializers.SerializerMethodField()
+    primary_address_latitude = serializers.SerializerMethodField()
+    primary_address_longitude = serializers.SerializerMethodField()
     system_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
     open_ticket_count = serializers.SerializerMethodField()
@@ -54,6 +58,8 @@ class CustomerListSerializer(serializers.ModelSerializer):
             'advertising_status', 'advertising_status_display',
             'is_reference', 'responsible_user', 'responsible_user_name',
             'primary_email', 'primary_phone', 'is_active',
+            'primary_address_city', 'primary_address_country',
+            'primary_address_latitude', 'primary_address_longitude',
             'system_count', 'project_count', 'open_ticket_count',
             'created_at', 'updated_at'
         ]
@@ -68,6 +74,23 @@ class CustomerListSerializer(serializers.ModelSerializer):
     def get_primary_phone(self, obj):
         primary = obj.phones.filter(is_primary=True).first()
         return primary.phone_number if primary else None
+    
+    def get_primary_address_city(self, obj):
+        # Get first active address (ordered by is_active DESC, address_type)
+        primary = obj.addresses.filter(is_active=True).first()
+        return primary.city if primary else None
+    
+    def get_primary_address_country(self, obj):
+        primary = obj.addresses.filter(is_active=True).first()
+        return primary.country if primary else None
+    
+    def get_primary_address_latitude(self, obj):
+        primary = obj.addresses.filter(is_active=True).first()
+        return str(primary.latitude) if primary and primary.latitude else None
+    
+    def get_primary_address_longitude(self, obj):
+        primary = obj.addresses.filter(is_active=True).first()
+        return str(primary.longitude) if primary and primary.longitude else None
 
     def get_system_count(self, obj):
         # system_records is the related_name from systems.System

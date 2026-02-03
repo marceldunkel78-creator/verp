@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import AddressMap from '../components/AddressMap';
 import {
   ArrowLeftIcon,
   ComputerDesktopIcon,
@@ -21,7 +22,9 @@ import {
   ShoppingCartIcon,
   TicketIcon,
   ArrowTopRightOnSquareIcon,
-  KeyIcon
+  KeyIcon,
+  DocumentTextIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
@@ -31,7 +34,8 @@ const TABS = [
   { id: 'projects', name: 'Projekte', icon: FolderIcon },
   { id: 'orders', name: 'Aufträge', icon: ShoppingCartIcon },
   { id: 'service', name: 'Service', icon: WrenchScrewdriverIcon },
-  { id: 'visiview', name: 'VisiView', icon: KeyIcon }
+  { id: 'visiview', name: 'VisiView', icon: KeyIcon },
+  { id: 'travel-reports', name: 'Reisebericht/Servicebericht', icon: DocumentTextIcon }
 ];
 
 const SystemEdit = () => {
@@ -55,14 +59,32 @@ const SystemEdit = () => {
     description: '',
     status: 'active',
     location: '',
+    location_university: '',
+    location_institute: '',
+    location_department: '',
+    location_street: '',
+    location_house_number: '',
+    location_address_supplement: '',
+    location_postal_code: '',
+    location_city: '',
+    location_country: 'DE',
+    location_latitude: null,
+    location_longitude: null,
     installation_date: '',
     notes: '',
-    visiview_license: ''
+    visiview_license: '',
+    responsible_employee: ''
   });
   const [customers, setCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
+  // Responsible Employee State
+  const [employees, setEmployees] = useState([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [searchingEmployees, setSearchingEmployees] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
   
   // VisiView License State
   const [licenses, setLicenses] = useState([]);
@@ -90,6 +112,17 @@ const SystemEdit = () => {
   const [customerOrders, setCustomerOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   
+  // Order Search and Import State
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  const [orderSearchResults, setOrderSearchResults] = useState([]);
+  const [searchingOrders, setSearchingOrders] = useState(false);
+  const [selectedOrderForImport, setSelectedOrderForImport] = useState(null);
+  const [orderPositions, setOrderPositions] = useState([]);
+  const [loadingPositions, setLoadingPositions] = useState(false);
+  const [selectedPositions, setSelectedPositions] = useState([]);
+  const [showOrderImportModal, setShowOrderImportModal] = useState(false);
+  const [importingPositions, setImportingPositions] = useState(false);
+  
   // Service Tab State
   const [serviceTickets, setServiceTickets] = useState([]);
   const [rmaCases, setRmaCases] = useState([]);
@@ -113,6 +146,8 @@ const SystemEdit = () => {
     if (id) {
       fetchSystem();
     }
+    // Lade Mitarbeiter für Dropdown (nur Vertrieb & Geschäftsführung)
+    fetchResponsibleEmployees();
   }, [id]);
 
   // Load tab data when tab is selected
@@ -141,9 +176,21 @@ const SystemEdit = () => {
         description: data.description || '',
         status: data.status || 'active',
         location: data.location || '',
+        location_university: data.location_university || '',
+        location_institute: data.location_institute || '',
+        location_department: data.location_department || '',
+        location_street: data.location_street || '',
+        location_house_number: data.location_house_number || '',
+        location_address_supplement: data.location_address_supplement || '',
+        location_postal_code: data.location_postal_code || '',
+        location_city: data.location_city || '',
+        location_country: data.location_country || 'DE',
+        location_latitude: data.location_latitude ? parseFloat(data.location_latitude) : null,
+        location_longitude: data.location_longitude ? parseFloat(data.location_longitude) : null,
         installation_date: data.installation_date || '',
         notes: data.notes || '',
-        visiview_license: data.visiview_license || ''
+        visiview_license: data.visiview_license || '',
+        responsible_employee: data.responsible_employee || ''
       });
       setComponents(data.components || []);
       setPhotos(data.photos || []);
@@ -156,6 +203,11 @@ const SystemEdit = () => {
       // Load license details if license is set
       if (data.visiview_license_details) {
         setSelectedLicense(data.visiview_license_details);
+      }
+      
+      // Load responsible employee details if set
+      if (data.responsible_employee_details) {
+        setSelectedEmployee(data.responsible_employee_details);
       }
     } catch (error) {
       console.error('Error fetching system:', error);
@@ -226,6 +278,53 @@ const SystemEdit = () => {
     setSelectedLicense(null);
     setFormData(prev => ({ ...prev, visiview_license: '' }));
     setHasChanges(true);
+  };
+
+  // Employee search functions
+  const searchEmployees = async () => {
+    if (!employeeSearch.trim()) return;
+    setSearchingEmployees(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('search', employeeSearch);
+      const response = await api.get(`/users/employees/?${params.toString()}`);
+      const data = response.data.results || response.data || [];
+      setEmployees(data);
+    } catch (err) {
+      console.error('Error searching employees:', err);
+      setEmployees([]);
+    } finally {
+      setSearchingEmployees(false);
+    }
+  };
+
+  const selectEmployee = (employee) => {
+    setSelectedEmployee(employee);
+    setFormData(prev => ({ ...prev, responsible_employee: employee.id }));
+    setEmployees([]);
+    setEmployeeSearch('');
+    setHasChanges(true);
+  };
+
+  const clearEmployee = () => {
+    setSelectedEmployee(null);
+    setFormData(prev => ({ ...prev, responsible_employee: '' }));
+    setHasChanges(true);
+  };
+
+  const fetchResponsibleEmployees = async () => {
+    try {
+      // Lade nur aktive Mitarbeiter aus Vertrieb und Geschäftsführung
+      const response = await api.get('/users/employees/?employment_status=aktiv');
+      const allEmployees = response.data.results || response.data || [];
+      const filtered = allEmployees.filter(emp => 
+        emp.department === 'vertrieb' || emp.department === 'geschaeftsfuehrung'
+      );
+      setEmployees(filtered);
+    } catch (err) {
+      console.error('Error loading employees:', err);
+      setEmployees([]);
+    }
   };
 
   const fetchProjects = async () => {
@@ -304,6 +403,82 @@ const SystemEdit = () => {
       setInventoryItems(response.data.results || response.data);
     } catch (error) {
       console.error('Error fetching inventory items:', error);
+    }
+  };
+
+  // Order Search and Import Functions
+  const searchOrdersForImport = async () => {
+    if (!orderSearchQuery.trim() || orderSearchQuery.length < 2) {
+      setOrderSearchResults([]);
+      return;
+    }
+    setSearchingOrders(true);
+    try {
+      const response = await api.get(`/systems/systems/search_orders/?search=${encodeURIComponent(orderSearchQuery)}`);
+      setOrderSearchResults(response.data);
+    } catch (error) {
+      console.error('Error searching orders:', error);
+      setOrderSearchResults([]);
+    } finally {
+      setSearchingOrders(false);
+    }
+  };
+
+  const selectOrderForImport = async (order) => {
+    setSelectedOrderForImport(order);
+    setOrderSearchResults([]);
+    setOrderSearchQuery('');
+    setLoadingPositions(true);
+    try {
+      const response = await api.get(`/systems/systems/order_positions/?order_id=${order.id}`);
+      setOrderPositions(response.data);
+      setSelectedPositions(response.data.map(p => p.id)); // Standardmäßig alle ausgewählt
+    } catch (error) {
+      console.error('Error fetching order positions:', error);
+      setOrderPositions([]);
+    } finally {
+      setLoadingPositions(false);
+    }
+  };
+
+  const togglePositionSelection = (posId) => {
+    setSelectedPositions(prev => 
+      prev.includes(posId) 
+        ? prev.filter(id => id !== posId)
+        : [...prev, posId]
+    );
+  };
+
+  const selectAllPositions = () => {
+    setSelectedPositions(orderPositions.map(p => p.id));
+  };
+
+  const deselectAllPositions = () => {
+    setSelectedPositions([]);
+  };
+
+  const importSelectedPositions = async () => {
+    if (selectedPositions.length === 0) return;
+    
+    setImportingPositions(true);
+    try {
+      const response = await api.post(`/systems/systems/${id}/import_order_positions/`, {
+        position_ids: selectedPositions
+      });
+      
+      if (response.data.success) {
+        alert(`${response.data.created_count} Komponente(n) erfolgreich importiert!`);
+        setShowOrderImportModal(false);
+        setSelectedOrderForImport(null);
+        setOrderPositions([]);
+        setSelectedPositions([]);
+        fetchSystem(); // Reload to show new components
+      }
+    } catch (error) {
+      console.error('Error importing positions:', error);
+      alert('Fehler beim Importieren der Positionen');
+    } finally {
+      setImportingPositions(false);
     }
   };
 
@@ -606,9 +781,13 @@ const SystemEdit = () => {
               {selectedCustomer ? (
                 <div className="flex items-center gap-2 p-3 bg-gray-50 border rounded-lg">
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/customers/${selectedCustomer.id}`)}
+                      className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+                    >
                       {selectedCustomer.full_name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`}
-                    </div>
+                    </button>
                     <div className="text-sm text-gray-600">{selectedCustomer.customer_number}</div>
                   </div>
                   <button
@@ -672,9 +851,13 @@ const SystemEdit = () => {
               {selectedLicense ? (
                 <div className="flex items-center gap-2 p-3 bg-gray-50 border rounded-lg">
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/visiview/licenses/${selectedLicense.id}`)}
+                      className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+                    >
                       {selectedLicense.license_number}
-                    </div>
+                    </button>
                     <div className="text-sm text-gray-600">
                       Dongle: {selectedLicense.serial_number}
                       {selectedLicense.version && ` • Version: ${selectedLicense.version}`}
@@ -740,6 +923,36 @@ const SystemEdit = () => {
               )}
             </div>
 
+            {/* Zuständiger Mitarbeiter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Zuständiger Mitarbeiter
+              </label>
+              <select
+                value={formData.responsible_employee}
+                onChange={(e) => {
+                  const empId = e.target.value;
+                  handleInputChange('responsible_employee', empId);
+                  if (empId) {
+                    const emp = employees.find(e => e.id === parseInt(empId));
+                    setSelectedEmployee(emp || null);
+                  } else {
+                    setSelectedEmployee(null);
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Kein Mitarbeiter zugewiesen --</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name}
+                    {emp.job_title && ` (${emp.job_title})`}
+                    {emp.department_display && ` - ${emp.department_display}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Status
@@ -758,15 +971,42 @@ const SystemEdit = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Standort
+                Standort (Raum/Labor/Gebäude)
               </label>
-              <input
-                type="text"
-                value={formData.location}
-                onChange={(e) => handleInputChange('location', e.target.value)}
-                placeholder="z.B. Labor 301, Gebäude A"
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.location}
+                  onChange={(e) => handleInputChange('location', e.target.value)}
+                  placeholder="z.B. Labor 301, Raum A2.15, Gebäude B"
+                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                {system.customer_address && !formData.location_university && !formData.location_street && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const addr = system.customer_address;
+                      setFormData(prev => ({
+                        ...prev,
+                        location_university: addr.university || '',
+                        location_institute: addr.institute || '',
+                        location_department: addr.department || '',
+                        location_street: addr.street || '',
+                        location_house_number: addr.house_number || '',
+                        location_address_supplement: addr.address_supplement || '',
+                        location_postal_code: addr.postal_code || '',
+                        location_city: addr.city || '',
+                        location_country: addr.country || 'DE'
+                      }));
+                      setHasChanges(true);
+                    }}
+                    className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 whitespace-nowrap"
+                    title="Kundenadresse übernehmen"
+                  >
+                    Kundenadresse
+                  </button>
+                )}
+              </div>
             </div>
 
             <div>
@@ -779,6 +1019,173 @@ const SystemEdit = () => {
                 onChange={(e) => handleInputChange('installation_date', e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+            {/* Erweiterte Standortadresse */}
+            <div className="md:col-span-2 border-t pt-4 mt-2">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Standortadresse</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Universität/Institution</label>
+                  <input
+                    type="text"
+                    value={formData.location_university}
+                    onChange={(e) => handleInputChange('location_university', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Institut</label>
+                  <input
+                    type="text"
+                    value={formData.location_institute}
+                    onChange={(e) => handleInputChange('location_institute', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-gray-600 mb-1">Lehrstuhl/Abteilung</label>
+                  <input
+                    type="text"
+                    value={formData.location_department}
+                    onChange={(e) => handleInputChange('location_department', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-600 mb-1">Straße</label>
+                    <input
+                      type="text"
+                      value={formData.location_street}
+                      onChange={(e) => handleInputChange('location_street', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="w-24">
+                    <label className="block text-sm text-gray-600 mb-1">Nr.</label>
+                    <input
+                      type="text"
+                      value={formData.location_house_number}
+                      onChange={(e) => handleInputChange('location_house_number', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Adresszusatz</label>
+                  <input
+                    type="text"
+                    value={formData.location_address_supplement}
+                    onChange={(e) => handleInputChange('location_address_supplement', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <div className="w-28">
+                    <label className="block text-sm text-gray-600 mb-1">PLZ</label>
+                    <input
+                      type="text"
+                      value={formData.location_postal_code}
+                      onChange={(e) => handleInputChange('location_postal_code', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-gray-600 mb-1">Stadt</label>
+                    <input
+                      type="text"
+                      value={formData.location_city}
+                      onChange={(e) => handleInputChange('location_city', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Land (ISO Code)</label>
+                  <input
+                    type="text"
+                    value={formData.location_country}
+                    onChange={(e) => handleInputChange('location_country', e.target.value)}
+                    maxLength={2}
+                    placeholder="DE"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                {/* Koordinaten */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Breitengrad</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={formData.location_latitude || ''}
+                      onChange={(e) => handleInputChange('location_latitude', e.target.value ? parseFloat(e.target.value) : null)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="z.B. 48.137154"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Längengrad</label>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={formData.location_longitude || ''}
+                      onChange={(e) => handleInputChange('location_longitude', e.target.value ? parseFloat(e.target.value) : null)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="z.B. 11.576124"
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Kartenansicht für Standort */}
+              <div className="md:col-span-2 mt-4 border-t pt-4">
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
+                    <div className="flex items-center justify-between text-sm text-gray-700">
+                      <div className="flex items-center">
+                        <MapPinIcon className="h-4 w-4 mr-2" />
+                        Systemstandort auf Karte
+                      </div>
+                      {formData.location_latitude && formData.location_longitude && (
+                        <a
+                          href={`https://www.openstreetmap.org/?mlat=${formData.location_latitude}&mlon=${formData.location_longitude}#map=15/${formData.location_latitude}/${formData.location_longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 text-xs"
+                        >
+                          In OpenStreetMap öffnen →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-gray-50">
+                    <AddressMap
+                      latitude={formData.location_latitude}
+                      longitude={formData.location_longitude}
+                      address={{
+                        street: formData.location_street,
+                        house_number: formData.location_house_number,
+                        postal_code: formData.location_postal_code,
+                        city: formData.location_city,
+                        country: formData.location_country
+                      }}
+                      onPositionChange={(lat, lng) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          location_latitude: parseFloat(lat.toFixed(6)),
+                          location_longitude: parseFloat(lng.toFixed(6))
+                        }));
+                        setHasChanges(true);
+                      }}
+                      editable={true}
+                      height="350px"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Warranty end removed from base info per request */}
@@ -1047,6 +1454,13 @@ const SystemEdit = () => {
           <div>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-medium">Kundenaufträge</h3>
+              <button
+                onClick={() => setShowOrderImportModal(true)}
+                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Positionen aus Auftrag importieren
+              </button>
             </div>
             
             {ordersLoading ? (
@@ -1536,6 +1950,381 @@ const SystemEdit = () => {
           </div>
         </div>
       )}
+
+      {/* Order Import Modal */}
+      {showOrderImportModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-black opacity-50" onClick={() => {
+              setShowOrderImportModal(false);
+              setSelectedOrderForImport(null);
+              setOrderPositions([]);
+              setSelectedPositions([]);
+              setOrderSearchQuery('');
+              setOrderSearchResults([]);
+            }}></div>
+            
+            <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold">Auftragspositionen als Komponenten importieren</h2>
+                <button onClick={() => {
+                  setShowOrderImportModal(false);
+                  setSelectedOrderForImport(null);
+                  setOrderPositions([]);
+                  setSelectedPositions([]);
+                  setOrderSearchQuery('');
+                  setOrderSearchResults([]);
+                }} className="text-gray-400 hover:text-gray-600">
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              {!selectedOrderForImport ? (
+                <div>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Auftrag suchen (Kundennummer, Kundenname oder Auftragsnummer)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={orderSearchQuery}
+                        onChange={(e) => setOrderSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && searchOrdersForImport()}
+                        placeholder="z.B. K-00042, Müller, A-00123..."
+                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        onClick={searchOrdersForImport}
+                        disabled={searchingOrders}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {searchingOrders ? 'Suche...' : 'Suchen'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {orderSearchResults.length > 0 && (
+                    <div className="border rounded-lg divide-y max-h-80 overflow-y-auto">
+                      {orderSearchResults.map(order => (
+                        <div
+                          key={order.id}
+                          onClick={() => selectOrderForImport(order)}
+                          className="p-4 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span className="font-mono text-green-600 font-medium">{order.order_number}</span>
+                              <div className="text-sm text-gray-600 mt-1">
+                                {order.customer_number && <span className="mr-2">{order.customer_number}</span>}
+                                {order.customer_name}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm text-gray-500">
+                                {order.order_date && new Date(order.order_date).toLocaleDateString('de-DE')}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                {order.position_count} Position(en)
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {orderSearchQuery && orderSearchResults.length === 0 && !searchingOrders && (
+                    <p className="text-gray-500 text-center py-4">Keine Aufträge gefunden</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-mono text-green-700 font-medium">{selectedOrderForImport.order_number}</span>
+                        <span className="ml-2 text-gray-600">{selectedOrderForImport.customer_name}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedOrderForImport(null);
+                          setOrderPositions([]);
+                          setSelectedPositions([]);
+                        }}
+                        className="text-sm text-green-600 hover:underline"
+                      >
+                        Anderen Auftrag wählen
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingPositions ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="mt-2 text-gray-500">Lade Positionen...</p>
+                    </div>
+                  ) : orderPositions.length > 0 ? (
+                    <div>
+                      <div className="flex justify-between items-center mb-3">
+                        <label className="text-sm font-medium text-gray-700">
+                          Positionen auswählen ({selectedPositions.length} von {orderPositions.length})
+                        </label>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={selectAllPositions}
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            Alle
+                          </button>
+                          <span className="text-gray-300">|</span>
+                          <button
+                            onClick={deselectAllPositions}
+                            className="text-sm text-blue-600 hover:underline"
+                          >
+                            Keine
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+                        {orderPositions.map(pos => (
+                          <label
+                            key={pos.id}
+                            className="flex items-start p-3 hover:bg-gray-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedPositions.includes(pos.id)}
+                              onChange={() => togglePositionSelection(pos.id)}
+                              className="mt-1 mr-3 h-4 w-4 text-blue-600 rounded"
+                            />
+                            <div className="flex-1">
+                              <div className="flex justify-between">
+                                <span className="font-medium">{pos.name}</span>
+                                <span className="text-sm text-gray-500">{pos.position_display}</span>
+                              </div>
+                              {pos.article_number && (
+                                <div className="text-sm text-gray-500">Art.Nr: {pos.article_number}</div>
+                              )}
+                              {pos.serial_number && (
+                                <div className="text-sm text-gray-500">SN: {pos.serial_number}</div>
+                              )}
+                              {pos.description && (
+                                <p className="text-sm text-gray-400 mt-1 line-clamp-2">{pos.description}</p>
+                              )}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">Keine Positionen in diesem Auftrag</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                <button
+                  onClick={() => {
+                    setShowOrderImportModal(false);
+                    setSelectedOrderForImport(null);
+                    setOrderPositions([]);
+                    setSelectedPositions([]);
+                    setOrderSearchQuery('');
+                    setOrderSearchResults([]);
+                  }}
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                {selectedOrderForImport && selectedPositions.length > 0 && (
+                  <button
+                    onClick={importSelectedPositions}
+                    disabled={importingPositions}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {importingPositions ? 'Importiere...' : `${selectedPositions.length} Position(en) importieren`}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Travel Reports Tab */}
+      {activeTab === 'travel-reports' && (
+        <div>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-medium">Reisebericht/Servicebericht</h3>
+            <button
+              onClick={() => navigate(`/travel-reports/new?system=${id}`)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              <PlusIcon className="h-5 w-5" />
+              Neuer Bericht
+            </button>
+          </div>
+          <TravelReportsTab systemId={id} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Travel Reports Tab Component
+const TravelReportsTab = ({ systemId }) => {
+  const navigate = useNavigate();
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    fetchReports();
+  }, [systemId, filter]);
+
+  const fetchReports = async () => {
+    try {
+      let url = `/service/travel-reports/?linked_system=${systemId}`;
+      if (filter !== 'all') {
+        url += `&report_type=${filter}`;
+      }
+      const response = await api.get(url);
+      setReports(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Berichte:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteReport = async (reportId) => {
+    if (!window.confirm('Bericht wirklich löschen?')) return;
+    try {
+      await api.delete(`/service/travel-reports/${reportId}/`);
+      fetchReports();
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error);
+      alert('Fehler beim Löschen des Berichts');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-32">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => setFilter('all')}
+          className={`px-4 py-2 rounded-lg ${
+            filter === 'all'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Alle
+        </button>
+        <button
+          onClick={() => setFilter('travel')}
+          className={`px-4 py-2 rounded-lg ${
+            filter === 'travel'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Reiseberichte
+        </button>
+        <button
+          onClick={() => setFilter('service')}
+          className={`px-4 py-2 rounded-lg ${
+            filter === 'service'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          Serviceberichte
+        </button>
+      </div>
+
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Datum
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Typ
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Ort
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Fotos
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Aktionen
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {reports.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                  Keine Berichte vorhanden
+                </td>
+              </tr>
+            ) : (
+              reports.map((report) => (
+                <tr
+                  key={report.id}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => navigate(`/travel-reports/${report.id}`)}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {new Date(report.date).toLocaleDateString('de-DE')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        report.report_type === 'travel'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-green-100 text-green-800'
+                      }`}
+                    >
+                      {report.report_type === 'travel' ? 'Reise' : 'Service'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {report.location}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {report.photo_count || 0}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteReport(report.id);
+                      }}
+                      className="text-red-600 hover:text-red-900"
+                    >
+                      <TrashIcon className="h-5 w-5" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

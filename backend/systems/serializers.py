@@ -57,15 +57,47 @@ class SystemListSerializer(serializers.ModelSerializer):
     primary_photo_url = serializers.SerializerMethodField()
     service_ticket_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
+    location_full = serializers.SerializerMethodField()
+    responsible_employee_name = serializers.SerializerMethodField()
     
     class Meta:
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
-            'description', 'status', 'status_display', 'location', 'installation_date',
-            'component_count', 'photo_count', 'primary_photo_url', 
-            'service_ticket_count', 'project_count', 'created_at'
+            'description', 'status', 'status_display', 'location', 'location_full',
+            'location_university', 'location_institute', 'location_department',
+            'location_street', 'location_house_number', 'location_address_supplement',
+            'location_postal_code', 'location_city', 'location_country',
+            'location_latitude', 'location_longitude',
+            'installation_date', 'component_count', 'photo_count', 'primary_photo_url', 
+            'service_ticket_count', 'project_count', 'responsible_employee', 
+            'responsible_employee_name', 'created_at'
         ]
+    
+    def get_responsible_employee_name(self, obj):
+        if obj.responsible_employee:
+            emp = obj.responsible_employee
+            return f"{emp.first_name} {emp.last_name}".strip() or emp.employee_number
+        return None
+    
+    def get_location_full(self, obj):
+        """Gibt die vollständige Standortadresse als String zurück"""
+        parts = []
+        if obj.location:
+            parts.append(obj.location)
+        if obj.location_university:
+            parts.append(obj.location_university)
+        if obj.location_institute:
+            parts.append(obj.location_institute)
+        if obj.location_street and obj.location_house_number:
+            parts.append(f"{obj.location_street} {obj.location_house_number}")
+        elif obj.location_street:
+            parts.append(obj.location_street)
+        if obj.location_postal_code and obj.location_city:
+            parts.append(f"{obj.location_postal_code} {obj.location_city}")
+        elif obj.location_city:
+            parts.append(obj.location_city)
+        return ', '.join(parts) if parts else None
     
     def get_component_count(self, obj):
         return obj.components.count()
@@ -115,7 +147,9 @@ class SystemDetailSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     customer_data = serializers.SerializerMethodField()
     customer_details = serializers.SerializerMethodField()
+    customer_address = serializers.SerializerMethodField()
     visiview_license_details = serializers.SerializerMethodField()
+    responsible_employee_details = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     components = SystemComponentSerializer(many=True, read_only=True)
     photos = SystemPhotoSerializer(many=True, read_only=True)
@@ -123,18 +157,44 @@ class SystemDetailSerializer(serializers.ModelSerializer):
         source='created_by.get_full_name',
         read_only=True
     )
+    location_full = serializers.SerializerMethodField()
     
     class Meta:
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
-            'customer_data', 'customer_details', 'description', 'status', 'status_display',
-            'location', 'installation_date', 'notes',
+            'customer_data', 'customer_details', 'customer_address', 'description', 'status', 'status_display',
+            'location', 'location_full',
+            'location_university', 'location_institute', 'location_department',
+            'location_street', 'location_house_number', 'location_address_supplement',
+            'location_postal_code', 'location_city', 'location_country',
+            'location_latitude', 'location_longitude',
+            'installation_date', 'notes',
             'visiview_license', 'visiview_license_details',
+            'responsible_employee', 'responsible_employee_details',
             'components', 'photos', 'created_by', 'created_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'system_number', 'created_by', 'created_at', 'updated_at']
+    
+    def get_location_full(self, obj):
+        """Gibt die vollständige Standortadresse als String zurück"""
+        parts = []
+        if obj.location:
+            parts.append(obj.location)
+        if obj.location_university:
+            parts.append(obj.location_university)
+        if obj.location_institute:
+            parts.append(obj.location_institute)
+        if obj.location_street and obj.location_house_number:
+            parts.append(f"{obj.location_street} {obj.location_house_number}")
+        elif obj.location_street:
+            parts.append(obj.location_street)
+        if obj.location_postal_code and obj.location_city:
+            parts.append(f"{obj.location_postal_code} {obj.location_city}")
+        elif obj.location_city:
+            parts.append(obj.location_city)
+        return ', '.join(parts) if parts else None
     
     def get_customer_data(self, obj):
         if obj.customer:
@@ -171,6 +231,37 @@ class SystemDetailSerializer(serializers.ModelSerializer):
             }
         return None
     
+    def get_customer_address(self, obj):
+        """Gibt die primäre Adresse des Kunden zurück (Office/Labor)"""
+        if not obj.customer:
+            return None
+        
+        # Versuche zuerst Office, dann Labor Adresse zu finden
+        address = obj.customer.addresses.filter(
+            is_active=True,
+            address_type__in=['Office', 'Labor']
+        ).order_by('address_type').first()
+        
+        if not address:
+            # Fallback auf erste aktive Adresse
+            address = obj.customer.addresses.filter(is_active=True).first()
+        
+        if address:
+            return {
+                'id': address.id,
+                'address_type': address.address_type,
+                'university': address.university,
+                'institute': address.institute,
+                'department': address.department,
+                'street': address.street,
+                'house_number': address.house_number,
+                'address_supplement': address.address_supplement,
+                'postal_code': address.postal_code,
+                'city': address.city,
+                'country': address.country,
+            }
+        return None
+    
     def get_visiview_license_details(self, obj):
         if obj.visiview_license:
             lic = obj.visiview_license
@@ -180,6 +271,19 @@ class SystemDetailSerializer(serializers.ModelSerializer):
                 'serial_number': lic.serial_number,
                 'version': lic.version or '',
                 'status': lic.status,
+            }
+        return None
+    
+    def get_responsible_employee_details(self, obj):
+        if obj.responsible_employee:
+            emp = obj.responsible_employee
+            return {
+                'id': emp.id,
+                'employee_id': emp.employee_id,
+                'full_name': f"{emp.first_name} {emp.last_name}",
+                'first_name': emp.first_name,
+                'last_name': emp.last_name,
+                'department': emp.department,
             }
         return None
 
@@ -192,8 +296,12 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'description',
-            'status', 'location', 'installation_date',
-            'notes', 'visiview_license', 'components'
+            'status', 'location', 
+            'location_university', 'location_institute', 'location_department',
+            'location_street', 'location_house_number', 'location_address_supplement',
+            'location_postal_code', 'location_city', 'location_country',
+            'location_latitude', 'location_longitude',
+            'installation_date', 'notes', 'visiview_license', 'responsible_employee', 'components'
         ]
         read_only_fields = ['id', 'system_number']
     

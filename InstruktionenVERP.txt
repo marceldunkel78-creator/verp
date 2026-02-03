@@ -55,11 +55,6 @@ Superuser erstellen bei activated venv
 python manage.py createsuperuser
 
 
-Testdaten erstellen:
-python manage.py create_test_data
-# Erstellt: 5 Lieferanten, 7 Handelswaren, 5 Material & Supplies, 4 Assets, 12 Kunden
-
-
 Firmeneinstellungen konfigurieren:
 1. Admin-Interface öffnen: http://localhost:8000/admin
 2. Unter "Firmeneinstellungen" → "Company Settings" die Firmendaten eintragen
@@ -84,6 +79,8 @@ server starten :
 
 # Backend (Terminal 1)
 cd backend
+
+.\venv\Scripts\Activate
 python manage.py runserver
 
 # Frontend (Terminal 2)
@@ -122,3 +119,10 @@ cd frontend
 npm run generate-favicons
 
 python import_maintenance_data.py --license-id 1598
+
+
+cd c:\Users\mdunk\Documents\VERP\backend
+dry run
+python import_legacy_orders.py --limit 100
+live
+python import_legacy_orders.py --live

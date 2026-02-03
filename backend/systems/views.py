@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import models
 from django.db.models import Q
 
 from .models import System, SystemComponent, SystemPhoto
@@ -19,11 +20,13 @@ class SystemViewSet(viewsets.ModelViewSet):
     """
     queryset = System.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'customer']
+    filterset_fields = ['status', 'responsible_employee', 'location_city', 'location_country']
     # Use actual Customer model fields for related searches/ordering
     search_fields = [
         'system_number', 'system_name', 'description',
-        'customer__customer_number', 'customer__first_name', 'customer__last_name'
+        'customer__customer_number', 'customer__first_name', 'customer__last_name',
+        'location_city', 'location_university', 'location_institute', 'location_country',
+        'visiview_license__serial_number', 'visiview_license__license_number'
     ]
     ordering_fields = ['system_number', 'system_name', 'created_at', 'customer__last_name']
     ordering = ['-created_at']
@@ -150,13 +153,13 @@ class SystemViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def customer_inventory(self, request, pk=None):
-        """Gibt alle Warenlager-Items des Kunden für dieses System zurück"""
+        """Gibt alle Warenlager-Items des Kunden für dieses System zurück (alle Status)"""
         system = self.get_object()
         
         from inventory.models import InventoryItem
+        # Alle Warenlager-Items des Kunden ohne Status-Filter
         items = InventoryItem.objects.filter(
-            customer=system.customer,
-            status='AUF_LAGER'
+            customer=system.customer
         ).select_related('product_category').order_by('name')
         
         data = []
@@ -174,6 +177,120 @@ class SystemViewSet(viewsets.ModelViewSet):
             })
         
         return Response(data)
+    
+    @action(detail=False, methods=['get'])
+    def search_orders(self, request):
+        """Sucht nach Kundenaufträgen anhand von Kundennamen oder Auftragsnummer"""
+        search = request.query_params.get('search', '')
+        if not search or len(search) < 2:
+            return Response([])
+        
+        from customer_orders.models import CustomerOrder
+        from django.db.models import Q
+        
+        orders = CustomerOrder.objects.filter(
+            Q(order_number__icontains=search) |
+            Q(customer__first_name__icontains=search) |
+            Q(customer__last_name__icontains=search) |
+            Q(customer__customer_number__icontains=search)
+        ).select_related('customer').order_by('-created_at')[:20]
+        
+        data = []
+        for order in orders:
+            customer_name = ''
+            if order.customer:
+                parts = [order.customer.title or '', order.customer.first_name or '', order.customer.last_name or '']
+                customer_name = ' '.join([p for p in parts if p]).strip()
+            
+            data.append({
+                'id': order.id,
+                'order_number': order.order_number,
+                'customer_id': order.customer_id,
+                'customer_name': customer_name,
+                'customer_number': order.customer.customer_number if order.customer else None,
+                'order_date': order.order_date,
+                'status': order.status,
+                'total': str(order.total_net) if order.total_net else None,
+                'position_count': order.items.count()
+            })
+        
+        return Response(data)
+    
+    @action(detail=False, methods=['get'])
+    def order_positions(self, request):
+        """Gibt die Positionen eines Auftrags zurück"""
+        order_id = request.query_params.get('order_id')
+        if not order_id:
+            return Response({'error': 'order_id required'}, status=400)
+        
+        from customer_orders.models import CustomerOrder, CustomerOrderItem
+        
+        try:
+            order = CustomerOrder.objects.get(id=order_id)
+        except CustomerOrder.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=404)
+        
+        positions = order.items.filter(is_group_header=False).order_by('position')
+        
+        data = []
+        for pos in positions:
+            data.append({
+                'id': pos.id,
+                'position': pos.position,
+                'position_display': pos.position_display or str(pos.position),
+                'article_number': pos.article_number,
+                'name': pos.name,
+                'description': pos.description,
+                'serial_number': pos.serial_number,
+                'quantity': str(pos.quantity),
+                'unit': pos.unit,
+                'final_price': str(pos.final_price),
+            })
+        
+        return Response(data)
+    
+    @action(detail=True, methods=['post'])
+    def import_order_positions(self, request, pk=None):
+        """Importiert Auftragspositionen als Systemkomponenten"""
+        system = self.get_object()
+        position_ids = request.data.get('position_ids', [])
+        
+        if not position_ids:
+            return Response({'error': 'position_ids required'}, status=400)
+        
+        from customer_orders.models import CustomerOrderItem
+        
+        positions = CustomerOrderItem.objects.filter(id__in=position_ids)
+        
+        # Ermittle höchste Position im System
+        max_pos = system.components.aggregate(
+            max_pos=models.Max('position')
+        )['max_pos'] or 0
+        
+        created_components = []
+        for pos in positions:
+            max_pos += 1
+            component = SystemComponent.objects.create(
+                system=system,
+                position=max_pos,
+                component_type='custom',
+                name=pos.name,
+                description=pos.description,
+                serial_number=pos.serial_number,
+                category='other',  # Standardkategorie, kann später angepasst werden
+                notes=f'Importiert aus Auftrag {pos.order.order_number}, Pos. {pos.position}'
+            )
+            created_components.append({
+                'id': component.id,
+                'name': component.name,
+                'position': component.position
+            })
+        
+        return Response({
+            'success': True,
+            'created_count': len(created_components),
+            'components': created_components
+        })
 
 
 class SystemComponentViewSet(viewsets.ModelViewSet):

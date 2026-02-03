@@ -213,6 +213,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     """Serializer für Employee Model (HR-Daten)"""
     signature_image_url = serializers.SerializerMethodField()
     user_id = serializers.SerializerMethodField()
+    department_display = serializers.SerializerMethodField()
     
     class Meta:
         model = Employee
@@ -220,7 +221,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'id', 'employee_id', 'first_name', 'last_name', 'date_of_birth',
             'address', 'personal_email', 'work_email', 'phone',
             'employment_start_date', 'employment_end_date', 'contract_type',
-            'job_title', 'department', 'working_time_percentage', 'employment_status',
+            'job_title', 'department', 'department_display', 
+            'sales_territory_countries', 'sales_territory_postal_codes',
+            'working_time_percentage', 'employment_status',
             'weekly_work_hours', 'work_days',
             'annual_vacation_days', 'vacation_balance',
             'signature_image', 'signature_image_url', 'closing_greeting',
@@ -228,7 +231,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'commission_rate',
             'created_at', 'updated_at', 'user_id'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id', 'signature_image_url', 'user_id']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'employee_id', 'signature_image_url', 'user_id', 'department_display']
     
     def get_signature_image_url(self, obj):
         if obj.signature_image:
@@ -246,6 +249,12 @@ class EmployeeSerializer(serializers.ModelSerializer):
                 return user.id
         except Exception:
             return None
+        return None
+    
+    def get_department_display(self, obj):
+        """Gibt den Anzeige-Namen der Abteilung zurück"""
+        if obj.department:
+            return dict(Employee.DEPARTMENT_CHOICES).get(obj.department, obj.department)
         return None
     
     def validate_work_days(self, value):

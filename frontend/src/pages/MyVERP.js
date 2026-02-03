@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon, CurrencyEuroIcon } from '@heroicons/react/24/outline';
+import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon, CurrencyEuroIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import CalendarMonth from '../components/CalendarMonth';
+import TravelReportList from './TravelReportList';
 
 // Funktion: gibt die ISO-Datumsstrings (YYYY-MM-DD) für eine Kalenderwoche zurück (Mo-So)
 // Berechnung nach ISO 8601: Woche 1 ist die Woche mit dem ersten Donnerstag des Jahres
@@ -139,6 +140,7 @@ const MyVERP = () => {
     { id: 'reminders', name: 'Erinnerungen', icon: BellIcon },
     { id: 'vacation', name: 'Urlaub', icon: CalendarIcon },
     { id: 'travel-expenses', name: 'Reisekosten', icon: CalendarIcon },
+    { id: 'travel-reports', name: 'Reiseberichte', icon: DocumentTextIcon },
   ];
 
   if (loading) {
@@ -219,6 +221,9 @@ const MyVERP = () => {
         )}
         {activeTab === 'travel-expenses' && (
           <TravelExpensesTab onRefresh={fetchData} />
+        )}
+        {activeTab === 'travel-reports' && (
+          <TravelReportList />
         )}
       </div>
     </div>

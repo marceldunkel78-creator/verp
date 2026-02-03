@@ -82,6 +82,8 @@ import SalesMeeting from './pages/SalesMeeting';
 import VisiViewMeeting from './pages/VisiViewMeeting';
 import Meetings from './pages/modules/Meetings';
 import CompanyCalendar from './pages/CompanyCalendar';
+import TravelReportList from './pages/TravelReportList';
+import TravelReportEdit from './pages/TravelReportEdit';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -234,6 +236,11 @@ function App() {
             <Route path="suppliers/:id" element={<Navigate to="/procurement/suppliers/:id" replace />} />
             <Route path="trading" element={<Navigate to="/procurement/trading-goods" replace />} />
             <Route path="settings/exchange-rates" element={<Navigate to="/settings/currency-exchange-rates" replace />} />
+            
+            {/* Travel Reports */}
+            <Route path="travel-reports" element={<TravelReportList />} />
+            <Route path="travel-reports/new" element={<TravelReportEdit />} />
+            <Route path="travel-reports/:id" element={<TravelReportEdit />} />
           </Route>
         </Routes>
       </Router>

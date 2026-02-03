@@ -181,6 +181,14 @@ class Employee(models.Model):
         ('aufkündigung', 'Aufkündigung'),
     ]
     
+    DEPARTMENT_CHOICES = [
+        ('vertrieb', 'Vertrieb'),
+        ('geschaeftsfuehrung', 'Geschäftsführung'),
+        ('entwicklung', 'Entwicklung'),
+        ('fertigung', 'Fertigung'),
+        ('verwaltung', 'Verwaltung'),
+    ]
+    
     employee_id = models.CharField(max_length=50, unique=True, blank=True, verbose_name='Mitarbeiter-ID')
     first_name = models.CharField(max_length=100, verbose_name='Vorname')
     last_name = models.CharField(max_length=100, verbose_name='Nachname')
@@ -193,7 +201,22 @@ class Employee(models.Model):
     employment_end_date = models.DateField(blank=True, null=True, verbose_name='Austrittsdatum')
     contract_type = models.CharField(max_length=20, choices=CONTRACT_TYPE_CHOICES, verbose_name='Vertragsart')
     job_title = models.CharField(max_length=150, verbose_name='Stellenbezeichnung')
-    department = models.CharField(max_length=100, blank=True, verbose_name='Abteilung')
+    department = models.CharField(max_length=100, blank=True, choices=DEPARTMENT_CHOICES, verbose_name='Abteilung')
+    
+    # Vertriebsgebiet (nur für Abteilung Vertrieb)
+    sales_territory_countries = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Vertriebsgebiet Länder',
+        help_text='Liste der Länder-ISO-Codes (z.B. ["DE", "AT", "CH"])'
+    )
+    sales_territory_postal_codes = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Vertriebsgebiet PLZ-Bereiche',
+        help_text='Liste der PLZ-Präfixe (z.B. ["8", "9"] für PLZ 80000-99999)'
+    )
+    
     working_time_percentage = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, verbose_name='Beschäftigungsumfang (%)')
     weekly_work_hours = models.DecimalField(max_digits=5, decimal_places=2, default=40.00, verbose_name='Wochenarbeitszeit (h)')
     # Arbeitstage als Liste von Wochentagskürzeln, z.B. ['mon','tue','wed','thu','fri']

@@ -687,6 +687,16 @@ class VisiViewTicket(models.Model):
         help_text='Verknüpfte VisiView-Lizenz (Dongle-Seriennummer)'
     )
     
+    # Verknüpfung zu einem System
+    linked_system = models.ForeignKey(
+        'systems.System',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visiview_tickets',
+        verbose_name='Verknüpftes System'
+    )
+    
     # Zeitplanung
     start_date = models.DateField(
         null=True,

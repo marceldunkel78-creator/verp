@@ -92,7 +92,7 @@ class ServiceTicketViewSet(viewsets.ModelViewSet):
     queryset = ServiceTicket.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'billing', 'customer', 'assigned_to']
+    filterset_fields = ['status', 'billing', 'customer', 'assigned_to', 'linked_system']
     search_fields = ['ticket_number', 'title', 'description', 'contact_email']
     ordering_fields = ['ticket_number', 'created_at', 'updated_at', 'status']
     ordering = ['-updated_at']
@@ -496,7 +496,7 @@ class RMACaseViewSet(viewsets.ModelViewSet):
     queryset = RMACase.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'customer', 'warranty_status', 'assigned_to']
+    filterset_fields = ['status', 'customer', 'warranty_status', 'assigned_to', 'linked_system']
     search_fields = ['rma_number', 'title', 'description', 'serial_number', 'product_name']
     ordering_fields = ['rma_number', 'created_at', 'status']
     ordering = ['-created_at']

@@ -78,6 +78,71 @@ class System(models.Model):
         help_text='z.B. Labor, Raum, Gebäude'
     )
     
+    # Erweiterte Standort-Adresse
+    location_university = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Universität/Institution'
+    )
+    location_institute = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Institut'
+    )
+    location_department = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Lehrstuhl/Abteilung'
+    )
+    location_street = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Straße'
+    )
+    location_house_number = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Hausnummer'
+    )
+    location_address_supplement = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Adresszusatz'
+    )
+    location_postal_code = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='PLZ'
+    )
+    location_city = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Stadt'
+    )
+    location_country = models.CharField(
+        max_length=2,
+        default='DE',
+        blank=True,
+        verbose_name='Land',
+        help_text='ISO 3166-1 Alpha-2 Code'
+    )
+    
+    # Koordinaten für Kartenansicht
+    location_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name='Breitengrad (Latitude)'
+    )
+    location_longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name='Längengrad (Longitude)'
+    )
+
     installation_date = models.DateField(
         null=True,
         blank=True,
@@ -98,6 +163,16 @@ class System(models.Model):
         blank=True,
         related_name='associated_systems',
         verbose_name='VisiView Lizenz'
+    )
+    
+    # Zuständiger Mitarbeiter
+    responsible_employee = models.ForeignKey(
+        'users.Employee',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='responsible_systems',
+        verbose_name='Zuständiger Mitarbeiter'
     )
     
     # Metadaten
