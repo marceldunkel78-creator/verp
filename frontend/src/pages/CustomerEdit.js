@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
-import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon, BuildingOfficeIcon, BeakerIcon, WrenchScrewdriverIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon, UserIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon, BuildingOfficeIcon, BeakerIcon, WrenchScrewdriverIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon, UserIcon, KeyIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import AddressMap from '../components/AddressMap';
 
 const CustomerEdit = () => {
@@ -41,6 +41,17 @@ const CustomerEdit = () => {
   const [customerLicensesPage, setCustomerLicensesPage] = useState(1);
   const [customerLicensesPageSize] = useState(9);
   const [customerLicensesTotal, setCustomerLicensesTotal] = useState(0);
+
+  // Contact History State
+  const [contactHistory, setContactHistory] = useState([]);
+  const [contactHistoryLoading, setContactHistoryLoading] = useState(false);
+  const [showContactHistoryModal, setShowContactHistoryModal] = useState(false);
+  const [editingContactHistory, setEditingContactHistory] = useState(null);
+  const [contactHistoryForm, setContactHistoryForm] = useState({
+    contact_date: new Date().toISOString().split('T')[0],
+    contact_type: 'EMAIL',
+    comment: ''
+  });
 
   useEffect(() => {
     loadUsers();
@@ -120,6 +131,73 @@ const CustomerEdit = () => {
     } catch (error) {
       console.error('Error fetching customer licenses:', error);
     }
+  };
+
+  // Contact History Functions
+  const fetchContactHistory = async () => {
+    setContactHistoryLoading(true);
+    try {
+      const response = await api.get(`/customers/contact-history/?customer=${id}`);
+      setContactHistory(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching contact history:', error);
+    } finally {
+      setContactHistoryLoading(false);
+    }
+  };
+
+  const handleContactHistorySubmit = async (e) => {
+    e.preventDefault();
+    if (!contactHistoryForm.comment.trim()) {
+      alert('Bitte geben Sie einen Kommentar ein.');
+      return;
+    }
+    
+    try {
+      const payload = {
+        ...contactHistoryForm,
+        customer: id
+      };
+      
+      if (editingContactHistory) {
+        await api.patch(`/customers/contact-history/${editingContactHistory.id}/`, payload);
+      } else {
+        await api.post('/customers/contact-history/', payload);
+      }
+      
+      setShowContactHistoryModal(false);
+      setEditingContactHistory(null);
+      setContactHistoryForm({
+        contact_date: new Date().toISOString().split('T')[0],
+        contact_type: 'EMAIL',
+        comment: ''
+      });
+      fetchContactHistory();
+    } catch (error) {
+      console.error('Error saving contact history:', error);
+      alert('Fehler beim Speichern: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleDeleteContactHistory = async (entryId) => {
+    if (!window.confirm('Diesen Eintrag wirklich löschen?')) return;
+    try {
+      await api.delete(`/customers/contact-history/${entryId}/`);
+      fetchContactHistory();
+    } catch (error) {
+      console.error('Error deleting contact history:', error);
+      alert('Fehler beim Löschen');
+    }
+  };
+
+  const openEditContactHistory = (entry) => {
+    setEditingContactHistory(entry);
+    setContactHistoryForm({
+      contact_date: entry.contact_date,
+      contact_type: entry.contact_type,
+      comment: entry.comment
+    });
+    setShowContactHistoryModal(true);
   };
 
   const loadRelatedData = async (customerId) => {
@@ -304,9 +382,17 @@ const CustomerEdit = () => {
       { id: 'projects', label: 'Projekte', icon: BeakerIcon, count: customerProjects.length },
       { id: 'orders', label: 'Aufträge', icon: DocumentTextIcon, count: customerOrders.length },
       { id: 'quotations', label: 'Angebote', icon: DocumentTextIcon, count: customerQuotations.length },
-      { id: 'visiview', label: 'VisiView', icon: KeyIcon, count: customerLicensesTotal }
+      { id: 'visiview', label: 'VisiView', icon: KeyIcon, count: customerLicensesTotal },
+      { id: 'contact-history', label: 'Kontakthistorie', icon: ChatBubbleLeftRightIcon, count: contactHistory.length }
     ] : [])
   ];
+
+  // Load contact history when tab is selected
+  useEffect(() => {
+    if (activeTab === 'contact-history' && isEditing && !contactHistory.length && !contactHistoryLoading) {
+      fetchContactHistory();
+    }
+  }, [activeTab, isEditing]);
 
   if (loading) {
     return (
@@ -1177,6 +1263,178 @@ const CustomerEdit = () => {
                       })()
                     )}
 
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Contact History Tab */}
+            {activeTab === 'contact-history' && isEditing && (
+              <div className="px-6 py-4">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-medium">Kontakthistorie</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingContactHistory(null);
+                      setContactHistoryForm({
+                        contact_date: new Date().toISOString().split('T')[0],
+                        contact_type: 'EMAIL',
+                        comment: ''
+                      });
+                      setShowContactHistoryModal(true);
+                    }}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                    Neuer Eintrag
+                  </button>
+                </div>
+
+                {contactHistoryLoading ? (
+                  <div className="text-center py-8 text-gray-500">Lade Kontakthistorie...</div>
+                ) : contactHistory.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">Keine Kontakthistorie vorhanden</div>
+                ) : (
+                  <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Art</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kommentar</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">System</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Erstellt von</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aktionen</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {contactHistory.map((entry) => (
+                          <tr key={entry.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {new Date(entry.contact_date).toLocaleDateString('de-DE')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                entry.contact_type === 'EMAIL' ? 'bg-blue-100 text-blue-800' :
+                                entry.contact_type === 'PHONE' ? 'bg-green-100 text-green-800' :
+                                'bg-purple-100 text-purple-800'
+                              }`}>
+                                {entry.contact_type_display}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900 max-w-md">
+                              <div className="line-clamp-2">{entry.comment}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {entry.system_name ? (
+                                <span className="text-blue-600">{entry.system_number} - {entry.system_name}</span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {entry.created_by_name || '-'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                type="button"
+                                onClick={() => openEditContactHistory(entry)}
+                                className="text-blue-600 hover:text-blue-900 mr-3"
+                              >
+                                Bearbeiten
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteContactHistory(entry.id)}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                <TrashIcon className="h-5 w-5 inline" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Contact History Modal */}
+                {showContactHistoryModal && (
+                  <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                      <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowContactHistoryModal(false)} />
+                      
+                      <div className="inline-block w-full max-w-lg my-8 overflow-hidden text-left align-middle transition-all transform bg-white rounded-lg shadow-xl">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {editingContactHistory ? 'Kontakt bearbeiten' : 'Neuer Kontakteintrag'}
+                          </h3>
+                          <button type="button" onClick={() => setShowContactHistoryModal(false)} className="text-gray-400 hover:text-gray-500">
+                            <XMarkIcon className="h-6 w-6" />
+                          </button>
+                        </div>
+                        
+                        <div className="px-6 py-4 space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Datum <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={contactHistoryForm.contact_date}
+                              onChange={(e) => setContactHistoryForm({ ...contactHistoryForm, contact_date: e.target.value })}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Kontaktart <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={contactHistoryForm.contact_type}
+                              onChange={(e) => setContactHistoryForm({ ...contactHistoryForm, contact_type: e.target.value })}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="EMAIL">E-Mail</option>
+                              <option value="PHONE">Telefon</option>
+                              <option value="MEETING">Treffen</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Kommentar <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                              required
+                              rows={4}
+                              value={contactHistoryForm.comment}
+                              onChange={(e) => setContactHistoryForm({ ...contactHistoryForm, comment: e.target.value })}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Beschreiben Sie den Kontakt..."
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+                          <button
+                            type="button"
+                            onClick={() => setShowContactHistoryModal(false)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                          >
+                            Abbrechen
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleContactHistorySubmit}
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+                          >
+                            {editingContactHistory ? 'Aktualisieren' : 'Speichern'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

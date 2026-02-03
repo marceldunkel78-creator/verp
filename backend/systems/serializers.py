@@ -1,3 +1,4 @@
+from datetime import date
 from rest_framework import serializers
 from .models import System, SystemComponent, SystemPhoto
 from customers.models import Customer
@@ -59,6 +60,8 @@ class SystemListSerializer(serializers.ModelSerializer):
     project_count = serializers.SerializerMethodField()
     location_full = serializers.SerializerMethodField()
     responsible_employee_name = serializers.SerializerMethodField()
+    last_contact_date = serializers.SerializerMethodField()
+    contact_overdue = serializers.SerializerMethodField()
     
     class Meta:
         model = System
@@ -71,7 +74,7 @@ class SystemListSerializer(serializers.ModelSerializer):
             'location_latitude', 'location_longitude',
             'installation_date', 'component_count', 'photo_count', 'primary_photo_url', 
             'service_ticket_count', 'project_count', 'responsible_employee', 
-            'responsible_employee_name', 'created_at'
+            'responsible_employee_name', 'last_contact_date', 'contact_overdue', 'created_at'
         ]
     
     def get_responsible_employee_name(self, obj):
@@ -130,6 +133,52 @@ class SystemListSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(primary.image.url)
         return None
 
+    def get_last_contact_date(self, obj):
+        """Liefert das Datum des letzten Kontakteintrags"""
+        from customers.models import ContactHistory, CustomerSystem
+        
+        # ContactHistory ist mit CustomerSystem verknüpft, nicht mit systems.System
+        # Daher müssen wir über die system_number oder den Kunden suchen
+        last_contact = None
+        
+        # Suche nach CustomerSystem mit gleicher system_number
+        try:
+            customer_system = CustomerSystem.objects.get(system_number=obj.system_number)
+            last_contact = ContactHistory.objects.filter(
+                system=customer_system
+            ).order_by('-contact_date').first()
+        except CustomerSystem.DoesNotExist:
+            pass
+        
+        # Auch Kunden-Kontakte ohne System-Verknüpfung berücksichtigen
+        if obj.customer:
+            customer_contact = ContactHistory.objects.filter(
+                customer=obj.customer,
+                system__isnull=True
+            ).order_by('-contact_date').first()
+            
+            if customer_contact:
+                if not last_contact or customer_contact.contact_date > last_contact.contact_date:
+                    last_contact = customer_contact
+        
+        return last_contact.contact_date if last_contact else None
+    
+    def get_contact_overdue(self, obj):
+        """Prüft ob der letzte Kontakt > 6 Monate her ist"""
+        from customers.models import ContactHistory
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        
+        last_date = self.get_last_contact_date(obj)
+        if not last_date:
+            # Kein Kontakt vorhanden - prüfe Installationsdatum oder created_at
+            reference_date = obj.installation_date or obj.created_at.date()
+            six_months_ago = date.today() - relativedelta(months=6)
+            return reference_date < six_months_ago
+        
+        six_months_ago = date.today() - relativedelta(months=6)
+        return last_date < six_months_ago
+
     def get_customer_name(self, obj):
         cust = obj.customer
         if not cust:
@@ -158,6 +207,8 @@ class SystemDetailSerializer(serializers.ModelSerializer):
         read_only=True
     )
     location_full = serializers.SerializerMethodField()
+    last_contact_date = serializers.SerializerMethodField()
+    contact_overdue = serializers.SerializerMethodField()
     
     class Meta:
         model = System
@@ -173,7 +224,8 @@ class SystemDetailSerializer(serializers.ModelSerializer):
             'visiview_license', 'visiview_license_details',
             'responsible_employee', 'responsible_employee_details',
             'components', 'photos', 'created_by', 'created_by_name',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at',
+            'last_contact_date', 'contact_overdue'
         ]
         read_only_fields = ['id', 'system_number', 'created_by', 'created_at', 'updated_at']
     
@@ -286,6 +338,57 @@ class SystemDetailSerializer(serializers.ModelSerializer):
                 'department': emp.department,
             }
         return None
+
+    def get_last_contact_date(self, obj):
+        """Gibt das Datum des letzten Kontakts zurück"""
+        from customers.models import ContactHistory, CustomerSystem
+        
+        # ContactHistory ist mit CustomerSystem verknüpft, nicht mit systems.System
+        # Daher müssen wir über die system_number oder den Kunden suchen
+        system_contact = None
+        
+        # Suche nach CustomerSystem mit gleicher system_number
+        try:
+            customer_system = CustomerSystem.objects.get(system_number=obj.system_number)
+            system_contact = ContactHistory.objects.filter(
+                system=customer_system
+            ).order_by('-contact_date').first()
+        except CustomerSystem.DoesNotExist:
+            pass
+        
+        # Prüfe auch ContactHistory für den Kunden (ohne System-Bezug)
+        customer_contact = None
+        if obj.customer:
+            customer_contact = ContactHistory.objects.filter(
+                customer=obj.customer,
+                system__isnull=True
+            ).order_by('-contact_date').first()
+        
+        # Nimm das neueste Datum
+        dates = []
+        if system_contact:
+            dates.append(system_contact.contact_date)
+        if customer_contact:
+            dates.append(customer_contact.contact_date)
+        
+        if dates:
+            return max(dates)
+        
+        # Fallback: Installationsdatum oder Erstellungsdatum
+        if obj.installation_date:
+            return obj.installation_date
+        return obj.created_at.date() if obj.created_at else None
+
+    def get_contact_overdue(self, obj):
+        """Prüft ob der letzte Kontakt länger als 6 Monate her ist"""
+        from dateutil.relativedelta import relativedelta
+        
+        last_contact = self.get_last_contact_date(obj)
+        if not last_contact:
+            return True  # Kein Kontakt = überfällig
+        
+        six_months_ago = date.today() - relativedelta(months=6)
+        return last_contact < six_months_ago
 
 
 class SystemCreateUpdateSerializer(serializers.ModelSerializer):

@@ -11,7 +11,7 @@ class CustomPageNumberPagination(PageNumberPagination):
     Custom pagination that allows larger page sizes for map views and large datasets.
     Clients can request up to 10000 items per page using ?page_size=10000
     """
-    page_size = 50
+    page_size = 10000
     page_size_query_param = 'page_size'
     max_page_size = 10000
 

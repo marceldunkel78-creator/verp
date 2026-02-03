@@ -9,7 +9,8 @@ from django.http import FileResponse, Http404
 from django.apps import apps
 from suppliers.models import Supplier, TradingProduct
 from customers.models import Customer
-from visiview.models import VisiViewProduct
+from visiview.models import VisiViewProduct, VisiViewLicense
+from systems.models import System
 from manufacturing.models import VSHardware
 from service.models import VSService
 import os
@@ -40,12 +41,24 @@ def dashboard_stats(request):
     total_products = trading_total + vshardware_total + visiview_total + vsservice_total
     active_products = trading_active + vshardware_active + visiview_active + vsservice_active
     
+    # System-Statistiken
+    total_systems = System.objects.count()
+    active_systems = System.objects.filter(status='aktiv').count()
+    
+    # VisiView-Lizenz-Statistiken
+    total_licenses = VisiViewLicense.objects.count()
+    active_licenses = VisiViewLicense.objects.filter(status='active').count()
+    
     # Sammle Statistiken
     stats = {
         'total_customers': Customer.objects.count(),
         'active_customers': Customer.objects.filter(is_active=True).count(),
         'total_suppliers': Supplier.objects.count(),
         'active_suppliers': Supplier.objects.filter(is_active=True).count(),
+        'total_systems': total_systems,
+        'active_systems': active_systems,
+        'total_licenses': total_licenses,
+        'active_licenses': active_licenses,
         'total_products': total_products,
         'active_products': active_products,
         # Einzelne Produktkategorien für Details

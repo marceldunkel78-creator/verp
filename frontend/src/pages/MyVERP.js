@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ClockIcon, ChatBubbleLeftIcon, ChartBarIcon, BellIcon, CalendarIcon, Squares2X2Icon, CurrencyEuroIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import CalendarMonth from '../components/CalendarMonth';
 import TravelReportList from './TravelReportList';
@@ -2408,6 +2409,7 @@ const DayExpenseCard = ({ day, reportId, onAddExpense, onRemoveDay, onUpdateDay,
 
 // PersonalDashboardTab Component - Persönliche Schnellzugriffe
 const PersonalDashboardTab = () => {
+  const { user } = useAuth();
   const STORAGE_KEY = 'myverp_dashboard_modules';
   const MAIN_DASHBOARD_KEY = 'myverp_main_dashboard_widgets';
   
@@ -2424,69 +2426,77 @@ const PersonalDashboardTab = () => {
   ];
   
   // Alle verfügbaren Module - hierarchisch nach Hauptmodulen gegliedert
+  // permission: null/undefined = immer sichtbar, sonst Berechtigung erforderlich
   const allModules = [
     // Finance
-    { id: 'finance', name: 'Finance', route: '/finance', icon: '💰', category: 'Finance' },
+    { id: 'finance', name: 'Finance', route: '/finance', icon: '💰', category: 'Finance', permission: 'can_read_finance' },
     
     // Procurement
-    { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Procurement' },
-    { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Procurement' },
-    { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Procurement' },
-    { id: 'materials-supplies', name: 'Material & Verbrauchsmaterial', route: '/procurement/materials-supplies', icon: '🧪', category: 'Procurement' },
-    { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Procurement' },
-    { id: 'loans', name: 'Leihgeräte', route: '/procurement/loans', icon: '🔄', category: 'Procurement' },
-    { id: 'product-collections', name: 'Produktsammlungen', route: '/procurement/product-collections', icon: '📋', category: 'Procurement' },
+    { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Procurement', permission: 'can_read_procurement' },
+    { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Procurement', permission: 'can_read_suppliers' },
+    { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Procurement', permission: 'can_read_trading' },
+    { id: 'materials-supplies', name: 'Material & Verbrauchsmaterial', route: '/procurement/materials-supplies', icon: '🧪', category: 'Procurement', permission: 'can_read_procurement' },
+    { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Procurement', permission: 'can_read_procurement_orders' },
+    { id: 'loans', name: 'Leihgeräte', route: '/procurement/loans', icon: '🔄', category: 'Procurement', permission: 'can_read_loans' },
+    { id: 'product-collections', name: 'Produktsammlungen', route: '/procurement/product-collections', icon: '📋', category: 'Procurement', permission: 'can_read_procurement' },
     
     // Inventory
-    { id: 'inventory', name: 'Wareneingang & Lager', route: '/inventory/warehouse', icon: '🏭', category: 'Inventory' },
+    { id: 'inventory', name: 'Wareneingang & Lager', route: '/inventory/warehouse', icon: '🏭', category: 'Inventory', permission: 'can_read_inventory' },
     
     // Sales / Orders
-    { id: 'sales', name: 'Vertrieb & Aufträge', route: '/sales', icon: '💼', category: 'Sales / Orders' },
-    { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Sales / Orders' },
-    { id: 'dealers', name: 'Distributoren', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders' },
-    { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Sales / Orders' },
-    { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Sales / Orders' },
-    { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Sales / Orders' },
-    { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Sales / Orders' },
-    { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Sales / Orders' },
-    { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders' },
-    { id: 'sales-tickets', name: 'Vertriebs-Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders' },
+    { id: 'sales', name: 'Vertrieb & Aufträge', route: '/sales', icon: '💼', category: 'Sales / Orders', permission: 'can_read_sales' },
+    { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Sales / Orders', permission: 'can_read_customers' },
+    { id: 'dealers', name: 'Distributoren', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders', permission: 'can_read_dealers' },
+    { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Sales / Orders', permission: 'can_read_pricelists' },
+    { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Sales / Orders', permission: 'can_read_sales_projects' },
+    { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Sales / Orders', permission: 'can_read_systems' },
+    { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Sales / Orders', permission: 'can_read_sales_quotations' },
+    { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Sales / Orders', permission: 'can_read_sales_order_processing' },
+    { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders', permission: 'can_read_marketing' },
+    { id: 'sales-tickets', name: 'Vertriebs-Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders', permission: 'can_read_sales_tickets' },
     
     // HR
-    { id: 'hr', name: 'HR', route: '/hr', icon: '👥', category: 'HR' },
-    { id: 'employees', name: 'Mitarbeiter', route: '/hr/employees', icon: '👤', category: 'HR' },
+    { id: 'hr', name: 'HR', route: '/hr', icon: '👥', category: 'HR', permission: 'can_read_hr' },
+    { id: 'employees', name: 'Mitarbeiter', route: '/hr/employees', icon: '👤', category: 'HR', permission: 'can_read_hr' },
     
     // Manufacturing
-    { id: 'manufacturing', name: 'Manufacturing', route: '/manufacturing', icon: '🏭', category: 'Manufacturing' },
-    { id: 'vs-hardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Manufacturing' },
-    { id: 'production-orders', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '⚙️', category: 'Manufacturing' },
+    { id: 'manufacturing', name: 'Manufacturing', route: '/manufacturing', icon: '🏭', category: 'Manufacturing', permission: 'can_read_manufacturing' },
+    { id: 'vs-hardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Manufacturing', permission: 'can_read_manufacturing_vs_hardware' },
+    { id: 'production-orders', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '⚙️', category: 'Manufacturing', permission: 'can_read_manufacturing_production_orders' },
     
     // VisiView
-    { id: 'visiview', name: 'VisiView', route: '/visiview', icon: '🔬', category: 'VisiView' },
-    { id: 'visiview-products', name: 'VisiView Produkte', route: '/visiview/products', icon: '🔬', category: 'VisiView' },
-    { id: 'visiview-licenses', name: 'Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'VisiView' },
-    { id: 'visiview-tickets', name: 'VisiView Tickets', route: '/visiview/tickets', icon: '🎫', category: 'VisiView' },
-    { id: 'visiview-macros', name: 'Macros', route: '/visiview/macros', icon: '📜', category: 'VisiView' },
+    { id: 'visiview', name: 'VisiView', route: '/visiview', icon: '🔬', category: 'VisiView', permission: 'can_read_visiview' },
+    { id: 'visiview-products', name: 'VisiView Produkte', route: '/visiview/products', icon: '🔬', category: 'VisiView', permission: 'can_read_visiview_products' },
+    { id: 'visiview-licenses', name: 'Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'VisiView', permission: 'can_read_visiview_licenses' },
+    { id: 'visiview-tickets', name: 'VisiView Tickets', route: '/visiview/tickets', icon: '🎫', category: 'VisiView', permission: 'can_read_visiview_tickets' },
+    { id: 'visiview-macros', name: 'Macros', route: '/visiview/macros', icon: '📜', category: 'VisiView', permission: 'can_read_visiview_macros' },
     
     // Service
-    { id: 'service', name: 'Service', route: '/service', icon: '🛠️', category: 'Service' },
-    { id: 'vs-service', name: 'VS-Service Produkte', route: '/service/vs-service', icon: '🛠️', category: 'Service' },
-    { id: 'service-tickets', name: 'Service Tickets', route: '/service/tickets', icon: '🎫', category: 'Service' },
-    { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service' },
-    { id: 'troubleshooting', name: 'Troubleshooting', route: '/service/troubleshooting', icon: '🔍', category: 'Service' },
+    { id: 'service', name: 'Service', route: '/service', icon: '🛠️', category: 'Service', permission: 'can_read_service' },
+    { id: 'vs-service', name: 'VS-Service Produkte', route: '/service/vs-service', icon: '🛠️', category: 'Service', permission: 'can_read_service_vs_service' },
+    { id: 'service-tickets', name: 'Service Tickets', route: '/service/tickets', icon: '🎫', category: 'Service', permission: 'can_read_service_tickets' },
+    { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service', permission: 'can_read_service_rma' },
+    { id: 'troubleshooting', name: 'Troubleshooting', route: '/service/troubleshooting', icon: '🔍', category: 'Service', permission: 'can_read_service' },
     
     // BI
-    { id: 'bi', name: 'BI', route: '/bi', icon: '📊', category: 'BI' },
+    { id: 'bi', name: 'BI', route: '/bi', icon: '📊', category: 'BI', permission: 'can_read_bi' },
     
     // Documents
-    { id: 'documents', name: 'Documents', route: '/documents', icon: '📄', category: 'Documents' },
+    { id: 'documents', name: 'Documents', route: '/documents', icon: '📄', category: 'Documents', permission: 'can_read_documents' },
     
     // Settings
-    { id: 'settings', name: 'Settings', route: '/settings', icon: '⚙️', category: 'Settings' },
-    { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'Settings' },
-    { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'Settings' },
-    { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'Settings' },
+    { id: 'settings', name: 'Settings', route: '/settings', icon: '⚙️', category: 'Settings', permission: 'can_read_settings' },
+    { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'Settings', permission: 'can_read_settings' },
+    { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'Settings', permission: 'can_read_finance' },
+    { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'Settings', permission: 'can_read_settings' },
   ];
+  
+  // Filtere Module basierend auf Benutzerberechtigungen
+  const permittedModules = allModules.filter(module => {
+    if (!module.permission) return true; // Keine Berechtigung erforderlich
+    if (user?.is_superuser) return true; // Superuser kann alles sehen
+    return user?.[module.permission] === true;
+  });
   
   // Standard-Module die initial aktiviert sind
   const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
@@ -2561,8 +2571,9 @@ const PersonalDashboardTab = () => {
     });
   };
   
-  const activeModules = allModules.filter(m => selectedModules.includes(m.id));
-  const categories = [...new Set(allModules.map(m => m.category))];
+  // Nur Module anzeigen, für die der User Berechtigung hat
+  const activeModules = permittedModules.filter(m => selectedModules.includes(m.id));
+  const categories = [...new Set(permittedModules.map(m => m.category))];
   
   const colorClasses = {
     'Finance': 'bg-emerald-500 hover:bg-emerald-600',
@@ -2704,7 +2715,7 @@ const PersonalDashboardTab = () => {
               <div key={category} className="mb-6">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">{category}</h4>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {allModules.filter(m => m.category === category).map(module => (
+                  {permittedModules.filter(m => m.category === category).map(module => (
                     <label
                       key={module.id}
                       className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${

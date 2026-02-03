@@ -12,7 +12,8 @@ import {
   InboxArrowDownIcon,
   UserIcon,
   Squares2X2Icon,
-  ListBulletIcon
+  ListBulletIcon,
+  PlusIcon
 } from '@heroicons/react/24/outline';
 
 const SESSION_KEY = 'inventory_search_state';
@@ -39,6 +40,28 @@ const Inventory = () => {
   
   // View mode
   const [viewMode, setViewMode] = useState('cards');
+  
+  // Manual entry modal
+  const [showManualEntryModal, setShowManualEntryModal] = useState(false);
+  const [manualEntryForm, setManualEntryForm] = useState({
+    name: '',
+    article_number: '',
+    visitron_part_number: '',
+    model_designation: '',
+    description: '',
+    supplier: '',
+    item_function: 'TRADING_GOOD',
+    product_category: '',
+    serial_number: '',
+    quantity: 1,
+    unit: 'Stück',
+    purchase_price: '',
+    currency: 'EUR',
+    delivery_date: new Date().toISOString().split('T')[0],
+    status: 'FREI',
+    notes: ''
+  });
+  const [manualEntryLoading, setManualEntryLoading] = useState(false);
   
   // Common Data
   const [suppliers, setSuppliers] = useState([]);
@@ -249,6 +272,86 @@ const Inventory = () => {
     navigate(`/inventory/warehouse/${id}`);
   };
   
+  // Manual entry handlers
+  const resetManualEntryForm = () => {
+    setManualEntryForm({
+      name: '',
+      article_number: '',
+      visitron_part_number: '',
+      model_designation: '',
+      description: '',
+      supplier: '',
+      item_function: 'TRADING_GOOD',
+      product_category: '',
+      serial_number: '',
+      quantity: 1,
+      unit: 'Stück',
+      purchase_price: '',
+      currency: 'EUR',
+      delivery_date: new Date().toISOString().split('T')[0],
+      status: 'FREI',
+      notes: ''
+    });
+  };
+  
+  const handleManualEntrySubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validierung
+    if (!manualEntryForm.name.trim()) {
+      alert('Bitte geben Sie einen Produktnamen ein.');
+      return;
+    }
+    if (!manualEntryForm.supplier) {
+      alert('Bitte wählen Sie einen Lieferanten aus.');
+      return;
+    }
+    if (!manualEntryForm.article_number.trim()) {
+      alert('Bitte geben Sie eine Artikelnummer ein.');
+      return;
+    }
+    if (!manualEntryForm.purchase_price || parseFloat(manualEntryForm.purchase_price) < 0) {
+      alert('Bitte geben Sie einen gültigen Einkaufspreis ein.');
+      return;
+    }
+    if (!manualEntryForm.product_category) {
+      alert('Bitte wählen Sie eine Warenkategorie aus.');
+      return;
+    }
+    
+    setManualEntryLoading(true);
+    try {
+      const payload = {
+        ...manualEntryForm,
+        quantity: parseFloat(manualEntryForm.quantity) || 1,
+        purchase_price: parseFloat(manualEntryForm.purchase_price) || 0,
+        product_category: manualEntryForm.product_category || null,
+        supplier: manualEntryForm.supplier || null
+      };
+      
+      const response = await api.post('/inventory/inventory-items/', payload);
+      
+      // Schließe Modal und aktualisiere Liste
+      setShowManualEntryModal(false);
+      resetManualEntryForm();
+      
+      // Navigiere direkt zum neuen Artikel
+      navigate(`/inventory/warehouse/${response.data.id}`);
+    } catch (error) {
+      console.error('Error creating inventory item:', error);
+      if (error.response?.data) {
+        const errors = Object.entries(error.response.data)
+          .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : val}`)
+          .join('\n');
+        alert(`Fehler beim Erstellen:\n${errors}`);
+      } else {
+        alert('Fehler beim Erstellen des Lagerartikels');
+      }
+    } finally {
+      setManualEntryLoading(false);
+    }
+  };
+  
   // Filter categories by item_function
   const getFilteredCategories = (itemFunction) => {
     if (!itemFunction) return productCategories;
@@ -334,6 +437,13 @@ const Inventory = () => {
               <ListBulletIcon className="h-5 w-5" />
             </button>
           </div>
+          <button
+            onClick={() => setShowManualEntryModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Manuell erfassen
+          </button>
           <Link
             to="/inventory/goods-receipt"
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
@@ -614,6 +724,279 @@ const Inventory = () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Manual Entry Modal */}
+      {showManualEntryModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setShowManualEntryModal(false)} />
+            
+            <div className="inline-block w-full max-w-3xl my-8 overflow-hidden text-left align-middle transition-all transform bg-white rounded-lg shadow-xl">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <PlusIcon className="h-5 w-5 mr-2 text-blue-600" />
+                  Lagerartikel manuell erfassen
+                </h3>
+                <button
+                  onClick={() => setShowManualEntryModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              
+              {/* Modal Body */}
+              <form onSubmit={handleManualEntrySubmit}>
+                <div className="px-6 py-4 max-h-[70vh] overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Produktname */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Produktname <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={manualEntryForm.name}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, name: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="z.B. ORCA Flash 4.0 V3"
+                      />
+                    </div>
+                    
+                    {/* Lieferant */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Lieferant <span className="text-red-500">*</span>
+                      </label>
+                      <SupplierSearch
+                        value={manualEntryForm.supplier || null}
+                        onChange={(supplierId) => setManualEntryForm({ ...manualEntryForm, supplier: supplierId || '' })}
+                        placeholder="Lieferant auswählen..."
+                        className="text-sm"
+                      />
+                    </div>
+                    
+                    {/* Artikelnummer */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Lieferanten-Artikelnummer <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={manualEntryForm.article_number}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, article_number: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="z.B. C11440-22CU"
+                      />
+                    </div>
+                    
+                    {/* VS-Artikelnummer */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">VS-Artikelnummer</label>
+                      <input
+                        type="text"
+                        value={manualEntryForm.visitron_part_number}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, visitron_part_number: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="z.B. VS-CAM-001"
+                      />
+                    </div>
+                    
+                    {/* Modellbezeichnung */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Modellbezeichnung</label>
+                      <input
+                        type="text"
+                        value={manualEntryForm.model_designation}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, model_designation: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="z.B. Flash 4.0 V3 Digital CMOS"
+                      />
+                    </div>
+                    
+                    {/* Warenfunktion */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Warenfunktion <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={manualEntryForm.item_function}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, item_function: e.target.value, product_category: '' })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="TRADING_GOOD">Handelsware</option>
+                        <option value="ASSET">Asset</option>
+                        <option value="MATERIAL">Material & Supplies</option>
+                      </select>
+                    </div>
+                    
+                    {/* Warenkategorie */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Warenkategorie <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={manualEntryForm.product_category}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, product_category: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        required
+                      >
+                        <option value="">-- Kategorie wählen --</option>
+                        {getFilteredCategories(manualEntryForm.item_function).map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Seriennummer */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Seriennummer</label>
+                      <input
+                        type="text"
+                        value={manualEntryForm.serial_number}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, serial_number: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Falls vorhanden"
+                      />
+                    </div>
+                    
+                    {/* Menge und Einheit */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Menge</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualEntryForm.quantity}
+                          onChange={(e) => setManualEntryForm({ ...manualEntryForm, quantity: e.target.value })}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Einheit</label>
+                        <input
+                          type="text"
+                          value={manualEntryForm.unit}
+                          onChange={(e) => setManualEntryForm({ ...manualEntryForm, unit: e.target.value })}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Einkaufspreis */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Einkaufspreis <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          required
+                          value={manualEntryForm.purchase_price}
+                          onChange={(e) => setManualEntryForm({ ...manualEntryForm, purchase_price: e.target.value })}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Währung</label>
+                        <select
+                          value={manualEntryForm.currency}
+                          onChange={(e) => setManualEntryForm({ ...manualEntryForm, currency: e.target.value })}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="EUR">EUR</option>
+                          <option value="USD">USD</option>
+                          <option value="GBP">GBP</option>
+                          <option value="CHF">CHF</option>
+                          <option value="JPY">JPY</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    {/* Lieferdatum */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Lieferdatum</label>
+                      <input
+                        type="date"
+                        value={manualEntryForm.delivery_date}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, delivery_date: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    
+                    {/* Status */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={manualEntryForm.status}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, status: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="FREI">Frei</option>
+                        <option value="RESERVIERT">Reserviert</option>
+                        <option value="RMA_IN_HOUSE">RMA in house</option>
+                        <option value="RMA_OUT_HOUSE">RMA out house</option>
+                      </select>
+                    </div>
+                    
+                    {/* Beschreibung */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
+                      <textarea
+                        rows={2}
+                        value={manualEntryForm.description}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, description: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Optionale Beschreibung..."
+                      />
+                    </div>
+                    
+                    {/* Notizen */}
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notizen</label>
+                      <textarea
+                        rows={2}
+                        value={manualEntryForm.notes}
+                        onChange={(e) => setManualEntryForm({ ...manualEntryForm, notes: e.target.value })}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="z.B. Herkunft: Altbestand, Demo-Gerät..."
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Modal Footer */}
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowManualEntryModal(false);
+                      resetManualEntryForm();
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={manualEntryLoading}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {manualEntryLoading ? 'Speichern...' : 'Speichern & Bearbeiten'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

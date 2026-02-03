@@ -299,6 +299,91 @@ class SystemViewSet(viewsets.ModelViewSet):
             'components': created_components
         })
 
+    @action(detail=False, methods=['get'])
+    def contact_overdue(self, request):
+        """
+        Liefert alle Systeme deren letzter Kontakt mehr als 6 Monate zurückliegt.
+        Für das Dashboard-Widget - nur Systeme des eingeloggten Mitarbeiters.
+        """
+        from customers.models import ContactHistory, CustomerSystem
+        from datetime import date
+        from dateutil.relativedelta import relativedelta
+        from users.models import Employee
+        
+        six_months_ago = date.today() - relativedelta(months=6)
+        
+        # Finde den Employee zum eingeloggten User (users ist ManyToMany)
+        try:
+            employee = Employee.objects.get(users=request.user)
+        except Employee.DoesNotExist:
+            employee = None
+        except Employee.MultipleObjectsReturned:
+            # Falls mehrere Employees mit demselben User existieren, nimm den ersten
+            employee = Employee.objects.filter(users=request.user).first()
+        
+        # Alle aktiven Systeme holen
+        systems = System.objects.filter(
+            status__in=['aktiv', 'unbekannt']
+        ).select_related('customer', 'responsible_employee')
+        
+        # Filter nach verantwortlichem Mitarbeiter (wenn User kein Superuser ist)
+        if not request.user.is_superuser and employee:
+            systems = systems.filter(responsible_employee=employee)
+        
+        overdue_systems = []
+        for system in systems:
+            last_contact_date = None
+            
+            # Suche nach CustomerSystem mit gleicher system_number für ContactHistory
+            try:
+                customer_system = CustomerSystem.objects.get(system_number=system.system_number)
+                system_contact = ContactHistory.objects.filter(
+                    system=customer_system
+                ).order_by('-contact_date').first()
+                if system_contact:
+                    last_contact_date = system_contact.contact_date
+            except CustomerSystem.DoesNotExist:
+                pass
+            
+            # Auch Kunden-Kontakte ohne System berücksichtigen
+            if system.customer:
+                customer_contact = ContactHistory.objects.filter(
+                    customer=system.customer,
+                    system__isnull=True
+                ).order_by('-contact_date').first()
+                if customer_contact:
+                    if not last_contact_date or customer_contact.contact_date > last_contact_date:
+                        last_contact_date = customer_contact.contact_date
+            
+            # Prüfen ob überfällig
+            if last_contact_date:
+                is_overdue = last_contact_date < six_months_ago
+            else:
+                # Kein Kontakt - prüfe Installationsdatum oder created_at
+                reference_date = system.installation_date or system.created_at.date()
+                is_overdue = reference_date < six_months_ago
+            
+            if is_overdue:
+                overdue_systems.append({
+                    'id': system.id,
+                    'system_number': system.system_number,
+                    'system_name': system.system_name,
+                    'customer_name': f"{system.customer.first_name} {system.customer.last_name}".strip() if system.customer else None,
+                    'customer_id': system.customer_id,
+                    'last_contact_date': last_contact_date,
+                    'days_since_contact': (date.today() - last_contact_date).days if last_contact_date else None,
+                    'status': system.status,
+                    'responsible_employee': system.responsible_employee.get_full_name() if system.responsible_employee else None
+                })
+        
+        # Sortieren nach Tagen seit letztem Kontakt (längste zuerst)
+        overdue_systems.sort(key=lambda x: x['days_since_contact'] if x['days_since_contact'] else 9999, reverse=True)
+        
+        return Response({
+            'count': len(overdue_systems),
+            'systems': overdue_systems[:20]  # Max 20 für Dashboard
+        })
+
 
 class SystemComponentViewSet(viewsets.ModelViewSet):
     """

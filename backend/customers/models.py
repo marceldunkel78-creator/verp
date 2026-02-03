@@ -4,6 +4,65 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 
+class ContactHistory(models.Model):
+    """
+    Kontakthistorie - kann mit Kunden und/oder Systemen verknüpft werden.
+    Bei Verknüpfung eines Systems wird automatisch auch der Kunde verknüpft.
+    """
+    CONTACT_TYPE_CHOICES = [
+        ('EMAIL', 'E-Mail'),
+        ('PHONE', 'Telefon'),
+        ('MEETING', 'Treffen'),
+    ]
+    
+    customer = models.ForeignKey(
+        'Customer',
+        on_delete=models.CASCADE,
+        related_name='contact_history',
+        verbose_name='Kunde'
+    )
+    system = models.ForeignKey(
+        'CustomerSystem',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='contact_history',
+        verbose_name='System'
+    )
+    
+    contact_date = models.DateField(verbose_name='Kontaktdatum')
+    contact_type = models.CharField(
+        max_length=20,
+        choices=CONTACT_TYPE_CHOICES,
+        verbose_name='Kontaktart'
+    )
+    comment = models.TextField(verbose_name='Kommentar')
+    
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_contact_history',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Kontakthistorie'
+        verbose_name_plural = 'Kontakthistorie'
+        ordering = ['-contact_date', '-created_at']
+    
+    def __str__(self):
+        return f"{self.get_contact_type_display()} am {self.contact_date}"
+    
+    def save(self, *args, **kwargs):
+        # Wenn ein System angegeben ist, automatisch den Kunden vom System übernehmen
+        if self.system and not self.customer_id:
+            self.customer = self.system.customer
+        super().save(*args, **kwargs)
+
+
 class Customer(models.Model):
     """
     Kundenstammdaten

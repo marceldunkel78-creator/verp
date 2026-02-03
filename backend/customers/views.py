@@ -4,11 +4,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
-from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerSystem
+from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerSystem, ContactHistory
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
     CustomerCreateUpdateSerializer, CustomerAddressSerializer,
-    CustomerPhoneSerializer, CustomerEmailSerializer
+    CustomerPhoneSerializer, CustomerEmailSerializer, ContactHistorySerializer
 )
 
 
@@ -153,3 +153,76 @@ class CustomerEmailViewSet(viewsets.ModelViewSet):
     serializer_class = CustomerEmailSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['customer', 'is_primary', 'newsletter_consent', 'marketing_consent']
+
+
+class ContactHistoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Kontakthistorie.
+    Kann nach customer oder system gefiltert werden.
+    Bei einem System werden alle Einträge zurückgegeben, die entweder:
+    - direkt mit diesem System verknüpft sind, ODER
+    - mit dem Kunden des Systems verknüpft sind (aber keinem anderen System)
+    """
+    queryset = ContactHistory.objects.all()
+    serializer_class = ContactHistorySerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    # Hinweis: 'system' wird manuell in get_queryset gefiltert (systems.System ID -> CustomerSystem)
+    filterset_fields = ['customer', 'contact_type']
+    ordering_fields = ['contact_date', 'created_at']
+    ordering = ['-contact_date', '-created_at']
+    
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related('customer', 'system', 'created_by')
+        
+        # Spezielle Filterlogik für System-Ansicht
+        system_id = self.request.query_params.get('system', None)
+        customer_id = self.request.query_params.get('customer', None)
+        
+        if system_id:
+            # Bei System: Zeige alle Einträge die:
+            # 1. direkt mit diesem System verknüpft sind, ODER
+            # 2. mit dem Kunden des Systems verknüpft sind (system ist null)
+            from .models import CustomerSystem
+            from systems.models import System
+            
+            customer_system = None
+            customer_for_filter = None
+            
+            # Zuerst versuchen, systems.System zu finden (das ist der normale Fall)
+            try:
+                systems_system = System.objects.get(id=system_id)
+                customer_for_filter = systems_system.customer_id
+                # Suche das entsprechende CustomerSystem für die Filterung
+                customer_system = CustomerSystem.objects.filter(
+                    system_number=systems_system.system_number
+                ).first()
+            except System.DoesNotExist:
+                # Fallback: Vielleicht ist es eine CustomerSystem ID
+                try:
+                    customer_system = CustomerSystem.objects.get(id=system_id)
+                    customer_for_filter = customer_system.customer_id
+                except CustomerSystem.DoesNotExist:
+                    return queryset.none()
+            
+            # Filter: Einträge mit diesem CustomerSystem ODER Kunden-Einträge ohne System
+            if customer_system:
+                queryset = queryset.filter(
+                    Q(system=customer_system) |
+                    Q(customer_id=customer_for_filter, system__isnull=True)
+                )
+            elif customer_for_filter:
+                # Kein CustomerSystem gefunden, zeige nur Kunden-Einträge ohne System
+                queryset = queryset.filter(
+                    customer_id=customer_for_filter, system__isnull=True
+                )
+            else:
+                return queryset.none()
+        elif customer_id:
+            # Bei Kunde: Zeige alle Einträge des Kunden
+            queryset = queryset.filter(customer_id=customer_id)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        # Automatisch den aktuellen Benutzer als Ersteller setzen
+        serializer.save(created_by=self.request.user)

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail
+from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, ContactHistory, CustomerSystem
 
 
 class CustomerAddressSerializer(serializers.ModelSerializer):
@@ -224,3 +224,69 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
                     CustomerEmail.objects.create(customer=instance, **email_data)
         
         return instance
+
+
+class ContactHistorySerializer(serializers.ModelSerializer):
+    """Serializer für Kontakthistorie"""
+    contact_type_display = serializers.CharField(source='get_contact_type_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    system_name = serializers.SerializerMethodField()
+    system_number = serializers.CharField(source='system.system_number', read_only=True)
+    # Akzeptiert systems.System ID und mappt zu CustomerSystem
+    systems_system_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
+    class Meta:
+        model = ContactHistory
+        fields = [
+            'id', 'customer', 'customer_name', 'system', 'system_name', 'system_number',
+            'systems_system_id',
+            'contact_date', 'contact_type', 'contact_type_display',
+            'comment', 'created_by', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+    
+    def validate(self, attrs):
+        """Konvertiert systems.System ID zu CustomerSystem"""
+        systems_system_id = attrs.pop('systems_system_id', None)
+        
+        if systems_system_id and not attrs.get('system'):
+            # Hole das systems.System und finde/erstelle das entsprechende CustomerSystem
+            from systems.models import System as SystemsSystem
+            try:
+                systems_system = SystemsSystem.objects.get(id=systems_system_id)
+                # Suche CustomerSystem mit gleicher system_number
+                customer_system = CustomerSystem.objects.filter(
+                    system_number=systems_system.system_number
+                ).first()
+                
+                if customer_system:
+                    attrs['system'] = customer_system
+                    # Stelle sicher, dass der Kunde gesetzt ist
+                    if not attrs.get('customer') and customer_system.customer:
+                        attrs['customer'] = customer_system.customer
+                else:
+                    # Kein CustomerSystem gefunden - system bleibt None
+                    # aber Customer sollte trotzdem gesetzt werden
+                    if not attrs.get('customer') and systems_system.customer:
+                        attrs['customer'] = systems_system.customer
+            except SystemsSystem.DoesNotExist:
+                pass
+        
+        return attrs
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+    
+    def get_customer_name(self, obj):
+        if obj.customer:
+            return f"{obj.customer.first_name} {obj.customer.last_name}".strip() or obj.customer.customer_number
+        return None
+    
+    def get_system_name(self, obj):
+        if obj.system:
+            return obj.system.name
+        return None

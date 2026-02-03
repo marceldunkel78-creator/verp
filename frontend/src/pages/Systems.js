@@ -17,7 +17,8 @@ import {
   Squares2X2Icon,
   ListBulletIcon,
   MapPinIcon,
-  UserIcon
+  UserIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
 // Simple Map Component using Leaflet (if available) or placeholder
@@ -744,9 +745,16 @@ const Systems = () => {
                     >
                       <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
                         <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
-                          {getStatusLabel(system.status)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {system.contact_overdue && (
+                            <span title="Letzter Kontakt > 6 Monate" className="text-orange-500">
+                              <ExclamationTriangleIcon className="h-5 w-5" />
+                            </span>
+                          )}
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
+                            {getStatusLabel(system.status)}
+                          </span>
+                        </div>
                       </div>
                       
                       <div className="p-4">
@@ -838,9 +846,16 @@ const Systems = () => {
                             <div className="text-sm text-gray-900">{system.responsible_employee_name || '-'}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
-                              {getStatusLabel(system.status)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
+                                {getStatusLabel(system.status)}
+                              </span>
+                              {system.contact_overdue && (
+                                <span title="Letzter Kontakt > 6 Monate" className="text-orange-500">
+                                  <ExclamationTriangleIcon className="h-5 w-5" />
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

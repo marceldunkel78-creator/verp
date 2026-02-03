@@ -72,7 +72,8 @@ try {
                 $env:PGPASSWORD = $dbPassword
                 $pgDump = "C:\Program Files\PostgreSQL\15\bin\pg_dump.exe"
                 if (Test-Path $pgDump) {
-                    & $pgDump -U $dbUser -h ($dbHost ?? "localhost") -Fc $dbName > "$BackupPath\verp_db.dump"
+                    $dbHostValue = if ($dbHost) { $dbHost } else { "localhost" }
+                    & $pgDump -U $dbUser -h $dbHostValue -Fc $dbName > "$BackupPath\verp_db.dump"
                     Write-Success "Datenbank gesichert"
                 } else {
                     Write-Host "  ! pg_dump nicht gefunden, überspringe DB-Backup" -ForegroundColor Yellow

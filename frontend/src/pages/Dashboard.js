@@ -19,21 +19,37 @@ const myverpTabMapping = {
 // permission: null oder undefined = immer sichtbar
 // permission: 'can_read_xyz' = nur sichtbar wenn User diese Berechtigung hat
 const allModules = [
+  // Sales / Orders
   { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb', permission: 'can_read_customers' },
+  { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Vertrieb', permission: 'can_read_systems' },
   { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb', permission: 'can_read_sales_quotations' },
   { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb', permission: 'can_read_sales_order_processing' },
+  { id: 'dealers', name: 'Distributoren', route: '/sales/dealers', icon: '🤝', category: 'Vertrieb', permission: 'can_read_dealers' },
+  { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Vertrieb', permission: 'can_read_pricelists' },
+  { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Vertrieb', permission: 'can_read_sales_projects' },
+  { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Vertrieb', permission: 'can_read_marketing' },
+  // Procurement
   { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung', permission: 'can_read_procurement' },
   { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung', permission: 'can_read_suppliers' },
   { id: 'trading', name: 'Handelsware', route: '/procurement/trading-goods', icon: '📦', category: 'Beschaffung', permission: 'can_read_trading' },
+  { id: 'materials-supplies', name: 'Material & Verbrauchsmaterial', route: '/procurement/materials-supplies', icon: '🧪', category: 'Beschaffung', permission: 'can_read_procurement' },
   { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung', permission: 'can_read_procurement_orders' },
-  { id: 'visiview', name: 'VisiView Produkte', route: '/products/visiview', icon: '🔬', category: 'Produkte', permission: 'can_read_visiview_products' },
-  { id: 'vshardware', name: 'VS-Hardware', route: '/products/vs-hardware', icon: '🔧', category: 'Produkte', permission: 'can_read_manufacturing_vs_hardware' },
+  { id: 'loans', name: 'Leihgeräte', route: '/procurement/loans', icon: '🔄', category: 'Beschaffung', permission: 'can_read_loans' },
+  // Products
+  { id: 'visiview', name: 'VisiView Produkte', route: '/visiview/products', icon: '🔬', category: 'Produkte', permission: 'can_read_visiview_products' },
+  { id: 'visiview-licenses', name: 'VisiView Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'Produkte', permission: 'can_read_visiview_licenses' },
+  { id: 'vshardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Produkte', permission: 'can_read_manufacturing_vs_hardware' },
+  // Service
   { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service', permission: 'can_read_service_vs_service' },
   { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service', permission: 'can_read_service_rma' },
+  { id: 'service-tickets', name: 'Service Tickets', route: '/service/tickets', icon: '🎫', category: 'Service', permission: 'can_read_service_tickets' },
+  // Lager
   { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager', permission: 'can_read_inventory' },
+  // Fertigung
   { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung', permission: 'can_read_manufacturing_production_orders' },
+  // Entwicklung
   { id: 'development-projects', name: 'Entwicklung', route: '/development/projects', icon: '🧪', category: 'Entwicklung', permission: 'can_read_development_projects' },
-  { id: 'projects', name: 'Projekte', route: '/projects', icon: '📁', category: 'Projekte', permission: 'can_read_sales_projects' },
+  // System
   { id: 'documents', name: 'Dokumente', route: '/documents', icon: '📄', category: 'System', permission: 'can_read_documents' },
   { id: 'settings', name: 'Einstellungen', route: '/settings', icon: '⚙️', category: 'System', permission: 'can_read_settings' },
   { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System', permission: 'can_read_settings' },
@@ -54,6 +70,23 @@ const categoryColors = {
 
 const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
 
+// ID-Mapping für Kompatibilität zwischen MyVERP und Dashboard
+const MODULE_ID_MAP = {
+  'vs-hardware': 'vshardware',
+  'visiview-products': 'visiview',
+  'vs-service': 'vsservice',
+  'production-orders': 'production',
+};
+
+// Normalisiere Module-IDs aus localStorage
+const normalizeModuleIds = (ids) => {
+  if (!Array.isArray(ids)) return [];
+  const validIds = new Set(allModules.map(m => m.id));
+  return ids
+    .map(id => MODULE_ID_MAP[id] || id)  // Mappe bekannte IDs
+    .filter(id => validIds.has(id));  // Filtere unbekannte IDs
+};
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
@@ -62,6 +95,8 @@ const Dashboard = () => {
   const [myverpData, setMyverpData] = useState({});
   const [loadingMyVerp, setLoadingMyVerp] = useState(false);
   const [selectedModules, setSelectedModules] = useState([]);
+  const [overdueContactSystems, setOverdueContactSystems] = useState([]);
+  const [loadingOverdueContact, setLoadingOverdueContact] = useState(false);
 
   // Filtere Module basierend auf Benutzerberechtigungen
   const permittedModules = allModules.filter(module => {
@@ -74,19 +109,34 @@ const Dashboard = () => {
     fetchDashboardData();
     loadMyverpSelection();
     loadModuleSelection();
+    fetchOverdueContactSystems();
   }, []);
 
   const loadModuleSelection = () => {
     try {
       const saved = localStorage.getItem(MODULE_STORAGE_KEY);
       if (saved) {
-        setSelectedModules(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setSelectedModules(normalizeModuleIds(parsed));
       } else {
         setSelectedModules(defaultModules);
       }
     } catch (err) {
       console.warn('Could not load module selection from localStorage', err);
       setSelectedModules(defaultModules);
+    }
+  };
+
+  const fetchOverdueContactSystems = async () => {
+    setLoadingOverdueContact(true);
+    try {
+      const response = await api.get('/systems/systems/contact_overdue/');
+      setOverdueContactSystems(response.data.systems || []);
+    } catch (error) {
+      console.error('Error fetching overdue contact systems:', error);
+      setOverdueContactSystems([]);
+    } finally {
+      setLoadingOverdueContact(false);
     }
   };
 
@@ -207,6 +257,7 @@ const Dashboard = () => {
 
       {/* Statistiken */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        {/* Kunden */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
@@ -229,6 +280,30 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* Systeme */}
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="flex items-center justify-center h-12 w-12 rounded-md bg-cyan-500 text-white">
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Systeme</dt>
+                  <dd className="text-lg font-semibold text-gray-900">
+                    {dashboardData?.stats?.active_systems} / {dashboardData?.stats?.total_systems}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Lieferanten */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
@@ -251,43 +326,22 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="flex items-center justify-center h-12 w-12 rounded-md bg-orange-500 text-white">
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Produkte</dt>
-                  <dd className="text-lg font-semibold text-gray-900">
-                    {dashboardData?.stats?.active_products} / {dashboardData?.stats?.total_products}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        {/* VisiView Lizenzen */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <div className="flex items-center justify-center h-12 w-12 rounded-md bg-purple-500 text-white">
                   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                   </svg>
                 </div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Module</dt>
+                  <dt className="text-sm font-medium text-gray-500 truncate">VisiView Lizenzen</dt>
                   <dd className="text-lg font-semibold text-gray-900">
-                    {activeModules.length}
+                    {dashboardData?.stats?.active_licenses} / {dashboardData?.stats?.total_licenses}
                   </dd>
                 </dl>
               </div>
@@ -384,6 +438,76 @@ const Dashboard = () => {
                     </div>
                   </div>
                 </Link>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Systeme mit überfälligem Kontakt */}
+      {overdueContactSystems.length > 0 && (
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <span className="text-orange-500">⚠️</span>
+              Systeme mit überfälligem Kontakt
+              <span className="text-sm font-normal text-gray-500">(&gt; 6 Monate)</span>
+            </h2>
+            <Link to="/sales/systems" className="text-sm text-blue-600 hover:underline">
+              Alle Systeme →
+            </Link>
+          </div>
+          
+          {loadingOverdueContact ? (
+            <div className="text-center py-4 text-gray-500">Lade...</div>
+          ) : (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-orange-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">System</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kunde</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Letzter Kontakt</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verantwortlich</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {overdueContactSystems.slice(0, 10).map((system) => (
+                    <tr key={system.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <Link to={`/sales/systems/${system.id}`} className="text-blue-600 hover:underline">
+                          <div className="font-medium">{system.system_number}</div>
+                          <div className="text-sm text-gray-500">{system.system_name}</div>
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {system.customer_name || '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm text-gray-900">
+                          {system.last_contact_date 
+                            ? new Date(system.last_contact_date).toLocaleDateString('de-DE')
+                            : 'Noch nie'
+                          }
+                        </div>
+                        <div className="text-xs text-orange-600">
+                          {system.days_since_contact 
+                            ? `vor ${system.days_since_contact} Tagen`
+                            : 'Kein Kontakt'
+                          }
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {system.responsible_employee || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {overdueContactSystems.length > 10 && (
+                <div className="px-4 py-2 bg-gray-50 text-sm text-gray-500 text-center">
+                  + {overdueContactSystems.length - 10} weitere Systeme
+                </div>
               )}
             </div>
           )}
