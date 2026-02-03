@@ -58,15 +58,15 @@ class System(models.Model):
     
     # Status
     STATUS_CHOICES = [
-        ('active', 'Aktiv'),
-        ('inactive', 'Inaktiv'),
-        ('maintenance', 'In Wartung'),
-        ('decommissioned', 'Außer Betrieb'),
+        ('unbekannt', 'Unbekannt'),
+        ('in_nutzung', 'In Nutzung'),
+        ('in_wartung', 'In Wartung'),
+        ('ausser_betrieb', 'Außer Betrieb'),
     ]
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='active',
+        default='unbekannt',
         verbose_name='Status'
     )
     

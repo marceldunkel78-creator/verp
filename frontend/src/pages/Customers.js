@@ -4,7 +4,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
 import { 
-  PlusIcon, PencilIcon, TrashIcon, UserIcon,
+  PlusIcon, PencilIcon, UserIcon,
   PhoneIcon, EnvelopeIcon, GlobeAltIcon,
   BuildingOfficeIcon, WrenchScrewdriverIcon, BeakerIcon,
   Squares2X2Icon, ListBulletIcon, MapPinIcon
@@ -397,17 +397,7 @@ const Customers = () => {
     try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
   };
 
-  const handleDelete = async (customerId) => {
-    if (!window.confirm('Möchten Sie diesen Kunden wirklich löschen?')) return;
-    
-    try {
-      await api.delete(`/customers/customers/${customerId}/`);
-      fetchCustomers();
-    } catch (error) {
-      console.error('Fehler beim Löschen:', error);
-      alert('Fehler beim Löschen des Kunden');
-    }
-  };
+
 
   if (loading) {
     return (
@@ -617,14 +607,11 @@ const Customers = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Statistiken
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Aktionen
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {customers.map((customer) => (
-                    <tr key={customer.id} className="hover:bg-gray-50">
+                    <tr key={customer.id} onClick={() => navigate(`/sales/customers/${customer.id}`)} className="hover:bg-gray-50 cursor-pointer">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <div>
@@ -686,20 +673,6 @@ const Customers = () => {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => navigate(`/sales/customers/${customer.id}`)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          <PencilIcon className="h-5 w-5 inline" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(customer.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-5 w-5 inline" />
-                        </button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -729,20 +702,12 @@ const Customers = () => {
                           <span className="text-sm text-gray-600">{customer.language_display}</span>
                         </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => navigate(`/sales/customers/${customer.id}`)}
-                          className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(customer.id)}
-                          className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => navigate(`/sales/customers/${customer.id}`)}
+                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
                     </div>
 
                     {/* Contact Info */}

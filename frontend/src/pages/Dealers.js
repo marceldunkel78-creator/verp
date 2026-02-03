@@ -3,10 +3,11 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
 import { 
-  PlusIcon, PencilIcon, TrashIcon,
+  PlusIcon,
   BuildingStorefrontIcon, UserGroupIcon,
   PhoneIcon, EnvelopeIcon, GlobeAltIcon,
-  ComputerDesktopIcon, DocumentTextIcon
+  ComputerDesktopIcon, DocumentTextIcon,
+  Squares2X2Icon, ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const Dealers = () => {
@@ -16,6 +17,7 @@ const Dealers = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasSearched, setHasSearched] = useState(false);
+  const [viewMode, setViewMode] = useState('cards');
   const [filters, setFilters] = useState({
     search: '',
     city: '',
@@ -177,18 +179,6 @@ const Dealers = () => {
     navigate(`/sales/dealers/${dealer.id}`);
   };
 
-  const handleDelete = async (dealerId) => {
-    if (!window.confirm('Möchten Sie diesen Händler wirklich löschen?')) return;
-    
-    try {
-      await api.delete(`/dealers/dealers/${dealerId}/`);
-      fetchDealers();
-    } catch (error) {
-      console.error('Fehler beim Löschen:', error);
-      alert('Fehler beim Löschen des Händlers');
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -210,13 +200,40 @@ const Dealers = () => {
             Verwaltung von Händlerstammdaten, Ansprechpartnern und Preislisten
           </p>
         </div>
-        <button
-          onClick={openCreatePage}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          Neuer Händler
-        </button>
+        <div className="flex items-center space-x-2">
+          {/* View Toggle */}
+          <div className="flex rounded-md shadow-sm">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 text-sm font-medium rounded-l-md border ${
+                viewMode === 'cards'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
+                viewMode === 'list'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          <button
+            onClick={openCreatePage}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Neuer Händler
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -318,103 +335,174 @@ const Dealers = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {dealers.map((dealer) => (
-              <div 
-                key={dealer.id} 
-                className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => openEditPage(dealer)}
-              >
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {dealer.company_name}
-                        </h3>
-                        {dealer.status === 'inactive' && (
-                          <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded">
-                            Inaktiv
+          {/* Card View */}
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {dealers.map((dealer) => (
+                <div 
+                  key={dealer.id} 
+                  className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => openEditPage(dealer)}
+                >
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {dealer.company_name}
+                          </h3>
+                          {dealer.status === 'inactive' && (
+                            <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded">
+                              Inaktiv
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-500">{dealer.dealer_number}</p>
+                        <div className="flex items-center mt-1">
+                          <GlobeAltIcon className="h-4 w-4 text-gray-400 mr-1" />
+                          <span className="text-sm text-gray-600">
+                            {dealer.city && `${dealer.city}, `}{dealer.country}
                           </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Discount & Payment Terms */}
+                    <div className="space-y-2 border-t pt-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Händlerrabatt:</span>
+                        <span className="font-medium text-green-600">{dealer.dealer_discount}%</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Zahlungskond.:</span>
+                        <span className="text-gray-900">{dealer.payment_terms_display}</span>
+                      </div>
+                    </div>
+
+                    {/* Primary Contact */}
+                    {dealer.primary_contact && (
+                      <div className="mt-4 pt-4 border-t">
+                        <p className="text-xs text-gray-500 mb-1">Hauptansprechpartner:</p>
+                        <p className="text-sm font-medium text-gray-900">{dealer.primary_contact.name}</p>
+                        {dealer.primary_contact.email && (
+                          <div className="flex items-center text-sm text-gray-600 mt-1">
+                            <EnvelopeIcon className="h-3 w-3 mr-1 text-gray-400" />
+                            <span className="truncate">{dealer.primary_contact.email}</span>
+                          </div>
+                        )}
+                        {dealer.primary_contact.phone && (
+                          <div className="flex items-center text-sm text-gray-600 mt-1">
+                            <PhoneIcon className="h-3 w-3 mr-1 text-gray-400" />
+                            <span>{dealer.primary_contact.phone}</span>
+                          </div>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">{dealer.dealer_number}</p>
-                      <div className="flex items-center mt-1">
-                        <GlobeAltIcon className="h-4 w-4 text-gray-400 mr-1" />
-                        <span className="text-sm text-gray-600">
-                          {dealer.city && `${dealer.city}, `}{dealer.country}
+                    )}
+
+                    {/* Stats */}
+                    <div className="mt-4 pt-4 border-t">
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span className="flex items-center" title="Mitarbeiter">
+                          <UserGroupIcon className="h-4 w-4 mr-1" />
+                          <span className="font-semibold text-blue-600">{dealer.employee_count || 0}</span>
+                        </span>
+                        <span className="flex items-center" title="Kundensysteme">
+                          <ComputerDesktopIcon className="h-4 w-4 mr-1" />
+                          <span className="font-semibold text-orange-600">{dealer.customer_system_count || 0}</span>
+                        </span>
+                        <span className="flex items-center" title="Sprache">
+                          <DocumentTextIcon className="h-4 w-4 mr-1" />
+                          <span className="font-semibold text-green-600">{dealer.language_display}</span>
                         </span>
                       </div>
                     </div>
-                    <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => openEditPage(dealer)}
-                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
-                      >
-                        <PencilIcon className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(dealer.id)}
-                        className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded"
-                      >
-                        <TrashIcon className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Discount & Payment Terms */}
-                  <div className="space-y-2 border-t pt-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Händlerrabatt:</span>
-                      <span className="font-medium text-green-600">{dealer.dealer_discount}%</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Zahlungskond.:</span>
-                      <span className="text-gray-900">{dealer.payment_terms_display}</span>
-                    </div>
-                  </div>
-
-                  {/* Primary Contact */}
-                  {dealer.primary_contact && (
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-xs text-gray-500 mb-1">Hauptansprechpartner:</p>
-                      <p className="text-sm font-medium text-gray-900">{dealer.primary_contact.name}</p>
-                      {dealer.primary_contact.email && (
-                        <div className="flex items-center text-sm text-gray-600 mt-1">
-                          <EnvelopeIcon className="h-3 w-3 mr-1 text-gray-400" />
-                          <span className="truncate">{dealer.primary_contact.email}</span>
-                        </div>
-                      )}
-                      {dealer.primary_contact.phone && (
-                        <div className="flex items-center text-sm text-gray-600 mt-1">
-                          <PhoneIcon className="h-3 w-3 mr-1 text-gray-400" />
-                          <span>{dealer.primary_contact.phone}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Stats */}
-                  <div className="mt-4 pt-4 border-t">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span className="flex items-center" title="Mitarbeiter">
-                        <UserGroupIcon className="h-4 w-4 mr-1" />
-                        <span className="font-semibold text-blue-600">{dealer.employee_count || 0}</span>
-                      </span>
-                      <span className="flex items-center" title="Kundensysteme">
-                        <ComputerDesktopIcon className="h-4 w-4 mr-1" />
-                        <span className="font-semibold text-orange-600">{dealer.customer_system_count || 0}</span>
-                      </span>
-                      <span className="flex items-center" title="Sprache">
-                        <DocumentTextIcon className="h-4 w-4 mr-1" />
-                        <span className="font-semibold text-green-600">{dealer.language_display}</span>
-                      </span>
-                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-white shadow rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Händler
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Händler-Nr.
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Standort
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Hauptkontakt
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Rabatt
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {dealers.map((dealer) => (
+                    <tr
+                      key={dealer.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => openEditPage(dealer)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <BuildingStorefrontIcon className="h-5 w-5 text-blue-600 mr-3" />
+                          <div className="text-sm font-medium text-gray-900">
+                            {dealer.company_name}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">{dealer.dealer_number}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {dealer.city && `${dealer.city}, `}{dealer.country}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {dealer.primary_contact ? (
+                            <>
+                              <div>{dealer.primary_contact.name}</div>
+                              {dealer.primary_contact.email && (
+                                <div className="text-xs text-gray-400">{dealer.primary_contact.email}</div>
+                              )}
+                            </>
+                          ) : '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="text-sm font-medium text-green-600">{dealer.dealer_discount}%</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            dealer.status === 'active'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {dealer.status === 'active' ? 'Aktiv' : 'Inaktiv'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

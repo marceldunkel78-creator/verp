@@ -32,6 +32,11 @@ class UserViewSet(viewsets.ModelViewSet):
         elif self.action in ['update', 'partial_update']:
             return UserUpdateSerializer
         return UserSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied("Nur Superuser dürfen Benutzer löschen.")
+        return super().destroy(request, *args, **kwargs)
     
     def get_permissions(self):
         """

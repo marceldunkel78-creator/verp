@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.http import FileResponse, Http404
+from django.apps import apps
 from suppliers.models import Supplier, TradingProduct
 from customers.models import Customer
 from visiview.models import VisiViewProduct
@@ -519,3 +520,193 @@ class MediaBrowserViewSet(viewsets.ViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# ============ Admin Delete Module ============
+# Ermöglicht Superusern das Löschen von Datenbankeinträgen nach Typ und ID
+
+DELETABLE_MODELS = {
+    'customer': ('customers', 'Customer', 'customer_number', 'Kunde'),
+    'supplier': ('suppliers', 'Supplier', 'supplier_number', 'Lieferant'),
+    'order': ('orders', 'Order', 'order_number', 'Lieferantenbestellung'),
+    'customer_order': ('customer_orders', 'CustomerOrder', 'order_number', 'Kundenauftrag'),
+    'quotation': ('quotations', 'Quotation', 'quotation_number', 'Angebot'),
+    'dealer': ('dealers', 'Dealer', 'name', 'Händler'),
+    'system': ('systems', 'System', 'system_number', 'System'),
+    'project': ('projects', 'Project', 'project_number', 'Projekt'),
+    'service_ticket': ('service', 'ServiceTicket', 'ticket_number', 'Service-Ticket'),
+    'visiview_ticket': ('visiview', 'VisiViewTicket', 'ticket_number', 'VisiView-Ticket'),
+    'visiview_license': ('visiview', 'VisiViewLicense', 'serial_number', 'VisiView-Lizenz'),
+    'trading_product': ('suppliers', 'TradingProduct', 'vs_article_number', 'Handelsware'),
+    'inventory_item': ('inventory', 'InventoryItem', 'inventory_number', 'Warenlager-Eintrag'),
+}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_delete_types(request):
+    """
+    Gibt die verfügbaren Typen zum Löschen zurück.
+    Nur für Superuser.
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'Nur für VERP Super User'}, status=status.HTTP_403_FORBIDDEN)
+    
+    types = []
+    for key, (app_label, model_name, identifier_field, display_name) in DELETABLE_MODELS.items():
+        types.append({
+            'key': key,
+            'name': display_name,
+            'identifier_field': identifier_field
+        })
+    
+    return Response({'types': types})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_delete_preview(request):
+    """
+    Vorschau eines zu löschenden Eintrags.
+    GET /core/admin-delete/preview/?type=customer&id=123
+    Nur für Superuser.
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'Nur für VERP Super User'}, status=status.HTTP_403_FORBIDDEN)
+    
+    model_type = request.query_params.get('type')
+    item_id = request.query_params.get('id')
+    
+    if not model_type or not item_id:
+        return Response({'error': 'type und id Parameter erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if model_type not in DELETABLE_MODELS:
+        return Response({'error': f'Unbekannter Typ: {model_type}'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    app_label, model_name, identifier_field, display_name = DELETABLE_MODELS[model_type]
+    
+    try:
+        Model = apps.get_model(app_label, model_name)
+    except LookupError:
+        return Response({'error': f'Model {model_name} nicht gefunden'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Suche nach ID oder Identifier-Feld
+    try:
+        # Erst versuchen nach ID
+        try:
+            item = Model.objects.get(pk=int(item_id))
+        except (ValueError, Model.DoesNotExist):
+            # Falls keine numerische ID, nach Identifier-Feld suchen
+            filter_kwargs = {identifier_field: item_id}
+            item = Model.objects.get(**filter_kwargs)
+    except Model.DoesNotExist:
+        return Response({'error': f'{display_name} mit ID/Nummer {item_id} nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Sammle Informationen über den Eintrag
+    item_info = {
+        'id': item.pk,
+        'type': model_type,
+        'type_display': display_name,
+    }
+    
+    # Identifier-Feld hinzufügen
+    if hasattr(item, identifier_field):
+        item_info['identifier'] = getattr(item, identifier_field)
+        item_info['identifier_field'] = identifier_field
+    
+    # Namen/Titel hinzufügen
+    name_fields = ['name', 'title', 'system_name', 'first_name', 'last_name', 'description']
+    for field in name_fields:
+        if hasattr(item, field):
+            value = getattr(item, field)
+            if value:
+                if field in ['first_name', 'last_name']:
+                    if 'display_name' not in item_info:
+                        item_info['display_name'] = ''
+                    item_info['display_name'] += ((' ' if item_info['display_name'] else '') + str(value))
+                else:
+                    item_info['display_name'] = str(value)
+                    break
+    
+    # Erstellt/Geändert-Datum
+    if hasattr(item, 'created_at'):
+        item_info['created_at'] = item.created_at.isoformat() if item.created_at else None
+    
+    # Verknüpfte Objekte zählen (für Warnung)
+    related_counts = []
+    for rel in item._meta.related_objects:
+        try:
+            related_manager = getattr(item, rel.get_accessor_name())
+            count = related_manager.count()
+            if count > 0:
+                related_counts.append({
+                    'name': rel.related_model._meta.verbose_name_plural,
+                    'count': count
+                })
+        except Exception:
+            pass
+    
+    item_info['related_objects'] = related_counts
+    item_info['has_related_objects'] = len(related_counts) > 0
+    
+    return Response(item_info)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_delete_execute(request):
+    """
+    Führt das Löschen eines Eintrags durch.
+    POST /core/admin-delete/execute/
+    Body: { "type": "customer", "id": 123, "confirm": true }
+    Nur für Superuser.
+    """
+    if not request.user.is_superuser:
+        return Response({'error': 'Nur für VERP Super User'}, status=status.HTTP_403_FORBIDDEN)
+    
+    model_type = request.data.get('type')
+    item_id = request.data.get('id')
+    confirm = request.data.get('confirm', False)
+    
+    if not model_type or not item_id:
+        return Response({'error': 'type und id Parameter erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if not confirm:
+        return Response({'error': 'confirm=true erforderlich um zu löschen'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if model_type not in DELETABLE_MODELS:
+        return Response({'error': f'Unbekannter Typ: {model_type}'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    app_label, model_name, identifier_field, display_name = DELETABLE_MODELS[model_type]
+    
+    try:
+        Model = apps.get_model(app_label, model_name)
+    except LookupError:
+        return Response({'error': f'Model {model_name} nicht gefunden'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Suche nach ID oder Identifier-Feld
+    try:
+        try:
+            item = Model.objects.get(pk=int(item_id))
+        except (ValueError, Model.DoesNotExist):
+            filter_kwargs = {identifier_field: item_id}
+            item = Model.objects.get(**filter_kwargs)
+    except Model.DoesNotExist:
+        return Response({'error': f'{display_name} mit ID/Nummer {item_id} nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Speichere Info für Log
+    deleted_id = item.pk
+    deleted_identifier = getattr(item, identifier_field, str(item.pk))
+    
+    try:
+        item.delete()
+        return Response({
+            'success': True,
+            'message': f'{display_name} "{deleted_identifier}" (ID: {deleted_id}) wurde gelöscht.',
+            'deleted_id': deleted_id,
+            'deleted_identifier': deleted_identifier
+        })
+    except Exception as e:
+        return Response({
+            'error': f'Fehler beim Löschen: {str(e)}',
+            'detail': 'Möglicherweise gibt es noch verknüpfte Einträge die das Löschen verhindern.'
+        }, status=status.HTTP_400_BAD_REQUEST)

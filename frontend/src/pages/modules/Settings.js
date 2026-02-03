@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
-  BanknotesIcon, CircleStackIcon, BellIcon
+  BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -48,6 +48,14 @@ const Settings = () => {
       icon: CircleStackIcon,
       path: '/settings/backup-restore',
       color: 'purple'
+    },
+    {
+      name: 'Admin Löschmodul',
+      description: 'Datenbankeinträge löschen (nur Super User)',
+      icon: TrashIcon,
+      path: '/settings/admin-delete',
+      color: 'red',
+      superUserOnly: true
     },
     {
       name: 'System',

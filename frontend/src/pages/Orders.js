@@ -3,9 +3,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { 
-  PlusIcon, ShoppingCartIcon, PencilIcon, TrashIcon, ArrowUturnLeftIcon,
+  PlusIcon, ShoppingCartIcon, ArrowUturnLeftIcon,
   DocumentTextIcon, BuildingOfficeIcon, CalendarIcon,
-  ChevronLeftIcon, ChevronRightIcon, EyeIcon, CurrencyEuroIcon
+  ChevronLeftIcon, ChevronRightIcon, CurrencyEuroIcon,
+  Squares2X2Icon, ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const Orders = () => {
@@ -14,6 +15,7 @@ const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [viewMode, setViewMode] = useState('cards');
   const searchInputRef = useRef(null);
   const [filters, setFilters] = useState({
     search: '',
@@ -177,121 +179,6 @@ const Orders = () => {
     fetchOrders(1, { search: filters.search || '', status: filters.status || '', year: filters.year || '' });
   };
 
-  const canDelete = (order) => {
-    if (order.status !== 'angelegt') return false;
-    
-    // Parse order number format: B-003-12/25
-    const parts = order.order_number.split('-');
-    if (parts.length < 3) return false;
-    
-    const orderNum = parseInt(parts[1]);
-    const monthYear = parts[2]; // "12/25"
-    const [, year] = monthYear.split('/');
-    const orderYear = 2000 + parseInt(year); // 25 -> 2025
-    
-    const currentYear = new Date().getFullYear();
-    
-    // Can only delete orders from current year
-    if (orderYear !== currentYear) return false;
-    
-    // Check if there's a newer order (higher number) in the same year
-    const hasNewerOrder = orders.some(o => {
-      if (o.id === order.id) return false; // Skip selbst
-      
-      const oParts = o.order_number.split('-');
-      if (oParts.length < 3) return false;
-      
-      const oNum = parseInt(oParts[1]);
-      const oMonthYear = oParts[2];
-      const [, oYear] = oMonthYear.split('/');
-      const oOrderYear = 2000 + parseInt(oYear);
-      
-      return oOrderYear === currentYear && oNum > orderNum;
-    });
-    
-    return !hasNewerOrder;
-  };
-
-  const handleDelete = async (order) => {
-    if (canDelete(order)) {
-      if (window.confirm(`Möchten Sie die Bestellung ${order.order_number} wirklich löschen?`)) {
-        try {
-          await api.delete(`/orders/orders/${order.id}/`);
-          fetchOrders();
-        } catch (error) {
-          console.error('Fehler beim Löschen:', error);
-          alert('Fehler beim Löschen der Bestellung');
-        }
-      }
-    } else {
-      if (window.confirm('Diese Bestellung kann nicht gelöscht werden.\n\nMöchten Sie die Bestellung stornieren?')) {
-        const shouldCopy = window.confirm('Möchten Sie eine neue bearbeitbare Kopie dieser Bestellung anlegen?');
-        
-        try {
-          if (shouldCopy) {
-            // Create copy first
-            const response = await api.get(`/orders/orders/${order.id}/`);
-            const orderData = response.data;
-            
-            const newOrderData = {
-              supplier: orderData.supplier,
-              order_date: new Date().toISOString().split('T')[0],
-              delivery_date: orderData.delivery_date || null,
-              payment_date: null,
-              status: 'angelegt',
-              offer_reference: orderData.offer_reference || '',
-              custom_text: orderData.custom_text || '',
-              notes: (orderData.notes || '') + '\n\n[Kopie von Bestellung ' + orderData.order_number + ']',
-              items: orderData.items.map(item => ({
-                trading_product: item.trading_product,
-                asset: item.asset,
-                material_supply: item.material_supply,
-                article_number: item.article_number,
-                name: item.name,
-                description: item.description,
-                quantity: item.quantity,
-                unit: item.unit,
-                list_price: item.list_price,
-                discount_percent: item.discount_percent,
-                final_price: item.final_price,
-                currency: item.currency,
-                position: item.position
-              }))
-            };
-            
-            const createResponse = await api.post('/orders/orders/', newOrderData);
-            
-            // Cancel original order
-            const timestamp = new Date().toLocaleString('de-DE');
-            await api.patch(`/orders/orders/${order.id}/`, {
-              status: 'storniert',
-              notes: (orderData.notes || '') + `\n\n[Storniert am ${timestamp} - Kopie erstellt als ${createResponse.data.order_number}]`
-            });
-            
-            fetchOrders();
-            navigate(`/procurement/orders/${createResponse.data.id}/edit`);
-          } else {
-            // Just cancel
-            const response = await api.get(`/orders/orders/${order.id}/`);
-            const orderData = response.data;
-            const timestamp = new Date().toLocaleString('de-DE');
-            
-            await api.patch(`/orders/orders/${order.id}/`, {
-              status: 'storniert',
-              notes: (orderData.notes || '') + `\n\n[Storniert am ${timestamp}]`
-            });
-            
-            fetchOrders();
-          }
-        } catch (error) {
-          console.error('Fehler:', error);
-          console.error('Error details:', error.response?.data);
-          alert('Fehler beim Verarbeiten der Bestellung: ' + (error.response?.data ? JSON.stringify(error.response.data) : error.message));
-        }
-      }
-    }
-  };
-
   const handleRevertCancellation = async (order) => {
     if (window.confirm(`Möchten Sie die Stornierung von ${order.order_number} rückgängig machen?`)) {
       try {
@@ -359,13 +246,32 @@ const Orders = () => {
             Verwaltung aller Bestellungen und Bestellpositionen
           </p>
         </div>
-        <button
-          onClick={() => navigate('/procurement/orders/new')}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          Neue Bestellung
-        </button>
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          <button
+            onClick={() => navigate('/procurement/orders/new')}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Neue Bestellung
+          </button>
+        </div>
       </div>
 
       {/* Filter/Search */}
@@ -458,116 +364,131 @@ const Orders = () => {
       {/* Orders Grid */}
       {orders.length > 0 && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer"
-                onClick={() => { saveSearchState(); navigate(`/procurement/orders/${order.id}`); }}
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center">
-                    <DocumentTextIcon className="h-5 w-5 text-blue-600 mr-2" />
-                    <h3 className="text-lg font-semibold text-gray-900 font-mono">
-                      {order.order_number}
-                    </h3>
-                  </div>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                    {order.status_display}
-                  </span>
-                </div>
-
-                {/* Supplier */}
-                <div className="mb-3">
-                  <div className="flex items-center text-sm text-gray-600 mb-1">
-                    <BuildingOfficeIcon className="h-4 w-4 mr-2" />
-                    <span className="font-medium">{order.supplier_name}</span>
-                  </div>
-                  <div className="text-xs text-gray-500 ml-6">
-                    Nr. {order.supplier_number}
-                  </div>
-                </div>
-
-                {/* Dates */}
-                <div className="mb-4 space-y-1">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <CalendarIcon className="h-4 w-4 mr-2" />
-                    <span>
-                      {order.order_date ? new Date(order.order_date).toLocaleDateString('de-DE') : 'Kein Datum'}
+          {/* Card View */}
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+              {orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+                  onClick={() => { saveSearchState(); navigate(`/procurement/orders/${order.id}`); }}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center">
+                      <DocumentTextIcon className="h-5 w-5 text-blue-600 mr-2" />
+                      <h3 className="text-lg font-semibold text-gray-900 font-mono">
+                        {order.order_number}
+                      </h3>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                      {order.status_display}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 ml-6">
-                    Erstellt: {new Date(order.created_at).toLocaleDateString('de-DE')}
-                  </div>
-                </div>
 
-                {/* Items Count & Total */}
-                <div className="border-t pt-3 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Positionen:</span>
-                    <span className="font-medium text-gray-900">{order.items_count}</span>
+                  {/* Supplier */}
+                  <div className="mb-3">
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <BuildingOfficeIcon className="h-4 w-4 mr-2" />
+                      <span className="font-medium">{order.supplier_name}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 ml-6">
+                      Nr. {order.supplier_number}
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm mt-2">
-                    <span className="text-gray-600">Summe:</span>
-                    <span className="font-bold text-gray-900 flex items-center">
-                      {(order.confirmed_total ?? order.total_amount) ? (order.confirmed_total ?? order.total_amount).toFixed(2) : '0.00'}
-                      <CurrencyEuroIcon className="h-4 w-4 ml-1" />
-                    </span>
-                  </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-end space-x-2 border-t pt-3">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      saveSearchState();
-                      navigate(`/procurement/orders/${order.id}`);
-                    }}
-                    className="text-blue-600 hover:text-blue-900 p-1"
-                    title="Details"
-                  >
-                    <EyeIcon className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      saveSearchState();
-                      navigate(`/procurement/orders/${order.id}/edit`);
-                    }}
-                    className="text-green-600 hover:text-green-900 p-1"
-                    title="Bearbeiten"
-                  >
-                    <PencilIcon className="h-5 w-5" />
-                  </button>
-                  {order.status === 'storniert' ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRevertCancellation(order);
-                      }}
-                      className="text-yellow-600 hover:text-yellow-900 p-1"
-                      title="Stornierung rückgängig machen"
-                    >
-                      <ArrowUturnLeftIcon className="h-5 w-5" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(order);
-                      }}
-                      className="text-red-600 hover:text-red-900 p-1"
-                      title={canDelete(order) ? 'Löschen' : 'Stornieren'}
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  )}
+                  {/* Dates */}
+                  <div className="mb-4 space-y-1">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <CalendarIcon className="h-4 w-4 mr-2" />
+                      <span>
+                        {order.order_date ? new Date(order.order_date).toLocaleDateString('de-DE') : 'Kein Datum'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 ml-6">
+                      Erstellt: {new Date(order.created_at).toLocaleDateString('de-DE')}
+                    </div>
+                  </div>
+
+                  {/* Items Count & Total */}
+                  <div className="border-t pt-3 mb-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Positionen:</span>
+                      <span className="font-medium text-gray-900">{order.items_count}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span className="text-gray-600">Summe:</span>
+                      <span className="font-bold text-gray-900 flex items-center">
+                        {(order.confirmed_total ?? order.total_amount) ? (order.confirmed_total ?? order.total_amount).toFixed(2) : '0.00'}
+                        <CurrencyEuroIcon className="h-4 w-4 ml-1" />
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Bestell-Nr.
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lieferant
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Datum
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Positionen
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Summe
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {orders.map((order) => (
+                    <tr
+                      key={order.id}
+                      onClick={() => { saveSearchState(); navigate(`/procurement/orders/${order.id}`); }}
+                      className="hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="font-mono font-medium text-blue-600">{order.order_number}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">{order.supplier_name}</div>
+                        <div className="text-xs text-gray-500">Nr. {order.supplier_number}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {order.order_date ? new Date(order.order_date).toLocaleDateString('de-DE') : '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {order.items_count}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {(order.confirmed_total ?? order.total_amount)?.toFixed(2) || '0.00'} €
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                          {order.status_display}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

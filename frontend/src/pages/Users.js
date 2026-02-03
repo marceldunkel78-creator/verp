@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { PlusIcon, PencilIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
 // Hierarchische Modulstruktur
 const MODULE_HIERARCHY = [
@@ -211,18 +211,6 @@ const Users = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Möchten Sie diesen Benutzer wirklich löschen?')) {
-      try {
-        await api.delete(`/users/${id}/`);
-        fetchUsers();
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen des Benutzers');
-      }
-    }
-  };
-
   const resetForm = () => {
     setFormData(getInitialFormData());
     setEditingUser(null);
@@ -382,14 +370,15 @@ const Users = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktionen
-              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {users.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50">
+              <tr 
+                key={user.id} 
+                onClick={() => openEditModal(user)}
+                className="hover:bg-gray-50 cursor-pointer"
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {user.username}
                 </td>
@@ -420,20 +409,6 @@ const Users = () => {
                   >
                     {user.is_active ? 'Aktiv' : 'Inaktiv'}
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => openEditModal(user)}
-                    className="text-blue-600 hover:text-blue-900 mr-4"
-                  >
-                    <PencilIcon className="h-5 w-5 inline" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <TrashIcon className="h-5 w-5 inline" />
-                  </button>
                 </td>
               </tr>
             ))}

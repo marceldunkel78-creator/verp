@@ -5,9 +5,10 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import storage from '../utils/sessionStore';
 import { 
-  PlusIcon, EyeIcon, PencilIcon, TrashIcon, 
+  PlusIcon, 
   DocumentArrowDownIcon, DocumentIcon, DocumentTextIcon, DocumentDuplicateIcon,
-  UserIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon
+  UserIcon, CalendarIcon, ClockIcon, CurrencyEuroIcon,
+  Squares2X2Icon, ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const Quotations = () => {
@@ -18,6 +19,7 @@ const Quotations = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasSearched, setHasSearched] = useState(false);
+  const [viewMode, setViewMode] = useState('cards');
   const [users, setUsers] = useState([]);
   const [filters, setFilters] = useState({
     search: '',
@@ -204,68 +206,6 @@ const Quotations = () => {
     setSearchParams({});
   };
   
-  const handleDelete = async (id) => {
-    if (window.confirm('Möchten Sie dieses Angebot wirklich löschen?')) {
-      try {
-        await api.delete(`/sales/quotations/${id}/`);
-        fetchQuotations();
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen des Angebots');
-      }
-    }
-  };
-  
-  const handleDownloadPDF = async (quotationId, quotationNumber) => {
-    try {
-      const response = await api.get(`/sales/quotations/${quotationId}/download_pdf/`, {
-        responseType: 'blob'
-      });
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Angebot_${quotationNumber}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Fehler beim PDF-Download:', error);
-      alert('Fehler beim Herunterladen des PDFs');
-    }
-  };
-  
-  const handleViewPDF = async (quotationId) => {
-    try {
-      const response = await api.get(`/sales/quotations/${quotationId}/download_pdf/`, {
-        responseType: 'blob'
-      });
-      
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
-    } catch (error) {
-      console.error('Fehler beim PDF-Anzeigen:', error);
-      alert('Fehler beim Anzeigen des PDFs');
-    }
-  };
-
-  const handleDuplicate = async (quotationId) => {
-    if (!window.confirm('Möchten Sie dieses Angebot wirklich kopieren? Die Gültigkeit wird automatisch um 30 Tage verlängert.')) {
-      return;
-    }
-    
-    try {
-      await api.post(`/sales/quotations/${quotationId}/duplicate/`);
-      alert('Angebot erfolgreich kopiert');
-      fetchQuotations(); // Refresh the list
-    } catch (error) {
-      console.error('Fehler beim Kopieren des Angebots:', error);
-      alert('Fehler beim Kopieren des Angebots');
-    }
-  };
-  
   const getStatusBadge = (status, statusDisplay) => {
     const colors = {
       DRAFT: 'bg-gray-100 text-gray-800',
@@ -311,15 +251,34 @@ const Quotations = () => {
             Kundenangebote verwalten und generieren
           </p>
         </div>
-        {canWrite && (
-          <button
-            onClick={() => navigate('/sales/quotations/new')}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Neues Angebot
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          {canWrite && (
+            <button
+              onClick={() => navigate('/sales/quotations/new')}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Neues Angebot
+            </button>
+          )}
+        </div>
       </div>
       
       {/* Suchfilter */}
@@ -419,22 +378,28 @@ const Quotations = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {quotations.map((quotation) => (
-              <div key={quotation.id} className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="p-6">
-                  {/* Header */}
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 font-mono mb-1">
-                        {quotation.quotation_number}
-                      </h3>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <UserIcon className="h-4 w-4 mr-1 text-gray-400" />
-                        <span className="truncate">{quotation.customer_name}</span>
+          {/* Card View */}
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {quotations.map((quotation) => (
+                <div 
+                  key={quotation.id} 
+                  className="bg-white shadow rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => navigate(`/sales/quotations/${quotation.id}`)}
+                >
+                  <div className="p-6">
+                    {/* Header */}
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 font-mono mb-1">
+                          {quotation.quotation_number}
+                        </h3>
+                        <div className="flex items-center text-sm text-gray-600">
+                          <UserIcon className="h-4 w-4 mr-1 text-gray-400" />
+                          <span className="truncate">{quotation.customer_name}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{quotation.customer_number}</p>
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{quotation.customer_number}</p>
-                    </div>
                     <div>
                       {getStatusBadge(quotation.status, quotation.status_display)}
                     </div>
@@ -468,64 +433,70 @@ const Quotations = () => {
                       </div>
                     </div>
                   </div>
-
-                  {/* Aktionen */}
-                  <div className="mt-4 pt-4 border-t flex justify-between items-center">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleViewPDF(quotation.id)}
-                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
-                        title="PDF anzeigen"
-                      >
-                        <DocumentIcon className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDownloadPDF(quotation.id, quotation.quotation_number)}
-                        className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 rounded"
-                        title="PDF herunterladen"
-                      >
-                        <DocumentArrowDownIcon className="h-5 w-5" />
-                      </button>
-                      {canWrite && (
-                        <button
-                          onClick={() => handleDuplicate(quotation.id)}
-                          className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded"
-                          title="Angebot kopieren"
-                        >
-                          <DocumentDuplicateIcon className="h-5 w-5" />
-                        </button>
-                      )}
-                      <Link
-                        to={`/sales/quotations/${quotation.id}`}
-                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
-                        title="Details anzeigen"
-                      >
-                        <EyeIcon className="h-5 w-5" />
-                      </Link>
-                    </div>
-                    {canWrite && (
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => navigate(`/sales/quotations/${quotation.id}/edit`)}
-                          className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
-                          title="Bearbeiten"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(quotation.id)}
-                          className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded"
-                          title="Löschen"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             ))}
           </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Angebots-Nr.
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Kunde
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Datum
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Gültig bis
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Summe
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {quotations.map((quotation) => (
+                    <tr
+                      key={quotation.id}
+                      onClick={() => navigate(`/sales/quotations/${quotation.id}`)}
+                      className="hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="font-mono font-medium text-green-600">{quotation.quotation_number}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">{quotation.customer_name}</div>
+                        <div className="text-xs text-gray-500">{quotation.customer_number}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(quotation.date).toLocaleDateString('de-DE')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(quotation.valid_until).toLocaleDateString('de-DE')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {quotation.total_amount?.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(quotation.status, quotation.status_display)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

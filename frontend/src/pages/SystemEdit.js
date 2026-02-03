@@ -57,7 +57,7 @@ const SystemEdit = () => {
     system_name: '',
     customer: urlCustomerId || '',
     description: '',
-    status: 'active',
+    status: 'unbekannt',
     location: '',
     location_university: '',
     location_institute: '',
@@ -174,7 +174,7 @@ const SystemEdit = () => {
         system_name: data.system_name || '',
         customer: data.customer || '',
         description: data.description || '',
-        status: data.status || 'active',
+        status: data.status || 'unbekannt',
         location: data.location || '',
         location_university: data.location_university || '',
         location_institute: data.location_institute || '',
@@ -633,10 +633,10 @@ const SystemEdit = () => {
 
   const getStatusColor = (status) => {
     const colors = {
-      'active': 'bg-green-100 text-green-800',
-      'inactive': 'bg-gray-100 text-gray-800',
-      'maintenance': 'bg-yellow-100 text-yellow-800',
-      'decommissioned': 'bg-red-100 text-red-800'
+      'unbekannt': 'bg-gray-100 text-gray-800',
+      'in_nutzung': 'bg-green-100 text-green-800',
+      'in_wartung': 'bg-yellow-100 text-yellow-800',
+      'ausser_betrieb': 'bg-red-100 text-red-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
@@ -962,10 +962,10 @@ const SystemEdit = () => {
                 onChange={(e) => handleInputChange('status', e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               >
-                <option value="active">Aktiv</option>
-                <option value="inactive">Inaktiv</option>
-                <option value="maintenance">In Wartung</option>
-                <option value="decommissioned">Außer Betrieb</option>
+                <option value="unbekannt">Unbekannt</option>
+                <option value="in_nutzung">In Nutzung</option>
+                <option value="in_wartung">In Wartung</option>
+                <option value="ausser_betrieb">Außer Betrieb</option>
               </select>
             </div>
 

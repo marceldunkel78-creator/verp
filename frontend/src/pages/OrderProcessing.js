@@ -5,7 +5,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import storage from '../utils/sessionStore';
 import {
-  PlusIcon, EyeIcon, PencilIcon, TrashIcon,
+  PlusIcon,
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
@@ -169,18 +169,6 @@ const OrderProcessing = () => {
     setSearchParams({});
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Möchten Sie diesen Auftrag wirklich löschen?')) {
-      try {
-        await api.delete(`/customer-orders/customer-orders/${id}/`);
-        fetchOrders();
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen des Auftrags');
-      }
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -316,12 +304,6 @@ const OrderProcessing = () => {
                     <span className="text-gray-600">Summe:</span>
                     <span className="font-bold text-gray-900">{order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</span>
                   </div>
-                </div>
-
-                <div className="flex items-center justify-end space-x-2 border-t pt-3">
-                  <button onClick={(e) => { e.stopPropagation(); navigate(`/sales/order-processing/${order.id}`); }} className="text-blue-600 hover:text-blue-900 p-1" title="Details"><EyeIcon className="h-5 w-5" /></button>
-                  {canWrite && <button onClick={(e) => { e.stopPropagation(); navigate(`/sales/order-processing/${order.id}/edit`); }} className="text-green-600 hover:text-green-900 p-1" title="Bearbeiten"><PencilIcon className="h-5 w-5" /></button>}
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(order.id); }} className="text-red-600 hover:text-red-900 p-1" title="Löschen"><TrashIcon className="h-5 w-5" /></button>
                 </div>
               </div>
             ))}

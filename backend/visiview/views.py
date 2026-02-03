@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -119,6 +120,11 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied("Nur Admins dürfen Lizenzen löschen.")
+        return super().destroy(request, *args, **kwargs)
     
     @action(detail=False, methods=['get'])
     def next_serial(self, request):

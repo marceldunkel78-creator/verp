@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import storage from '../utils/sessionStore';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -9,12 +10,13 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   XCircleIcon,
-  PencilIcon,
-  TrashIcon
+  Squares2X2Icon,
+  ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const VisiViewLicenses = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [licenses, setLicenses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,16 +26,91 @@ const VisiViewLicenses = () => {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(9); // show up to 9 tiles per page
   const [totalCount, setTotalCount] = useState(0);
+  const [viewMode, setViewMode] = useState('cards');
 
-  // Don't load licenses on mount - only when user searches
-  // useEffect removed
+  const SESSION_KEY = 'visiview_licenses_search_state';
 
-  const fetchLicenses = async (searchQuery = '', pageNumber = 1) => {
+  const loadSearchState = () => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.searchTerm !== undefined) setSearchTerm(st.searchTerm);
+      if (st.statusFilter !== undefined) setStatusFilter(st.statusFilter);
+      if (st.showOutdated !== undefined) setShowOutdated(st.showOutdated);
+      if (st.viewMode) setViewMode(st.viewMode);
+      if (st.page) setPage(st.page);
+      if (st.licenses) setLicenses(st.licenses);
+      if (st.totalCount !== undefined) setTotalCount(st.totalCount);
+      if (st.hasSearched) setHasSearched(true);
+      return { page: st.page || 1, filters: st };
+    } catch (e) {
+      console.warn('Failed to load visiview licenses search state', e);
+      return false;
+    }
+  };
+
+  const saveSearchState = () => {
+    try {
+      const st = { searchTerm, statusFilter, showOutdated, viewMode, page, licenses, totalCount, hasSearched };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save visiview licenses search state', e);
+    }
+  };
+
+  // On mount: prefer URL params, else restore from session storage
+  useEffect(() => {
+    const urlParams = Object.fromEntries([...searchParams]);
+    if (Object.keys(urlParams).length > 0) {
+      // URL has params - let the searchParams effect handle it
+      return;
+    }
+
+    const restored = loadSearchState();
+    if (restored && restored.filters && restored.filters.hasSearched) {
+      // Restore URL params from session
+      const params = {};
+      if (restored.filters.searchTerm) params.search = restored.filters.searchTerm;
+      if (restored.filters.statusFilter) params.status = restored.filters.statusFilter;
+      if (restored.filters.showOutdated) params.outdated = 'true';
+      if (restored.filters.page) params.page = String(restored.filters.page);
+      setSearchParams(params);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync state from URL params
+  useEffect(() => {
+    const params = Object.fromEntries([...searchParams]);
+    const hasParams = Object.keys(params).length > 0;
+    if (hasParams) {
+      const newSearchTerm = params.search || '';
+      const newStatusFilter = params.status || '';
+      const newShowOutdated = params.outdated === 'true';
+      const newPage = params.page ? parseInt(params.page, 10) : 1;
+
+      setSearchTerm(newSearchTerm);
+      setStatusFilter(newStatusFilter);
+      setShowOutdated(newShowOutdated);
+      setPage(newPage);
+      setHasSearched(true);
+      fetchLicenses(newSearchTerm, newPage, newStatusFilter, newShowOutdated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Save state whenever relevant values change
+  useEffect(() => {
+    saveSearchState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, showOutdated, viewMode, page, licenses, totalCount, hasSearched]);
+
+  const fetchLicenses = async (searchQuery = '', pageNumber = 1, status = statusFilter, outdated = showOutdated) => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (statusFilter) params.append('status', statusFilter);
-      if (!showOutdated) params.append('is_outdated', 'false');
+      if (status) params.append('status', status);
+      if (!outdated) params.append('is_outdated', 'false');
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
       params.append('page_size', String(pageSize));
       params.append('page', String(pageNumber));
@@ -56,36 +133,28 @@ const VisiViewLicenses = () => {
     }
   };
 
-  // Refetch when page changes (but only after an initial search)
-  useEffect(() => {
-    if (hasSearched) {
-      fetchLicenses(searchTerm, page);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
-
   const handleSearch = (e) => {
     e.preventDefault();
+    const params = {};
+    if (searchTerm) params.search = searchTerm;
+    if (statusFilter) params.status = statusFilter;
+    if (showOutdated) params.outdated = 'true';
+    params.page = '1';
+    setSearchParams(params);
     setPage(1);
-    fetchLicenses(searchTerm, 1);
+    setHasSearched(true);
   };
 
-  const handleDelete = async (licenseId, licenseNumber) => {
-    if (window.confirm(`Möchten Sie die Lizenz "${licenseNumber}" wirklich löschen?`)) {
-      try {
-        await api.delete(`/visiview/licenses/${licenseId}/`);
-        const filtered = licenses.filter(l => l.id !== licenseId);
-        setLicenses(filtered);
-        setTotalCount(prev => Math.max(0, prev - 1));
-        // If this page became empty after deletion, go back one page
-        if (filtered.length === 0 && page > 1) {
-          setPage(prev => prev - 1);
-        }
-      } catch (error) {
-        console.error('Error deleting license:', error);
-        alert('Fehler beim Löschen der Lizenz.');
-      }
-    }
+  const handleReset = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setShowOutdated(false);
+    setLicenses([]);
+    setPage(1);
+    setTotalCount(0);
+    setHasSearched(false);
+    setSearchParams({});
+    try { storage.remove(SESSION_KEY); } catch (e) { /* ignore */ }
   };
 
   const getStatusColor = (status) => {
@@ -122,13 +191,40 @@ const VisiViewLicenses = () => {
           <KeyIcon className="h-8 w-8 text-indigo-600" />
           <h1 className="text-3xl font-bold text-gray-900">VisiView Lizenzen</h1>
         </div>
-        <button
-          onClick={() => navigate('/visiview/licenses/new')}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          <PlusIcon className="h-5 w-5" />
-          Neue Lizenz
-        </button>
+        <div className="flex items-center space-x-2">
+          {/* View Toggle */}
+          <div className="flex rounded-md shadow-sm">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 text-sm font-medium rounded-l-md border ${
+                viewMode === 'cards'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
+                viewMode === 'list'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          <button
+            onClick={() => navigate('/visiview/licenses/new')}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Neue Lizenz
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -184,7 +280,19 @@ const VisiViewLicenses = () => {
           >
             Suchen
           </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            Zurücksetzen
+          </button>
         </form>
+        {hasSearched && (
+          <div className="mt-3 text-sm text-gray-600">
+            {totalCount} Lizenzen gefunden (Seite {page} von {totalPages || 1})
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -234,102 +342,194 @@ const VisiViewLicenses = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {licenses.map((license) => (
-            <div
-              key={license.id}
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden"
-            >
-              {/* Header */}
-              <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-medium text-indigo-600">
-                    {license.serial_number}
-                  </span>
-                  {license.is_demo && (
-                    <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Demo</span>
-                  )}
-                  {license.is_loaner && (
-                    <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">Leih</span>
-                  )}
-                </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(license.status)}`}>
-                  {license.status_display}
-                </span>
-              </div>
-              
-              {/* Content */}
-              <div className="p-4">
-                <div className="flex items-start gap-2 mb-3">
-                  <UserIcon className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    {license.customer ? (
-                      <button
-                        onClick={() => navigate(`/customers/${license.customer}`)}
-                        className="text-indigo-600 hover:underline text-left"
-                      >
-                        {license.customer_name}
-                      </button>
-                    ) : (
-                      <span className="text-gray-700">{license.customer_name_legacy || '-'}</span>
-                    )}
-                    {license.customer_number && (
-                      <span className="text-xs text-gray-500 ml-2">({license.customer_number})</span>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-1 text-gray-600">
-                    <CalendarIcon className="h-4 w-4" />
-                    <span>{license.delivery_date ? new Date(license.delivery_date).toLocaleDateString('de-DE') : '-'}</span>
-                  </div>
-                  <div className="text-gray-600">
-                    <span className="font-medium">v{license.version || '-'}</span>
-                  </div>
-                </div>
-                
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {license.options_count > 0 ? (
-                      <CheckCircleIcon className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircleIcon className="h-4 w-4 text-gray-400" />
-                    )}
-                    <span className="text-sm text-gray-600">{license.options_count} Optionen</span>
-                  </div>
-                  {license.distributor && (
-                    <span className="text-xs text-gray-500">{license.distributor}</span>
-                  )}
-                </div>
-              </div>
-              
-              {/* Actions */}
-              <div className="px-4 py-3 bg-gray-50 border-t flex justify-between">
-                <button
+          {/* Card View */}
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {licenses.map((license) => (
+                <div
+                  key={license.id}
                   onClick={() => navigate(`/visiview/licenses/${license.id}`)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden cursor-pointer hover:bg-gray-50"
                 >
-                  <PencilIcon className="h-4 w-4" />
-                  Bearbeiten
-                </button>
-                <button
-                  onClick={() => handleDelete(license.id, license.serial_number)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                >
-                  <TrashIcon className="h-4 w-4" />
-                  Löschen
-                </button>
-              </div>
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center group-hover:bg-gray-100">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-medium text-indigo-600">
+                        {license.serial_number}
+                      </span>
+                      {license.is_demo && (
+                        <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Demo</span>
+                      )}
+                      {license.is_loaner && (
+                        <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">Leih</span>
+                      )}
+                    </div>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(license.status)}`}>
+                      {license.status_display}
+                    </span>
+                  </div>
+                  
+                  {/* Content */}
+                  <div className="p-4">
+                    <div className="flex items-start gap-2 mb-3">
+                      <UserIcon className="h-5 w-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        {license.customer ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/customers/${license.customer}`);
+                            }}
+                            className="text-indigo-600 hover:underline text-left pointer-events-auto"
+                          >
+                            {license.customer_name}
+                          </button>
+                        ) : (
+                          <span className="text-gray-700">{license.customer_name_legacy || '-'}</span>
+                        )}
+                        {license.customer_number && (
+                          <span className="text-xs text-gray-500 ml-2">({license.customer_number})</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex items-center gap-1 text-gray-600">
+                        <CalendarIcon className="h-4 w-4" />
+                        <span>{license.delivery_date ? new Date(license.delivery_date).toLocaleDateString('de-DE') : '-'}</span>
+                      </div>
+                      <div className="text-gray-600">
+                        <span className="font-medium">v{license.version || '-'}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-3 flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        {license.options_count > 0 ? (
+                          <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <XCircleIcon className="h-4 w-4 text-gray-400" />
+                        )}
+                        <span className="text-sm text-gray-600">{license.options_count} Optionen</span>
+                      </div>
+                      {license.distributor && (
+                        <span className="text-xs text-gray-500">{license.distributor}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-white shadow rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Seriennummer
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Kunde
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lieferdatum
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Version
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Optionen
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Typ
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {licenses.map((license) => (
+                    <tr
+                      key={license.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => navigate(`/visiview/licenses/${license.id}`)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <KeyIcon className="h-5 w-5 text-indigo-600 mr-3" />
+                          <span className="font-mono font-medium text-indigo-600">
+                            {license.serial_number}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {license.customer_name || license.customer_name_legacy || '-'}
+                        </div>
+                        {license.customer_number && (
+                          <div className="text-xs text-gray-500">{license.customer_number}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {license.delivery_date ? new Date(license.delivery_date).toLocaleDateString('de-DE') : '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">v{license.version || '-'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1 text-sm text-gray-500">
+                          {license.options_count > 0 ? (
+                            <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <XCircleIcon className="h-4 w-4 text-gray-400" />
+                          )}
+                          {license.options_count}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex gap-1">
+                          {license.is_demo && (
+                            <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Demo</span>
+                          )}
+                          {license.is_loaner && (
+                            <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">Leih</span>
+                          )}
+                          {!license.is_demo && !license.is_loaner && (
+                            <span className="text-sm text-gray-500">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(license.status)}`}>
+                          {license.status_display}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
         {/* Pagination */}
         {totalCount > pageSize && (
           <div className="mt-6 flex justify-center items-center space-x-2">
             <button
-              onClick={() => setPage(prev => Math.max(1, prev - 1))}
+              onClick={() => {
+                const newPage = Math.max(1, page - 1);
+                setPage(newPage);
+                setSearchParams(prev => {
+                  const params = Object.fromEntries([...prev]);
+                  params.page = String(newPage);
+                  return params;
+                });
+              }}
               disabled={page === 1}
               className={`px-3 py-1 rounded ${page === 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
             >
@@ -337,7 +537,19 @@ const VisiViewLicenses = () => {
             </button>
 
             {paginationStart > 1 && (
-              <button onClick={() => setPage(1)} className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100">1</button>
+              <button 
+                onClick={() => {
+                  setPage(1);
+                  setSearchParams(prev => {
+                    const params = Object.fromEntries([...prev]);
+                    params.page = '1';
+                    return params;
+                  });
+                }} 
+                className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100"
+              >
+                1
+              </button>
             )}
 
             {paginationStart > 2 && <span className="px-2">…</span>}
@@ -345,7 +557,14 @@ const VisiViewLicenses = () => {
             {paginationPages.map(p => (
               <button
                 key={p}
-                onClick={() => setPage(p)}
+                onClick={() => {
+                  setPage(p);
+                  setSearchParams(prev => {
+                    const params = Object.fromEntries([...prev]);
+                    params.page = String(p);
+                    return params;
+                  });
+                }}
                 className={`px-3 py-1 rounded ${p === page ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
               >
                 {p}
@@ -355,11 +574,31 @@ const VisiViewLicenses = () => {
             {paginationEnd < totalPages - 1 && <span className="px-2">…</span>}
 
             {paginationEnd < totalPages && (
-              <button onClick={() => setPage(totalPages)} className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100">{totalPages}</button>
+              <button 
+                onClick={() => {
+                  setPage(totalPages);
+                  setSearchParams(prev => {
+                    const params = Object.fromEntries([...prev]);
+                    params.page = String(totalPages);
+                    return params;
+                  });
+                }} 
+                className="px-3 py-1 rounded bg-white text-gray-700 hover:bg-gray-100"
+              >
+                {totalPages}
+              </button>
             )}
 
             <button
-              onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+              onClick={() => {
+                const newPage = Math.min(totalPages, page + 1);
+                setPage(newPage);
+                setSearchParams(prev => {
+                  const params = Object.fromEntries([...prev]);
+                  params.page = String(newPage);
+                  return params;
+                });
+              }}
               disabled={page === totalPages}
               className={`px-3 py-1 rounded ${page === totalPages ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
             >

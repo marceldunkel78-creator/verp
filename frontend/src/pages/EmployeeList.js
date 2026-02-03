@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { PlusIcon, PencilIcon, TrashIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 
 
 
@@ -124,17 +124,6 @@ const EmployeeList = () => {
     navigate(`/hr/employees/${employee.id}`);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Mitarbeiter wirklich löschen?')) {
-      try {
-        await api.delete(`/users/employees/${id}/`);
-        fetchEmployees();
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-      }
-    }
-  };
-
   const toggleStatus = async (employee) => {
     try {
       const next = employee.employment_status === 'aktiv' ? 'inaktiv' : 'aktiv';
@@ -236,9 +225,6 @@ const EmployeeList = () => {
                     <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                       Status
                     </th>
-                    <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                      <span className="sr-only">Aktionen</span>
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 bg-white">
@@ -282,26 +268,6 @@ const EmployeeList = () => {
                             Toggle
                           </button>
                         </div>
-                      </td>
-                      <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(employee);
-                          }}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(employee.id);
-                          }}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -412,13 +378,20 @@ const EmployeeList = () => {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Abteilung</label>
-                          <input
-                            type="text"
+                          <label className="block text-sm font-medium text-gray-700">Abteilung *</label>
+                          <select
                             value={formData.department}
                             onChange={(e) => setFormData({...formData, department: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          />
+                            required
+                          >
+                            <option value="">Abteilung auswählen...</option>
+                            <option value="vertrieb">Vertrieb</option>
+                            <option value="geschaeftsfuehrung">Geschäftsführung</option>
+                            <option value="entwicklung">Entwicklung</option>
+                            <option value="fertigung">Fertigung</option>
+                            <option value="verwaltung">Verwaltung</option>
+                          </select>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Beschäftigungsumfang (%)</label>

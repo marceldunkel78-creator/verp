@@ -99,6 +99,7 @@ import {
   Service,
   BusinessIntelligence
 } from './pages/modules';
+import AdminDelete from './pages/modules/AdminDelete';
 
 function App() {
   return (
@@ -229,6 +230,7 @@ function App() {
             <Route path="settings/payment-delivery" element={<PaymentDeliverySettings />} />
             <Route path="settings/backup-restore" element={<BackupRestore />} />
             <Route path="settings/notifications" element={<NotificationSettings />} />
+            <Route path="settings/admin-delete" element={<AdminDelete />} />
             
             {/* Legacy redirects for backward compatibility */}
             <Route path="users" element={<Navigate to="/settings/users" replace />} />

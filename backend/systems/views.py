@@ -2,6 +2,7 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
 from django.db.models import Q
@@ -40,6 +41,12 @@ class SystemViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Nur Superuser dürfen Systeme löschen"""
+        if not request.user.is_superuser:
+            raise PermissionDenied("Nur VERP Super User können Systeme löschen.")
+        return super().destroy(request, *args, **kwargs)
     
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

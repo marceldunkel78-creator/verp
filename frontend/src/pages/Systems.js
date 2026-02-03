@@ -5,7 +5,6 @@ import storage from '../utils/sessionStore';
 import {
   PlusIcon,
   PencilIcon,
-  TrashIcon,
   MagnifyingGlassIcon,
   ComputerDesktopIcon,
   ChevronLeftIcon,
@@ -537,38 +536,26 @@ const Systems = () => {
 
   const getStatusColor = (status) => {
     const colors = {
-      'active': 'bg-green-100 text-green-800',
-      'inactive': 'bg-gray-100 text-gray-800',
-      'maintenance': 'bg-yellow-100 text-yellow-800',
-      'decommissioned': 'bg-red-100 text-red-800'
+      'unbekannt': 'bg-gray-100 text-gray-800',
+      'in_nutzung': 'bg-green-100 text-green-800',
+      'in_wartung': 'bg-yellow-100 text-yellow-800',
+      'ausser_betrieb': 'bg-red-100 text-red-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
   const getStatusLabel = (status) => {
     const labels = {
-      'active': 'Aktiv',
-      'inactive': 'Inaktiv',
-      'maintenance': 'In Wartung',
-      'decommissioned': 'Außer Betrieb'
+      'unbekannt': 'Unbekannt',
+      'in_nutzung': 'In Nutzung',
+      'in_wartung': 'In Wartung',
+      'ausser_betrieb': 'Außer Betrieb'
     };
     return labels[status] || status;
   };
 
   const handleEdit = (systemId) => {
     navigate(`/sales/systems/${systemId}`);
-  };
-
-  const handleDelete = async (systemId, systemName) => {
-    if (window.confirm(`Möchten Sie das System "${systemName || systemId}" wirklich löschen?`)) {
-      try {
-        await api.delete(`/systems/systems/${systemId}/`);
-        setSystems(systems.filter(s => s.id !== systemId));
-      } catch (error) {
-        console.error('Error deleting system:', error);
-        alert('Fehler beim Löschen des Systems.');
-      }
-    }
   };
 
   const clearFilters = () => {
@@ -651,10 +638,10 @@ const Systems = () => {
               className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Alle Status</option>
-              <option value="active">Aktiv</option>
-              <option value="inactive">Inaktiv</option>
-              <option value="maintenance">In Wartung</option>
-              <option value="decommissioned">Außer Betrieb</option>
+              <option value="unbekannt">Unbekannt</option>
+              <option value="in_nutzung">In Nutzung</option>
+              <option value="in_wartung">In Wartung</option>
+              <option value="ausser_betrieb">Außer Betrieb</option>
             </select>
             
             {/* City Filter */}
@@ -805,10 +792,10 @@ const Systems = () => {
               {/* List View */}
               {viewMode === 'list' && (
                 <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200 table-fixed">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                           System
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -823,9 +810,6 @@ const Systems = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Aktionen
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -835,11 +819,11 @@ const Systems = () => {
                           onClick={() => navigate(`/sales/systems/${system.id}`)}
                           className="hover:bg-gray-50 cursor-pointer"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-6 py-4 w-48">
                             <div className="flex items-center">
-                              <div>
+                              <div className="truncate max-w-[160px]">
                                 <div className="text-sm font-medium text-blue-600">{system.system_number}</div>
-                                <div className="text-sm text-gray-900">{system.system_name}</div>
+                                <div className="text-sm text-gray-900 truncate" title={system.system_name}>{system.system_name}</div>
                               </div>
                             </div>
                           </td>
@@ -857,20 +841,6 @@ const Systems = () => {
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(system.status)}`}>
                               {getStatusLabel(system.status)}
                             </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEdit(system.id); }}
-                              className="text-blue-600 hover:text-blue-900 mr-3"
-                            >
-                              <PencilIcon className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDelete(system.id, system.system_name); }}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              <TrashIcon className="h-5 w-5" />
-                            </button>
                           </td>
                         </tr>
                       ))}

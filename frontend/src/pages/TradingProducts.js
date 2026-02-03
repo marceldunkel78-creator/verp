@@ -4,7 +4,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import storage from '../utils/sessionStore';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusIcon, PencilIcon, TrashIcon, CubeIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, CubeIcon, Squares2X2Icon, ListBulletIcon } from '@heroicons/react/24/outline';
 
 const TradingProducts = () => {
   const { user } = useAuth();
@@ -32,6 +32,7 @@ const TradingProducts = () => {
   const [totalCount, setTotalCount] = useState(0);
   
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_trading || user?.can_write_suppliers;
+  const [viewMode, setViewMode] = useState('cards');
 
   const SESSION_KEY = 'trading_products_search_state';
   const [searchParams, setSearchParams] = useSearchParams();
@@ -337,18 +338,6 @@ const TradingProducts = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Möchten Sie diese Handelsware wirklich löschen?')) {
-      try {
-        await api.delete(`/suppliers/products/${id}/`);
-        fetchProducts(currentPage);
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen der Handelsware');
-      }
-    }
-  };
-
   
 
   // Inline modal-based edit removed; full-page editor is used instead.
@@ -389,15 +378,42 @@ const TradingProducts = () => {
             </p>
           )}
         </div>
-        {canWrite && (
-          <button
-            onClick={() => navigate('/procurement/trading-goods/new')}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Neue Handelsware
-          </button>
-        )}
+        <div className="flex items-center space-x-2">
+          {/* View Toggle */}
+          <div className="flex rounded-md shadow-sm">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 text-sm font-medium rounded-l-md border ${
+                viewMode === 'cards'
+                  ? 'bg-orange-600 text-white border-orange-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 text-sm font-medium rounded-r-md border-t border-r border-b ${
+                viewMode === 'list'
+                  ? 'bg-orange-600 text-white border-orange-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          {canWrite && (
+            <button
+              onClick={() => navigate('/procurement/trading-goods/new')}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Neue Handelsware
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter und Sortierung */}
@@ -487,102 +503,177 @@ const TradingProducts = () => {
       </div>
 
       {/* Produktliste */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {products.map((product) => (
-          <div
-            key={product.id}
-            className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow duration-200 overflow-hidden"
-          >
-            <div className="p-4">
-              {/* Header mit VS-Nr und Status */}
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex-1">
-                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                    VS-Nr.
+      {/* Card View */}
+      {viewMode === 'cards' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {products.map((product) => (
+            <div
+              key={product.id}
+              className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow duration-200 overflow-hidden cursor-pointer"
+              onClick={() => navigate(`/procurement/trading-goods/${product.id}`)}
+            >
+              <div className="p-4">
+                {/* Header mit VS-Nr und Status */}
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1">
+                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                      VS-Nr.
+                    </div>
+                    <div className="font-bold text-lg text-gray-900">
+                      {product.visitron_part_number}
+                    </div>
                   </div>
-                  <div className="font-bold text-lg text-gray-900">
-                    {product.visitron_part_number}
-                  </div>
-                </div>
-                <span
-                  className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                    product.is_active
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {product.is_active ? 'Aktiv' : 'Inaktiv'}
-                </span>
-              </div>
-
-              {/* Produktname */}
-              <h3 className="text-base font-semibold text-gray-900 mb-3 line-clamp-2" title={product.name}>
-                {product.name}
-              </h3>
-
-              {/* Lieferant und Kategorie */}
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-500 w-24 flex-shrink-0">Lieferant:</span>
-                  <span className="text-gray-900 font-medium truncate" title={product.supplier_name}>
-                    {product.supplier_name || '-'}
+                  <span
+                    className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                      product.is_active
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {product.is_active ? 'Aktiv' : 'Inaktiv'}
                   </span>
                 </div>
-                <div className="flex items-center text-sm">
-                  <span className="text-gray-500 w-24 flex-shrink-0">Kategorie:</span>
-                  <span className="text-gray-900 truncate" title={product.category_display}>
-                    {product.category_display || '-'}
-                  </span>
-                </div>
-              </div>
 
-              {/* Preisinformationen */}
-              <div className="bg-blue-50 rounded-lg p-3 mb-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-600 uppercase tracking-wide">
-                    Einkaufspreis
-                  </span>
-                  {!isPriceValid(product) && (
-                    <span className="text-xs text-red-600 font-semibold">
-                      Ungültig
+                {/* Produktname */}
+                <h3 className="text-base font-semibold text-gray-900 mb-3 line-clamp-2" title={product.name}>
+                  {product.name}
+                </h3>
+
+                {/* Lieferant und Kategorie */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-500 w-24 flex-shrink-0">Lieferant:</span>
+                    <span className="text-gray-900 font-medium truncate" title={product.supplier_name}>
+                      {product.supplier_name || '-'}
                     </span>
-                  )}
+                  </div>
+                  <div className="flex items-center text-sm">
+                    <span className="text-gray-500 w-24 flex-shrink-0">Kategorie:</span>
+                    <span className="text-gray-900 truncate" title={product.category_display}>
+                      {product.category_display || '-'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-blue-900">
-                  {Number(product.purchase_price_eur).toFixed(2)} €
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Gültig bis:{' '}
-                  {product.price_valid_until 
-                    ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
-                    : 'unbegrenzt'}
+
+                {/* Preisinformationen */}
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-600 uppercase tracking-wide">
+                      Einkaufspreis
+                    </span>
+                    {!isPriceValid(product) && (
+                      <span className="text-xs text-red-600 font-semibold">
+                        Ungültig
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-bold text-blue-900">
+                    {Number(product.purchase_price_eur).toFixed(2)} €
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Gültig bis:{' '}
+                    {product.price_valid_until 
+                      ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
+                      : 'unbegrenzt'}
+                  </div>
                 </div>
               </div>
-
-              {/* Aktionen */}
-              {canWrite && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => navigate(`/procurement/trading-goods/${product.id}`)}
-                    className="flex-1 inline-flex justify-center items-center px-3 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    title="Bearbeiten"
-                  >
-                    <PencilIcon className="h-4 w-4 mr-1" />
-                    Bearbeiten
-                  </button>
-                  <button
-                    onClick={() => handleDelete(product.id)}
-                    className="inline-flex items-center px-3 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                    title="Löschen"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
+        <div className="bg-white shadow rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  VS-Nr.
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Produktname
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Lieferant
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Kategorie
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Einkaufspreis
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Gültig bis
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {products.map((product) => (
+                <tr
+                  key={product.id}
+                  className="hover:bg-gray-50 cursor-pointer"
+                  onClick={() => navigate(`/procurement/trading-goods/${product.id}`)}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <CubeIcon className="h-5 w-5 text-orange-600 mr-3" />
+                      <div className="text-sm font-medium text-gray-900">
+                        {product.visitron_part_number}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900 truncate max-w-xs" title={product.name}>
+                      {product.name}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">
+                      {product.supplier_name || '-'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">
+                      {product.category_display || '-'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-blue-900">
+                      {Number(product.purchase_price_eur).toFixed(2)} €
+                    </div>
+                    {!isPriceValid(product) && (
+                      <span className="text-xs text-red-600">Ungültig</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-500">
+                      {product.price_valid_until 
+                        ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
+                        : 'unbegrenzt'}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        product.is_active
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {product.is_active ? 'Aktiv' : 'Inaktiv'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Paginierung */}
       {hasSearched && totalPages > 1 && (

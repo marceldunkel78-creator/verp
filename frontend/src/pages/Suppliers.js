@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
-/* eslint-disable react-hooks/exhaustive-deps */import { useSearchParams } from 'react-router-dom';
+/* eslint-disable react-hooks/exhaustive-deps */import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { COUNTRIES } from '../utils/countries';
 import storage from '../utils/sessionStore';
 import { 
-  PlusIcon, PencilIcon, TrashIcon, EyeIcon, 
+  PlusIcon, EyeIcon, 
   BuildingOfficeIcon, EnvelopeIcon, PhoneIcon,
-  UserGroupIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon
+  UserGroupIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon,
+  Squares2X2Icon, ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const Suppliers = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [viewMode, setViewMode] = useState('cards');
   const [showModal, setShowModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -242,18 +245,6 @@ const Suppliers = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Möchten Sie diesen Lieferanten wirklich löschen?')) {
-      try {
-        await api.delete(`/suppliers/suppliers/${id}/`);
-        fetchSuppliers();
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen des Lieferanten');
-      }
-    }
-  };
-
   const resetForm = () => {
     setFormData({
       company_name: '',
@@ -379,18 +370,6 @@ const Suppliers = () => {
     }
   };
 
-  const handleGroupDelete = async (groupId) => {
-    if (window.confirm('Möchten Sie diese Warengruppe wirklich löschen?')) {
-      try {
-        await api.delete(`/suppliers/product-groups/${groupId}/`);
-        await fetchProductGroups(selectedSupplier.id);
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen der Warengruppe');
-      }
-    }
-  };
-
   const resetGroupForm = () => {
     setGroupFormData({
       name: '',
@@ -445,19 +424,6 @@ const Suppliers = () => {
         alert('Fehler beim Speichern der Preisliste: ' + errorMsg);
       } else {
         alert('Fehler beim Speichern der Preisliste');
-      }
-    }
-  };
-
-  const handlePriceListDelete = async (priceListId) => {
-    if (window.confirm('Möchten Sie diese Preisliste wirklich löschen?')) {
-      try {
-        await api.delete(`/suppliers/price-lists/${priceListId}/`);
-        await fetchPriceLists(selectedSupplier.id);
-        await fetchSuppliers(); // Aktualisiere Lieferantenliste für Preislisten-Anzahl
-      } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler beim Löschen der Preisliste');
       }
     }
   };
@@ -520,15 +486,34 @@ const Suppliers = () => {
             </p>
           )}
         </div>
-        {canWrite && (
-          <Link
-            to="/procurement/suppliers/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Neuer Lieferant
-          </Link>
-        )}
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          {canWrite && (
+            <Link
+              to="/procurement/suppliers/new"
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Neuer Lieferant
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filter/Search */}
@@ -599,117 +584,179 @@ const Suppliers = () => {
       {/* Suppliers Grid */}
       {suppliers.length > 0 && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            {suppliers.map((supplier) => (
-              <div
-                key={supplier.id}
-                className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200"
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center">
-                    <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-2" />
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {supplier.company_name}
-                    </h3>
-                  </div>
-                  <span
-                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      supplier.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
-                  </span>
-                </div>
-
-                {/* Supplier Number */}
-                <div className="text-xs text-gray-500 font-mono mb-3">
-                  Nr. {supplier.supplier_number || '-'}
-                </div>
-
-                {/* Contact Info */}
-                <div className="space-y-2 mb-4">
-                  {supplier.email && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <EnvelopeIcon className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span className="truncate">{supplier.email}</span>
+          {/* Card View */}
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+              {suppliers.map((supplier) => (
+                <div
+                  key={supplier.id}
+                  className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+                  onClick={() => navigate(`/procurement/suppliers/${supplier.id}`)}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center">
+                      <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-2" />
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {supplier.company_name}
+                      </h3>
                     </div>
-                  )}
-                  {supplier.phone && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <PhoneIcon className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>{supplier.phone}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Stats */}
-                <div className="border-t pt-3 mb-4 space-y-2">
-                  <button
-                    onClick={() => openGroupModal(supplier)}
-                    className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
-                  >
-                    <span className="text-gray-600 flex items-center">
-                      <UserGroupIcon className="h-4 w-4 mr-2" />
-                      Warengruppen:
-                    </span>
-                    <span className="font-medium text-orange-600">
-                      {supplier.product_groups?.length || 0}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => openPriceListModal(supplier)}
-                    className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
-                  >
-                    <span className="text-gray-600 flex items-center">
-                      <RectangleStackIcon className="h-4 w-4 mr-2" />
-                      Preislisten:
-                    </span>
-                    <span className="font-medium text-blue-600">
-                      {supplier.price_lists?.length || 0}
-                    </span>
-                  </button>
-                  <div className="flex justify-between text-sm p-2">
-                    <span className="text-gray-600">Kontakte:</span>
-                    <span className="font-medium text-gray-900">
-                      {supplier.contacts?.length || 0}
+                    <span
+                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        supplier.is_active
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-end space-x-2 border-t pt-3">
-                  <Link
-                    to={`/procurement/suppliers/${supplier.id}`}
-                    className="text-blue-600 hover:text-blue-900 p-1"
-                    title="Details anzeigen"
-                  >
-                    <EyeIcon className="h-5 w-5" />
-                  </Link>
-                  {canWrite && (
-                    <>
-                      <Link
-                        to={`/procurement/suppliers/${supplier.id}/edit`}
-                        className="text-blue-600 hover:text-blue-900 p-1"
-                        title="Bearbeiten"
-                      >
-                        <PencilIcon className="h-5 w-5" />
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(supplier.id)}
-                        className="text-red-600 hover:text-red-900 p-1"
-                        title="Löschen"
-                      >
-                        <TrashIcon className="h-5 w-5" />
-                      </button>
-                    </>
-                  )}
+                  {/* Supplier Number */}
+                  <div className="text-xs text-gray-500 font-mono mb-3">
+                    Nr. {supplier.supplier_number || '-'}
+                  </div>
+
+                  {/* Contact Info */}
+                  <div className="space-y-2 mb-4">
+                    {supplier.email && (
+                      <div className="flex items-center text-sm text-gray-600">
+                        <EnvelopeIcon className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span className="truncate">{supplier.email}</span>
+                      </div>
+                    )}
+                    {supplier.phone && (
+                      <div className="flex items-center text-sm text-gray-600">
+                        <PhoneIcon className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <span>{supplier.phone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stats */}
+                  <div className="border-t pt-3 mb-4 space-y-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openGroupModal(supplier); }}
+                      className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
+                    >
+                      <span className="text-gray-600 flex items-center">
+                        <UserGroupIcon className="h-4 w-4 mr-2" />
+                        Warengruppen:
+                      </span>
+                      <span className="font-medium text-orange-600">
+                        {supplier.product_groups?.length || 0}
+                      </span>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openPriceListModal(supplier); }}
+                      className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
+                    >
+                      <span className="text-gray-600 flex items-center">
+                        <RectangleStackIcon className="h-4 w-4 mr-2" />
+                        Preislisten:
+                      </span>
+                      <span className="font-medium text-blue-600">
+                        {supplier.price_lists?.length || 0}
+                      </span>
+                    </button>
+                    <div className="flex justify-between text-sm p-2">
+                      <span className="text-gray-600">Kontakte:</span>
+                      <span className="font-medium text-gray-900">
+                        {supplier.contacts?.length || 0}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lieferant
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lieferanten-Nr.
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Kontakt
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Warengruppen
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Preislisten
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {suppliers.map((supplier) => (
+                    <tr
+                      key={supplier.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => navigate(`/procurement/suppliers/${supplier.id}`)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-3" />
+                          <div className="text-sm font-medium text-gray-900">
+                            {supplier.company_name}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500 font-mono">
+                          {supplier.supplier_number || '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {supplier.email && <div>{supplier.email}</div>}
+                          {supplier.phone && <div>{supplier.phone}</div>}
+                          {!supplier.email && !supplier.phone && '-'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openGroupModal(supplier); }}
+                          className="text-sm text-orange-600 hover:text-orange-800"
+                        >
+                          {supplier.product_groups?.length || 0}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openPriceListModal(supplier); }}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          {supplier.price_lists?.length || 0}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            supplier.is_active
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -1229,12 +1276,15 @@ const Suppliers = () => {
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rabatt</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Aktionen</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {productGroups.map((group) => (
-                            <tr key={group.id}>
+                            <tr 
+                              key={group.id} 
+                              onClick={() => openEditGroupForm(group)}
+                              className="cursor-pointer hover:bg-gray-50"
+                            >
                               <td className="px-4 py-2 text-sm text-gray-900">{group.name}</td>
                               <td className="px-4 py-2 text-sm text-gray-500">{group.discount_percent}%</td>
                               <td className="px-4 py-2 text-sm">
@@ -1245,20 +1295,6 @@ const Suppliers = () => {
                                 >
                                   {group.is_active ? 'Aktiv' : 'Inaktiv'}
                                 </span>
-                              </td>
-                              <td className="px-4 py-2 text-sm text-right">
-                                <button
-                                  onClick={() => openEditGroupForm(group)}
-                                  className="text-blue-600 hover:text-blue-900 mr-3"
-                                >
-                                  <PencilIcon className="h-4 w-4 inline" />
-                                </button>
-                                <button
-                                  onClick={() => handleGroupDelete(group.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <TrashIcon className="h-4 w-4 inline" />
-                                </button>
                               </td>
                             </tr>
                           ))}
@@ -1393,12 +1429,15 @@ const Suppliers = () => {
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Gültig von</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Gültig bis</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Aktionen</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {priceLists.map((priceList) => (
-                            <tr key={priceList.id}>
+                            <tr 
+                              key={priceList.id}
+                              onClick={() => editPriceList(priceList)}
+                              className="cursor-pointer hover:bg-gray-50"
+                            >
                               <td className="px-4 py-2 text-sm text-gray-900">{priceList.name}</td>
                               <td className="px-4 py-2 text-sm text-gray-500">
                                 {new Date(priceList.valid_from).toLocaleDateString('de-DE')}
@@ -1416,20 +1455,6 @@ const Suppliers = () => {
                                 >
                                   {priceList.is_active ? 'Aktiv' : 'Inaktiv'}
                                 </span>
-                              </td>
-                              <td className="px-4 py-2 text-sm text-right">
-                                <button
-                                  onClick={() => editPriceList(priceList)}
-                                  className="text-blue-600 hover:text-blue-900 mr-3"
-                                >
-                                  <PencilIcon className="h-4 w-4 inline" />
-                                </button>
-                                <button
-                                  onClick={() => handlePriceListDelete(priceList.id)}
-                                  className="text-red-600 hover:text-red-900"
-                                >
-                                  <TrashIcon className="h-4 w-4 inline" />
-                                </button>
                               </td>
                             </tr>
                           ))}

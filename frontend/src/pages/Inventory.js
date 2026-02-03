@@ -6,12 +6,13 @@ import SupplierSearch from '../components/SupplierSearch';
 import {
   FunnelIcon,
   ArchiveBoxIcon,
-  PencilSquareIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   XMarkIcon,
   InboxArrowDownIcon,
-  UserIcon
+  UserIcon,
+  Squares2X2Icon,
+  ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const SESSION_KEY = 'inventory_search_state';
@@ -36,6 +37,9 @@ const Inventory = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 9;
   
+  // View mode
+  const [viewMode, setViewMode] = useState('cards');
+  
   // Common Data
   const [suppliers, setSuppliers] = useState([]);
   const [productCategories, setProductCategories] = useState([]);
@@ -58,7 +62,8 @@ const Inventory = () => {
         filters: filtersToSave, 
         inventoryItems: itemsToSave, 
         currentPage: pageToSave,
-        hasSearched: searched
+        hasSearched: searched,
+        viewMode
       };
       storage.set(SESSION_KEY, st);
     } catch (e) {
@@ -142,6 +147,9 @@ const Inventory = () => {
       }
       if (restored.currentPage) {
         setCurrentPage(restored.currentPage);
+      }
+      if (restored.viewMode) {
+        setViewMode(restored.viewMode);
       }
       setHasSearched(true);
       
@@ -237,19 +245,6 @@ const Inventory = () => {
     }
   };
   
-  const handleDeleteInventoryItem = async (id) => {
-    if (!window.confirm('Möchten Sie diesen Lagerartikel wirklich löschen?')) return;
-    try {
-      await api.delete(`/inventory/inventory-items/${id}/`);
-      fetchInventoryItems(filters, currentPage);
-      alert('Lagerartikel wurde gelöscht');
-    } catch (error) {
-      console.error('Error deleting inventory item:', error);
-      const errMsg = error.response?.data?.detail || error.response?.data?.error || 'Fehler beim Löschen';
-      alert(errMsg);
-    }
-  };
-  
   const handleEditInventoryItem = (id) => {
     navigate(`/inventory/warehouse/${id}`);
   };
@@ -264,6 +259,41 @@ const Inventory = () => {
       if (itemFunction === 'ASSET') return cat.applies_to_trading_goods;
       return true;
     });
+  };
+
+  // Status helpers
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'FREI':
+        return 'bg-green-100 text-green-800';
+      case 'RESERVIERT':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'GELIEFERT':
+        return 'bg-blue-100 text-blue-800';
+      case 'RMA_IN_HOUSE':
+        return 'bg-orange-100 text-orange-800';
+      case 'RMA_OUT_HOUSE':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+  
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'FREI':
+        return 'Frei';
+      case 'RESERVIERT':
+        return 'Reserviert';
+      case 'GELIEFERT':
+        return 'Geliefert';
+      case 'RMA_IN_HOUSE':
+        return 'RMA in house';
+      case 'RMA_OUT_HOUSE':
+        return 'RMA out house';
+      default:
+        return status;
+    }
   };
   
   // Pagination helpers for inventory
@@ -286,13 +316,32 @@ const Inventory = () => {
             Verwalten Sie Ihren Lagerbestand
           </p>
         </div>
-        <Link
-          to="/inventory/goods-receipt"
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
-        >
-          <InboxArrowDownIcon className="h-5 w-5 mr-2" />
-          Wareneingang
-        </Link>
+        <div className="flex items-center gap-4">
+          {/* View Mode Toggle */}
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          <Link
+            to="/inventory/goods-receipt"
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+          >
+            <InboxArrowDownIcon className="h-5 w-5 mr-2" />
+            Wareneingang
+          </Link>
+        </div>
       </div>
       
       {/* Filters */}
@@ -402,18 +451,85 @@ const Inventory = () => {
         </div>
       ) : (
         <>
-          {/* Card Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            {paginatedInventoryItems.map((item) => (
-              <InventoryItemCard
-                key={item.id}
-                item={item}
-                onUpdate={handleUpdateInventoryItem}
-                onEdit={handleEditInventoryItem}
-                onDelete={handleDeleteInventoryItem}
-              />
-            ))}
-          </div>
+          {/* Card View */}
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+              {paginatedInventoryItems.map((item) => (
+                <InventoryItemCard
+                  key={item.id}
+                  item={item}
+                  onEdit={handleEditInventoryItem}
+                />
+              ))}
+            </div>
+          )}
+          
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lager-Nr.
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Bezeichnung
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lieferant
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Menge/SN
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Wert
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paginatedInventoryItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      onClick={() => handleEditInventoryItem(item.id)}
+                      className="hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="font-mono text-sm text-gray-600">{item.inventory_number}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                        {item.model_designation && (
+                          <div className="text-xs text-gray-500">{item.model_designation}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {item.supplier_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {item.serial_number ? (
+                          <span className="font-mono">{item.serial_number}</span>
+                        ) : (
+                          <span>{item.quantity} {item.unit}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {item.total_value?.toFixed(2) || '0.00'} {item.currency}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(item.status)}`}>
+                          {getStatusLabel(item.status)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           
           {/* Pagination */}
           {totalPages > 1 && (
@@ -504,7 +620,7 @@ const Inventory = () => {
 };
 
 // Sub-component for Inventory Item Card
-const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
+const InventoryItemCard = ({ item, onEdit }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'FREI':
@@ -550,7 +666,10 @@ const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
   const customerDisplay = getCustomerDisplay();
   
   return (
-    <div className="bg-white shadow-md rounded-lg p-5 hover:shadow-lg transition-shadow">
+    <div 
+      onClick={() => onEdit(item.id)}
+      className="bg-white shadow-md rounded-lg p-5 hover:shadow-lg transition-shadow cursor-pointer hover:bg-gray-50"
+    >
       {/* Header with Inventory Number and Status */}
       <div className="flex justify-between items-start mb-3">
         <div className="font-mono text-sm font-medium text-gray-500">
@@ -571,7 +690,7 @@ const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
       </div>
       
       {/* Details Grid */}
-      <div className="space-y-2 mb-4 text-sm">
+      <div className="space-y-2 text-sm">
         <div className="flex justify-between">
           <span className="text-gray-500">Lieferant:</span>
           <span className="text-gray-900 font-medium">{item.supplier_name || '-'}</span>
@@ -617,23 +736,6 @@ const InventoryItemCard = ({ item, onUpdate, onEdit, onDelete }) => {
             )}
           </div>
         )}
-      </div>
-      
-      {/* Action Buttons */}
-      <div className="flex space-x-2 pt-3 border-t border-gray-200">
-        <button
-          onClick={() => onEdit(item.id)}
-          className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 text-sm font-medium flex items-center justify-center"
-        >
-          <PencilSquareIcon className="h-4 w-4 mr-1" />
-          Bearbeiten
-        </button>
-        <button
-          onClick={() => onDelete?.(item.id)}
-          className="px-3 py-2 border border-red-300 text-red-600 rounded-md hover:bg-red-50 text-sm font-medium"
-        >
-          Löschen
-        </button>
       </div>
     </div>
   );
