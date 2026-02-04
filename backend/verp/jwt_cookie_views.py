@@ -5,8 +5,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
 def _cookie_params():
-    # Cookie options - in DEBUG we keep Secure=False for local dev
-    secure = not settings.DEBUG
+    # Cookie options - align with deployment settings (allow HTTP when configured)
+    secure = getattr(settings, 'SESSION_COOKIE_SECURE', not settings.DEBUG)
     max_age_access = int(settings.SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME', timedelta(hours=8)).total_seconds())
     max_age_refresh = int(settings.SIMPLE_JWT.get('REFRESH_TOKEN_LIFETIME', timedelta(days=7)).total_seconds())
     return {
