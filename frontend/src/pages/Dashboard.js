@@ -21,13 +21,13 @@ const myverpTabMapping = {
 const allModules = [
   // Sales / Orders
   { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Vertrieb', permission: 'can_read_customers' },
-  { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Vertrieb', permission: 'can_read_systems' },
+  { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Vertrieb', permission: 'can_read_sales_systems' },
   { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb', permission: 'can_read_sales_quotations' },
   { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb', permission: 'can_read_sales_order_processing' },
-  { id: 'dealers', name: 'Distributors', route: '/sales/dealers', icon: '🤝', category: 'Vertrieb', permission: 'can_read_dealers' },
-  { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Vertrieb', permission: 'can_read_pricelists' },
+  { id: 'dealers', name: 'Distributors', route: '/sales/dealers', icon: '🤝', category: 'Vertrieb', permission: 'can_read_sales_dealers' },
+  { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Vertrieb', permission: 'can_read_sales_pricelists' },
   { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Vertrieb', permission: 'can_read_sales_projects' },
-  { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Vertrieb', permission: 'can_read_marketing' },
+  { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Vertrieb', permission: 'can_read_sales_marketing' },
   // Procurement
   { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung', permission: 'can_read_procurement' },
   { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung', permission: 'can_read_suppliers' },
@@ -35,9 +35,12 @@ const allModules = [
   { id: 'materials-supplies', name: 'Material & Verbrauchsmaterial', route: '/procurement/materials-supplies', icon: '🧪', category: 'Beschaffung', permission: 'can_read_procurement' },
   { id: 'purchase-orders', name: 'Bestellungen', route: '/procurement/orders', icon: '🛒', category: 'Beschaffung', permission: 'can_read_procurement_orders' },
   { id: 'loans', name: 'Leihgeräte', route: '/procurement/loans', icon: '🔄', category: 'Beschaffung', permission: 'can_read_loans' },
-  // Products
+  // VisiView / Produkte
   { id: 'visiview', name: 'VisiView Produkte', route: '/visiview/products', icon: '🔬', category: 'Produkte', permission: 'can_read_visiview_products' },
+  { id: 'visiview-products', name: 'VisiView Produkte', route: '/visiview/products', icon: '🔬', category: 'Produkte', permission: 'can_read_visiview_products' },
   { id: 'visiview-licenses', name: 'VisiView Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'Produkte', permission: 'can_read_visiview_licenses' },
+  { id: 'visiview-macros', name: 'VisiView Makros', route: '/visiview/macros', icon: '📜', category: 'Produkte', permission: 'can_read_visiview_macros' },
+  { id: 'visiview-tickets', name: 'VisiView Tickets', route: '/visiview/tickets', icon: '🎫', category: 'Produkte', permission: 'can_read_visiview_tickets' },
   { id: 'vshardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Produkte', permission: 'can_read_manufacturing_vs_hardware' },
   // Service
   { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service', permission: 'can_read_service_vs_service' },
@@ -47,6 +50,7 @@ const allModules = [
   { id: 'inventory', name: 'Lagerverwaltung', route: '/inventory', icon: '📊', category: 'Lager', permission: 'can_read_inventory' },
   // Fertigung
   { id: 'production', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung', permission: 'can_read_manufacturing_production_orders' },
+  { id: 'production-orders', name: 'Fertigungsaufträge', route: '/manufacturing/production-orders', icon: '🏭', category: 'Fertigung', permission: 'can_read_manufacturing_production_orders' },
   // Entwicklung
   { id: 'development-projects', name: 'Entwicklung', route: '/development/projects', icon: '🧪', category: 'Entwicklung', permission: 'can_read_development_projects' },
   // System
@@ -55,6 +59,10 @@ const allModules = [
   { id: 'users', name: 'Benutzer', route: '/settings/users', icon: '👥', category: 'System', permission: 'can_read_settings' },
   { id: 'exchange-rates', name: 'Wechselkurse', route: '/settings/currency-exchange-rates', icon: '💱', category: 'System', permission: 'can_read_finance' },
   { id: 'company', name: 'Firmendaten', route: '/settings/company-info', icon: '🏛️', category: 'System', permission: 'can_read_settings' },
+  // VS-Hardware
+  { id: 'vs-hardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Fertigung', permission: 'can_read_manufacturing_vs_hardware' },
+  // VS-Service
+  { id: 'vs-service', name: 'VS-Service Produkte', route: '/service/vs-service', icon: '🛠️', category: 'Service', permission: 'can_read_service_vs_service' },
 ];
 
 const categoryColors = {
@@ -71,11 +79,9 @@ const categoryColors = {
 const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
 
 // ID-Mapping für Kompatibilität zwischen MyVERP und Dashboard
+// Falls in MyVERP andere IDs verwendet werden, hier mappen
 const MODULE_ID_MAP = {
-  'vs-hardware': 'vshardware',
-  'visiview-products': 'visiview',
-  'vs-service': 'vsservice',
-  'production-orders': 'production',
+  // keine Mappings mehr nötig - IDs sind jetzt konsistent
 };
 
 // Normalisiere Module-IDs aus localStorage

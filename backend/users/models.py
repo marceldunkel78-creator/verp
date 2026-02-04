@@ -81,6 +81,7 @@ class User(AbstractUser):
     can_read_visiview_licenses = models.BooleanField(default=False, verbose_name='VisiView Lizenzen - Lesen')
     can_read_visiview_tickets = models.BooleanField(default=False, verbose_name='VisiView Tickets - Lesen')
     can_read_visiview_macros = models.BooleanField(default=False, verbose_name='VisiView Macros - Lesen')
+    can_read_visiview_production_orders = models.BooleanField(default=False, verbose_name='VisiView Fertigungsaufträge - Lesen')
     can_read_service_vs_service = models.BooleanField(default=False, verbose_name='VS-Service Produkte - Lesen')
     can_read_service_tickets = models.BooleanField(default=False, verbose_name='Service Tickets - Lesen')
     can_read_service_rma = models.BooleanField(default=False, verbose_name='RMA - Lesen')
@@ -94,6 +95,8 @@ class User(AbstractUser):
     can_read_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Lesen')
     # Meetings Modul
     can_read_meetings = models.BooleanField(default=True, verbose_name='Meetings - Lesen')
+    # Firmenkalender
+    can_read_company_calendar = models.BooleanField(default=True, verbose_name='Firmenkalender - Lesen')
     
     # Berechtigungen für Module - Schreiben
     can_write_accounting = models.BooleanField(default=False, verbose_name='Buchhaltung - Schreiben')
@@ -134,6 +137,7 @@ class User(AbstractUser):
     can_write_visiview_licenses = models.BooleanField(default=False, verbose_name='VisiView Lizenzen - Schreiben')
     can_write_visiview_tickets = models.BooleanField(default=False, verbose_name='VisiView Tickets - Schreiben')
     can_write_visiview_macros = models.BooleanField(default=False, verbose_name='VisiView Macros - Schreiben')
+    can_write_visiview_production_orders = models.BooleanField(default=False, verbose_name='VisiView Fertigungsaufträge - Schreiben')
     can_write_service_vs_service = models.BooleanField(default=False, verbose_name='VS-Service Produkte - Schreiben')
     can_write_service_tickets = models.BooleanField(default=False, verbose_name='Service Tickets - Schreiben')
     can_write_service_rma = models.BooleanField(default=False, verbose_name='RMA - Schreiben')
@@ -145,6 +149,8 @@ class User(AbstractUser):
     can_write_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Schreiben')
     # VisiView Maintenance
     can_write_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Schreiben')
+    # Firmenkalender
+    can_write_company_calendar = models.BooleanField(default=False, verbose_name='Firmenkalender - Schreiben')
     
     # MyVERP Tab-Sichtbarkeit (alle Tabs standardmäßig aktiviert)
     myverp_visible_tabs = models.JSONField(

@@ -87,11 +87,17 @@ const MODULE_HIERARCHY = [
     submodules: []
   },
   {
+    key: 'company_calendar',
+    label: 'Firmenkalender',
+    submodules: []
+  },
+  {
     key: 'visiview',
     label: 'VisiView',
     submodules: [
       { key: 'visiview_products', label: 'Produkte' },
       { key: 'visiview_licenses', label: 'Lizenzen' },
+      { key: 'visiview_production_orders', label: 'Fertigungsaufträge' },
       { key: 'visiview_tickets', label: 'Tickets' },
       { key: 'visiview_macros', label: 'Macros' },
       { key: 'visiview_maintenance_time', label: 'Maintenance Zeiterfassung' },

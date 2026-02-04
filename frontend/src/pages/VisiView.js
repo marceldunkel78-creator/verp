@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
   CubeIcon,
   KeyIcon,
@@ -11,51 +12,65 @@ import {
 
 const VisiView = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const modules = [
+  const allModules = [
     {
       name: 'Produkte',
       description: 'VisiView Produkte und Preise verwalten',
       icon: CubeIcon,
       color: 'bg-blue-500',
-      path: '/visiview/products'
+      path: '/visiview/products',
+      permission: 'can_read_visiview_products'
     },
     {
       name: 'Lizenzen',
       description: 'VisiView Lizenzen und Optionen verwalten',
       icon: KeyIcon,
       color: 'bg-indigo-500',
-      path: '/visiview/licenses'
+      path: '/visiview/licenses',
+      permission: 'can_read_visiview_licenses'
     },
     {
       name: 'Fertigungsaufträge',
       description: 'VisiView Fertigungsaufträge für Lizenzen',
       icon: CogIcon,
       color: 'bg-purple-500',
-      path: '/visiview/production-orders'
+      path: '/visiview/production-orders',
+      permission: 'can_read_visiview_production_orders'
     },
     {
       name: 'Tickets',
       description: 'Support-Tickets und Anfragen',
       icon: TicketIcon,
       color: 'bg-green-500',
-      path: '/visiview/tickets'
+      path: '/visiview/tickets',
+      permission: 'can_read_visiview_tickets'
     },
     {
       name: 'Makros',
       description: 'VisiView Makros verwalten',
       icon: CodeBracketIcon,
       color: 'bg-yellow-500',
-      path: '/visiview/macros'
+      path: '/visiview/macros',
+      permission: 'can_read_visiview_macros'
     },
     {
       name: 'Maintenance',
       description: 'Maintenance-Zeitgutschriften verwalten',
       icon: ClockIcon,
       color: 'bg-orange-500',
-      path: '/visiview/maintenance-time'
+      path: '/visiview/maintenance-time',
+      permission: 'can_read_visiview_maintenance_time'
     }
   ];
+
+  // Filtere Module basierend auf Benutzerberechtigungen
+  const modules = allModules.filter(module => {
+    if (!module.permission) return true;
+    if (user?.is_superuser) return true;
+    return user?.[module.permission] === true;
+  });
 
   return (
     <div className="container mx-auto px-4 py-8">
