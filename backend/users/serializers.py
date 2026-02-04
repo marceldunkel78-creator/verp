@@ -57,7 +57,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_write_development_projects',
             # MyVERP Tab-Einstellungen
             'myverp_visible_tabs',
-            'is_active', 'is_staff', 'date_joined', 'last_login'
+            'is_active', 'is_staff', 'is_superuser', 'date_joined', 'last_login'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login']
 
