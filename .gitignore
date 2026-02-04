@@ -45,6 +45,10 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# WinSW service files (local only)
+backend/VERP-Backend.exe
+backend/VERP-Backend.xml
+
 # IDE
 .vscode/
 .idea/
