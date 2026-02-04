@@ -697,15 +697,6 @@ const CustomerModal = ({ customer, onClose, onSuccess }) => {
                   />
                   <span className="ml-2 text-sm text-gray-700">Newsletter</span>
                 </label>
-                <label className="flex items-center whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={email.marketing_consent}
-                    onChange={(e) => updateEmail(index, 'marketing_consent', e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">Werbung</span>
-                </label>
                 <button
                   type="button"
                   onClick={() => removeEmail(index)}

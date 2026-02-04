@@ -55,6 +55,8 @@ class UserSerializer(serializers.ModelSerializer):
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse',
             'can_write_development_projects',
+            # MyVERP Tab-Einstellungen
+            'myverp_visible_tabs',
             'is_active', 'is_staff', 'date_joined', 'last_login'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login']
@@ -112,6 +114,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse',
             'can_write_development_projects',
+            # MyVERP Tab-Einstellungen
+            'myverp_visible_tabs',
         ]
     
     def validate(self, attrs):
@@ -170,6 +174,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_write_hr_employees', 'can_write_inventory_warehouse',
             'can_write_development_projects',
             'password', 'password_confirm',
+            # MyVERP Tab-Einstellungen
+            'myverp_visible_tabs',
             'is_active' 
         ]
         

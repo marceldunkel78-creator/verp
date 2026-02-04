@@ -146,6 +146,14 @@ class User(AbstractUser):
     # VisiView Maintenance
     can_write_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Schreiben')
     
+    # MyVERP Tab-Sichtbarkeit (alle Tabs standardmäßig aktiviert)
+    myverp_visible_tabs = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='MyVERP sichtbare Tabs',
+        help_text='Liste der sichtbaren Tab-IDs in MyVERP. Leer = alle Tabs sichtbar.'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

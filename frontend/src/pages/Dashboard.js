@@ -24,7 +24,7 @@ const allModules = [
   { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Vertrieb', permission: 'can_read_systems' },
   { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Vertrieb', permission: 'can_read_sales_quotations' },
   { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Vertrieb', permission: 'can_read_sales_order_processing' },
-  { id: 'dealers', name: 'Distributoren', route: '/sales/dealers', icon: '🤝', category: 'Vertrieb', permission: 'can_read_dealers' },
+  { id: 'dealers', name: 'Distributors', route: '/sales/dealers', icon: '🤝', category: 'Vertrieb', permission: 'can_read_dealers' },
   { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Vertrieb', permission: 'can_read_pricelists' },
   { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Vertrieb', permission: 'can_read_sales_projects' },
   { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Vertrieb', permission: 'can_read_marketing' },
@@ -350,12 +350,12 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* MyVERP Schnellzugriff */}
-      {myverpSelection.length > 0 && (
+      {/* MyVERP Schnellzugriff - Kombiniert Widgets und Module */}
+      {(myverpSelection.length > 0 || activeModules.length > 0) && (
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-gray-900">MyVERP Schnellzugriff</h2>
-            <Link to="/myverp" className="text-sm text-blue-600 hover:underline">
+            <Link to="/myverp?tab=dashboard" className="text-sm text-blue-600 hover:underline">
               Anpassen →
             </Link>
           </div>
@@ -364,7 +364,7 @@ const Dashboard = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {myverpSelection.includes('time-tracking') && (
                 <Link 
                   to={`/myverp?tab=${myverpTabMapping['time-tracking']}`} 
@@ -438,6 +438,30 @@ const Dashboard = () => {
                     </div>
                   </div>
                 </Link>
+              )}
+
+              {/* Modul-Schnellzugriff Kacheln */}
+              {activeModules.map((module) => {
+                const colorClass = categoryColors[module.category] || 'bg-gray-500 hover:bg-gray-600';
+                return (
+                  <Link
+                    key={module.id}
+                    to={module.route}
+                    className={`${colorClass} text-white p-4 rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105`}
+                  >
+                    <div className="text-center">
+                      <div className="text-2xl mb-1">{module.icon}</div>
+                      <div className="text-sm font-semibold">{module.name}</div>
+                      <div className="text-xs opacity-75 mt-1">{module.category}</div>
+                    </div>
+                  </Link>
+                );
+              })}
+
+              {myverpSelection.length === 0 && activeModules.length === 0 && (
+                <div className="col-span-full text-center text-gray-500 py-8 bg-gray-50 rounded-lg">
+                  Keine Widgets oder Module ausgewählt. <Link to="/myverp?tab=dashboard" className="text-blue-600 hover:underline">Klicken Sie hier</Link>, um diese hinzuzufügen.
+                </div>
               )}
             </div>
           )}
@@ -513,39 +537,6 @@ const Dashboard = () => {
           )}
         </div>
       )}
-
-      {/* Modul-Schnellzugriff (aus MyVERP Einstellungen) */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Modul-Schnellzugriff</h2>
-          <Link to="/myverp?tab=dashboard" className="text-sm text-blue-600 hover:underline">
-            Anpassen →
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {activeModules.map((module) => {
-            const colorClass = categoryColors[module.category] || 'bg-gray-500 hover:bg-gray-600';
-            return (
-              <Link
-                key={module.id}
-                to={module.route}
-                className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
-              >
-                <div className="text-center">
-                  <div className="text-3xl mb-2">{module.icon}</div>
-                  <div className="text-lg font-semibold">{module.name}</div>
-                  <div className="text-xs opacity-75">{module.category}</div>
-                </div>
-              </Link>
-            );
-          })}
-          {activeModules.length === 0 && (
-            <div className="col-span-full text-center text-gray-500 py-8 bg-gray-50 rounded-lg">
-              Keine Module ausgewählt. <Link to="/myverp?tab=dashboard" className="text-blue-600 hover:underline">Klicken Sie hier</Link>, um Module hinzuzufügen.
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 };

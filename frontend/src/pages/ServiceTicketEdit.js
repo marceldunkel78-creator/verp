@@ -464,7 +464,7 @@ const ServiceTicketEdit = () => {
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Kunde/Dealer</label>
+                    <label className="block text-sm font-medium text-gray-700">Customer/Distributor</label>
                     {selectedCustomer ? (
                       <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border rounded-md">
                         <div className="flex-1">

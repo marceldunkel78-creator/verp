@@ -3,7 +3,9 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q
+from django.db.models import Q, Exists, OuterRef
+from django.http import HttpResponse
+import csv
 from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerSystem, ContactHistory
 from .serializers import (
     CustomerListSerializer, CustomerDetailSerializer,
@@ -15,7 +17,7 @@ from .serializers import (
 class CustomerPagination(PageNumberPagination):
     page_size = 9
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 10000
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
@@ -24,7 +26,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     """
     queryset = Customer.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'language']
+    filterset_fields = ['is_active', 'language', 'is_reference', 'advertising_status', 'responsible_user']
     # Use only valid model fields. Include related fields for broader search (emails, phones, addresses).
     search_fields = [
         'customer_number', 'first_name', 'last_name', 'title',
@@ -37,15 +39,88 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         
-        # Suche nach Stadt
+        # Suche nach Stadt (unterstützt mehrere Städte durch Komma getrennt)
         city = self.request.query_params.get('city', None)
         if city:
-            queryset = queryset.filter(addresses__city__icontains=city).distinct()
+            cities = [c.strip() for c in city.split(',') if c.strip()]
+            if len(cities) == 1:
+                queryset = queryset.filter(addresses__city__icontains=cities[0]).distinct()
+            elif len(cities) > 1:
+                city_query = Q()
+                for c in cities:
+                    city_query |= Q(addresses__city__icontains=c)
+                queryset = queryset.filter(city_query).distinct()
         
         # Suche nach Land
         country = self.request.query_params.get('country', None)
         if country:
             queryset = queryset.filter(addresses__country=country).distinct()
+        
+        # Filter: Hat E-Mail
+        has_email = self.request.query_params.get('has_email', None)
+        if has_email is not None:
+            if has_email.lower() == 'true':
+                queryset = queryset.filter(
+                    Exists(CustomerEmail.objects.filter(customer=OuterRef('pk')))
+                )
+            elif has_email.lower() == 'false':
+                queryset = queryset.exclude(
+                    Exists(CustomerEmail.objects.filter(customer=OuterRef('pk')))
+                )
+        
+        # Filter: Hat Telefon
+        has_phone = self.request.query_params.get('has_phone', None)
+        if has_phone is not None:
+            if has_phone.lower() == 'true':
+                queryset = queryset.filter(
+                    Exists(CustomerPhone.objects.filter(customer=OuterRef('pk')))
+                )
+            elif has_phone.lower() == 'false':
+                queryset = queryset.exclude(
+                    Exists(CustomerPhone.objects.filter(customer=OuterRef('pk')))
+                )
+        
+        # Filter: Hat Adresse
+        has_address = self.request.query_params.get('has_address', None)
+        if has_address is not None:
+            if has_address.lower() == 'true':
+                queryset = queryset.filter(
+                    Exists(CustomerAddress.objects.filter(customer=OuterRef('pk')))
+                )
+            elif has_address.lower() == 'false':
+                queryset = queryset.exclude(
+                    Exists(CustomerAddress.objects.filter(customer=OuterRef('pk')))
+                )
+        
+        # Filter: Newsletter-Zustimmung (über E-Mail)
+        has_newsletter = self.request.query_params.get('has_newsletter', None)
+        if has_newsletter is not None:
+            if has_newsletter.lower() == 'true':
+                queryset = queryset.filter(
+                    Exists(CustomerEmail.objects.filter(customer=OuterRef('pk'), newsletter_consent=True))
+                )
+            elif has_newsletter.lower() == 'false':
+                queryset = queryset.exclude(
+                    Exists(CustomerEmail.objects.filter(customer=OuterRef('pk'), newsletter_consent=True))
+                )
+        
+        # Filter: Hat verknüpftes System
+        has_system = self.request.query_params.get('has_system', None)
+        if has_system is not None:
+            from systems.models import System
+            if has_system.lower() == 'true':
+                queryset = queryset.filter(
+                    Exists(System.objects.filter(customer=OuterRef('pk')))
+                )
+            elif has_system.lower() == 'false':
+                queryset = queryset.exclude(
+                    Exists(System.objects.filter(customer=OuterRef('pk')))
+                )
+        
+        # Filter: Kein zuständiger Mitarbeiter
+        no_responsible_user = self.request.query_params.get('no_responsible_user', None)
+        if no_responsible_user is not None and no_responsible_user.lower() == 'true':
+            queryset = queryset.filter(responsible_user__isnull=True)
         
         return queryset
     
@@ -122,6 +197,148 @@ class CustomerViewSet(viewsets.ModelViewSet):
             for t in tickets
         ]
         return Response(data)
+    
+    @action(detail=False, methods=['get'])
+    def export_csv(self, request):
+        """
+        Exportiert Kunden als CSV-Datei.
+        Verwendet die gleichen Filter wie die Liste.
+        """
+        # Hole gefilterte Queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Welche Felder exportieren (kann über fields Parameter gesteuert werden)
+        requested_fields = request.query_params.get('fields', None)
+        if requested_fields:
+            export_fields = [f.strip() for f in requested_fields.split(',')]
+        else:
+            # Standard-Felder
+            export_fields = [
+                'customer_number', 'salutation', 'title', 'first_name', 'last_name',
+                'language', 'advertising_status', 'is_reference', 'is_active',
+                'primary_email', 'primary_phone',
+                'primary_address_street', 'primary_address_postal_code', 
+                'primary_address_city', 'primary_address_country',
+                'primary_address_university', 'primary_address_institute',
+                'responsible_user'
+            ]
+        
+        # CSV-Response erstellen
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="kunden_export.csv"'
+        # UTF-8 BOM für Excel
+        response.write('\ufeff')
+        
+        writer = csv.writer(response, delimiter=';')
+        
+        # Header-Zeile
+        header_mapping = {
+            'customer_number': 'Kundennummer',
+            'salutation': 'Anrede',
+            'title': 'Titel',
+            'first_name': 'Vorname',
+            'last_name': 'Nachname',
+            'language': 'Sprache',
+            'advertising_status': 'Werbestatus',
+            'is_reference': 'Referenzkunde',
+            'is_active': 'Aktiv',
+            'primary_email': 'E-Mail',
+            'all_emails': 'Alle E-Mails',
+            'primary_phone': 'Telefon',
+            'all_phones': 'Alle Telefonnummern',
+            'primary_address_street': 'Straße',
+            'primary_address_postal_code': 'PLZ',
+            'primary_address_city': 'Stadt',
+            'primary_address_country': 'Land',
+            'primary_address_university': 'Universität/Firma',
+            'primary_address_institute': 'Institut',
+            'all_addresses': 'Alle Adressen',
+            'responsible_user': 'Zuständiger Mitarbeiter',
+            'description': 'Beschreibung',
+            'notes': 'Notizen',
+            'created_at': 'Erstellt am',
+        }
+        writer.writerow([header_mapping.get(f, f) for f in export_fields])
+        
+        # Daten schreiben
+        for customer in queryset.prefetch_related('emails', 'phones', 'addresses'):
+            row = []
+            for field in export_fields:
+                if field == 'customer_number':
+                    row.append(customer.customer_number or '')
+                elif field == 'salutation':
+                    row.append(customer.salutation or '')
+                elif field == 'title':
+                    row.append(customer.title or '')
+                elif field == 'first_name':
+                    row.append(customer.first_name or '')
+                elif field == 'last_name':
+                    row.append(customer.last_name or '')
+                elif field == 'language':
+                    row.append(customer.get_language_display() if customer.language else '')
+                elif field == 'advertising_status':
+                    row.append(customer.get_advertising_status_display() if customer.advertising_status else '')
+                elif field == 'is_reference':
+                    row.append('Ja' if customer.is_reference else 'Nein')
+                elif field == 'is_active':
+                    row.append('Ja' if customer.is_active else 'Nein')
+                elif field == 'primary_email':
+                    primary = customer.emails.filter(is_primary=True).first()
+                    if not primary:
+                        primary = customer.emails.first()
+                    row.append(primary.email if primary else '')
+                elif field == 'all_emails':
+                    emails = [e.email for e in customer.emails.all()]
+                    row.append(', '.join(emails))
+                elif field == 'primary_phone':
+                    primary = customer.phones.filter(is_primary=True).first()
+                    if not primary:
+                        primary = customer.phones.first()
+                    row.append(primary.phone_number if primary else '')
+                elif field == 'all_phones':
+                    phones = [p.phone_number for p in customer.phones.all()]
+                    row.append(', '.join(phones))
+                elif field == 'primary_address_street':
+                    addr = customer.addresses.filter(is_active=True).first()
+                    if addr:
+                        street = f"{addr.street} {addr.house_number}".strip()
+                        row.append(street)
+                    else:
+                        row.append('')
+                elif field == 'primary_address_postal_code':
+                    addr = customer.addresses.filter(is_active=True).first()
+                    row.append(addr.postal_code if addr else '')
+                elif field == 'primary_address_city':
+                    addr = customer.addresses.filter(is_active=True).first()
+                    row.append(addr.city if addr else '')
+                elif field == 'primary_address_country':
+                    addr = customer.addresses.filter(is_active=True).first()
+                    row.append(addr.country if addr else '')
+                elif field == 'primary_address_university':
+                    addr = customer.addresses.filter(is_active=True).first()
+                    row.append(addr.university if addr else '')
+                elif field == 'primary_address_institute':
+                    addr = customer.addresses.filter(is_active=True).first()
+                    row.append(addr.institute if addr else '')
+                elif field == 'all_addresses':
+                    addrs = []
+                    for addr in customer.addresses.all():
+                        parts = [addr.street, addr.house_number, addr.postal_code, addr.city, addr.country]
+                        addrs.append(' '.join(p for p in parts if p))
+                    row.append(' | '.join(addrs))
+                elif field == 'responsible_user':
+                    row.append(customer.responsible_user.get_full_name() if customer.responsible_user else '')
+                elif field == 'description':
+                    row.append(customer.description or '')
+                elif field == 'notes':
+                    row.append(customer.notes or '')
+                elif field == 'created_at':
+                    row.append(customer.created_at.strftime('%d.%m.%Y') if customer.created_at else '')
+                else:
+                    row.append('')
+            writer.writerow(row)
+        
+        return response
 
 
 class CustomerAddressViewSet(viewsets.ModelViewSet):

@@ -33,8 +33,8 @@ const SalesOrderManagement = () => {
       permission: 'can_read_customers',
     },
     {
-      name: 'Dealers',
-      description: 'Händlerverwaltung',
+      name: 'Distributors',
+      description: 'Distributor management',
       icon: BuildingStorefrontIcon,
       path: '/sales/dealers',
       color: 'teal',

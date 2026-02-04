@@ -56,10 +56,10 @@ const DealerEdit = () => {
   });
 
   const tabs = [
-    { id: 'company', label: 'Firmeninfo', icon: BuildingStorefrontIcon },
-    { id: 'employees', label: 'Mitarbeiter', icon: UserGroupIcon },
-    { id: 'customer_systems', label: 'Dealer-Kundensysteme', icon: ComputerDesktopIcon },
-    { id: 'logs', label: 'Preislisten & Angebote', icon: DocumentTextIcon }
+    { id: 'company', label: 'Company', icon: BuildingStorefrontIcon },
+    { id: 'employees', label: 'Employees', icon: UserGroupIcon },
+    { id: 'customer_systems', label: 'Distributor customer systems', icon: ComputerDesktopIcon },
+    { id: 'logs', label: 'Pricelists & Quotations', icon: DocumentTextIcon }
   ];
 
   const loadDealer = useCallback(async () => {
@@ -92,8 +92,8 @@ const DealerEdit = () => {
       setPricelistLogs(dealer.pricelist_logs || []);
       setQuotationLogs(dealer.quotation_logs || []);
     } catch (error) {
-      console.error('Fehler beim Laden des Händlers:', error);
-      alert('Fehler beim Laden des Händlers');
+      console.error('Error loading distributor:', error);
+      alert('Error loading distributor');
     } finally {
       setLoading(false);
     }
@@ -105,7 +105,7 @@ const DealerEdit = () => {
 
   const handleSave = async () => {
     if (!formData.company_name.trim()) {
-      alert('Bitte geben Sie einen Firmennamen ein.');
+      alert('Please enter a company name.');
       return;
     }
 
@@ -118,10 +118,10 @@ const DealerEdit = () => {
 
       if (isEditing) {
         await api.put(`/dealers/dealers/${id}/`, submitData);
-        alert('Händler erfolgreich aktualisiert');
+        alert('Distributor successfully updated');
       } else {
         const response = await api.post('/dealers/dealers/', submitData);
-        alert('Händler erfolgreich erstellt');
+        alert('Distributor successfully created');
         navigate(`/sales/dealers/${response.data.id}`);
       }
     } catch (error) {
@@ -406,11 +406,11 @@ const DealerEdit = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center">
               <BuildingStorefrontIcon className="h-8 w-8 mr-3 text-blue-600" />
-              {isEditing ? formData.company_name || 'Händler bearbeiten' : 'Neuer Händler'}
+              {isEditing ? formData.company_name || 'Edit Distributor' : 'New Distributor'}
             </h1>
             {isEditing && (
               <p className="mt-1 text-sm text-gray-500">
-                Händlernummer wird automatisch vergeben
+                Distributor number is assigned automatically
               </p>
             )}
           </div>
@@ -574,7 +574,7 @@ const DealerEdit = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Händlerrabatt (%)
+                      Distributor discount (%)
                     </label>
                     <input
                       type="number"
@@ -613,7 +613,7 @@ const DealerEdit = () => {
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Interne Notizen zum Händler..."
+                  placeholder="Internal notes about distributor..."
                 />
               </div>
 
@@ -927,7 +927,7 @@ const DealerEdit = () => {
               </div>
 
               <p className="text-sm text-gray-500">
-                Hier können Sie Informationen über die Endkunden und deren Systeme Ihres Händlers erfassen.
+                Here you can record information about the distributor's end customers and their systems.
               </p>
 
               {customerSystems.length === 0 ? (

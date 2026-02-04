@@ -139,7 +139,7 @@ const Dealers = () => {
 
       if (pageArg) setCurrentPage(page);
     } catch (error) {
-      console.error('Fehler beim Laden der Händler:', error);
+      console.error('Error loading distributors:', error);
       setDealers([]);
     } finally {
       setLoading(false);
@@ -194,10 +194,10 @@ const Dealers = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center">
             <BuildingStorefrontIcon className="h-8 w-8 mr-3 text-blue-600" />
-            Händlerverwaltung
+            Distributors
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Verwaltung von Händlerstammdaten, Ansprechpartnern und Preislisten
+            Manage distributor master data, contacts and pricelists
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -231,20 +231,20 @@ const Dealers = () => {
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
-            Neuer Händler
+            New Distributor
           </button>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Händlersuche</h2>
+        <h2 className="text-lg font-semibold mb-4">Distributor Search</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Suche (Name, Nummer)</label>
             <input
               type="text"
-              placeholder="Firmenname oder Händlernummer..."
+              placeholder="Company name or distributor number..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -311,7 +311,7 @@ const Dealers = () => {
         </div>
         {hasSearched && (
           <div className="text-sm text-gray-600">
-            {dealers.length} Händler gefunden (Seite {currentPage} von {totalPages})
+            {dealers.length} distributors found (page {currentPage} of {totalPages})
           </div>
         )}
       </div>
@@ -320,17 +320,17 @@ const Dealers = () => {
       {!hasSearched ? (
         <div className="bg-white shadow rounded-lg p-12 text-center">
           <BuildingStorefrontIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Händler angezeigt</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No distributors shown</h3>
           <p className="text-gray-500 mb-4">
-            Verwenden Sie die Suchfilter oben, um Händler anzuzeigen.
+            Use the search filters above to show distributors.
           </p>
         </div>
       ) : dealers.length === 0 ? (
         <div className="bg-white shadow rounded-lg p-12 text-center">
           <BuildingStorefrontIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Keine Händler gefunden</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No distributors found</h3>
           <p className="text-gray-500">
-            Es wurden keine Händler mit den angegebenen Filtern gefunden.
+            No distributors were found for the selected filters.
           </p>
         </div>
       ) : (
@@ -370,7 +370,7 @@ const Dealers = () => {
                     {/* Discount & Payment Terms */}
                     <div className="space-y-2 border-t pt-4">
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Händlerrabatt:</span>
+                        <span className="text-gray-600">Distributor discount:</span>
                         <span className="font-medium text-green-600">{dealer.dealer_discount}%</span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -429,10 +429,10 @@ const Dealers = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Händler
+                      Distributor
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Händler-Nr.
+                      Distributor No.
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Standort

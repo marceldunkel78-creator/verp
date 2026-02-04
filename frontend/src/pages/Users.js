@@ -3,6 +3,19 @@ import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { PlusIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
+// MyVERP Tab-Definitionen
+const MYVERP_TABS = [
+  { id: 'dashboard', name: 'Dashboard' },
+  { id: 'time-tracking', name: 'Zeiterfassung' },
+  { id: 'my-tickets', name: 'MyTickets' },
+  { id: 'messages', name: 'Nachrichtencenter' },
+  { id: 'reporting', name: 'Reporting' },
+  { id: 'reminders', name: 'Erinnerungen' },
+  { id: 'vacation', name: 'Urlaub' },
+  { id: 'travel-expenses', name: 'Reisekosten' },
+  { id: 'travel-reports', name: 'Reiseberichte' },
+];
+
 // Hierarchische Modulstruktur
 const MODULE_HIERARCHY = [
   {
@@ -36,7 +49,7 @@ const MODULE_HIERARCHY = [
     label: 'Sales / Orders',
     submodules: [
       { key: 'customers', label: 'Kunden' },
-      { key: 'sales_dealers', label: 'Händler' },
+      { key: 'sales_dealers', label: 'Distributors' },
       { key: 'sales_pricelists', label: 'Preislisten' },
       { key: 'sales_projects', label: 'Projekte' },
       { key: 'sales_systems', label: 'Systeme' },
@@ -125,6 +138,7 @@ const getInitialFormData = () => {
     department: '',
     employee: '',
     is_active: true,
+    myverp_visible_tabs: [], // Leer = alle Tabs sichtbar
   };
 
   // Alle Hauptmodule und Submodule hinzufügen
@@ -296,6 +310,7 @@ const Users = () => {
       position: user.position || '',
       department: user.department || '',
       is_active: user.is_active,
+      myverp_visible_tabs: user.myverp_visible_tabs || [],
     };
 
     // Alle Berechtigungsfelder laden
@@ -647,6 +662,76 @@ const Users = () => {
                           )}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* MyVERP Tab-Sichtbarkeit */}
+                <div className="bg-white shadow sm:rounded-lg mt-6">
+                  <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">
+                      MyVERP Tab-Sichtbarkeit
+                    </h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Wähle aus, welche Tabs in MyVERP sichtbar sein sollen. 
+                      Wenn keine Tabs ausgewählt sind, sind alle sichtbar.
+                    </p>
+                  </div>
+                  <div className="px-4 py-5 sm:p-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {MYVERP_TABS.map((tab) => (
+                        <label key={tab.id} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={formData.myverp_visible_tabs?.length === 0 || formData.myverp_visible_tabs?.includes(tab.id)}
+                            onChange={(e) => {
+                              const currentTabs = formData.myverp_visible_tabs || [];
+                              let newTabs;
+                              
+                              if (currentTabs.length === 0) {
+                                // Wenn leer (alle sichtbar), dann alle außer dem deaktivierten setzen
+                                if (!e.target.checked) {
+                                  newTabs = MYVERP_TABS.filter(t => t.id !== tab.id).map(t => t.id);
+                                } else {
+                                  newTabs = []; // Bleibt leer = alle sichtbar
+                                }
+                              } else {
+                                // Normal hinzufügen/entfernen
+                                if (e.target.checked) {
+                                  newTabs = [...currentTabs, tab.id];
+                                  // Wenn alle wieder aktiviert, auf leer setzen
+                                  if (newTabs.length === MYVERP_TABS.length) {
+                                    newTabs = [];
+                                  }
+                                } else {
+                                  newTabs = currentTabs.filter(id => id !== tab.id);
+                                }
+                              }
+                              
+                              setFormData({ ...formData, myverp_visible_tabs: newTabs });
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">{tab.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, myverp_visible_tabs: [] })}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Alle aktivieren
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, myverp_visible_tabs: ['dashboard'] })}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Nur Dashboard
+                      </button>
                     </div>
                   </div>
                 </div>

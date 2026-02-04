@@ -18,7 +18,8 @@ import {
   ListBulletIcon,
   MapPinIcon,
   UserIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  KeyIcon
 } from '@heroicons/react/24/outline';
 
 // Simple Map Component using Leaflet (if available) or placeholder
@@ -776,6 +777,12 @@ const Systems = () => {
                             {system.location_city}
                           </p>
                         )}
+                        {system.visiview_license_serial && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mb-2">
+                            <KeyIcon className="h-3 w-3" />
+                            VisiView: {system.visiview_license_serial}
+                          </p>
+                        )}
                         
                         <div className="flex items-center gap-4 pt-3 border-t">
                           <div className="flex items-center gap-1" title="Komponenten">
@@ -813,6 +820,9 @@ const Systems = () => {
                           Standort
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          VisiView Lizenz
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Zuständig
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -841,6 +851,9 @@ const Systems = () => {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{system.location_city || '-'}</div>
                             <div className="text-xs text-gray-500">{system.location_university || ''}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{system.visiview_license_serial || '-'}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{system.responsible_employee_name || '-'}</div>

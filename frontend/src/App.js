@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
+import PermissionRoute from './components/PermissionRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
@@ -119,9 +120,9 @@ function App() {
             <Route path="inventory/warehouse/:id" element={<InventoryItemEdit />} />
             <Route path="inventory/goods-receipt" element={<GoodsReceipt />} />
             <Route path="sales" element={<SalesOrderManagement />} />
-            <Route path="hr" element={<HumanResources />} />
-            <Route path="hr/employees" element={<EmployeeList />} />
-            <Route path="hr/employees/:id" element={<EmployeeEdit />} />
+            <Route path="hr" element={<PermissionRoute permission="can_read_hr"><HumanResources /></PermissionRoute>} />
+            <Route path="hr/employees" element={<PermissionRoute permission="can_read_hr"><EmployeeList /></PermissionRoute>} />
+            <Route path="hr/employees/:id" element={<PermissionRoute permission="can_read_hr"><EmployeeEdit /></PermissionRoute>} />
             <Route path="myverp" element={<MyVERP />} />
             <Route path="manufacturing" element={<Manufacturing />} />
             <Route path="manufacturing/vs-hardware" element={<VSHardware />} />

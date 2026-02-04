@@ -62,6 +62,7 @@ class SystemListSerializer(serializers.ModelSerializer):
     responsible_employee_name = serializers.SerializerMethodField()
     last_contact_date = serializers.SerializerMethodField()
     contact_overdue = serializers.SerializerMethodField()
+    visiview_license_serial = serializers.SerializerMethodField()
     
     class Meta:
         model = System
@@ -74,7 +75,8 @@ class SystemListSerializer(serializers.ModelSerializer):
             'location_latitude', 'location_longitude',
             'installation_date', 'component_count', 'photo_count', 'primary_photo_url', 
             'service_ticket_count', 'project_count', 'responsible_employee', 
-            'responsible_employee_name', 'last_contact_date', 'contact_overdue', 'created_at'
+            'responsible_employee_name', 'last_contact_date', 'contact_overdue',
+            'visiview_license_serial', 'created_at'
         ]
     
     def get_responsible_employee_name(self, obj):
@@ -189,6 +191,12 @@ class SystemListSerializer(serializers.ModelSerializer):
         if cust.customer_number:
             return f"{cust.customer_number} - {name}" if name else cust.customer_number
         return name or None
+
+    def get_visiview_license_serial(self, obj):
+        """Gibt die Seriennummer der verknüpften VisiView-Lizenz zurück"""
+        if obj.visiview_license:
+            return obj.visiview_license.serial_number
+        return None
 
 
 class SystemDetailSerializer(serializers.ModelSerializer):

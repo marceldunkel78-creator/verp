@@ -30,6 +30,7 @@ const getWeekDates = (year, week) => {
 
 const MyVERP = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
   const initialTab = searchParams.get('tab') || 'dashboard';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [timeEntries, setTimeEntries] = useState([]);
@@ -132,7 +133,7 @@ const MyVERP = () => {
     }
   };
 
-  const tabs = [
+  const allTabs = [
     { id: 'dashboard', name: 'Dashboard', icon: Squares2X2Icon },
     { id: 'time-tracking', name: 'Zeiterfassung', icon: ClockIcon },
     { id: 'my-tickets', name: 'MyTickets', icon: ChatBubbleLeftIcon },
@@ -143,6 +144,13 @@ const MyVERP = () => {
     { id: 'travel-expenses', name: 'Reisekosten', icon: CalendarIcon },
     { id: 'travel-reports', name: 'Reiseberichte', icon: DocumentTextIcon },
   ];
+
+  // Filtere Tabs basierend auf User-Einstellungen
+  // Wenn myverp_visible_tabs leer ist, sind alle Tabs sichtbar
+  const visibleTabIds = user?.myverp_visible_tabs || [];
+  const tabs = visibleTabIds.length === 0 
+    ? allTabs 
+    : allTabs.filter(tab => visibleTabIds.includes(tab.id));
 
   if (loading) {
     return (
@@ -2446,13 +2454,13 @@ const PersonalDashboardTab = () => {
     // Sales / Orders
     { id: 'sales', name: 'Vertrieb & Aufträge', route: '/sales', icon: '💼', category: 'Sales / Orders', permission: 'can_read_sales' },
     { id: 'customers', name: 'Kunden', route: '/sales/customers', icon: '👤', category: 'Sales / Orders', permission: 'can_read_customers' },
-    { id: 'dealers', name: 'Distributoren', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders', permission: 'can_read_dealers' },
-    { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Sales / Orders', permission: 'can_read_pricelists' },
+    { id: 'dealers', name: 'Distributors', route: '/sales/dealers', icon: '🤝', category: 'Sales / Orders', permission: 'can_read_sales_dealers' },
+    { id: 'pricelists', name: 'Preislisten', route: '/sales/pricelists', icon: '💲', category: 'Sales / Orders', permission: 'can_read_sales_pricelists' },
     { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Sales / Orders', permission: 'can_read_sales_projects' },
-    { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Sales / Orders', permission: 'can_read_systems' },
+    { id: 'systems', name: 'Systeme', route: '/sales/systems', icon: '🖥️', category: 'Sales / Orders', permission: 'can_read_sales_systems' },
     { id: 'quotations', name: 'Angebote', route: '/sales/quotations', icon: '📋', category: 'Sales / Orders', permission: 'can_read_sales_quotations' },
     { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Sales / Orders', permission: 'can_read_sales_order_processing' },
-    { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders', permission: 'can_read_marketing' },
+    { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders', permission: 'can_read_sales_marketing' },
     { id: 'sales-tickets', name: 'Vertriebs-Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders', permission: 'can_read_sales_tickets' },
     
     // HR

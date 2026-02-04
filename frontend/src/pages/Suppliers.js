@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { COUNTRIES } from '../utils/countries';
 import storage from '../utils/sessionStore';
 import { 
-  PlusIcon, EyeIcon, 
+  PlusIcon, EyeIcon, PencilIcon,
   BuildingOfficeIcon, EnvelopeIcon, PhoneIcon,
   UserGroupIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon,
   Squares2X2Icon, ListBulletIcon
@@ -595,21 +595,30 @@ const Suppliers = () => {
                 >
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center">
-                      <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-2" />
-                      <h3 className="text-lg font-semibold text-gray-900">
+                    <div className="flex items-center flex-1 min-w-0">
+                      <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-2 flex-shrink-0" />
+                      <h3 className="text-lg font-semibold text-gray-900 truncate">
                         {supplier.company_name}
                       </h3>
                     </div>
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        supplier.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
-                    </span>
+                    <div className="flex items-center gap-2 ml-2">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          supplier.is_active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/procurement/suppliers/${supplier.id}/edit`); }}
+                        className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                        title="Bearbeiten"
+                      >
+                        <PencilIcon className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Supplier Number */}
@@ -695,6 +704,9 @@ const Suppliers = () => {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Aktionen
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -750,6 +762,15 @@ const Suppliers = () => {
                         >
                           {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/procurement/suppliers/${supplier.id}/edit`); }}
+                          className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                          title="Bearbeiten"
+                        >
+                          <PencilIcon className="h-5 w-5" />
+                        </button>
                       </td>
                     </tr>
                   ))}
