@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
+import { useAuth } from '../context/AuthContext';
 import {
   PlusIcon,
   PencilIcon,
@@ -241,6 +242,7 @@ const SystemsMap = ({ systems, onSystemClick }) => {
 const Systems = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth();
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -273,6 +275,8 @@ const Systems = () => {
   const [starNameSuggestions, setStarNameSuggestions] = useState([]);
   const [showStarSearch, setShowStarSearch] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+
+  const canUseEmployeeFilter = user?.is_superuser || user?.can_read_hr || user?.can_write_hr;
 
   const SESSION_KEY = 'systems_search_state';
 
@@ -376,14 +380,21 @@ const Systems = () => {
 
   const fetchFilters = async () => {
     try {
-      const empRes = await api.get('/users/employees/?employment_status=aktiv');
-      const allEmployees = empRes.data.results || empRes.data || [];
-      
-      // Filter nur Vertrieb und Geschäftsführung
-      const filteredEmployees = allEmployees.filter(emp => 
-        emp.department === 'vertrieb' || emp.department === 'geschaeftsfuehrung'
-      );
-      setEmployees(filteredEmployees);
+      if (canUseEmployeeFilter) {
+        const empRes = await api.get('/users/employees/?employment_status=aktiv');
+        const allEmployees = empRes.data.results || empRes.data || [];
+        
+        // Filter nur Vertrieb und Geschäftsführung
+        const filteredEmployees = allEmployees.filter(emp => 
+          emp.department === 'vertrieb' || emp.department === 'geschaeftsfuehrung'
+        );
+        setEmployees(filteredEmployees);
+      } else {
+        setEmployees([]);
+        if (employeeFilter) {
+          setEmployeeFilter('');
+        }
+      }
       
       // Get unique cities and countries from systems
       const systemsRes = await api.get('/systems/systems/?page_size=1000');
@@ -411,7 +422,7 @@ const Systems = () => {
       if (statusFilter) params.append('status', statusFilter);
       if (cityFilter) params.append('location_city', cityFilter);
       if (countryFilter) params.append('location_country', countryFilter);
-      if (employeeFilter) params.append('responsible_employee', employeeFilter);
+      if (employeeFilter && canUseEmployeeFilter) params.append('responsible_employee', employeeFilter);
       
       console.log(`Fetching systems for ${viewMode} view with pageSize:`, pageSize);
       const response = await api.get(`/systems/systems/?${params.toString()}`);
