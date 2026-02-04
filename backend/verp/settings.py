@@ -98,11 +98,11 @@ WSGI_APPLICATION = 'verp.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB', 'verp_db'),
-        'USER': os.environ.get('POSTGRES_USER', 'verp_user'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'verp_password'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+        'NAME': config('DB_NAME', default='verp_db'),
+        'USER': config('DB_USER', default='verp_user'),
+        'PASSWORD': config('DB_PASSWORD', default='verp_password'),
+        'HOST': config('DB_HOST', default='localhost'),
+        'PORT': config('DB_PORT', default='5432'),
     }
 }
 
