@@ -380,6 +380,10 @@ const Systems = () => {
 
   const fetchFilters = async () => {
     try {
+      // Get unique cities and countries from systems
+      const systemsRes = await api.get('/systems/systems/?page_size=1000');
+      const allSystems = systemsRes.data.results || systemsRes.data || [];
+
       if (canUseEmployeeFilter) {
         const empRes = await api.get('/users/employees/?employment_status=aktiv');
         const allEmployees = empRes.data.results || empRes.data || [];
@@ -390,15 +394,22 @@ const Systems = () => {
         );
         setEmployees(filteredEmployees);
       } else {
-        setEmployees([]);
-        if (employeeFilter) {
+        // Fallback: use responsible_employee from systems list
+        const employeeMap = new Map();
+        allSystems.forEach(system => {
+          if (system.responsible_employee) {
+            employeeMap.set(system.responsible_employee, {
+              id: system.responsible_employee,
+              first_name: (system.responsible_employee_name || '').split(' ')[0] || '',
+              last_name: (system.responsible_employee_name || '').split(' ').slice(1).join(' ') || system.responsible_employee_name || ''
+            });
+          }
+        });
+        setEmployees(Array.from(employeeMap.values()));
+        if (employeeFilter && !employeeMap.has(Number(employeeFilter))) {
           setEmployeeFilter('');
         }
       }
-      
-      // Get unique cities and countries from systems
-      const systemsRes = await api.get('/systems/systems/?page_size=1000');
-      const allSystems = systemsRes.data.results || systemsRes.data || [];
       
       const uniqueCities = [...new Set(allSystems.map(s => s.location_city).filter(Boolean))].sort();
       const uniqueCountries = [...new Set(allSystems.map(s => s.location_country).filter(Boolean))].sort();
