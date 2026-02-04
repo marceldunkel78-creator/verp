@@ -152,6 +152,10 @@ if not MEDIA_ROOT.exists():
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Upload limits (in bytes) - override via .env if needed
+DATA_UPLOAD_MAX_MEMORY_SIZE = config('DATA_UPLOAD_MAX_MEMORY_SIZE', default=209715200, cast=int)
+FILE_UPLOAD_MAX_MEMORY_SIZE = config('FILE_UPLOAD_MAX_MEMORY_SIZE', default=209715200, cast=int)
+
 # Custom User Model
 AUTH_USER_MODEL = 'users.User'
 

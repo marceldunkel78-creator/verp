@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <system.webServer>
+        <!-- Request size limit (in bytes). 200 MB = 209715200 -->
+        <security>
+            <requestFiltering>
+                <requestLimits maxAllowedContentLength="209715200" />
+            </requestFiltering>
+        </security>
         <rewrite>
             <rules>
                 <!-- API Requests an Django Backend weiterleiten -->
