@@ -13,11 +13,15 @@ $ErrorActionPreference = "Stop"
 $Timestamp = Get-Date -Format "yyyy-MM-dd"
 $LogFile = "$BackupDir\backup_$Timestamp.log"
 
+# UTF-8 Ausgabe/Log
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 function Write-Log {
     param([string]$Message)
     $logEntry = "$(Get-Date -Format 'HH:mm:ss') - $Message"
     Write-Host $logEntry
-    Add-Content -Path $LogFile -Value $logEntry
+    Add-Content -Path $LogFile -Value $logEntry -Encoding UTF8
 }
 
 # Backup-Verzeichnis erstellen
@@ -52,11 +56,17 @@ try {
         
         # pg_dump Pfad finden
         $pgDumpPaths = @(
+            "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe",
+            "C:\Program Files\PostgreSQL\17\bin\pg_dump.exe",
             "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe",
             "C:\Program Files\PostgreSQL\15\bin\pg_dump.exe",
             "C:\Program Files\PostgreSQL\14\bin\pg_dump.exe"
         )
         $pgDump = $pgDumpPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $pgDump) {
+            $cmd = Get-Command pg_dump -ErrorAction SilentlyContinue
+            if ($cmd) { $pgDump = $cmd.Source }
+        }
         
         if ($pgDump) {
             $dbBackupFile = "$DayBackupDir\verp_db.dump"

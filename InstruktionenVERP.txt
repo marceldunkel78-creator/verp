@@ -154,20 +154,17 @@ iisreset
 # Backup ausführen (Standardziel: Z:\VERP-Backup)
 cd C:\VERP\scripts
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-.
-\backup-verp.ps1
+.\backup-verp.ps1
 
 # Update ausführen inkl. Backup
 cd C:\VERP\scripts
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-.
-\update-verp.ps1
+.\update-verp.ps1
 
 # Update ohne Backup
 cd C:\VERP\scripts
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-.
-\update-verp.ps1 -SkipBackup
+.\update-verp.ps1 -SkipBackup
 
 # Parameter (optional)
 # backup-verp.ps1: -VerpRoot "C:\VERP" -BackupDir "Z:\VERP-Backup" -MediaDir "C:\VERP-Media" -RetentionDays 30

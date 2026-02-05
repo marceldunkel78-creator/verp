@@ -70,8 +70,19 @@ try {
             
             if ($dbPassword -and $dbUser -and $dbName) {
                 $env:PGPASSWORD = $dbPassword
-                $pgDump = "C:\Program Files\PostgreSQL\15\bin\pg_dump.exe"
-                if (Test-Path $pgDump) {
+                $pgDumpPaths = @(
+                    "C:\Program Files\PostgreSQL\18\bin\pg_dump.exe",
+                    "C:\Program Files\PostgreSQL\17\bin\pg_dump.exe",
+                    "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe",
+                    "C:\Program Files\PostgreSQL\15\bin\pg_dump.exe",
+                    "C:\Program Files\PostgreSQL\14\bin\pg_dump.exe"
+                )
+                $pgDump = $pgDumpPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+                if (-not $pgDump) {
+                    $cmd = Get-Command pg_dump -ErrorAction SilentlyContinue
+                    if ($cmd) { $pgDump = $cmd.Source }
+                }
+                if ($pgDump) {
                     $dbHostValue = if ($dbHost) { $dbHost } else { "localhost" }
                     & $pgDump -U $dbUser -h $dbHostValue -Fc $dbName > "$BackupPath\verp_db.dump"
                     Write-Success "Datenbank gesichert"
