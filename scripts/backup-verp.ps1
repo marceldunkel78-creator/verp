@@ -4,7 +4,7 @@
 
 param(
     [string]$VerpRoot = "C:\VERP",
-    [string]$BackupDir = "C:\VERP-Backups",
+    [string]$BackupDir = "Z:\VERP-Backup",
     [string]$MediaDir = "C:\VERP-Media",
     [int]$RetentionDays = 30
 )

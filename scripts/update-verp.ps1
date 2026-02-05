@@ -5,7 +5,7 @@
 param(
     [switch]$SkipBackup = $false,
     [string]$VerpRoot = "C:\VERP",
-    [string]$BackupDir = "C:\VERP-Backups"
+    [string]$BackupDir = "Z:\VERP-Backup"
 )
 
 $ErrorActionPreference = "Stop"

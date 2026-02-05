@@ -134,6 +134,8 @@ cd backend
 update nach Änderung
 cd C:\VERP
 git pull origin main
+.\venv\Scripts\Activate
+python manage.py migrate
 Restart-Service VERP-Backend
 
 bzw. 
@@ -141,17 +143,61 @@ cd C:\VERP
 git pull origin main
 
 cd C:\VERP\frontend
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 npm run build
 Copy-Item C:\VERP\scripts\web.config.template C:\VERP\frontend\build\web.config -Force
 iisreset
 
-Schritte:
 
-DNS‑Auflösung im Netzwerk einrichten
-Danach Hostname überall ohne Hosts‑Eintrag nutzbar
-Der Zugriff klappt jetzt, weil du lokal hosts gesetzt hast. Für Android/andere Clients brauchst du DNS:
+# Backup/Update Scripte (Windows Server)
 
-Option A (empfohlen): Router/DNS‑Server
+# Backup ausführen (Standardziel: Z:\VERP-Backup)
+cd C:\VERP\scripts
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+.
+\backup-verp.ps1
 
-Im Router oder DNS‑Server einen A‑Record anlegen:
-verp.intern.local → 192.168.0.2
+# Update ausführen inkl. Backup
+cd C:\VERP\scripts
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+.
+\update-verp.ps1
+
+# Update ohne Backup
+cd C:\VERP\scripts
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+.
+\update-verp.ps1 -SkipBackup
+
+# Parameter (optional)
+# backup-verp.ps1: -VerpRoot "C:\VERP" -BackupDir "Z:\VERP-Backup" -MediaDir "C:\VERP-Media" -RetentionDays 30
+# update-verp.ps1: -VerpRoot "C:\VERP" -BackupDir "Z:\VERP-Backup" -SkipBackup
+
+# Was passiert beim Backup?
+# - Datenbank-Dump (verp_db.dump) wird unter Z:\VERP-Backup\YYYY-MM-DD gespeichert
+# - Media-Ordner wird per robocopy gespiegelt (inkrementell)
+# - .env und web.config werden in Z:\VERP-Backup\YYYY-MM-DD\Config gesichert
+# - Alte Backups > RetentionDays werden gelöscht
+
+# Was passiert beim Update?
+# - Optionales Backup
+# - Backend-Dienst stoppen
+# - Git Pull
+# - Backend: venv, pip install, migrate, collectstatic
+# - Frontend: npm install, npm run build
+# - web.config wiederherstellen
+# - Backend-Dienst starten
+
+# Backup wiederherstellen (manuell)
+# 1) Datenbank wiederherstellen
+#    - Datei: Z:\VERP-Backup\YYYY-MM-DD\verp_db.dump
+#    - pg_restore (Beispiel):
+#      "C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" -U verp_user -h localhost -d verp_db -c "Z:\VERP-Backup\YYYY-MM-DD\verp_db.dump"
+# 2) Media-Ordner zurückspielen
+#      robocopy "Z:\VERP-Backup\YYYY-MM-DD\Media" "C:\VERP-Media" /MIR /R:3 /W:5
+# 3) Config zurückspielen
+#      Copy-Item "Z:\VERP-Backup\YYYY-MM-DD\Config\.env.backend" "C:\VERP\backend\.env" -Force
+#      Copy-Item "Z:\VERP-Backup\YYYY-MM-DD\Config\web.config" "C:\VERP\frontend\build\web.config" -Force
+# 4) Dienst neu starten
+#      Restart-Service VERP-Backend
+
