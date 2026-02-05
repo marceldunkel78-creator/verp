@@ -16,12 +16,14 @@ from core.permissions import (
     VisiViewTicketPermission,
     VisiViewMacroPermission,
     VisiViewMaintenanceTimePermission,
+    VisiViewSupportedHardwarePermission,
 )
 
 from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
-    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, VisiViewLicenseHistory
+    VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, VisiViewLicenseHistory,
+    SupportedHardware, SupportedHardwareUseCase
 )
 from .serializers import (
     VisiViewProductListSerializer,
@@ -43,6 +45,9 @@ from .serializers import (
     MaintenanceTimeExpenditureSerializer,
     MaintenanceTimeExpenditureListSerializer,
     VisiViewLicenseHistorySerializer,
+    SupportedHardwareSerializer,
+    SupportedHardwareListSerializer,
+    SupportedHardwareUseCaseSerializer,
     calculate_maintenance_balance,
     calculate_interim_settlements,
     process_expenditure_deduction,
@@ -1208,3 +1213,79 @@ class MaintenanceTimeEntryViewSet(viewsets.ReadOnlyModelViewSet):
     # Pagination
     from verp.pagination import InfinitePagination
     pagination_class = InfinitePagination
+
+
+class SupportedHardwareViewSet(viewsets.ModelViewSet):
+    """ViewSet für VisiView kompatible Hardware"""
+    from verp.pagination import InfinitePagination
+    pagination_class = InfinitePagination
+    queryset = SupportedHardware.objects.all()
+    permission_classes = [IsAuthenticated, VisiViewSupportedHardwarePermission]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['category', 'manufacturer', 'support_level', 'data_quality']
+    search_fields = ['manufacturer', 'device', 'driver_name', 'comment', 'limitations']
+    ordering_fields = ['category', 'manufacturer', 'device', 'support_level', 'actualization_date']
+    ordering = ['category', 'manufacturer', 'device']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return SupportedHardwareListSerializer
+        return SupportedHardwareSerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=False, methods=['get'])
+    def categories(self, request):
+        """Gibt alle verfügbaren Kategorien zurück"""
+        return Response([choice[0] for choice in SupportedHardware.CATEGORY_CHOICES])
+    
+    @action(detail=False, methods=['get'])
+    def support_levels(self, request):
+        """Gibt alle verfügbaren Support-Level zurück"""
+        return Response([choice[0] for choice in SupportedHardware.SUPPORT_LEVEL_CHOICES])
+    
+    @action(detail=False, methods=['get'])
+    def manufacturers(self, request):
+        """Gibt alle vorhandenen Hersteller zurück"""
+        manufacturers = SupportedHardware.objects.values_list('manufacturer', flat=True).distinct().order_by('manufacturer')
+        return Response(list(manufacturers))
+    
+    @action(detail=False, methods=['get'])
+    def statistics(self, request):
+        """Gibt Statistiken zur unterstützten Hardware zurück"""
+        queryset = self.get_queryset()
+        
+        # Anzahl pro Kategorie
+        category_counts = {}
+        for category_choice in SupportedHardware.CATEGORY_CHOICES:
+            category_counts[category_choice[0]] = queryset.filter(category=category_choice[0]).count()
+        
+        # Anzahl pro Support-Level
+        support_level_counts = {}
+        for level_choice in SupportedHardware.SUPPORT_LEVEL_CHOICES:
+            support_level_counts[level_choice[0]] = queryset.filter(support_level=level_choice[0]).count()
+        
+        return Response({
+            'total': queryset.count(),
+            'by_category': category_counts,
+            'by_support_level': support_level_counts,
+        })
+
+
+class SupportedHardwareUseCaseViewSet(viewsets.ModelViewSet):
+    """ViewSet für Hardware Use Cases"""
+    queryset = SupportedHardwareUseCase.objects.all().select_related(
+        'hardware', 'customer', 'license', 'system', 'created_by'
+    )
+    serializer_class = SupportedHardwareUseCaseSerializer
+    permission_classes = [IsAuthenticated, VisiViewSupportedHardwarePermission]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['hardware', 'customer', 'license', 'system']
+    search_fields = ['customer__name', 'license__serial_number', 'system__system_number', 'comment', 'visiview_version']
+    ordering_fields = ['date', 'created_at']
+    ordering = ['-date', '-created_at']
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+

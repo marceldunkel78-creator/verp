@@ -269,45 +269,23 @@ python manage.py collectstatic --noinput
 
 ## 7. Windows-Dienste einrichten
 
-### 7.1 NSSM installieren (Non-Sucking Service Manager)
+sOption B: WinSW (falls NSSM nicht geht)
 
-1. Download von https://nssm.cc/download
-2. Entpacken nach `C:\Tools\nssm`
-3. Zum PATH hinzufügen oder direkt verwenden
-
-### 7.2 Backend-Dienst erstellen
-
-PowerShell als Administrator:
-
-```powershell
-# NSSM verwenden um Dienst zu erstellen
-C:\Tools\nssm\win64\nssm.exe install VERP-Backend
-
-# Im GUI folgende Einstellungen vornehmen:
-# Path: C:\VERP\backend\venv\Scripts\python.exe
-# Startup directory: C:\VERP\backend
-# Arguments: -m waitress --host=127.0.0.1 --port=8000 core.wsgi:application
-
-# Oder per Kommandozeile:
-C:\Tools\nssm\win64\nssm.exe set VERP-Backend Application "C:\VERP\backend\venv\Scripts\python.exe"
-C:\Tools\nssm\win64\nssm.exe set VERP-Backend AppDirectory "C:\VERP\backend"
-C:\Tools\nssm\win64\nssm.exe set VERP-Backend AppParameters "-m waitress --host=127.0.0.1 --port=8000 core.wsgi:application"
-C:\Tools\nssm\win64\nssm.exe set VERP-Backend DisplayName "VERP Backend Service"
-C:\Tools\nssm\win64\nssm.exe set VERP-Backend Description "VERP ERP System - Django Backend"
-C:\Tools\nssm\win64\nssm.exe set VERP-Backend Start SERVICE_AUTO_START
-
-# Dienst starten
-C:\Tools\nssm\win64\nssm.exe start VERP-Backend
-```
-
-### 7.3 Dienst-Status prüfen
-
-```powershell
-Get-Service VERP-Backend
-```
-
+Download: https://github.com/winsw/winsw/releases
+WinSW.exe nach C:\VERP\backend\VERP-Backend.exe legen
+C:\VERP\backend\VERP-Backend.xml erstellen:
+<service>
+  <id>VERP-Backend</id>
+  <name>VERP-Backend</name>
+  <description>VERP Backend Service</description>
+  <executable>C:\VERP\backend\venv\Scripts\python.exe</executable>
+  <arguments>-m waitress --host=127.0.0.1 --port=8000 verp.wsgi:application</arguments>
+  <workingdirectory>C:\VERP\backend</workingdirectory>
+  <logpath>C:\VERP\backend\logs</logpath>
+</service>
 ---
-
+C:\VERP\backend\VERP-Backend.exe install
+C:\VERP\backend\VERP-Backend.exe start
 ## 8. Reverse Proxy mit IIS
 
 ### 8.1 IIS Features installieren

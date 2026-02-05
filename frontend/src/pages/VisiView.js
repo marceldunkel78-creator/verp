@@ -7,7 +7,8 @@ import {
   TicketIcon,
   CodeBracketIcon,
   ClockIcon,
-  CogIcon
+  CogIcon,
+  ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 
 const VisiView = () => {
@@ -62,6 +63,14 @@ const VisiView = () => {
       color: 'bg-orange-500',
       path: '/visiview/maintenance-time',
       permission: 'can_read_visiview_maintenance_time'
+    },
+    {
+      name: 'Unterstützte Hardware',
+      description: 'VisiView-kompatible Hardware verwalten',
+      icon: ComputerDesktopIcon,
+      color: 'bg-cyan-500',
+      path: '/visiview/supported-hardware',
+      permission: 'can_read_visiview_supported_hardware'
     }
   ];
 

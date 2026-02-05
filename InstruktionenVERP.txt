@@ -79,7 +79,7 @@ server starten :
 
 # Backend (Terminal 1)
 cd backend
-
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 .\venv\Scripts\Activate
 python manage.py runserver
 
@@ -126,3 +126,32 @@ dry run
 python import_legacy_orders.py --limit 100
 live
 python import_legacy_orders.py --live
+
+um bei den Systemen die Kundenadresse als systemadresse zu übernehmen: 
+cd backend
+..\.venv\Scripts\python.exe migrate_system_locations.py
+
+update nach Änderung
+cd C:\VERP
+git pull origin main
+Restart-Service VERP-Backend
+
+bzw. 
+cd C:\VERP
+git pull origin main
+
+cd C:\VERP\frontend
+npm run build
+Copy-Item C:\VERP\scripts\web.config.template C:\VERP\frontend\build\web.config -Force
+iisreset
+
+Schritte:
+
+DNS‑Auflösung im Netzwerk einrichten
+Danach Hostname überall ohne Hosts‑Eintrag nutzbar
+Der Zugriff klappt jetzt, weil du lokal hosts gesetzt hast. Für Android/andere Clients brauchst du DNS:
+
+Option A (empfohlen): Router/DNS‑Server
+
+Im Router oder DNS‑Server einen A‑Record anlegen:
+verp.intern.local → 192.168.0.2

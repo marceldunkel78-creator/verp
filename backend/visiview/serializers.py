@@ -7,7 +7,7 @@ from .models import (
     VisiViewProduct, VisiViewProductPrice, VisiViewLicense, VisiViewOption,
     VisiViewTicket, VisiViewTicketComment, VisiViewTicketChangeLog, VisiViewTicketAttachment,
     VisiViewTicketTimeEntry, MaintenanceTimeCredit, MaintenanceTimeExpenditure, MaintenanceTimeCreditDeduction,
-    MaintenanceInvoice, VisiViewLicenseHistory
+    MaintenanceInvoice, VisiViewLicenseHistory, SupportedHardware, SupportedHardwareUseCase
 )
 from .production_orders import VisiViewProductionOrder, VisiViewProductionOrderItem
 
@@ -1067,3 +1067,83 @@ class VisiViewLicenseHistorySerializer(serializers.ModelSerializer):
         if obj.changed_by:
             return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip() or obj.changed_by.username
         return None
+
+
+class SupportedHardwareSerializer(serializers.ModelSerializer):
+    """Serializer für unterstützte Hardware"""
+    created_by_name = serializers.SerializerMethodField()
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    support_level_display = serializers.CharField(source='get_support_level_display', read_only=True)
+    data_quality_display = serializers.CharField(source='get_data_quality_display', read_only=True)
+    
+    class Meta:
+        model = SupportedHardware
+        fields = [
+            'id', 'category', 'category_display', 'manufacturer', 'device',
+            'driver_name', 'driver_version', 'visiview_version',
+            'limitations', 'comment', 'required_visiview_option',
+            'support_level', 'support_level_display',
+            'service_status', 'data_quality', 'data_quality_display',
+            'author', 'actualization_date',
+            # Camera-specific
+            'dual_cam', 'device_streaming', 'virtex', 'splitview',
+            # Microscope-specific
+            'xy_support', 'z_support', 'objective_support', 'beam_path_support', 'light_support',
+            # Light source-specific
+            'ttl_shutter', 'sw_shutter', 'analog_intensity', 'sw_intensity',
+            # Audit
+            'created_at', 'updated_at', 'created_by', 'created_by_name'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
+class SupportedHardwareListSerializer(serializers.ModelSerializer):
+    """Kompakter Serializer für Listen-Ansicht"""
+    use_case_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportedHardware
+        fields = [
+            'id', 'category', 'manufacturer', 'device',
+            'driver_name', 'visiview_version', 'support_level',
+            'data_quality', 'actualization_date', 'use_case_count'
+        ]
+    
+    def get_use_case_count(self, obj):
+        return obj.use_cases.count()
+
+
+class SupportedHardwareUseCaseSerializer(serializers.ModelSerializer):
+    """Serializer für Hardware Use Cases"""
+    created_by_name = serializers.SerializerMethodField()
+    customer_name = serializers.CharField(source='customer.name', read_only=True, allow_null=True)
+    license_serial_number = serializers.CharField(source='license.serial_number', read_only=True, allow_null=True)
+    system_number = serializers.CharField(source='system.system_number', read_only=True, allow_null=True)
+    hardware_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SupportedHardwareUseCase
+        fields = [
+            'id', 'hardware', 'hardware_name', 'date',
+            'customer', 'customer_name',
+            'license', 'license_serial_number',
+            'visiview_version', 'driver_version', 'device_firmware',
+            'system', 'system_number',
+            'comment',
+            'created_by', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_hardware_name(self, obj):
+        return f"{obj.hardware.manufacturer} {obj.hardware.device}"

@@ -101,6 +101,16 @@ class VisiViewMaintenanceTimePermission(ModulePermission):
         return super().has_permission(request, view)
 
 
+class VisiViewSupportedHardwarePermission(ModulePermission):
+    """Berechtigungen für VisiView Unterstützte Hardware"""
+    def has_permission(self, request, view):
+        view.read_permission = 'can_read_visiview_supported_hardware'
+        view.write_permission = 'can_write_visiview_supported_hardware'
+        view.main_read_permission = 'can_read_visiview'
+        view.main_write_permission = 'can_write_visiview'
+        return super().has_permission(request, view)
+
+
 class DevelopmentPermission(ModulePermission):
     """Berechtigungen für Entwicklung"""
     def has_permission(self, request, view):

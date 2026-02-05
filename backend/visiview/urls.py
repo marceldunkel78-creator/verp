@@ -9,7 +9,9 @@ from .views import (
     VisiViewMacroViewSet,
     VisiViewMacroExampleImageViewSet,
     VisiViewMacroChangeLogViewSet,
-    MaintenanceTimeEntryViewSet
+    MaintenanceTimeEntryViewSet,
+    SupportedHardwareViewSet,
+    SupportedHardwareUseCaseViewSet
 )
 from .production_views import VisiViewProductionOrderViewSet
 
@@ -24,6 +26,8 @@ router.register(r'macro-images', VisiViewMacroExampleImageViewSet, basename='vis
 router.register(r'macro-changelog', VisiViewMacroChangeLogViewSet, basename='visiview-macro-changelog')
 router.register(r'maintenance-time-entries', MaintenanceTimeEntryViewSet, basename='maintenance-time-entries')
 router.register(r'production-orders', VisiViewProductionOrderViewSet, basename='visiview-production-orders')
+router.register(r'supported-hardware', SupportedHardwareViewSet, basename='visiview-supported-hardware')
+router.register(r'hardware-use-cases', SupportedHardwareUseCaseViewSet, basename='visiview-hardware-use-cases')
 
 urlpatterns = [
     path('', include(router.urls)),

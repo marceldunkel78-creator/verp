@@ -51,6 +51,8 @@ import VisiViewMacros from './pages/VisiViewMacros';
 import VisiViewMacroEdit from './pages/VisiViewMacroEdit';
 import VisiViewProductionOrders from './pages/VisiViewProductionOrders';
 import VisiViewProductionOrderEdit from './pages/VisiViewProductionOrderEdit';
+import VisiViewSupportedHardware from './pages/VisiViewSupportedHardware';
+import VisiViewSupportedHardwareEdit from './pages/VisiViewSupportedHardwareEdit';
 import VSServiceProducts from './pages/VSServiceProducts';
 import VSServiceProductEdit from './pages/VSServiceProductEdit';
 import RMACases from './pages/RMACases';
@@ -143,6 +145,8 @@ function App() {
             <Route path="visiview/production-orders/new" element={<VisiViewProductionOrderEdit />} />
             <Route path="visiview/production-orders/:id" element={<VisiViewProductionOrderEdit />} />
             <Route path="visiview/maintenance-time" element={<VisiViewMaintenanceTime />} />
+            <Route path="visiview/supported-hardware" element={<VisiViewSupportedHardware />} />
+            <Route path="visiview/supported-hardware/:id" element={<VisiViewSupportedHardwareEdit />} />
             <Route path="service" element={<Service />} />
             <Route path="service/vs-service" element={<VSServiceProducts />} />
             <Route path="service/vs-service/:id" element={<VSServiceProductEdit />} />

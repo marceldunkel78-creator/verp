@@ -1641,3 +1641,301 @@ class MaintenanceInvoice(models.Model):
     def __str__(self):
         return f"Abrechnung {self.license.license_number} ({self.created_at.strftime('%d.%m.%Y')})"
 
+
+class SupportedHardware(models.Model):
+    """
+    Model for VisiView compatible hardware devices.
+    Stores compatibility information for cameras, microscopes, light sources, and peripherals.
+    """
+    
+    CATEGORY_CHOICES = [
+        ('Camera', 'Camera'),
+        ('Microscope', 'Microscope'),
+        ('Hardware Autofocus', 'Hardware Autofocus'),
+        ('Light source', 'Light source'),
+        ('Controller', 'Controller'),
+        ('Filterwheel', 'Filterwheel'),
+        ('Component', 'Component'),
+        ('Computer hardware', 'Computer hardware'),
+        ('Accessory', 'Accessory'),
+        ('Illumination', 'Illumination'),
+        ('Image Splitter', 'Image Splitter'),
+        ('Shutter', 'Shutter'),
+        ('Spinning Disk', 'Spinning Disk'),
+        ('xy-stage', 'XY-Stage'),
+        ('z-drive', 'Z-Drive'),
+        ('Peripherals', 'Peripherals'),
+    ]
+    
+    SUPPORT_LEVEL_CHOICES = [
+        ('Official Support', 'Official Support'),
+        ('Tested by Visitron', 'Tested by Visitron'),
+        ('Untested, driver provided by manufacturer', 'Untested, driver provided by manufacturer'),
+        ('Basic Support', 'Basic Support'),
+        ('Experimental', 'Experimental'),
+        ('Third-party driver', 'Third-party driver'),
+        ('Discontinued', 'Discontinued'),
+    ]
+    
+    DATA_QUALITY_CHOICES = [
+        ('Complete', 'Complete'),
+        ('Verified', 'Verified'),
+        ('Incomplete', 'Incomplete'),
+        ('Needs review', 'Needs review'),
+    ]
+    
+    # Common fields for all hardware types
+    category = models.CharField(
+        max_length=50,
+        choices=CATEGORY_CHOICES,
+        verbose_name='Kategorie'
+    )
+    manufacturer = models.CharField(
+        max_length=100,
+        verbose_name='Hersteller'
+    )
+    device = models.CharField(
+        max_length=200,
+        verbose_name='Gerät'
+    )
+    driver_name = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        verbose_name='Treiber Name'
+    )
+    driver_version = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='Treiber Version'
+    )
+    visiview_version = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='VisiView Version'
+    )
+    limitations = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Einschränkungen'
+    )
+    comment = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Kommentar'
+    )
+    required_visiview_option = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        verbose_name='Benötigte VisiView Option'
+    )
+    support_level = models.CharField(
+        max_length=100,
+        choices=SUPPORT_LEVEL_CHOICES,
+        blank=True,
+        default='',
+        verbose_name='Support Level'
+    )
+    service_status = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='Service Status (Hersteller)'
+    )
+    data_quality = models.CharField(
+        max_length=50,
+        choices=DATA_QUALITY_CHOICES,
+        blank=True,
+        default='',
+        verbose_name='Datenqualität'
+    )
+    author = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='Autor'
+    )
+    actualization_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Aktualisierungsdatum'
+    )
+    
+    # Camera-specific fields
+    dual_cam = models.BooleanField(
+        default=False,
+        verbose_name='Dual Cam'
+    )
+    device_streaming = models.BooleanField(
+        default=False,
+        verbose_name='Device Streaming'
+    )
+    virtex = models.BooleanField(
+        default=False,
+        verbose_name='Virtex'
+    )
+    splitview = models.BooleanField(
+        default=False,
+        verbose_name='Splitview'
+    )
+    
+    # Microscope-specific fields
+    xy_support = models.BooleanField(
+        default=False,
+        verbose_name='XY Support'
+    )
+    z_support = models.BooleanField(
+        default=False,
+        verbose_name='Z Support'
+    )
+    objective_support = models.BooleanField(
+        default=False,
+        verbose_name='Objective Support'
+    )
+    beam_path_support = models.BooleanField(
+        default=False,
+        verbose_name='Beam path Support'
+    )
+    light_support = models.BooleanField(
+        default=False,
+        verbose_name='Light Support'
+    )
+    
+    # Light source-specific fields
+    ttl_shutter = models.BooleanField(
+        default=False,
+        verbose_name='TTL Shutter'
+    )
+    sw_shutter = models.BooleanField(
+        default=False,
+        verbose_name='SW Shutter'
+    )
+    analog_intensity = models.BooleanField(
+        default=False,
+        verbose_name='Analog Intensity'
+    )
+    sw_intensity = models.BooleanField(
+        default=False,
+        verbose_name='SW Intensity'
+    )
+    
+    # Audit fields
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Erstellt am'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Aktualisiert am'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='supported_hardware_created',
+        verbose_name='Erstellt von'
+    )
+    
+    class Meta:
+        verbose_name = 'Unterstützte Hardware'
+        verbose_name_plural = 'Unterstützte Hardware'
+        ordering = ['category', 'manufacturer', 'device']
+        indexes = [
+            models.Index(fields=['category']),
+            models.Index(fields=['manufacturer']),
+            models.Index(fields=['support_level']),
+        ]
+    
+    def __str__(self):
+        return f"{self.manufacturer} {self.device} ({self.category})"
+
+
+class SupportedHardwareUseCase(models.Model):
+    """
+    Use Case für unterstützte Hardware.
+    Dokumentiert reale Einsatzfälle von Hardware bei Kunden.
+    """
+    hardware = models.ForeignKey(
+        SupportedHardware,
+        on_delete=models.CASCADE,
+        related_name='use_cases',
+        verbose_name='Hardware'
+    )
+    date = models.DateField(
+        verbose_name='Datum'
+    )
+    customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hardware_use_cases',
+        verbose_name='Kunde'
+    )
+    license = models.ForeignKey(
+        VisiViewLicense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hardware_use_cases',
+        verbose_name='VisiView Lizenz'
+    )
+    visiview_version = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='VisiView Version'
+    )
+    driver_version = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='Treiber Version'
+    )
+    device_firmware = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        verbose_name='Geräte Firmware'
+    )
+    system = models.ForeignKey(
+        'systems.System',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='hardware_use_cases',
+        verbose_name='System'
+    )
+    comment = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Kommentar'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='hardware_use_cases_created',
+        verbose_name='Eingetragen von'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Erstellt am'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Aktualisiert am'
+    )
+    
+    class Meta:
+        verbose_name = 'Hardware Use Case'
+        verbose_name_plural = 'Hardware Use Cases'
+        ordering = ['-date', '-created_at']
+    
+    def __str__(self):
+        customer_name = self.customer.name if self.customer else 'Unbekannt'
+        return f"{self.hardware} - {customer_name} ({self.date})"

@@ -93,6 +93,8 @@ class User(AbstractUser):
     can_read_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Lesen')
     # VisiView Maintenance
     can_read_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Lesen')
+    # VisiView Supported Hardware
+    can_read_visiview_supported_hardware = models.BooleanField(default=True, verbose_name='VisiView Unterstützte Hardware - Lesen')
     # Meetings Modul
     can_read_meetings = models.BooleanField(default=True, verbose_name='Meetings - Lesen')
     # Firmenkalender
@@ -149,6 +151,8 @@ class User(AbstractUser):
     can_write_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Schreiben')
     # VisiView Maintenance
     can_write_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Schreiben')
+    # VisiView Supported Hardware
+    can_write_visiview_supported_hardware = models.BooleanField(default=False, verbose_name='VisiView Unterstützte Hardware - Schreiben')
     # Firmenkalender
     can_write_company_calendar = models.BooleanField(default=False, verbose_name='Firmenkalender - Schreiben')
     

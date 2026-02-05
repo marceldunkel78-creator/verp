@@ -309,17 +309,26 @@ class SystemViewSet(viewsets.ModelViewSet):
         from datetime import date
         from dateutil.relativedelta import relativedelta
         from users.models import Employee
+        import logging
+        
+        logger = logging.getLogger(__name__)
         
         six_months_ago = date.today() - relativedelta(months=6)
         
-        # Finde den Employee zum eingeloggten User (users ist ManyToMany)
-        try:
-            employee = Employee.objects.get(users=request.user)
-        except Employee.DoesNotExist:
-            employee = None
-        except Employee.MultipleObjectsReturned:
-            # Falls mehrere Employees mit demselben User existieren, nimm den ersten
-            employee = Employee.objects.filter(users=request.user).first()
+        # Finde den Employee zum eingeloggten User
+        # Methode 1: User hat direktes employee ForeignKey
+        employee = getattr(request.user, 'employee', None)
+        
+        # Methode 2: Fallback - Reverse lookup über related_name='users'
+        if not employee:
+            try:
+                employee = Employee.objects.get(users=request.user)
+            except Employee.DoesNotExist:
+                employee = None
+            except Employee.MultipleObjectsReturned:
+                employee = Employee.objects.filter(users=request.user).first()
+        
+        logger.info(f"contact_overdue: User={request.user.username}, is_superuser={request.user.is_superuser}, employee={employee}")
         
         # Alle aktiven Systeme holen
         systems = System.objects.filter(
