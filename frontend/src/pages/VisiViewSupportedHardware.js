@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -31,6 +31,9 @@ const VisiViewSupportedHardware = () => {
   const [categories, setCategories] = useState([]);
   const [supportLevels, setSupportLevels] = useState([]);
   const [statistics, setStatistics] = useState(null);
+  const topScrollRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
   
   // Check write permission
   const canWrite = user?.is_superuser || user?.is_staff || user?.can_write_visiview_supported_hardware || user?.can_write_visiview;
@@ -80,6 +83,12 @@ const VisiViewSupportedHardware = () => {
   useEffect(() => {
     fetchMetadata();
   }, [fetchMetadata]);
+
+  useEffect(() => {
+    if (tableScrollRef.current) {
+      setTableScrollWidth(tableScrollRef.current.scrollWidth || 0);
+    }
+  }, [hardware]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -289,8 +298,30 @@ const VisiViewSupportedHardware = () => {
             <p>Keine Hardware gefunden</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 min-w-[900px]">
+          <>
+            <div
+              ref={topScrollRef}
+              className="overflow-x-auto"
+              onScroll={() => {
+                if (!topScrollRef.current || !tableScrollRef.current) return;
+                if (tableScrollRef.current.scrollLeft !== topScrollRef.current.scrollLeft) {
+                  tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+                }
+              }}
+            >
+              <div style={{ width: tableScrollWidth || 900, height: 1 }} />
+            </div>
+            <div
+              ref={tableScrollRef}
+              className="overflow-x-auto"
+              onScroll={() => {
+                if (!topScrollRef.current || !tableScrollRef.current) return;
+                if (topScrollRef.current.scrollLeft !== tableScrollRef.current.scrollLeft) {
+                  topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+                }
+              }}
+            >
+              <table className="min-w-full divide-y divide-gray-200 min-w-[900px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -354,8 +385,9 @@ const VisiViewSupportedHardware = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </>
         )}
         
         {/* Pagination */}

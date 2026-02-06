@@ -275,6 +275,9 @@ const Systems = () => {
   const [starNameSuggestions, setStarNameSuggestions] = useState([]);
   const [showStarSearch, setShowStarSearch] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
+  const topScrollRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
 
   const canUseEmployeeFilter = true; // Alle authentifizierten User können den Mitarbeiterfilter nutzen
 
@@ -371,6 +374,12 @@ const Systems = () => {
   useEffect(() => {
     fetchFilters();
   }, []);
+
+  useEffect(() => {
+    if (tableScrollRef.current) {
+      setTableScrollWidth(tableScrollRef.current.scrollWidth || 0);
+    }
+  }, [systems, viewMode]);
 
   useEffect(() => {
     if (showCreateModal) {
@@ -824,7 +833,28 @@ const Systems = () => {
               {/* List View */}
               {viewMode === 'list' && (
                 <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <div className="overflow-x-auto">
+                  <div
+                    ref={topScrollRef}
+                    className="overflow-x-auto"
+                    onScroll={() => {
+                      if (!topScrollRef.current || !tableScrollRef.current) return;
+                      if (tableScrollRef.current.scrollLeft !== topScrollRef.current.scrollLeft) {
+                        tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+                      }
+                    }}
+                  >
+                    <div style={{ width: tableScrollWidth || 1100, height: 1 }} />
+                  </div>
+                  <div
+                    ref={tableScrollRef}
+                    className="overflow-x-auto"
+                    onScroll={() => {
+                      if (!topScrollRef.current || !tableScrollRef.current) return;
+                      if (topScrollRef.current.scrollLeft !== tableScrollRef.current.scrollLeft) {
+                        topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+                      }
+                    }}
+                  >
                     <table className="min-w-full divide-y divide-gray-200 table-fixed min-w-[1100px]">
                     <thead className="bg-gray-50">
                       <tr>
