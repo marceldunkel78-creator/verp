@@ -1,4 +1,4 @@
-# VERP Backup Script für Windows Server
+﻿# VERP Backup Script für Windows Server
 # Tägliches Backup von Datenbank und Media-Ordner
 # Als geplante Aufgabe einrichten für automatische Ausführung
 

@@ -1,4 +1,4 @@
-# VERP Update Script für Windows Server
+﻿# VERP Update Script für Windows Server
 # Ausführen als Administrator: .\update-verp.ps1
 # Mit -SkipBackup Parameter um Backup zu überspringen
 
