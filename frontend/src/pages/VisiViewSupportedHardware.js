@@ -290,7 +290,7 @@ const VisiViewSupportedHardware = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 min-w-[900px]">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -318,7 +318,11 @@ const VisiViewSupportedHardware = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {hardware.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                  <tr
+                    key={item.id}
+                    onClick={() => navigate(`/visiview/supported-hardware/${item.id}`)}
+                    className="hover:bg-gray-50 cursor-pointer"
+                  >
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                       {item.id}
                     </td>
