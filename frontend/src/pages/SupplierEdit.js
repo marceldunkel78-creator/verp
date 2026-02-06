@@ -314,7 +314,7 @@ const SupplierEdit = () => {
 
   // Product Group handlers
   const handleGroupSubmit = async (e) => {
-    e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
     if (!id) {
       alert('Bitte speichern Sie den Lieferanten zuerst.');
       return;
@@ -363,7 +363,7 @@ const SupplierEdit = () => {
 
   // Price List handlers
   const handlePriceListSubmit = async (e) => {
-    e.preventDefault();
+    if (e?.preventDefault) e.preventDefault();
     if (!id) {
       alert('Bitte speichern Sie den Lieferanten zuerst.');
       return;
@@ -1051,7 +1051,7 @@ const SupplierEdit = () => {
                 <div className="border rounded-lg p-4">
                   <h4 className="text-md font-semibold mb-4">Preislisten</h4>
                   
-                  <form onSubmit={handlePriceListSubmit} className="mb-4 p-4 bg-gray-50 rounded-lg">
+                  <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Name *</label>
@@ -1085,7 +1085,8 @@ const SupplierEdit = () => {
                       </div>
                       <div className="flex items-end gap-2">
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={handlePriceListSubmit}
                           className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                         >
                           {editingPriceList ? 'Aktualisieren' : 'Hinzufügen'}
@@ -1101,7 +1102,7 @@ const SupplierEdit = () => {
                         )}
                       </div>
                     </div>
-                  </form>
+                  </div>
 
                   {priceLists.length === 0 ? (
                     <p className="text-sm text-gray-500">Keine Preislisten vorhanden</p>
@@ -1240,7 +1241,7 @@ const SupplierEdit = () => {
                 </div>
 
                 {/* Add/Edit Form */}
-                <form onSubmit={handleGroupSubmit} className="p-4 bg-gray-50 rounded-lg">
+                <div className="p-4 bg-gray-50 rounded-lg">
                   <h4 className="text-md font-medium mb-4">
                     {editingGroup ? 'Warengruppe bearbeiten' : 'Neue Warengruppe'}
                   </h4>
@@ -1279,7 +1280,8 @@ const SupplierEdit = () => {
                     </div>
                     <div className="flex items-end gap-2">
                       <button
-                        type="submit"
+                        type="button"
+                        onClick={handleGroupSubmit}
                         className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
                       >
                         {editingGroup ? 'Aktualisieren' : 'Hinzufügen'}
@@ -1295,7 +1297,7 @@ const SupplierEdit = () => {
                       )}
                     </div>
                   </div>
-                </form>
+                </div>
 
                 {/* Groups List */}
                 {productGroups.length === 0 ? (

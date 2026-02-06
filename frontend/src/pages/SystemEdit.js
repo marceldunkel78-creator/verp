@@ -1468,7 +1468,7 @@ const SystemEdit = () => {
                 {photos.map((photo, index) => (
                   <div key={photo.id} className={`relative group ${photo.is_outdated ? 'opacity-60' : ''}`}>
                     <img
-                      src={photo.image}
+                      src={photo.image_url || photo.image}
                       alt={photo.title}
                       className="w-full h-48 object-cover rounded-lg cursor-pointer"
                       onClick={() => {
@@ -2082,7 +2082,7 @@ const SystemEdit = () => {
           </button>
           
           <img
-            src={photos[currentPhotoIndex].image}
+            src={photos[currentPhotoIndex].image_url || photos[currentPhotoIndex].image}
             alt={photos[currentPhotoIndex].title}
             className="max-h-[80vh] max-w-[80vw] object-contain"
           />
