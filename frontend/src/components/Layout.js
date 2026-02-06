@@ -43,6 +43,65 @@ const Layout = () => {
     }
   }, [user]);
 
+  // Module mit ihren Submodul-Berechtigungen
+  const moduleSubPermissions = {
+    can_read_procurement: [
+      'can_read_suppliers',
+      'can_read_trading',
+      'can_read_procurement_product_collections',
+      'can_read_procurement_orders',
+      'can_read_procurement_loans',
+      'can_read_material_supplies'
+    ],
+    can_read_service: [
+      'can_read_service_vs_service',
+      'can_read_service_tickets',
+      'can_read_service_rma',
+      'can_read_service_troubleshooting'
+    ],
+    can_read_sales: [
+      'can_read_customers',
+      'can_read_sales_dealers',
+      'can_read_sales_pricelists',
+      'can_read_sales_projects',
+      'can_read_sales_quotations',
+      'can_read_sales_order_processing',
+      'can_read_sales_tickets',
+      'can_read_sales_marketing',
+      'can_read_sales_systems'
+    ],
+    can_read_inventory: [
+      'can_read_inventory_stock',
+      'can_read_inventory_planning'
+    ],
+    can_read_manufacturing: [
+      'can_read_manufacturing_vs_hardware',
+      'can_read_manufacturing_production_orders'
+    ],
+    can_read_visiview: [
+      'can_read_visiview_products',
+      'can_read_visiview_licenses',
+      'can_read_visiview_supported_hardware',
+      'can_read_visiview_macros',
+      'can_read_visiview_options'
+    ]
+  };
+
+  // Prüfe ob User Berechtigung für Modul oder eines seiner Submodule hat
+  const hasModuleAccess = (permission) => {
+    if (!permission) return true;
+    if (user?.is_superuser) return true;
+    if (user?.[permission]) return true;
+    
+    // Prüfe Submodul-Berechtigungen
+    const subPermissions = moduleSubPermissions[permission];
+    if (subPermissions) {
+      return subPermissions.some(subPerm => user?.[subPerm]);
+    }
+    
+    return false;
+  };
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'MyVERP', href: '/myverp', icon: ClockIcon },
@@ -65,8 +124,8 @@ const Layout = () => {
   const filteredNavigation = navigation.filter((item) => {
     if (item.adminOnly && !user?.is_staff) return false;
     if (item.settingsOnly && !(user?.can_read_settings || user?.is_superuser)) return false;
-    // Prüfe Berechtigung wenn angegeben
-    if (item.permission && !(user?.[item.permission] || user?.is_superuser)) return false;
+    // Prüfe Berechtigung (inkl. Submodul-Berechtigungen)
+    if (item.permission && !hasModuleAccess(item.permission)) return false;
     return true;
   });
 

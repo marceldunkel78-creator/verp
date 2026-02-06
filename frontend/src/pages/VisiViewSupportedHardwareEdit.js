@@ -171,7 +171,7 @@ const VisiViewSupportedHardwareEdit = () => {
 
   // Search handlers
   const searchCustomers = async (term) => {
-    if (term.length < 2) {
+    if (term.length < 3) {
       setCustomerResults([]);
       return;
     }
@@ -184,7 +184,7 @@ const VisiViewSupportedHardwareEdit = () => {
   };
 
   const searchLicenses = async (term) => {
-    if (term.length < 2) {
+    if (term.length < 3) {
       setLicenseResults([]);
       return;
     }
@@ -197,7 +197,7 @@ const VisiViewSupportedHardwareEdit = () => {
   };
 
   const searchSystems = async (term) => {
-    if (term.length < 2) {
+    if (term.length < 3) {
       setSystemResults([]);
       return;
     }
@@ -248,21 +248,6 @@ const VisiViewSupportedHardwareEdit = () => {
       setSaveMessage({ type: 'error', text: 'Fehler beim Speichern: ' + detail });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!window.confirm(`Möchten Sie "${formData.manufacturer} ${formData.device}" wirklich löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`)) {
-      return;
-    }
-    
-    try {
-      await api.delete(`/visiview/supported-hardware/${id}/`);
-      alert('Hardware erfolgreich gelöscht');
-      navigate('/visiview/supported-hardware');
-    } catch (error) {
-      console.error('Fehler beim Löschen:', error);
-      alert('Fehler beim Löschen: ' + (error.response?.data?.detail || error.message));
     }
   };
 
@@ -554,15 +539,6 @@ const VisiViewSupportedHardwareEdit = () => {
           </div>
           
           <div className="flex items-center gap-3">
-            {!isNew && canWrite && (
-              <button
-                onClick={handleDelete}
-                className="flex items-center gap-2 text-red-600 hover:text-red-700 px-3 py-2 border border-red-300 rounded-lg hover:bg-red-50"
-              >
-                <TrashIcon className="h-5 w-5" />
-                Löschen
-              </button>
-            )}
             {canWrite && (
               <button
                 onClick={handleSave}
