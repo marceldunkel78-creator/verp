@@ -15,11 +15,7 @@
                     <action type="Rewrite" url="http://127.0.0.1:8000/api/{R:1}" />
                 </rule>
                 
-                <!-- Media Files direkt aus dem Media-Ordner ausliefern -->
-                <rule name="Media Files" stopProcessing="true">
-                    <match url="^media/(.*)" />
-                    <action type="Rewrite" url="C:\VERP-Media\{R:1}" />
-                </rule>
+                <!-- Media Files: per IIS Virtual Directory bereitstellen (Alias: media -> C:\VERP-Media) -->
                 
                 <!-- Django Admin Interface weiterleiten -->
                 <rule name="Admin Proxy" stopProcessing="true">
