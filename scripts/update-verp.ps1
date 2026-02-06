@@ -21,7 +21,7 @@ function Write-Success {
     Write-Host "  ✓ $Message" -ForegroundColor Green
 }
 
-function Write-Error {
+function Write-Failure {
     param([string]$Message)
     Write-Host "  ✗ $Message" -ForegroundColor Red
 }
@@ -35,13 +35,13 @@ Write-Host "╚═════════════════════�
 # Prüfe ob als Administrator ausgeführt
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Error "Dieses Script muss als Administrator ausgeführt werden!"
+    Write-Failure "Dieses Script muss als Administrator ausgeführt werden!"
     exit 1
 }
 
 # Prüfe ob VERP-Verzeichnis existiert
 if (-not (Test-Path $VerpRoot)) {
-    Write-Error "VERP-Verzeichnis nicht gefunden: $VerpRoot"
+    Write-Failure "VERP-Verzeichnis nicht gefunden: $VerpRoot"
     exit 1
 }
 
@@ -117,20 +117,20 @@ try {
     Set-Location $VerpRoot
     
     # Lokale Änderungen sichern
-    $hasChanges = git status --porcelain
+    $hasChanges = (git status --porcelain) | Where-Object { $_.Trim() -ne '' }
     if ($hasChanges) {
         Write-Host "  ! Lokale Änderungen gefunden, erstelle Stash..." -ForegroundColor Yellow
-        git stash push -m "Auto-stash vor Update $Timestamp"
+        git stash push -m "Auto-stash vor Update $Timestamp" 2>&1 | Out-Null
     }
     
-    git fetch --all
-    $result = git pull origin main 2>&1
+    $fetchOut = git fetch --all 2>&1
+    $pullOut = git pull origin main 2>&1
     
     if ($LASTEXITCODE -eq 0) {
         Write-Success "Git Pull erfolgreich"
-        Write-Host "  $result" -ForegroundColor Gray
+        $pullOut | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
     } else {
-        throw "Git Pull fehlgeschlagen: $result"
+        throw "Git Pull fehlgeschlagen: $pullOut"
     }
 
     # ============================================================
@@ -151,11 +151,13 @@ try {
     }
     
     # Dependencies installieren
-    pip install -r requirements.txt --quiet --disable-pip-version-check
+    $pipOut = pip install -r requirements.txt --quiet --disable-pip-version-check 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "pip install fehlgeschlagen: $pipOut" }
     Write-Success "Python-Abhängigkeiten aktualisiert"
     
     # Migrationen ausführen
-    python manage.py migrate --noinput
+    $migrateOut = python manage.py migrate --noinput 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Migrationen fehlgeschlagen: $migrateOut" }
     Write-Success "Datenbank-Migrationen ausgeführt"
     
     # Static Files sammeln
@@ -206,7 +208,7 @@ try {
         if ($service.Status -eq "Running") {
             Write-Success "Backend-Dienst läuft"
         } else {
-            Write-Error "Backend-Dienst konnte nicht gestartet werden!"
+            Write-Failure "Backend-Dienst konnte nicht gestartet werden!"
             Write-Host "    Prüfen Sie die Logs mit: nssm status VERP-Backend" -ForegroundColor Gray
         }
     } else {
@@ -242,7 +244,7 @@ try {
     Write-Host "║           UPDATE FEHLGESCHLAGEN          ║" -ForegroundColor Red
     Write-Host "╚══════════════════════════════════════════╝" -ForegroundColor Red
     Write-Host ""
-    Write-Error $_.Exception.Message
+    Write-Failure $_.Exception.Message
     Write-Host ""
     Write-Host "Bitte prüfen Sie die Fehlermeldung und versuchen Sie es erneut." -ForegroundColor Yellow
     
