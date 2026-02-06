@@ -12,7 +12,7 @@ class SystemPhotoSerializer(serializers.ModelSerializer):
         model = SystemPhoto
         fields = [
             'id', 'system', 'image', 'image_url', 'title', 'description',
-            'is_primary', 'position', 'uploaded_by', 'created_at'
+            'is_primary', 'is_outdated', 'position', 'uploaded_by', 'created_at'
         ]
         read_only_fields = ['id', 'uploaded_by', 'created_at']
     
@@ -44,7 +44,7 @@ class SystemComponentSerializer(serializers.ModelSerializer):
             'id', 'system', 'position', 'inventory_item', 'inventory_item_name',
             'component_type', 'component_type_display', 'name', 'description',
             'manufacturer', 'serial_number', 'version', 'category',
-            'category_display', 'notes', 'created_at', 'updated_at'
+            'category_display', 'notes', 'is_legacy', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 

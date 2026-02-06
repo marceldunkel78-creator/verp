@@ -316,6 +316,11 @@ class SystemComponent(models.Model):
         verbose_name='Notizen'
     )
     
+    is_legacy = models.BooleanField(
+        default=False,
+        verbose_name='Legacy/Veraltet'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -370,6 +375,11 @@ class SystemPhoto(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         verbose_name='Hochgeladen von'
+    )
+    
+    is_outdated = models.BooleanField(
+        default=False,
+        verbose_name='Veraltet'
     )
     
     created_at = models.DateTimeField(auto_now_add=True)

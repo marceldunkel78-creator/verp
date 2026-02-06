@@ -300,10 +300,8 @@ const SystemEdit = () => {
     if (!employeeSearch.trim()) return;
     setSearchingEmployees(true);
     try {
-      const params = new URLSearchParams();
-      params.append('search', employeeSearch);
-      const response = await api.get(`/users/employees/?${params.toString()}`);
-      const data = response.data.results || response.data || [];
+      const response = await api.get(`/users/employees/lookup/?search=${encodeURIComponent(employeeSearch)}`);
+      const data = response.data || [];
       setEmployees(data);
     } catch (err) {
       console.error('Error searching employees:', err);
@@ -329,13 +327,10 @@ const SystemEdit = () => {
 
   const fetchResponsibleEmployees = async () => {
     try {
-      // Lade nur aktive Mitarbeiter aus Vertrieb und Geschäftsführung
-      const response = await api.get('/users/employees/?employment_status=aktiv');
-      const allEmployees = response.data.results || response.data || [];
-      const filtered = allEmployees.filter(emp => 
-        emp.department === 'vertrieb' || emp.department === 'geschaeftsfuehrung'
-      );
-      setEmployees(filtered);
+      // Lightweight Lookup-Endpoint - keine HR-Berechtigung nötig
+      const response = await api.get('/users/employees/lookup/?department=vertrieb,geschaeftsfuehrung');
+      const allEmployees = response.data || [];
+      setEmployees(allEmployees);
     } catch (err) {
       console.error('Error loading employees:', err);
       setEmployees([]);
@@ -618,7 +613,8 @@ const SystemEdit = () => {
       manufacturer: '',
       serial_number: '',
       version: '',
-      category: 'microscope'
+      category: 'microscope',
+      is_legacy: false
     });
     setShowComponentModal(true);
     if (inventoryItems.length === 0) {
@@ -660,6 +656,28 @@ const SystemEdit = () => {
       fetchSystem();
     } catch (error) {
       console.error('Error deleting component:', error);
+    }
+  };
+
+  const toggleComponentLegacy = async (component) => {
+    try {
+      await api.patch(`/systems/components/${component.id}/`, {
+        is_legacy: !component.is_legacy
+      });
+      fetchSystem();
+    } catch (error) {
+      console.error('Error toggling legacy:', error);
+    }
+  };
+
+  const togglePhotoOutdated = async (photo) => {
+    try {
+      await api.patch(`/systems/photos/${photo.id}/`, {
+        is_outdated: !photo.is_outdated
+      });
+      fetchSystem();
+    } catch (error) {
+      console.error('Error toggling outdated:', error);
     }
   };
 
@@ -1333,7 +1351,7 @@ const SystemEdit = () => {
             ) : (
               <div className="space-y-4">
                 {components.map((component) => (
-                  <div key={component.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                  <div key={component.id} className={`border rounded-lg p-4 hover:bg-gray-50 ${component.is_legacy ? 'opacity-60 border-dashed border-orange-300 bg-orange-50/30' : ''}`}>
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -1347,6 +1365,11 @@ const SystemEdit = () => {
                           <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
                             {component.category_display || component.category}
                           </span>
+                          {component.is_legacy && (
+                            <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded font-medium">
+                              Legacy
+                            </span>
+                          )}
                         </div>
                         <h4 className="font-medium mt-2">{component.name}</h4>
                         {component.description && (
@@ -1374,6 +1397,17 @@ const SystemEdit = () => {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => toggleComponentLegacy(component)}
+                          className={`p-2 rounded text-xs font-medium ${
+                            component.is_legacy 
+                              ? 'text-green-600 hover:bg-green-50' 
+                              : 'text-orange-600 hover:bg-orange-50'
+                          }`}
+                          title={component.is_legacy ? 'Als aktiv markieren' : 'Als Legacy markieren'}
+                        >
+                          {component.is_legacy ? 'Aktivieren' : 'Legacy'}
+                        </button>
                         <button
                           onClick={() => openComponentModal(component)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded"
@@ -1432,7 +1466,7 @@ const SystemEdit = () => {
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {photos.map((photo, index) => (
-                  <div key={photo.id} className="relative group">
+                  <div key={photo.id} className={`relative group ${photo.is_outdated ? 'opacity-60' : ''}`}>
                     <img
                       src={photo.image}
                       alt={photo.title}
@@ -1442,11 +1476,18 @@ const SystemEdit = () => {
                         setPhotoCarouselOpen(true);
                       }}
                     />
-                    {photo.is_primary && (
-                      <span className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
-                        Hauptbild
-                      </span>
-                    )}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                      {photo.is_primary && (
+                        <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded">
+                          Hauptbild
+                        </span>
+                      )}
+                      {photo.is_outdated && (
+                        <span className="bg-orange-600 text-white text-xs px-2 py-1 rounded">
+                          Veraltet
+                        </span>
+                      )}
+                    </div>
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
                       <button
                         onClick={() => {
@@ -1457,6 +1498,15 @@ const SystemEdit = () => {
                         title="Vergrößern"
                       >
                         <ArrowsPointingOutIcon className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => togglePhotoOutdated(photo)}
+                        className="p-2 bg-white rounded-full mx-1"
+                        title={photo.is_outdated ? 'Als aktuell markieren' : 'Als veraltet markieren'}
+                      >
+                        <span className={`text-xs font-medium ${photo.is_outdated ? 'text-green-600' : 'text-orange-600'}`}>
+                          {photo.is_outdated ? '✓' : '⊗'}
+                        </span>
                       </button>
                       {!photo.is_primary && (
                         <button
@@ -1979,6 +2029,19 @@ const SystemEdit = () => {
                     placeholder="z.B. FW 2.1, Driver 3.4.5"
                     className="w-full px-3 py-2 border rounded-lg"
                   />
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editingComponent.is_legacy || false}
+                      onChange={(e) => setEditingComponent(prev => ({ ...prev, is_legacy: e.target.checked }))}
+                      className="h-4 w-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Legacy / Veraltet</span>
+                  </label>
+                  <span className="text-xs text-gray-500">Markiert die Komponente als nicht mehr aktiv im System</span>
                 </div>
               </div>
 

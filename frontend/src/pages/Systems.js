@@ -276,7 +276,7 @@ const Systems = () => {
   const [showStarSearch, setShowStarSearch] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
 
-  const canUseEmployeeFilter = user?.is_superuser || user?.can_read_hr || user?.can_write_hr;
+  const canUseEmployeeFilter = true; // Alle authentifizierten User können den Mitarbeiterfilter nutzen
 
   const SESSION_KEY = 'systems_search_state';
 
@@ -385,14 +385,9 @@ const Systems = () => {
       const allSystems = systemsRes.data.results || systemsRes.data || [];
 
       if (canUseEmployeeFilter) {
-        const empRes = await api.get('/users/employees/?employment_status=aktiv');
-        const allEmployees = empRes.data.results || empRes.data || [];
-        
-        // Filter nur Vertrieb und Geschäftsführung
-        const filteredEmployees = allEmployees.filter(emp => 
-          emp.department === 'vertrieb' || emp.department === 'geschaeftsfuehrung'
-        );
-        setEmployees(filteredEmployees);
+        const empRes = await api.get('/users/employees/lookup/?department=vertrieb,geschaeftsfuehrung');
+        const allEmployees = empRes.data || [];
+        setEmployees(allEmployees);
       } else {
         // Fallback: use responsible_employee from systems list
         const employeeMap = new Map();

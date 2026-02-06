@@ -114,6 +114,33 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(emp)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='lookup')
+    def lookup(self, request):
+        """
+        Lightweight employee lookup - keine HR-Berechtigung nötig.
+        Gibt nur id, first_name, last_name, department, department_display, job_title zurück.
+        Wird z.B. für Mitarbeiter-Dropdowns in Systemen verwendet.
+        """
+        queryset = Employee.objects.filter(employment_status='aktiv')
+        department = request.query_params.get('department')
+        if department:
+            departments = [d.strip() for d in department.split(',')]
+            queryset = queryset.filter(department__in=departments)
+        search = request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(first_name__icontains=search) | Q(last_name__icontains=search)
+            )
+        data = list(queryset.values(
+            'id', 'first_name', 'last_name', 'department', 'job_title'
+        ).order_by('last_name', 'first_name'))
+        # department_display hinzufügen
+        dept_map = dict(Employee.DEPARTMENT_CHOICES) if hasattr(Employee, 'DEPARTMENT_CHOICES') else {}
+        for item in data:
+            item['department_display'] = dept_map.get(item['department'], item['department'] or '')
+        return Response(data)
+
 
 class TimeEntryViewSet(viewsets.ModelViewSet):
     """ViewSet für Zeiteinträge"""
