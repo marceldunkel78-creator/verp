@@ -15,10 +15,10 @@
                     <action type="Rewrite" url="http://127.0.0.1:8000/api/{R:1}" />
                 </rule>
                 
-                <!-- Media Files an Django Backend weiterleiten -->
-                <rule name="Media Proxy" stopProcessing="true">
+                <!-- Media Files direkt aus dem Media-Ordner ausliefern -->
+                <rule name="Media Files" stopProcessing="true">
                     <match url="^media/(.*)" />
-                    <action type="Rewrite" url="http://127.0.0.1:8000/media/{R:1}" />
+                    <action type="Rewrite" url="C:\VERP-Media\{R:1}" />
                 </rule>
                 
                 <!-- Django Admin Interface weiterleiten -->
@@ -56,6 +56,20 @@
             <mimeMap fileExtension=".woff" mimeType="application/font-woff" />
             <remove fileExtension=".woff2" />
             <mimeMap fileExtension=".woff2" mimeType="font/woff2" />
+            <remove fileExtension=".jpg" />
+            <mimeMap fileExtension=".jpg" mimeType="image/jpeg" />
+            <remove fileExtension=".jpeg" />
+            <mimeMap fileExtension=".jpeg" mimeType="image/jpeg" />
+            <remove fileExtension=".png" />
+            <mimeMap fileExtension=".png" mimeType="image/png" />
+            <remove fileExtension=".gif" />
+            <mimeMap fileExtension=".gif" mimeType="image/gif" />
+            <remove fileExtension=".webp" />
+            <mimeMap fileExtension=".webp" mimeType="image/webp" />
+            <remove fileExtension=".svg" />
+            <mimeMap fileExtension=".svg" mimeType="image/svg+xml" />
+            <remove fileExtension=".pdf" />
+            <mimeMap fileExtension=".pdf" mimeType="application/pdf" />
         </staticContent>
         
         <!-- Kompression aktivieren -->
