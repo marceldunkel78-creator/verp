@@ -29,6 +29,11 @@ Umgebungsvariablen konfigurieren (.env Datei):
 
   # Media Storage - Absoluter Pfad zum externen Medienordner
   MEDIA_ROOT=C:/VERP-Media
+  
+  # Media Base URL - Für Produktion (falls Backend unter anderer URL als Frontend läuft)
+  # Beispiel: MEDIA_BASE_URL=http://verp.intern.local
+  # Falls nicht gesetzt, wird die URL automatisch aus dem Request generiert
+  # MEDIA_BASE_URL=
 
 - Generiere einen sicheren SECRET_KEY:
   cd backend

@@ -18,8 +18,15 @@ class SystemPhotoSerializer(serializers.ModelSerializer):
     
     def get_image_url(self, obj):
         request = self.context.get('request')
-        if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
+        if obj.image:
+            # Use MEDIA_BASE_URL if configured, otherwise build from request
+            from django.conf import settings
+            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                return settings.MEDIA_BASE_URL + obj.image.url
+            elif request:
+                return request.build_absolute_uri(obj.image.url)
+            else:
+                return obj.image.url
         return None
 
 

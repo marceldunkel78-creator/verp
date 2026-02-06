@@ -141,6 +141,10 @@ if _media_root_env:
 else:
     MEDIA_ROOT = BASE_DIR / 'media'
 
+# Optional: Override MEDIA_BASE_URL for production (e.g., http://verp.intern.local)
+# Falls nicht gesetzt, wird request.build_absolute_uri verwendet
+MEDIA_BASE_URL = config('MEDIA_BASE_URL', default=None)
+
 # Ensure MEDIA_ROOT directory exists
 if not MEDIA_ROOT.exists():
     try:
