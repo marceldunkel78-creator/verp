@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import {
   PlusIcon,
-  PencilIcon,
   MagnifyingGlassIcon,
   ComputerDesktopIcon,
   ChevronLeftIcon,
@@ -15,7 +14,6 @@ import {
   CpuChipIcon,
   LightBulbIcon,
   Cog6ToothIcon,
-  TrashIcon,
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 
@@ -87,20 +85,6 @@ const VisiViewSupportedHardware = () => {
     e.preventDefault();
     setCurrentPage(1);
     fetchHardware();
-  };
-
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Möchten Sie "${name}" wirklich löschen?`)) {
-      return;
-    }
-    try {
-      await api.delete(`/visiview/supported-hardware/${id}/`);
-      fetchHardware();
-      fetchMetadata();
-    } catch (error) {
-      console.error('Error deleting hardware:', error);
-      alert('Fehler beim Löschen: ' + (error.response?.data?.detail || error.message));
-    }
   };
 
   const handleExportCSV = async () => {
@@ -310,6 +294,9 @@ const VisiViewSupportedHardware = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ID
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Kategorie
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -327,14 +314,14 @@ const VisiViewSupportedHardware = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Support Level
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aktionen
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {hardware.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                      {item.id}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-gray-900">
                         {getCategoryIcon(item.category)}
@@ -359,26 +346,6 @@ const VisiViewSupportedHardware = () => {
                           {item.support_level}
                         </span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => navigate(`/visiview/supported-hardware/${item.id}`)}
-                          className="text-blue-600 hover:text-blue-900 p-1"
-                          title="Bearbeiten"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        {canWrite && (
-                          <button
-                            onClick={() => handleDelete(item.id, `${item.manufacturer} ${item.device}`)}
-                            className="text-red-600 hover:text-red-900 p-1"
-                            title="Löschen"
-                          >
-                            <TrashIcon className="h-5 w-5" />
-                          </button>
-                        )}
-                      </div>
                     </td>
                   </tr>
                 ))}
