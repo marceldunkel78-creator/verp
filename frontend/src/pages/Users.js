@@ -101,6 +101,7 @@ const MODULE_HIERARCHY = [
       { key: 'visiview_tickets', label: 'Tickets' },
       { key: 'visiview_macros', label: 'Macros' },
       { key: 'visiview_maintenance_time', label: 'Maintenance Zeiterfassung' },
+      { key: 'visiview_supported_hardware', label: 'Unterstützte Hardware' },
     ]
   },
   {

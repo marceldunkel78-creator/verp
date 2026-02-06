@@ -46,7 +46,7 @@ const Layout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'MyVERP', href: '/myverp', icon: ClockIcon },
-    { name: 'Kalender', href: '/calendar', icon: CalendarIcon },
+    { name: 'Kalender', href: '/calendar', icon: CalendarIcon, permission: 'can_read_company_calendar' },
     { name: 'Meetings', href: '/meetings', icon: CalendarDaysIcon, permission: 'can_read_meetings' },
     { name: 'Finance', href: '/finance', icon: BanknotesIcon, permission: 'can_read_finance' },
     { name: 'Procurement', href: '/procurement', icon: TruckIcon, permission: 'can_read_procurement' },

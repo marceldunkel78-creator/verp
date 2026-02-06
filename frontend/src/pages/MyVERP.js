@@ -2478,6 +2478,12 @@ const PersonalDashboardTab = () => {
     { id: 'visiview-licenses', name: 'Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'VisiView', permission: 'can_read_visiview_licenses' },
     { id: 'visiview-tickets', name: 'VisiView Tickets', route: '/visiview/tickets', icon: '🎫', category: 'VisiView', permission: 'can_read_visiview_tickets' },
     { id: 'visiview-macros', name: 'Macros', route: '/visiview/macros', icon: '📜', category: 'VisiView', permission: 'can_read_visiview_macros' },
+    { id: 'visiview-supported-hardware', name: 'Unterstützte Hardware', route: '/visiview/supported-hardware', icon: '🖥️', category: 'VisiView', permission: 'can_read_visiview_supported_hardware' },
+    { id: 'visiview-maintenance-time', name: 'Maintenance Zeiterfassung', route: '/visiview/maintenance-time', icon: '⏱️', category: 'VisiView', permission: 'can_read_visiview_maintenance_time' },
+    
+    // Kalender & Meetings
+    { id: 'calendar', name: 'Firmenkalender', route: '/calendar', icon: '📅', category: 'Kalender', permission: 'can_read_company_calendar' },
+    { id: 'meetings', name: 'Meetings', route: '/meetings', icon: '🤝', category: 'Kalender', permission: 'can_read_meetings' },
     
     // Service
     { id: 'service', name: 'Service', route: '/service', icon: '🛠️', category: 'Service', permission: 'can_read_service' },

@@ -41,7 +41,12 @@ const allModules = [
   { id: 'visiview-licenses', name: 'VisiView Lizenzen', route: '/visiview/licenses', icon: '🔑', category: 'Produkte', permission: 'can_read_visiview_licenses' },
   { id: 'visiview-macros', name: 'VisiView Makros', route: '/visiview/macros', icon: '📜', category: 'Produkte', permission: 'can_read_visiview_macros' },
   { id: 'visiview-tickets', name: 'VisiView Tickets', route: '/visiview/tickets', icon: '🎫', category: 'Produkte', permission: 'can_read_visiview_tickets' },
+  { id: 'visiview-supported-hardware', name: 'Unterstützte Hardware', route: '/visiview/supported-hardware', icon: '🖥️', category: 'Produkte', permission: 'can_read_visiview_supported_hardware' },
+  { id: 'visiview-maintenance-time', name: 'Maintenance Zeiterfassung', route: '/visiview/maintenance-time', icon: '⏱️', category: 'Produkte', permission: 'can_read_visiview_maintenance_time' },
   { id: 'vshardware', name: 'VS-Hardware', route: '/manufacturing/vs-hardware', icon: '🔧', category: 'Produkte', permission: 'can_read_manufacturing_vs_hardware' },
+  // Kalender & Meetings
+  { id: 'calendar', name: 'Firmenkalender', route: '/calendar', icon: '📅', category: 'Kalender', permission: 'can_read_company_calendar' },
+  { id: 'meetings', name: 'Meetings', route: '/meetings', icon: '🤝', category: 'Kalender', permission: 'can_read_meetings' },
   // Service
   { id: 'vsservice', name: 'VS-Service', route: '/service/vs-service', icon: '🛠️', category: 'Service', permission: 'can_read_service_vs_service' },
   { id: 'rma', name: 'RMA-Fälle', route: '/service/rma', icon: '🔄', category: 'Service', permission: 'can_read_service_rma' },
@@ -72,6 +77,7 @@ const categoryColors = {
   'Service': 'bg-orange-500 hover:bg-orange-600',
   'Lager': 'bg-violet-500 hover:bg-violet-600',
   'Fertigung': 'bg-gray-500 hover:bg-gray-600',
+  'Kalender': 'bg-teal-500 hover:bg-teal-600',
   'Projekte': 'bg-indigo-500 hover:bg-indigo-600',
   'System': 'bg-purple-500 hover:bg-purple-600',
 };
