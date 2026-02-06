@@ -400,3 +400,14 @@ class SystemPhoto(models.Model):
                 is_primary=True
             ).exclude(pk=self.pk).update(is_primary=False)
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        # Entferne das Bild aus dem Media-Ordner, bevor der Datensatz geloescht wird
+        image_name = self.image.name if self.image else None
+        storage = self.image.storage if self.image else None
+        super().delete(*args, **kwargs)
+        if image_name and storage:
+            try:
+                storage.delete(image_name)
+            except Exception:
+                pass
