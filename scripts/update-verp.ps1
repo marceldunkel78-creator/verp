@@ -116,6 +116,12 @@ try {
     
     Set-Location $VerpRoot
     
+    # Git-Befehle brauchen ErrorActionPreference=Continue,
+    # da Git Fortschrittsmeldungen auf stderr schreibt und
+    # PowerShell 5.1 diese bei "Stop" als Exception wirft.
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    
     # Lokale Änderungen sichern
     $hasChanges = (git status --porcelain) | Where-Object { $_.Trim() -ne '' }
     if ($hasChanges) {
@@ -123,10 +129,13 @@ try {
         git stash push -m "Auto-stash vor Update $Timestamp" 2>&1 | Out-Null
     }
     
-    $fetchOut = git fetch --all 2>&1
+    git fetch --all 2>&1 | Out-Null
     $pullOut = git pull origin main 2>&1
+    $gitExitCode = $LASTEXITCODE
     
-    if ($LASTEXITCODE -eq 0) {
+    $ErrorActionPreference = $savedEAP
+    
+    if ($gitExitCode -eq 0) {
         Write-Success "Git Pull erfolgreich"
         $pullOut | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
     } else {
@@ -150,18 +159,29 @@ try {
         & $venvActivate
     }
     
-    # Dependencies installieren
+    # Dependencies installieren (Continue nötig wegen pip stderr-Warnungen)
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $pipOut = pip install -r requirements.txt --quiet --disable-pip-version-check 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "pip install fehlgeschlagen: $pipOut" }
+    $pipExit = $LASTEXITCODE
+    $ErrorActionPreference = $savedEAP
+    if ($pipExit -ne 0) { throw "pip install fehlgeschlagen: $pipOut" }
     Write-Success "Python-Abhängigkeiten aktualisiert"
     
     # Migrationen ausführen
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $migrateOut = python manage.py migrate --noinput 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "Migrationen fehlgeschlagen: $migrateOut" }
+    $migrateExit = $LASTEXITCODE
+    $ErrorActionPreference = $savedEAP
+    if ($migrateExit -ne 0) { throw "Migrationen fehlgeschlagen: $migrateOut" }
     Write-Success "Datenbank-Migrationen ausgeführt"
     
     # Static Files sammeln
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     python manage.py collectstatic --noinput 2>&1 | Out-Null
+    $ErrorActionPreference = $savedEAP
     Write-Success "Static Files gesammelt"
 
     # ============================================================
@@ -172,11 +192,21 @@ try {
     Set-Location "$VerpRoot\frontend"
     
     # npm install
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     npm install --silent 2>&1 | Out-Null
+    $npmInstallExit = $LASTEXITCODE
+    $ErrorActionPreference = $savedEAP
+    if ($npmInstallExit -ne 0) { throw "npm install fehlgeschlagen" }
     Write-Success "NPM-Abhängigkeiten aktualisiert"
     
     # Build erstellen
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     npm run build 2>&1 | Out-Null
+    $npmBuildExit = $LASTEXITCODE
+    $ErrorActionPreference = $savedEAP
+    if ($npmBuildExit -ne 0) { throw "npm build fehlgeschlagen" }
     Write-Success "Frontend Build erstellt"
 
     # ============================================================
