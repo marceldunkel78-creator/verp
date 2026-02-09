@@ -19,7 +19,7 @@ Boolean-Werte in SQL Server: BIT (0/1), in Access-Export: WAHR/FALSCH.
 import logging
 import re
 import pyodbc
-from django.db import transaction
+from django.db import connection, transaction
 from customers.models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerLegacyMapping
 
 logger = logging.getLogger(__name__)
@@ -593,6 +593,10 @@ def preview_sync(server, database='VSDB', use_dsn=False, dsn_name=None, limit=50
 def sync_customers(server, database='VSDB', use_dsn=False, dsn_name=None,
                    created_by_user=None, dry_run=False):
     """Fuehrt die vollstaendige Synchronisation durch."""
+    # PostgreSQL-Sequenzen reparieren bevor wir neue Datensaetze anlegen
+    if not dry_run:
+        reset_customer_sequences()
+
     conn = get_mssql_connection(server, database, use_dsn, dsn_name)
     rows = fetch_addresses_from_sql(conn)
     conn.close()
@@ -896,12 +900,15 @@ def _sync_phones(customer, anschluss1, anschluss2, anschluss3):
         if number and number not in existing_numbers:
             if is_primary and customer.phones.filter(is_primary=True).exists():
                 is_primary = False
-            CustomerPhone.objects.create(
-                customer=customer,
-                phone_type=phone_type,
-                phone_number=number,
-                is_primary=is_primary,
-            )
+            try:
+                CustomerPhone.objects.create(
+                    customer=customer,
+                    phone_type=phone_type,
+                    phone_number=number,
+                    is_primary=is_primary,
+                )
+            except Exception as e:
+                logger.warning(f"Telefon '{number}' fuer {customer}: {e}")
 
 
 def _sync_email(customer, email, newsletter=False):
@@ -922,12 +929,44 @@ def _sync_email(customer, email, newsletter=False):
 
     has_primary = customer.emails.filter(is_primary=True).exists()
 
-    CustomerEmail.objects.create(
-        customer=customer,
-        email=email,
-        is_primary=not has_primary,
-        newsletter_consent=newsletter,
-    )
+    try:
+        CustomerEmail.objects.create(
+            customer=customer,
+            email=email,
+            is_primary=not has_primary,
+            newsletter_consent=newsletter,
+        )
+    except Exception as e:
+        logger.warning(f"Email '{email}' fuer {customer}: {e}")
+
+
+# --- Sequenz-Reparatur ---
+
+def reset_customer_sequences():
+    """
+    Repariert PostgreSQL Auto-Increment-Sequenzen fuer alle Kunden-Tabellen.
+    Noetig nach Bulk-Imports die explizite IDs gesetzt haben.
+    """
+    tables = [
+        'customers_customer',
+        'customers_customeraddress',
+        'customers_customerphone',
+        'customers_customeremail',
+        'customers_contacthistory',
+        'customers_customerlegacymapping',
+    ]
+    with connection.cursor() as cursor:
+        for table in tables:
+            try:
+                cursor.execute(f"""
+                    SELECT setval(
+                        pg_get_serial_sequence('{table}', 'id'),
+                        COALESCE((SELECT MAX(id) FROM {table}), 1)
+                    )
+                """)
+                logger.info(f"Sequenz fuer {table} zurueckgesetzt")
+            except Exception as e:
+                logger.warning(f"Sequenz-Reset fuer {table} fehlgeschlagen: {e}")
 
 
 # --- Status ---
