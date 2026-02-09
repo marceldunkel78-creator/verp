@@ -266,13 +266,97 @@ def extract_street_and_number(street_str):
     return street_str, ''
 
 
+def _normalize_phone(number):
+    """
+    Normalisiert eine Telefonnummer fuer Vergleiche.
+    Entfernt Leerzeichen, Bindestriche, Klammern, Schraegstriche.
+    Ergebnis: nur Ziffern und ggf. fuehrendes '+'.
+    """
+    if not number:
+        return ''
+    num = str(number).strip()
+    # Fuehrendes + behalten
+    has_plus = num.startswith('+')
+    # Nur Ziffern behalten
+    digits = re.sub(r'[^\d]', '', num)
+    if has_plus:
+        return '+' + digits
+    return digits
+
+
+def _is_mobile_or_complete(number):
+    """
+    Prueft ob eine Telefonnummer bereits vollstaendig ist
+    (Mobilnummer, internationale Nummer, oder schon mit Vorwahl).
+    
+    Deutsche Mobilnummern: 015x, 016x, 017x
+    Internationale: +49..., +43..., etc.
+    Bereits mit Vorwahl: beginnt mit 0 und hat mind. 6 Ziffern
+    """
+    num = _normalize_phone(number)
+    if not num:
+        return False
+    # Internationale Nummer
+    if num.startswith('+'):
+        return True
+    # Deutsche Mobilpraefixe (015x, 016x, 017x)
+    if re.match(r'^0(15|16|17)\d', num):
+        return True
+    # Beginnt mit 0 und hat genug Ziffern -> wahrscheinlich schon mit Vorwahl
+    if num.startswith('0') and len(num) >= 6:
+        return True
+    return False
+
+
+def _detect_phone_type(number):
+    """
+    Erkennt den Telefontyp anhand der Nummer.
+    Mobilnummern (015x, 016x, 017x) -> 'Mobil'
+    Sonst -> 'Buero'
+    """
+    num = _normalize_phone(number)
+    if not num:
+        return 'Büro'
+    # Deutsche Mobil-Praefixe
+    if re.match(r'^\+?49?(15|16|17)\d', num):
+        return 'Mobil'
+    if re.match(r'^0(15|16|17)\d', num):
+        return 'Mobil'
+    return 'Büro'
+
+
+def smart_combine_phone(area_code, number):
+    """
+    Kombiniert Vorwahl und Telefonnummer intelligent.
+    
+    Regeln:
+    - Leere Nummer -> ''
+    - Nummer ist bereits vollstaendig (Mobil, international, hat Vorwahl) -> nur Nummer
+    - Sonst: Vorwahl + Nummer kombinieren
+    - Vorwahl wird normalisiert (fuehrende 0 hinzufuegen wenn noetig)
+    """
+    area = clean_string(area_code)
+    num = clean_string(number)
+    
+    if not num:
+        return ''
+    
+    # Nummer ist bereits vollstaendig -> nicht mit Vorwahl kombinieren
+    if _is_mobile_or_complete(num):
+        return num
+    
+    # Vorwahl vorhanden -> kombinieren
+    if area:
+        if not area.startswith('0') and not area.startswith('+'):
+            area = '0' + area
+        return f"{area} {num}"
+    
+    return num
+
+
 def combine_phone(vorwahl, telefon):
-    """Kombiniert Vorwahl und Telefonnummer."""
-    v = clean_string(vorwahl)
-    t = clean_string(telefon)
-    if v and t:
-        return f"{v} {t}"
-    return t or v
+    """Legacy-Wrapper -> nutzt jetzt smart_combine_phone."""
+    return smart_combine_phone(vorwahl, telefon)
 
 
 def get_language(english_speaking, land_iso):
@@ -748,11 +832,11 @@ def _sync_single_customer(row, created_by_user=None, dry_run=False):
 
     street, house_number = extract_street_and_number(strasse_raw)
 
-    # Telefonnummern (Ortsnetz + Anschluss)
+    # Telefonnummern (Ortsnetz + Anschluss) - intelligente Kombination
     ortsnetz = clean_string(row.get('Ortsnetz', ''))
-    anschluss1 = combine_phone(ortsnetz, clean_string(row.get('Anschluss1', '')))
-    anschluss2 = combine_phone(ortsnetz, clean_string(row.get('Anschluss2', '')))
-    anschluss3 = combine_phone(ortsnetz, clean_string(row.get('Anschluss3', '')))
+    raw_anschluss1 = clean_string(row.get('Anschluss1', ''))
+    raw_anschluss2 = clean_string(row.get('Anschluss2', ''))
+    raw_anschluss3 = clean_string(row.get('Anschluss3', ''))
     email = clean_string(row.get('Email', ''))
 
     # PLZ bereinigen (z.B. 'CH-3000' -> '3000')
@@ -790,7 +874,7 @@ def _sync_single_customer(row, created_by_user=None, dry_run=False):
 
             _sync_address(existing, firma_uni, institut, lehrstuhl, street,
                          house_number, anfahrt, plz_clean, ort, country_iso)
-            _sync_phones(existing, anschluss1, anschluss2, anschluss3)
+            _sync_phones(existing, ortsnetz, raw_anschluss1, raw_anschluss2, raw_anschluss3)
             _sync_email(existing, email, newsletter)
 
             return 'updated' if match_method == 'legacy_id' else 'linked'
@@ -813,7 +897,7 @@ def _sync_single_customer(row, created_by_user=None, dry_run=False):
 
             _sync_address(customer, firma_uni, institut, lehrstuhl, street,
                          house_number, anfahrt, plz_clean, ort, country_iso)
-            _sync_phones(customer, anschluss1, anschluss2, anschluss3)
+            _sync_phones(customer, ortsnetz, raw_anschluss1, raw_anschluss2, raw_anschluss3)
             _sync_email(customer, email, newsletter)
 
             return 'created'
@@ -882,33 +966,67 @@ def _sync_address(customer, firma_uni, institut, lehrstuhl, street, house_number
         )
 
 
-def _sync_phones(customer, anschluss1, anschluss2, anschluss3):
-    """Synchronisiert Telefonnummern eines Kunden."""
+def _sync_phones(customer, ortsnetz, raw_anschluss1, raw_anschluss2, raw_anschluss3):
+    """
+    Synchronisiert Telefonnummern eines Kunden.
+    
+    Intelligente Logik:
+    - Anschluss1 wird mit Ortsnetz kombiniert (wenn noetig)
+    - Anschluss2/3: Nur mit Ortsnetz kombinieren wenn sie wie reine
+      Durchwahlnummern aussehen (kurz, ohne eigene Vorwahl)
+    - Mobilnummern (015x, 016x, 017x) bekommen KEINE Ortsvorwahl
+    - Nummern die schon mit 0 oder + beginnen gelten als vollstaendig
+    - Duplikaterkennung ueber normalisierte Nummern
+    - Telefontypierung: Mobil vs Buero automatisch
+    """
+    # Bestehende Nummern normalisiert laden fuer Duplikat-Check
+    existing_phones = list(customer.phones.values_list('phone_number', flat=True))
+    existing_normalized = {_normalize_phone(p) for p in existing_phones}
+    
     phones_to_sync = []
-    if anschluss1:
-        phones_to_sync.append(('Büro', anschluss1[:50], True))
-    if anschluss2:
-        phones_to_sync.append(('Büro', anschluss2[:50], False))
-    if anschluss3:
-        phones_to_sync.append(('Lab', anschluss3[:50], False))
-
-    existing_numbers = set(
-        customer.phones.values_list('phone_number', flat=True)
-    )
-
+    
+    # Anschluss1: Haupttelefon, mit Ortsnetz kombinieren
+    phone1 = smart_combine_phone(ortsnetz, raw_anschluss1)
+    if phone1:
+        ptype = _detect_phone_type(phone1)
+        phones_to_sync.append((ptype, phone1[:50], True))
+    
+    # Anschluss2: Oft eigenstaendige Nummer (Mobil, Direktwahl)
+    phone2 = smart_combine_phone(ortsnetz, raw_anschluss2)
+    if phone2:
+        ptype = _detect_phone_type(phone2)
+        phones_to_sync.append((ptype, phone2[:50], False))
+    
+    # Anschluss3: Oft Lab / weitere Nummer
+    phone3 = smart_combine_phone(ortsnetz, raw_anschluss3)
+    if phone3:
+        ptype = _detect_phone_type(phone3)
+        # Wenn nicht Mobil, dann als Lab-Nummer eintragen
+        if ptype != 'Mobil':
+            ptype = 'Lab'
+        phones_to_sync.append((ptype, phone3[:50], False))
+    
     for phone_type, number, is_primary in phones_to_sync:
-        if number and number not in existing_numbers:
-            if is_primary and customer.phones.filter(is_primary=True).exists():
-                is_primary = False
-            try:
-                CustomerPhone.objects.create(
-                    customer=customer,
-                    phone_type=phone_type,
-                    phone_number=number,
-                    is_primary=is_primary,
-                )
-            except Exception as e:
-                logger.warning(f"Telefon '{number}' fuer {customer}: {e}")
+        # Normalisierter Duplikat-Check
+        num_normalized = _normalize_phone(number)
+        if not num_normalized:
+            continue
+        if num_normalized in existing_normalized:
+            continue
+        
+        if is_primary and customer.phones.filter(is_primary=True).exists():
+            is_primary = False
+        
+        try:
+            CustomerPhone.objects.create(
+                customer=customer,
+                phone_type=phone_type,
+                phone_number=number,
+                is_primary=is_primary,
+            )
+            existing_normalized.add(num_normalized)
+        except Exception as e:
+            logger.warning(f"Telefon '{number}' fuer {customer}: {e}")
 
 
 def _sync_email(customer, email, newsletter=False):
