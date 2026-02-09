@@ -246,8 +246,8 @@ const Customers = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await api.get('/users/users/?is_active=true');
-        setUsers(response.data.results || response.data || []);
+        const response = await api.get('/users/users/lookup/?department=vertrieb,geschaeftsfuehrung');
+        setUsers(response.data || []);
       } catch (error) {
         console.error('Fehler beim Laden der Benutzer:', error);
       }

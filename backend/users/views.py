@@ -72,6 +72,32 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({'message': 'Passwort erfolgreich geändert.'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='lookup')
+    def lookup(self, request):
+        """
+        Lightweight user lookup - keine HR-Berechtigung nötig.
+        Gibt nur id, first_name, last_name, employee_id und department zurück.
+        Nutzt Employee.department wenn vorhanden, sonst User.department.
+        """
+        queryset = User.objects.filter(is_active=True)
+        department = request.query_params.get('department')
+        if department:
+            departments = [d.strip() for d in department.split(',') if d.strip()]
+            queryset = queryset.filter(
+                Q(employee__department__in=departments) | Q(department__in=departments)
+            )
+        search = request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search) | Q(last_name__icontains=search)
+            )
+        data = list(queryset.values(
+            'id', 'first_name', 'last_name', 'department', 'employee__employee_id'
+        ).order_by('last_name', 'first_name'))
+        for item in data:
+            item['employee_id'] = item.pop('employee__employee_id')
+        return Response(data)
+
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     """
