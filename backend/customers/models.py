@@ -147,6 +147,15 @@ class Customer(models.Model):
         related_name='responsible_for_customers',
         verbose_name='Zuständiger Mitarbeiter'
     )
+    # Legacy-ID aus der SQL-Datenbank (veraltet, siehe CustomerLegacyMapping)
+    # Wird noch als Schnell-Referenz behalten, aber nicht mehr unique
+    legacy_sql_id = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Legacy SQL ID (primär)',
+        help_text='Primäre AdressenID - für mehrere IDs siehe Legacy-Mappings'
+    )
+    
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -197,6 +206,37 @@ class Customer(models.Model):
         
         next_number = max(numeric_numbers) + 1
         return f'K-{next_number:05d}'
+
+
+class CustomerLegacyMapping(models.Model):
+    """
+    Mapping zwischen VERP-Kunden und SQL-Datenbank AdressenIDs.
+    Ein VERP-Kunde kann mehrere Legacy-IDs haben (z.B. wenn in der
+    SQL-Datenbank mehrfach vorhanden mit verschiedenen Adressen).
+    """
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name='legacy_mappings',
+        verbose_name='Kunde'
+    )
+    sql_id = models.IntegerField(
+        unique=True,
+        verbose_name='SQL AdressenID',
+        help_text='AdressenID aus der externen SQL-Datenbank'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Verknüpft am'
+    )
+
+    class Meta:
+        verbose_name = 'Legacy-Mapping'
+        verbose_name_plural = 'Legacy-Mappings'
+        ordering = ['sql_id']
+
+    def __str__(self):
+        return f"{self.customer} ← SQL-ID {self.sql_id}"
 
 
 class CustomerAddress(models.Model):

@@ -69,6 +69,96 @@ class System(models.Model):
         default='unbekannt',
         verbose_name='Status'
     )
+
+    MODEL_ORGANISM_CHOICES = [
+        ('Escherichia coli – Kolibakterium / Darmbakterium', 'Escherichia coli – Kolibakterium / Darmbakterium'),
+        ('Saccharomyces cerevisiae – Backhefe / Bäckerhefe', 'Saccharomyces cerevisiae – Backhefe / Bäckerhefe'),
+        ('Schizosaccharomyces pombe – Spalthefe', 'Schizosaccharomyces pombe – Spalthefe'),
+        ('Bacillus subtilis – Heubazillus', 'Bacillus subtilis – Heubazillus'),
+        ('Dictyostelium discoideum – Schleimpilz / Zellulärer Schleimpilz', 'Dictyostelium discoideum – Schleimpilz / Zellulärer Schleimpilz'),
+        ('Arabidopsis thaliana – Ackerschmalwand / Thale-Kresse', 'Arabidopsis thaliana – Ackerschmalwand / Thale-Kresse'),
+        ('Physcomitrella patens – Laubmoos / Knospiges Laubmoos', 'Physcomitrella patens – Laubmoos / Knospiges Laubmoos'),
+        ('Marchantia polymorpha – Brunnenlebermoos / Gewöhnliches Lebermoos', 'Marchantia polymorpha – Brunnenlebermoos / Gewöhnliches Lebermoos'),
+        ('Oryza sativa – Reis', 'Oryza sativa – Reis'),
+        ('Zea mays – Mais', 'Zea mays – Mais'),
+        ('Nicotiana benthamiana – Aufrechter Tabak', 'Nicotiana benthamiana – Aufrechter Tabak'),
+        ('Medicago truncatula – Kleinfrüchtige Luzerne / Bartklee', 'Medicago truncatula – Kleinfrüchtige Luzerne / Bartklee'),
+        ('Lotus japonicus – Japanischer Hornklee', 'Lotus japonicus – Japanischer Hornklee'),
+        ('Setaria viridis – Grünes Borstengras', 'Setaria viridis – Grünes Borstengras'),
+        ('Caenorhabditis elegans – Fadenwurm / Eleganter Fadenwurm', 'Caenorhabditis elegans – Fadenwurm / Eleganter Fadenwurm'),
+        ('Drosophila melanogaster – Taufliege / Schwarze Fruchtfliege', 'Drosophila melanogaster – Taufliege / Schwarze Fruchtfliege'),
+        ('Danio rerio – Zebrabärbling / Zebrafisch', 'Danio rerio – Zebrabärbling / Zebrafisch'),
+        ('Mus musculus – Hausmaus / Labormaus', 'Mus musculus – Hausmaus / Labormaus'),
+        ('Rattus norvegicus – Wanderratte / Laborratte', 'Rattus norvegicus – Wanderratte / Laborratte'),
+        ('Xenopus laevis – Krallenfrosch / Afrikanischer Krallenfrosch', 'Xenopus laevis – Krallenfrosch / Afrikanischer Krallenfrosch'),
+        ('Xenopus tropicalis – Westafrikanischer Krallenfrosch', 'Xenopus tropicalis – Westafrikanischer Krallenfrosch'),
+        ('Gallus gallus – Haushuhn', 'Gallus gallus – Haushuhn'),
+        ('Oryzias latipes – Medaka / Japanischer Reisfisch', 'Oryzias latipes – Medaka / Japanischer Reisfisch'),
+        ('Strongylocentrotus purpuratus – Purpur-Seeigel', 'Strongylocentrotus purpuratus – Purpur-Seeigel'),
+        ('Neurospora crassa – Brotschimmelpilz / Roter Brotschimmel', 'Neurospora crassa – Brotschimmelpilz / Roter Brotschimmel'),
+        ('Chlamydomonas reinhardtii – Grünalge / Einzellige Grünalge', 'Chlamydomonas reinhardtii – Grünalge / Einzellige Grünalge'),
+        ('Tetrahymena thermophila – Wimperntierchen', 'Tetrahymena thermophila – Wimperntierchen'),
+        ('Hydra vulgaris – Süßwasserpolyp', 'Hydra vulgaris – Süßwasserpolyp'),
+        ('Nematostella vectensis – Sternanemone', 'Nematostella vectensis – Sternanemone'),
+        ('Apis mellifera – Honigbiene', 'Apis mellifera – Honigbiene'),
+        ('Tribolium castaneum – Rotbrauner Mehlkäfer', 'Tribolium castaneum – Rotbrauner Mehlkäfer'),
+        ('Bombyx mori – Seidenspinner', 'Bombyx mori – Seidenspinner'),
+        ('Macaca mulatta – Rhesusaffe', 'Macaca mulatta – Rhesusaffe'),
+        ('Rattus rattus – Hausratte (manchmal separat genutzt)', 'Rattus rattus – Hausratte (manchmal separat genutzt)'),
+        ('Ciona intestinalis – Seescheide / Schlauch-Seescheide', 'Ciona intestinalis – Seescheide / Schlauch-Seescheide'),
+        ('Branchiostoma floridae – Lanzettfischchen / Floridas Lanzettfischchen', 'Branchiostoma floridae – Lanzettfischchen / Floridas Lanzettfischchen'),
+        ('Pisum sativum – Garten-Erbse', 'Pisum sativum – Garten-Erbse'),
+        ('Solanum lycopersicum – Tomate', 'Solanum lycopersicum – Tomate'),
+        ('Brachypodium distachyon – Schmalblättriges Zittergras', 'Brachypodium distachyon – Schmalblättriges Zittergras'),
+        ('Volvox carteri – Kugelalge / Volvox', 'Volvox carteri – Kugelalge / Volvox'),
+    ]
+
+    model_organism = models.CharField(
+        max_length=255,
+        blank=True,
+        choices=MODEL_ORGANISM_CHOICES,
+        verbose_name='Modellorganismus'
+    )
+
+    RESEARCH_FIELD_CHOICES = [
+        ('Onkologie / Krebsforschung', 'Onkologie / Krebsforschung'),
+        ('Immunologie (inkl. Autoimmunerkrankungen, Impfstoffe, Checkpoint-Inhibitoren)', 'Immunologie (inkl. Autoimmunerkrankungen, Impfstoffe, Checkpoint-Inhibitoren)'),
+        ('Neurowissenschaften / Neurologie (inkl. Neurodegeneration, Psyche)', 'Neurowissenschaften / Neurologie (inkl. Neurodegeneration, Psyche)'),
+        ('Kardiologie / Herz-Kreislauf-Forschung', 'Kardiologie / Herz-Kreislauf-Forschung'),
+        ('Infektiologie / Virologie / Mikrobiologie (inkl. Antibiotikaresistenz, Pandemievorbereitung)', 'Infektiologie / Virologie / Mikrobiologie (inkl. Antibiotikaresistenz, Pandemievorbereitung)'),
+        ('Genetik / Genomik / Humangenetik', 'Genetik / Genomik / Humangenetik'),
+        ('Molekularbiologie / Zellbiologie', 'Molekularbiologie / Zellbiologie'),
+        ('Entwicklungsbiologie / Regenerative Medizin / Stammzellforschung', 'Entwicklungsbiologie / Regenerative Medizin / Stammzellforschung'),
+        ('Endokrinologie / Stoffwechselforschung / Diabetes / Adipositas', 'Endokrinologie / Stoffwechselforschung / Diabetes / Adipositas'),
+        ('Mikrobiom-Forschung (Darm-, Haut-, Lungenmikrobiom etc.)', 'Mikrobiom-Forschung (Darm-, Haut-, Lungenmikrobiom etc.)'),
+        ('Präzisionsmedizin / Personalisierte Medizin', 'Präzisionsmedizin / Personalisierte Medizin'),
+        ('Gentherapie / Genom-Editing (CRISPR, Prime Editing, Base Editing)', 'Gentherapie / Genom-Editing (CRISPR, Prime Editing, Base Editing)'),
+        ('RNA-Therapeutika / mRNA-Technologien (über COVID hinaus)', 'RNA-Therapeutika / mRNA-Technologien (über COVID hinaus)'),
+        ('Immuntherapien (CAR-T, bispezifische Antikörper, Krebsimpfstoffe)', 'Immuntherapien (CAR-T, bispezifische Antikörper, Krebsimpfstoffe)'),
+        ('Künstliche Intelligenz / Machine Learning in Biologie & Medizin (Drug Discovery, Bildanalyse, Prädiktive Modelle)', 'Künstliche Intelligenz / Machine Learning in Biologie & Medizin (Drug Discovery, Bildanalyse, Prädiktive Modelle)'),
+        ('Single-Cell- & Spatial-Omics (Single-Cell RNA-seq, Spatial Transcriptomics, Multi-Omics)', 'Single-Cell- & Spatial-Omics (Single-Cell RNA-seq, Spatial Transcriptomics, Multi-Omics)'),
+        ('Synthetische Biologie / Bioengineering', 'Synthetische Biologie / Bioengineering'),
+        ('Alternsforschung / Biogerontologie / Senolytika / Longevity', 'Alternsforschung / Biogerontologie / Senolytika / Longevity'),
+        ('Long Covid / Postvirale Syndrome', 'Long Covid / Postvirale Syndrome'),
+        ('Frauengesundheit / Geschlechtersensible Medizin (Endometriose, Menopause, reproduktive Gesundheit – 2026 stark gefördert)', 'Frauengesundheit / Geschlechtersensible Medizin (Endometriose, Menopause, reproduktive Gesundheit – 2026 stark gefördert)'),
+        ('Organ-on-a-Chip / Organoids / Humane zelluläre Modelle', 'Organ-on-a-Chip / Organoids / Humane zelluläre Modelle'),
+        ('Neurodegenerative Erkrankungen (Alzheimer, Parkinson, ALS – inkl. Viren-Hypothese)', 'Neurodegenerative Erkrankungen (Alzheimer, Parkinson, ALS – inkl. Viren-Hypothese)'),
+        ('Kardiovaskuläre Präzisionsmedizin (Schwangerschafts-assoziierte Risiken, Menopause)', 'Kardiovaskuläre Präzisionsmedizin (Schwangerschafts-assoziierte Risiken, Menopause)'),
+        ('Antimicrobial Resistance / Neue Antibiotika / Phagentherapie', 'Antimicrobial Resistance / Neue Antibiotika / Phagentherapie'),
+        ('Zellfreie Biomanufacturing / Point-of-Care-Diagnostik', 'Zellfreie Biomanufacturing / Point-of-Care-Diagnostik'),
+        ('Klimawandel & Gesundheit (Infektionskrankheiten, Allergien, Hitzeextremereignisse)', 'Klimawandel & Gesundheit (Infektionskrankheiten, Allergien, Hitzeextremereignisse)'),
+        ('Digital Health / Datengetriebene Medizin / Big Data in der Klinik', 'Digital Health / Datengetriebene Medizin / Big Data in der Klinik'),
+        ('Kognitive Neurowissenschaften / Gehirn-Computer-Schnittstellen (BCI)', 'Kognitive Neurowissenschaften / Gehirn-Computer-Schnittstellen (BCI)'),
+        ('Krebsprävention / Früherkennung / Liquid Biopsy', 'Krebsprävention / Früherkennung / Liquid Biopsy'),
+        ('Autoimmunerkrankungen & systemische Entzündung (Rheuma, Lupus, Multiple Sklerose)', 'Autoimmunerkrankungen & systemische Entzündung (Rheuma, Lupus, Multiple Sklerose)'),
+    ]
+
+    research_field = models.CharField(
+        max_length=255,
+        blank=True,
+        choices=RESEARCH_FIELD_CHOICES,
+        verbose_name='Forschungsgebiet'
+    )
     
     # Standort-Informationen
     location = models.CharField(

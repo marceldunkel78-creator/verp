@@ -18,6 +18,9 @@ import {
   Squares2X2Icon,
   ListBulletIcon,
   MapPinIcon,
+  FunnelIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
   UserIcon,
   ExclamationTriangleIcon,
   KeyIcon
@@ -239,6 +242,82 @@ const SystemsMap = ({ systems, onSystemClick }) => {
   );
 };
 
+const MODEL_ORGANISM_OPTIONS = [
+  'Escherichia coli – Kolibakterium / Darmbakterium',
+  'Saccharomyces cerevisiae – Backhefe / Bäckerhefe',
+  'Schizosaccharomyces pombe – Spalthefe',
+  'Bacillus subtilis – Heubazillus',
+  'Dictyostelium discoideum – Schleimpilz / Zellulärer Schleimpilz',
+  'Arabidopsis thaliana – Ackerschmalwand / Thale-Kresse',
+  'Physcomitrella patens – Laubmoos / Knospiges Laubmoos',
+  'Marchantia polymorpha – Brunnenlebermoos / Gewöhnliches Lebermoos',
+  'Oryza sativa – Reis',
+  'Zea mays – Mais',
+  'Nicotiana benthamiana – Aufrechter Tabak',
+  'Medicago truncatula – Kleinfrüchtige Luzerne / Bartklee',
+  'Lotus japonicus – Japanischer Hornklee',
+  'Setaria viridis – Grünes Borstengras',
+  'Caenorhabditis elegans – Fadenwurm / Eleganter Fadenwurm',
+  'Drosophila melanogaster – Taufliege / Schwarze Fruchtfliege',
+  'Danio rerio – Zebrabärbling / Zebrafisch',
+  'Mus musculus – Hausmaus / Labormaus',
+  'Rattus norvegicus – Wanderratte / Laborratte',
+  'Xenopus laevis – Krallenfrosch / Afrikanischer Krallenfrosch',
+  'Xenopus tropicalis – Westafrikanischer Krallenfrosch',
+  'Gallus gallus – Haushuhn',
+  'Oryzias latipes – Medaka / Japanischer Reisfisch',
+  'Strongylocentrotus purpuratus – Purpur-Seeigel',
+  'Neurospora crassa – Brotschimmelpilz / Roter Brotschimmel',
+  'Chlamydomonas reinhardtii – Grünalge / Einzellige Grünalge',
+  'Tetrahymena thermophila – Wimperntierchen',
+  'Hydra vulgaris – Süßwasserpolyp',
+  'Nematostella vectensis – Sternanemone',
+  'Apis mellifera – Honigbiene',
+  'Tribolium castaneum – Rotbrauner Mehlkäfer',
+  'Bombyx mori – Seidenspinner',
+  'Macaca mulatta – Rhesusaffe',
+  'Rattus rattus – Hausratte (manchmal separat genutzt)',
+  'Ciona intestinalis – Seescheide / Schlauch-Seescheide',
+  'Branchiostoma floridae – Lanzettfischchen / Floridas Lanzettfischchen',
+  'Pisum sativum – Garten-Erbse',
+  'Solanum lycopersicum – Tomate',
+  'Brachypodium distachyon – Schmalblättriges Zittergras',
+  'Volvox carteri – Kugelalge / Volvox'
+];
+
+const RESEARCH_FIELD_OPTIONS = [
+  'Onkologie / Krebsforschung',
+  'Immunologie (inkl. Autoimmunerkrankungen, Impfstoffe, Checkpoint-Inhibitoren)',
+  'Neurowissenschaften / Neurologie (inkl. Neurodegeneration, Psyche)',
+  'Kardiologie / Herz-Kreislauf-Forschung',
+  'Infektiologie / Virologie / Mikrobiologie (inkl. Antibiotikaresistenz, Pandemievorbereitung)',
+  'Genetik / Genomik / Humangenetik',
+  'Molekularbiologie / Zellbiologie',
+  'Entwicklungsbiologie / Regenerative Medizin / Stammzellforschung',
+  'Endokrinologie / Stoffwechselforschung / Diabetes / Adipositas',
+  'Mikrobiom-Forschung (Darm-, Haut-, Lungenmikrobiom etc.)',
+  'Präzisionsmedizin / Personalisierte Medizin',
+  'Gentherapie / Genom-Editing (CRISPR, Prime Editing, Base Editing)',
+  'RNA-Therapeutika / mRNA-Technologien (über COVID hinaus)',
+  'Immuntherapien (CAR-T, bispezifische Antikörper, Krebsimpfstoffe)',
+  'Künstliche Intelligenz / Machine Learning in Biologie & Medizin (Drug Discovery, Bildanalyse, Prädiktive Modelle)',
+  'Single-Cell- & Spatial-Omics (Single-Cell RNA-seq, Spatial Transcriptomics, Multi-Omics)',
+  'Synthetische Biologie / Bioengineering',
+  'Alternsforschung / Biogerontologie / Senolytika / Longevity',
+  'Long Covid / Postvirale Syndrome',
+  'Frauengesundheit / Geschlechtersensible Medizin (Endometriose, Menopause, reproduktive Gesundheit – 2026 stark gefördert)',
+  'Organ-on-a-Chip / Organoids / Humane zelluläre Modelle',
+  'Neurodegenerative Erkrankungen (Alzheimer, Parkinson, ALS – inkl. Viren-Hypothese)',
+  'Kardiovaskuläre Präzisionsmedizin (Schwangerschafts-assoziierte Risiken, Menopause)',
+  'Antimicrobial Resistance / Neue Antibiotika / Phagentherapie',
+  'Zellfreie Biomanufacturing / Point-of-Care-Diagnostik',
+  'Klimawandel & Gesundheit (Infektionskrankheiten, Allergien, Hitzeextremereignisse)',
+  'Digital Health / Datengetriebene Medizin / Big Data in der Klinik',
+  'Kognitive Neurowissenschaften / Gehirn-Computer-Schnittstellen (BCI)',
+  'Krebsprävention / Früherkennung / Liquid Biopsy',
+  'Autoimmunerkrankungen & systemische Entzündung (Rheuma, Lupus, Multiple Sklerose)'
+];
+
 const Systems = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -250,12 +329,15 @@ const Systems = () => {
   const [cityFilter, setCityFilter] = useState('');
   const [countryFilter, setCountryFilter] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('');
+  const [modelOrganismFilter, setModelOrganismFilter] = useState('');
+  const [researchFieldFilter, setResearchFieldFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   
   // View mode: 'cards', 'list', 'map'
   const [viewMode, setViewMode] = useState('cards');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
   // Filter data
   const [employees, setEmployees] = useState([]);
@@ -282,6 +364,7 @@ const Systems = () => {
   const canUseEmployeeFilter = true; // Alle authentifizierten User können den Mitarbeiterfilter nutzen
 
   const SESSION_KEY = 'systems_search_state';
+  const listPageSize = 50;
 
   const loadSearchState = () => {
     try {
@@ -292,13 +375,26 @@ const Systems = () => {
       if (st.cityFilter !== undefined) setCityFilter(st.cityFilter);
       if (st.countryFilter !== undefined) setCountryFilter(st.countryFilter);
       if (st.employeeFilter !== undefined) setEmployeeFilter(st.employeeFilter);
+      if (st.modelOrganismFilter !== undefined) setModelOrganismFilter(st.modelOrganismFilter);
+      if (st.researchFieldFilter !== undefined) setResearchFieldFilter(st.researchFieldFilter);
       if (st.viewMode !== undefined) setViewMode(st.viewMode);
       const page = st.currentPage || 1;
       if (st.currentPage) setCurrentPage(st.currentPage);
       if (st.systems) setSystems(st.systems);
       if (st.totalPages) setTotalPages(st.totalPages);
       if (st.totalCount !== undefined) setTotalCount(st.totalCount);
-      return { page, filters: { searchTerm: st.searchTerm, statusFilter: st.statusFilter, cityFilter: st.cityFilter, countryFilter: st.countryFilter, employeeFilter: st.employeeFilter } };
+      return {
+        page,
+        filters: {
+          searchTerm: st.searchTerm,
+          statusFilter: st.statusFilter,
+          cityFilter: st.cityFilter,
+          countryFilter: st.countryFilter,
+          employeeFilter: st.employeeFilter,
+          modelOrganismFilter: st.modelOrganismFilter,
+          researchFieldFilter: st.researchFieldFilter
+        }
+      };
     } catch (e) {
       console.warn('Failed to load systems search state', e);
       return false;
@@ -307,7 +403,20 @@ const Systems = () => {
 
   const saveSearchState = () => {
     try {
-      const st = { searchTerm, statusFilter, cityFilter, countryFilter, employeeFilter, viewMode, currentPage, systems, totalPages, totalCount };
+      const st = {
+        searchTerm,
+        statusFilter,
+        cityFilter,
+        countryFilter,
+        employeeFilter,
+        modelOrganismFilter,
+        researchFieldFilter,
+        viewMode,
+        currentPage,
+        systems,
+        totalPages,
+        totalCount
+      };
       storage.set(SESSION_KEY, st);
     } catch (e) {
       console.warn('Failed to save systems search state', e);
@@ -337,6 +446,8 @@ const Systems = () => {
       if (restored.filters.cityFilter) params.city = restored.filters.cityFilter;
       if (restored.filters.countryFilter) params.country = restored.filters.countryFilter;
       if (restored.filters.employeeFilter) params.employee = restored.filters.employeeFilter;
+      if (restored.filters.modelOrganismFilter) params.model_organism = restored.filters.modelOrganismFilter;
+      if (restored.filters.researchFieldFilter) params.research_field = restored.filters.researchFieldFilter;
       params.page = String(restored.page);
       setSearchParams(params);
     }
@@ -347,7 +458,20 @@ const Systems = () => {
   useEffect(() => {
     saveSearchState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, statusFilter, cityFilter, countryFilter, employeeFilter, viewMode, currentPage, systems, totalPages, totalCount]);
+  }, [
+    searchTerm,
+    statusFilter,
+    cityFilter,
+    countryFilter,
+    employeeFilter,
+    modelOrganismFilter,
+    researchFieldFilter,
+    viewMode,
+    currentPage,
+    systems,
+    totalPages,
+    totalCount
+  ]);
 
   // React to URL query param changes
   useEffect(() => {
@@ -359,6 +483,8 @@ const Systems = () => {
       setCityFilter(params.city || '');
       setCountryFilter(params.country || '');
       setEmployeeFilter(params.employee || '');
+      setModelOrganismFilter(params.model_organism || '');
+      setResearchFieldFilter(params.research_field || '');
       const page = params.page ? parseInt(params.page, 10) : 1;
       setCurrentPage(page);
       fetchSystems();
@@ -369,7 +495,7 @@ const Systems = () => {
   useEffect(() => {
     fetchSystems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, statusFilter, cityFilter, countryFilter, employeeFilter]);
+  }, [currentPage, statusFilter, cityFilter, countryFilter, employeeFilter, modelOrganismFilter, researchFieldFilter]);
 
   useEffect(() => {
     fetchFilters();
@@ -429,8 +555,8 @@ const Systems = () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      // For map view, load ALL systems (no pagination)
-      const pageSize = viewMode === 'map' ? 10000 : 12;
+      // For map view, load up to 10000 systems; list/cards use pagination
+      const pageSize = viewMode === 'map' ? 10000 : listPageSize;
       params.append('page', currentPage);
       params.append('page_size', pageSize);
       if (searchTerm) params.append('search', searchTerm);
@@ -438,6 +564,8 @@ const Systems = () => {
       if (cityFilter) params.append('location_city', cityFilter);
       if (countryFilter) params.append('location_country', countryFilter);
       if (employeeFilter && canUseEmployeeFilter) params.append('responsible_employee', employeeFilter);
+      if (modelOrganismFilter) params.append('model_organism', modelOrganismFilter);
+      if (researchFieldFilter) params.append('research_field', researchFieldFilter);
       
       console.log(`Fetching systems for ${viewMode} view with pageSize:`, pageSize);
       const response = await api.get(`/systems/systems/?${params.toString()}`);
@@ -484,6 +612,8 @@ const Systems = () => {
     if (cityFilter) params.city = cityFilter;
     if (countryFilter) params.country = countryFilter;
     if (employeeFilter) params.employee = employeeFilter;
+    if (modelOrganismFilter) params.model_organism = modelOrganismFilter;
+    if (researchFieldFilter) params.research_field = researchFieldFilter;
     params.page = '1';
     setSearchParams(params);
     setCurrentPage(1);
@@ -495,6 +625,8 @@ const Systems = () => {
     setCityFilter('');
     setCountryFilter('');
     setEmployeeFilter('');
+    setModelOrganismFilter('');
+    setResearchFieldFilter('');
     setCurrentPage(1);
     setSystems([]);
     setSearchParams({});
@@ -590,7 +722,7 @@ const Systems = () => {
     handleReset();
   };
 
-  const hasActiveFilters = statusFilter || cityFilter || countryFilter || employeeFilter || searchTerm;
+  const hasActiveFilters = statusFilter || cityFilter || countryFilter || employeeFilter || modelOrganismFilter || researchFieldFilter || searchTerm;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -642,13 +774,29 @@ const Systems = () => {
 
       {/* Search and Filters */}
       <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Systemsuche</h2>
+          <button
+            type="button"
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900"
+          >
+            <FunnelIcon className="h-4 w-4 mr-1" />
+            Erweiterte Filter
+            {showAdvancedFilters ? (
+              <ChevronUpIcon className="h-4 w-4 ml-1" />
+            ) : (
+              <ChevronDownIcon className="h-4 w-4 ml-1" />
+            )}
+          </button>
+        </div>
         <form onSubmit={handleSearch}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {/* Search */}
             <div className="lg:col-span-2 relative">
               <input
                 type="text"
-                placeholder="Suche nach Name, Nummer, Kunde..."
+                placeholder="Suche nach Name, Nummer, Kunde, Lizenz..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -723,6 +871,50 @@ const Systems = () => {
               ))}
             </select>
           </div>
+
+          {showAdvancedFilters && (
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Erweiterte Filter</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Modellorganismus</label>
+                  <select
+                    value={modelOrganismFilter}
+                    onChange={(e) => {
+                      setModelOrganismFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Alle Modellorganismen</option>
+                    {MODEL_ORGANISM_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Forschungsgebiet</label>
+                  <select
+                    value={researchFieldFilter}
+                    onChange={(e) => {
+                      setResearchFieldFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Alle Forschungsgebiete</option>
+                    {RESEARCH_FIELD_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="flex justify-between items-center mt-4">
             <div className="flex gap-2">
@@ -940,7 +1132,7 @@ const Systems = () => {
           {viewMode !== 'map' && totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
               <p className="text-sm text-gray-600">
-                Zeige {(currentPage - 1) * 12 + 1} - {Math.min(currentPage * 12, totalCount)} von {totalCount} Systemen
+                Zeige {(currentPage - 1) * listPageSize + 1} - {Math.min(currentPage * listPageSize, totalCount)} von {totalCount} Systemen (50 pro Seite)
               </p>
               <div className="flex gap-2">
                 <button
@@ -953,6 +1145,8 @@ const Systems = () => {
                     if (cityFilter) params.city = cityFilter;
                     if (countryFilter) params.country = countryFilter;
                     if (employeeFilter) params.employee = employeeFilter;
+                    if (modelOrganismFilter) params.model_organism = modelOrganismFilter;
+                    if (researchFieldFilter) params.research_field = researchFieldFilter;
                     params.page = String(newPage);
                     setSearchParams(params);
                   }}
@@ -974,6 +1168,8 @@ const Systems = () => {
                     if (cityFilter) params.city = cityFilter;
                     if (countryFilter) params.country = countryFilter;
                     if (employeeFilter) params.employee = employeeFilter;
+                    if (modelOrganismFilter) params.model_organism = modelOrganismFilter;
+                    if (researchFieldFilter) params.research_field = researchFieldFilter;
                     params.page = String(newPage);
                     setSearchParams(params);
                   }}

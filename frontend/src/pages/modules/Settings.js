@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
-  BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon
+  BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -48,6 +48,13 @@ const Settings = () => {
       icon: CircleStackIcon,
       path: '/settings/backup-restore',
       color: 'purple'
+    },
+    {
+      name: 'Kundendaten-Sync',
+      description: 'Kundendaten mit SQL Server Datenbank abgleichen',
+      icon: ArrowsRightLeftIcon,
+      path: '/settings/customer-sync',
+      color: 'indigo'
     },
     {
       name: 'Admin Löschmodul',

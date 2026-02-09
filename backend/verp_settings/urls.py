@@ -7,6 +7,10 @@ from .views import (
     ProductCategoryViewSet, WarrantyTermViewSet
 )
 from .backup_views import DatabaseBackupView, DatabaseRestoreView, DatabaseStatsView
+from .customer_sync_views import (
+    CustomerSyncStatusView, CustomerSyncTestConnectionView,
+    CustomerSyncPreviewView, CustomerSyncExecuteView
+)
 
 router = DefaultRouter()
 router.register(r'exchange-rates', ExchangeRateViewSet, basename='exchange-rate')
@@ -26,4 +30,9 @@ urlpatterns = [
     path('backup/', DatabaseBackupView.as_view(), name='database-backup'),
     path('restore/', DatabaseRestoreView.as_view(), name='database-restore'),
     path('database-stats/', DatabaseStatsView.as_view(), name='database-stats'),
+    # Customer Sync mit SQL Server
+    path('customer-sync/status/', CustomerSyncStatusView.as_view(), name='customer-sync-status'),
+    path('customer-sync/test-connection/', CustomerSyncTestConnectionView.as_view(), name='customer-sync-test'),
+    path('customer-sync/preview/', CustomerSyncPreviewView.as_view(), name='customer-sync-preview'),
+    path('customer-sync/execute/', CustomerSyncExecuteView.as_view(), name='customer-sync-execute'),
 ]

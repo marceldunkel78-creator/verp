@@ -75,7 +75,7 @@ class SystemListSerializer(serializers.ModelSerializer):
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
-            'description', 'status', 'status_display', 'location', 'location_full',
+            'description', 'status', 'status_display', 'model_organism', 'research_field', 'location', 'location_full',
             'location_university', 'location_institute', 'location_department',
             'location_street', 'location_house_number', 'location_address_supplement',
             'location_postal_code', 'location_city', 'location_country',
@@ -230,6 +230,7 @@ class SystemDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
             'customer_data', 'customer_details', 'customer_address', 'description', 'status', 'status_display',
+            'model_organism', 'research_field',
             'location', 'location_full',
             'location_university', 'location_institute', 'location_department',
             'location_street', 'location_house_number', 'location_address_supplement',
@@ -414,7 +415,7 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'description',
-            'status', 'location', 
+            'status', 'model_organism', 'research_field', 'location', 
             'location_university', 'location_institute', 'location_department',
             'location_street', 'location_house_number', 'location_address_supplement',
             'location_postal_code', 'location_city', 'location_country',

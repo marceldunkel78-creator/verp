@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, ContactHistory, CustomerSystem
+from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, ContactHistory, CustomerSystem, CustomerLegacyMapping
 
 
 class CustomerAddressSerializer(serializers.ModelSerializer):
@@ -49,11 +49,12 @@ class CustomerListSerializer(serializers.ModelSerializer):
     system_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
     open_ticket_count = serializers.SerializerMethodField()
+    legacy_sql_ids = serializers.SerializerMethodField()
     
     class Meta:
         model = Customer
         fields = [
-            'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
+            'id', 'customer_number', 'legacy_sql_id', 'legacy_sql_ids', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
             'advertising_status', 'advertising_status_display',
             'is_reference', 'responsible_user', 'responsible_user_name',
@@ -108,6 +109,9 @@ class CustomerListSerializer(serializers.ModelSerializer):
             return obj.service_tickets.exclude(status__in=['resolved', 'no_solution']).count()
         return 0
 
+    def get_legacy_sql_ids(self, obj):
+        return list(obj.legacy_mappings.values_list('sql_id', flat=True))
+
 
 class CustomerDetailSerializer(serializers.ModelSerializer):
     """Serializer für Kundendetails (alle Daten)"""
@@ -119,11 +123,12 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     emails = CustomerEmailSerializer(many=True, read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     responsible_user_name = serializers.CharField(source='responsible_user.get_full_name', read_only=True)
+    legacy_sql_ids = serializers.SerializerMethodField()
     
     class Meta:
         model = Customer
         fields = [
-            'id', 'customer_number', 'salutation', 'title', 'first_name', 'last_name',
+            'id', 'customer_number', 'legacy_sql_id', 'legacy_sql_ids', 'salutation', 'title', 'first_name', 'last_name',
             'full_name', 'language', 'language_display',
             'advertising_status', 'advertising_status_display',
             'description', 'is_reference', 'responsible_user', 'responsible_user_name',
@@ -135,6 +140,9 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     
     def get_full_name(self, obj):
         return f"{obj.title} {obj.first_name} {obj.last_name}".strip()
+
+    def get_legacy_sql_ids(self, obj):
+        return list(obj.legacy_mappings.values_list('sql_id', flat=True))
 
 
 class CustomerCreateUpdateSerializer(serializers.ModelSerializer):

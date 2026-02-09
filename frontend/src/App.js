@@ -76,6 +76,7 @@ import MarketingItemEdit from './pages/MarketingItemEdit';
 import SalesTickets from './pages/SalesTickets';
 import SalesTicketEdit from './pages/SalesTicketEdit';
 import NotificationSettings from './pages/NotificationSettings';
+import CustomerSync from './pages/CustomerSync';
 import DevelopmentProjects from './pages/DevelopmentProjects';
 import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
 import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
@@ -236,6 +237,7 @@ function App() {
             <Route path="settings/backup-restore" element={<BackupRestore />} />
             <Route path="settings/notifications" element={<NotificationSettings />} />
             <Route path="settings/admin-delete" element={<AdminDelete />} />
+            <Route path="settings/customer-sync" element={<CustomerSync />} />
             
             {/* Legacy redirects for backward compatibility */}
             <Route path="users" element={<Navigate to="/settings/users" replace />} />

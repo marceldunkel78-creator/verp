@@ -40,6 +40,82 @@ const TABS = [
   { id: 'travel-reports', name: 'Reisebericht/Servicebericht', icon: DocumentTextIcon }
 ];
 
+const MODEL_ORGANISM_OPTIONS = [
+  'Escherichia coli – Kolibakterium / Darmbakterium',
+  'Saccharomyces cerevisiae – Backhefe / Bäckerhefe',
+  'Schizosaccharomyces pombe – Spalthefe',
+  'Bacillus subtilis – Heubazillus',
+  'Dictyostelium discoideum – Schleimpilz / Zellulärer Schleimpilz',
+  'Arabidopsis thaliana – Ackerschmalwand / Thale-Kresse',
+  'Physcomitrella patens – Laubmoos / Knospiges Laubmoos',
+  'Marchantia polymorpha – Brunnenlebermoos / Gewöhnliches Lebermoos',
+  'Oryza sativa – Reis',
+  'Zea mays – Mais',
+  'Nicotiana benthamiana – Aufrechter Tabak',
+  'Medicago truncatula – Kleinfrüchtige Luzerne / Bartklee',
+  'Lotus japonicus – Japanischer Hornklee',
+  'Setaria viridis – Grünes Borstengras',
+  'Caenorhabditis elegans – Fadenwurm / Eleganter Fadenwurm',
+  'Drosophila melanogaster – Taufliege / Schwarze Fruchtfliege',
+  'Danio rerio – Zebrabärbling / Zebrafisch',
+  'Mus musculus – Hausmaus / Labormaus',
+  'Rattus norvegicus – Wanderratte / Laborratte',
+  'Xenopus laevis – Krallenfrosch / Afrikanischer Krallenfrosch',
+  'Xenopus tropicalis – Westafrikanischer Krallenfrosch',
+  'Gallus gallus – Haushuhn',
+  'Oryzias latipes – Medaka / Japanischer Reisfisch',
+  'Strongylocentrotus purpuratus – Purpur-Seeigel',
+  'Neurospora crassa – Brotschimmelpilz / Roter Brotschimmel',
+  'Chlamydomonas reinhardtii – Grünalge / Einzellige Grünalge',
+  'Tetrahymena thermophila – Wimperntierchen',
+  'Hydra vulgaris – Süßwasserpolyp',
+  'Nematostella vectensis – Sternanemone',
+  'Apis mellifera – Honigbiene',
+  'Tribolium castaneum – Rotbrauner Mehlkäfer',
+  'Bombyx mori – Seidenspinner',
+  'Macaca mulatta – Rhesusaffe',
+  'Rattus rattus – Hausratte (manchmal separat genutzt)',
+  'Ciona intestinalis – Seescheide / Schlauch-Seescheide',
+  'Branchiostoma floridae – Lanzettfischchen / Floridas Lanzettfischchen',
+  'Pisum sativum – Garten-Erbse',
+  'Solanum lycopersicum – Tomate',
+  'Brachypodium distachyon – Schmalblättriges Zittergras',
+  'Volvox carteri – Kugelalge / Volvox'
+];
+
+const RESEARCH_FIELD_OPTIONS = [
+  'Onkologie / Krebsforschung',
+  'Immunologie (inkl. Autoimmunerkrankungen, Impfstoffe, Checkpoint-Inhibitoren)',
+  'Neurowissenschaften / Neurologie (inkl. Neurodegeneration, Psyche)',
+  'Kardiologie / Herz-Kreislauf-Forschung',
+  'Infektiologie / Virologie / Mikrobiologie (inkl. Antibiotikaresistenz, Pandemievorbereitung)',
+  'Genetik / Genomik / Humangenetik',
+  'Molekularbiologie / Zellbiologie',
+  'Entwicklungsbiologie / Regenerative Medizin / Stammzellforschung',
+  'Endokrinologie / Stoffwechselforschung / Diabetes / Adipositas',
+  'Mikrobiom-Forschung (Darm-, Haut-, Lungenmikrobiom etc.)',
+  'Präzisionsmedizin / Personalisierte Medizin',
+  'Gentherapie / Genom-Editing (CRISPR, Prime Editing, Base Editing)',
+  'RNA-Therapeutika / mRNA-Technologien (über COVID hinaus)',
+  'Immuntherapien (CAR-T, bispezifische Antikörper, Krebsimpfstoffe)',
+  'Künstliche Intelligenz / Machine Learning in Biologie & Medizin (Drug Discovery, Bildanalyse, Prädiktive Modelle)',
+  'Single-Cell- & Spatial-Omics (Single-Cell RNA-seq, Spatial Transcriptomics, Multi-Omics)',
+  'Synthetische Biologie / Bioengineering',
+  'Alternsforschung / Biogerontologie / Senolytika / Longevity',
+  'Long Covid / Postvirale Syndrome',
+  'Frauengesundheit / Geschlechtersensible Medizin (Endometriose, Menopause, reproduktive Gesundheit – 2026 stark gefördert)',
+  'Organ-on-a-Chip / Organoids / Humane zelluläre Modelle',
+  'Neurodegenerative Erkrankungen (Alzheimer, Parkinson, ALS – inkl. Viren-Hypothese)',
+  'Kardiovaskuläre Präzisionsmedizin (Schwangerschafts-assoziierte Risiken, Menopause)',
+  'Antimicrobial Resistance / Neue Antibiotika / Phagentherapie',
+  'Zellfreie Biomanufacturing / Point-of-Care-Diagnostik',
+  'Klimawandel & Gesundheit (Infektionskrankheiten, Allergien, Hitzeextremereignisse)',
+  'Digital Health / Datengetriebene Medizin / Big Data in der Klinik',
+  'Kognitive Neurowissenschaften / Gehirn-Computer-Schnittstellen (BCI)',
+  'Krebsprävention / Früherkennung / Liquid Biopsy',
+  'Autoimmunerkrankungen & systemische Entzündung (Rheuma, Lupus, Multiple Sklerose)'
+];
+
 const SystemEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -60,6 +136,8 @@ const SystemEdit = () => {
     customer: urlCustomerId || '',
     description: '',
     status: 'unbekannt',
+    model_organism: '',
+    research_field: '',
     location: '',
     location_university: '',
     location_institute: '',
@@ -190,6 +268,8 @@ const SystemEdit = () => {
         customer: data.customer || '',
         description: data.description || '',
         status: data.status || 'unbekannt',
+        model_organism: data.model_organism || '',
+        research_field: data.research_field || '',
         location: data.location || '',
         location_university: data.location_university || '',
         location_institute: data.location_institute || '',
@@ -1073,6 +1153,42 @@ const SystemEdit = () => {
                 <option value="in_nutzung">In Nutzung</option>
                 <option value="in_wartung">In Wartung</option>
                 <option value="ausser_betrieb">Außer Betrieb</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Modellorganismus
+              </label>
+              <select
+                value={formData.model_organism}
+                onChange={(e) => handleInputChange('model_organism', e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Nicht gesetzt --</option>
+                {MODEL_ORGANISM_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Forschungsgebiet
+              </label>
+              <select
+                value={formData.research_field}
+                onChange={(e) => handleInputChange('research_field', e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Nicht gesetzt --</option>
+                {RESEARCH_FIELD_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
               </select>
             </div>
 
