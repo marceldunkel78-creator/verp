@@ -121,6 +121,7 @@ class SupplierSerializer(serializers.ModelSerializer):
 class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Lieferanten Erstellung/Update mit verschachtelten Kontakten"""
     contacts = SupplierContactSerializer(many=True, required=False)
+    website = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
     
     class Meta:
         model = Supplier
@@ -132,12 +133,28 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
             'contacts', 'notes', 'is_active'
         ]
     
+    def validate_website(self, value):
+        """Website-Feld: Leere Werte erlauben, automatisch Schema hinzufügen"""
+        if not value or not value.strip():
+            return ''
+        value = value.strip()
+        if value and not value.startswith(('http://', 'https://')):
+            value = 'https://' + value
+        return value
+    
+    @staticmethod
+    def _clean_contact_data(contact_data):
+        """Entfernt Read-Only und berechnete Felder aus Kontaktdaten"""
+        read_only_keys = ['id', 'contact_type_display', 'created_at', 'updated_at', 'supplier']
+        return {k: v for k, v in contact_data.items() if k not in read_only_keys}
+    
     def create(self, validated_data):
         contacts_data = validated_data.pop('contacts', [])
         supplier = Supplier.objects.create(**validated_data)
         
         for contact_data in contacts_data:
-            SupplierContact.objects.create(supplier=supplier, **contact_data)
+            clean_data = self._clean_contact_data(contact_data)
+            SupplierContact.objects.create(supplier=supplier, **clean_data)
         
         return supplier
     
@@ -154,6 +171,7 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
             # Lösche alte Kontakte und erstelle neue
             instance.contacts.all().delete()
             for contact_data in contacts_data:
-                SupplierContact.objects.create(supplier=instance, **contact_data)
+                clean_data = self._clean_contact_data(contact_data)
+                SupplierContact.objects.create(supplier=instance, **clean_data)
         
         return instance
