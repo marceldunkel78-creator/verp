@@ -346,6 +346,8 @@ def import_contacts(execute=False, supplier_mapping=None):
         
         # Validiere Kontakttyp
         contact_type = contact_type_map.get(contact_type_raw, contact_type_raw)
+        if not contact_type:
+            contact_type = 'main'  # Default zu 'main' wenn leer
         if contact_type not in dict(SupplierContact.CONTACT_TYPE_CHOICES):
             stats['errors'].append(f"Zeile {i}: Ungültiger Kontakttyp '{contact_type_raw}'")
             continue
