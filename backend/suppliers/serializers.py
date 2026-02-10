@@ -1,8 +1,12 @@
+import logging
+from django.db import transaction
 from rest_framework import serializers
 from .models import (
     Supplier, SupplierContact, TradingProduct, 
     SupplierProduct, ProductGroup, PriceList, SupplierAttachment
 )
+
+logger = logging.getLogger(__name__)
 from verp_settings.serializers import PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer
 
 
@@ -148,30 +152,57 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
         read_only_keys = ['id', 'contact_type_display', 'created_at', 'updated_at', 'supplier']
         return {k: v for k, v in contact_data.items() if k not in read_only_keys}
     
+    @staticmethod
+    def _normalize_fk_fields(data):
+        """Konvertiere leere Strings zu None für ForeignKey-Felder"""
+        fk_fields = ['payment_term', 'delivery_term', 'delivery_instruction']
+        for field in fk_fields:
+            if field in data and data[field] == '':
+                data[field] = None
+        return data
+    
     def create(self, validated_data):
         contacts_data = validated_data.pop('contacts', [])
-        supplier = Supplier.objects.create(**validated_data)
+        validated_data = self._normalize_fk_fields(validated_data)
         
-        for contact_data in contacts_data:
-            clean_data = self._clean_contact_data(contact_data)
-            SupplierContact.objects.create(supplier=supplier, **clean_data)
+        try:
+            with transaction.atomic():
+                supplier = Supplier.objects.create(**validated_data)
+                for contact_data in contacts_data:
+                    clean_data = self._clean_contact_data(contact_data)
+                    SupplierContact.objects.create(supplier=supplier, **clean_data)
+        except Exception as e:
+            logger.error(f'Fehler beim Erstellen des Lieferanten: {e}', exc_info=True)
+            raise serializers.ValidationError({'detail': f'Fehler beim Erstellen: {str(e)}'})
         
         return supplier
     
     def update(self, instance, validated_data):
         contacts_data = validated_data.pop('contacts', None)
+        validated_data = self._normalize_fk_fields(validated_data)
         
-        # Update Supplier Felder
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        
-        # Update Kontakte wenn vorhanden
-        if contacts_data is not None:
-            # Lösche alte Kontakte und erstelle neue
-            instance.contacts.all().delete()
-            for contact_data in contacts_data:
-                clean_data = self._clean_contact_data(contact_data)
-                SupplierContact.objects.create(supplier=instance, **clean_data)
+        try:
+            with transaction.atomic():
+                # Update Supplier Felder
+                for attr, value in validated_data.items():
+                    setattr(instance, attr, value)
+                instance.save()
+                
+                # Update Kontakte wenn vorhanden
+                if contacts_data is not None:
+                    # Lösche alte Kontakte und erstelle neue
+                    instance.contacts.all().delete()
+                    for i, contact_data in enumerate(contacts_data):
+                        clean_data = self._clean_contact_data(contact_data)
+                        try:
+                            SupplierContact.objects.create(supplier=instance, **clean_data)
+                        except Exception as ce:
+                            logger.error(f'Fehler bei Kontakt {i}: {ce}, Daten: {clean_data}', exc_info=True)
+                            raise
+        except serializers.ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f'Fehler beim Aktualisieren des Lieferanten {instance.pk}: {e}', exc_info=True)
+            raise serializers.ValidationError({'detail': f'Fehler beim Speichern: {str(e)}'})
         
         return instance
