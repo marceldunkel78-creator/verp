@@ -790,6 +790,7 @@ class TroubleshootingTicket(models.Model):
         ('hardware', 'Hardware'),
         ('software', 'Software'),
         ('application', 'Applikation'),
+        ('artefakte', 'Artefakte'),
         ('other', 'Sonstiges'),
     ]
     
@@ -1008,6 +1009,10 @@ class TroubleshootingAttachment(models.Model):
         blank=True,
         verbose_name='Content-Type'
     )
+    is_primary = models.BooleanField(
+        default=False,
+        verbose_name='Hauptfoto'
+    )
     uploaded_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -1027,6 +1032,15 @@ class TroubleshootingAttachment(models.Model):
     
     def __str__(self):
         return f"{self.filename} ({self.ticket.ticket_number})"
+
+    def save(self, *args, **kwargs):
+        # Wenn als Hauptfoto markiert, andere Hauptfotos entfernen
+        if self.is_primary:
+            TroubleshootingAttachment.objects.filter(
+                ticket=self.ticket,
+                is_primary=True
+            ).exclude(pk=self.pk).update(is_primary=False)
+        super().save(*args, **kwargs)
     
     @property
     def is_image(self):

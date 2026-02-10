@@ -634,12 +634,22 @@ class TroubleshootingViewSet(viewsets.ModelViewSet):
         if not file_obj:
             return Response({'error': 'Keine Datei hochgeladen'}, status=status.HTTP_400_BAD_REQUEST)
         
+        is_image = False
+        if file_obj.content_type:
+            is_image = file_obj.content_type.startswith('image/')
+        else:
+            lower_name = (file_obj.name or '').lower()
+            is_image = lower_name.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
+
+        has_primary = ticket.attachments.filter(is_primary=True).exists()
+
         attachment = TroubleshootingAttachment.objects.create(
             ticket=ticket,
             file=file_obj,
             filename=file_obj.name,
             file_size=file_obj.size,
             content_type=file_obj.content_type or '',
+            is_primary=(is_image and not has_primary),
             uploaded_by=request.user
         )
         
@@ -657,6 +667,20 @@ class TroubleshootingViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except TroubleshootingAttachment.DoesNotExist:
             raise Http404("Anhang nicht gefunden")
+
+    @action(detail=True, methods=['post'], url_path='set_primary_attachment/(?P<attachment_id>[^/.]+)')
+    def set_primary_attachment(self, request, pk=None, attachment_id=None):
+        """Setzt ein Bild als Hauptfoto"""
+        ticket = self.get_object()
+        try:
+            attachment = TroubleshootingAttachment.objects.get(id=attachment_id, ticket=ticket)
+        except TroubleshootingAttachment.DoesNotExist:
+            raise Http404("Anhang nicht gefunden")
+
+        attachment.is_primary = True
+        attachment.save()
+        serializer = TroubleshootingAttachmentSerializer(attachment, context={'request': request})
+        return Response(serializer.data)
     
     @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
     def download_attachment(self, request, pk=None, attachment_id=None):

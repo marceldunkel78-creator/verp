@@ -449,7 +449,7 @@ class TroubleshootingAttachmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TroubleshootingAttachment
         fields = ['id', 'file', 'file_url', 'filename', 'file_size', 'content_type', 
-                  'is_image', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+                  'is_image', 'is_primary', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
         read_only_fields = ['id', 'uploaded_at', 'file_size', 'content_type', 'is_image']
     
     def get_uploaded_by_name(self, obj):
@@ -461,6 +461,9 @@ class TroubleshootingAttachmentSerializer(serializers.ModelSerializer):
         if obj.file:
             request = self.context.get('request')
             if request:
+                from django.conf import settings
+                if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                    return settings.MEDIA_BASE_URL + obj.file.url
                 return request.build_absolute_uri(obj.file.url)
             return obj.file.url
         return None
@@ -474,6 +477,7 @@ class TroubleshootingListSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.SerializerMethodField()
     author_name = serializers.SerializerMethodField()
     is_open = serializers.BooleanField(read_only=True)
+    main_photo_url = serializers.SerializerMethodField()
     
     class Meta:
         model = TroubleshootingTicket
@@ -483,7 +487,7 @@ class TroubleshootingListSerializer(serializers.ModelSerializer):
             'category', 'category_display',
             'assigned_to', 'assigned_to_name',
             'author', 'author_name',
-            'affected_version', 'is_open',
+            'affected_version', 'is_open', 'main_photo_url',
             'created_at', 'updated_at'
         ]
     
@@ -495,6 +499,21 @@ class TroubleshootingListSerializer(serializers.ModelSerializer):
     def get_author_name(self, obj):
         if obj.author:
             return f"{obj.author.first_name} {obj.author.last_name}".strip() or obj.author.username
+        return None
+
+    def get_main_photo_url(self, obj):
+        request = self.context.get('request')
+        attachments = list(obj.attachments.all())
+        primary = next((att for att in attachments if att.is_primary and att.is_image), None)
+        if not primary:
+            primary = next((att for att in attachments if att.is_image), None)
+        if primary and primary.file:
+            from django.conf import settings
+            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                return settings.MEDIA_BASE_URL + primary.file.url
+            if request:
+                return request.build_absolute_uri(primary.file.url)
+            return primary.file.url
         return None
 
 
@@ -509,6 +528,7 @@ class TroubleshootingDetailSerializer(serializers.ModelSerializer):
     comments = TroubleshootingCommentSerializer(many=True, read_only=True)
     attachments = TroubleshootingAttachmentSerializer(many=True, read_only=True)
     is_open = serializers.BooleanField(read_only=True)
+    main_photo_url = serializers.SerializerMethodField()
     
     class Meta:
         model = TroubleshootingTicket
@@ -522,7 +542,7 @@ class TroubleshootingDetailSerializer(serializers.ModelSerializer):
             'author', 'author_name',
             'last_changed_by', 'last_changed_by_name',
             'comments', 'is_open',
-            'attachments',
+            'attachments', 'main_photo_url',
             'created_at', 'updated_at', 'closed_at'
         ]
         read_only_fields = ['ticket_number', 'created_at', 'updated_at', 'comments', 'attachments']
@@ -540,6 +560,21 @@ class TroubleshootingDetailSerializer(serializers.ModelSerializer):
     def get_last_changed_by_name(self, obj):
         if obj.last_changed_by:
             return f"{obj.last_changed_by.first_name} {obj.last_changed_by.last_name}".strip() or obj.last_changed_by.username
+        return None
+
+    def get_main_photo_url(self, obj):
+        request = self.context.get('request')
+        attachments = list(obj.attachments.all())
+        primary = next((att for att in attachments if att.is_primary and att.is_image), None)
+        if not primary:
+            primary = next((att for att in attachments if att.is_image), None)
+        if primary and primary.file:
+            from django.conf import settings
+            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                return settings.MEDIA_BASE_URL + primary.file.url
+            if request:
+                return request.build_absolute_uri(primary.file.url)
+            return primary.file.url
         return None
 
 

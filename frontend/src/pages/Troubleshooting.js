@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -7,7 +7,9 @@ import {
   ArrowPathIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  Squares2X2Icon,
+  ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 // Status mapping
@@ -29,6 +31,7 @@ const CATEGORY_LABELS = {
   'hardware': { label: 'Hardware', color: 'bg-purple-100 text-purple-800' },
   'software': { label: 'Software', color: 'bg-indigo-100 text-indigo-800' },
   'application': { label: 'Applikation', color: 'bg-cyan-100 text-cyan-800' },
+  'artefakte': { label: 'Artefakte', color: 'bg-amber-100 text-amber-800' },
   'other': { label: 'Sonstiges', color: 'bg-gray-100 text-gray-800' }
 };
 
@@ -43,6 +46,10 @@ const Troubleshooting = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [statistics, setStatistics] = useState(null);
+  const [viewMode, setViewMode] = useState('list');
+  const topScrollRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
 
   const fetchStatistics = useCallback(async () => {
     try {
@@ -92,6 +99,12 @@ const Troubleshooting = () => {
     fetchStatistics();
     fetchTickets();
   }, [fetchStatistics, fetchTickets]);
+
+  useEffect(() => {
+    if (tableScrollRef.current) {
+      setTableScrollWidth(tableScrollRef.current.scrollWidth || 0);
+    }
+  }, [tickets, viewMode]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -165,7 +178,7 @@ const Troubleshooting = () => {
 
       {/* Statistiken */}
       {statistics && (
-        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
           <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
@@ -220,6 +233,19 @@ const Troubleshooting = () => {
               </div>
             </div>
           </div>
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0 text-amber-600">🧩</div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Artefakte</dt>
+                    <dd className="text-lg font-medium text-gray-900">{statistics.by_category?.artefakte || 0}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -239,6 +265,24 @@ const Troubleshooting = () => {
         </form>
         
         <div className="flex gap-2">
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
@@ -261,6 +305,7 @@ const Troubleshooting = () => {
             <option value="hardware">Hardware</option>
             <option value="software">Software</option>
             <option value="application">Applikation</option>
+            <option value="artefakte">Artefakte</option>
             <option value="other">Sonstiges</option>
           </select>
           
@@ -273,85 +318,166 @@ const Troubleshooting = () => {
         </div>
       </div>
 
-      {/* Tabelle */}
-      <div className="mt-6 bg-white shadow-sm rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                #
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Thema
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kategorie
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Priorität
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Autor
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktualisiert
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-12 text-center">
-                  <ArrowPathIcon className="h-8 w-8 animate-spin mx-auto text-orange-600" />
-                  <p className="mt-2 text-sm text-gray-500">Lade Tickets...</p>
-                </td>
-              </tr>
-            ) : tickets.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
-                  Keine Tickets gefunden
-                </td>
-              </tr>
-            ) : (
-              tickets.map((ticket) => (
-                <tr
-                  key={ticket.id}
-                  onClick={() => navigate(`/service/troubleshooting/${ticket.id}`)}
-                  className="hover:bg-gray-50 cursor-pointer"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {ticket.legacy_id || ticket.ticket_number}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    <div className="max-w-md truncate">{ticket.title}</div>
-                    {ticket.affected_version && (
-                      <div className="text-xs text-gray-500">Version: {ticket.affected_version}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getCategoryBadge(ticket.category)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+      {/* Content */}
+      {viewMode === 'cards' && (
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading ? (
+            <div className="col-span-full text-center py-12">
+              <ArrowPathIcon className="h-8 w-8 animate-spin mx-auto text-orange-600" />
+              <p className="mt-2 text-sm text-gray-500">Lade Tickets...</p>
+            </div>
+          ) : tickets.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-gray-500">
+              Keine Tickets gefunden
+            </div>
+          ) : (
+            tickets.map((ticket) => (
+              <div
+                key={ticket.id}
+                onClick={() => navigate(`/service/troubleshooting/${ticket.id}`)}
+                className="bg-white rounded-lg shadow hover:shadow-md transition cursor-pointer overflow-hidden"
+              >
+                {ticket.category === 'artefakte' && ticket.main_photo_url ? (
+                  <div className="h-36 bg-gray-100">
+                    <img
+                      src={ticket.main_photo_url}
+                      alt={ticket.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-2 bg-orange-600" />
+                )}
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono text-gray-500">
+                      {ticket.legacy_id || ticket.ticket_number}
+                    </span>
                     {getStatusBadge(ticket.status)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-900 truncate" title={ticket.title}>
+                    {ticket.title}
+                  </h3>
+                  {ticket.affected_version && (
+                    <div className="text-xs text-gray-500 mt-1">Version: {ticket.affected_version}</div>
+                  )}
+                  <div className="flex items-center gap-2 mt-3">
+                    {getCategoryBadge(ticket.category)}
                     {getPriorityBadge(ticket.priority)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {ticket.author_name || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(ticket.updated_at)}
-                  </td>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-500">
+                    {ticket.author_name || '-'} • {formatDate(ticket.updated_at)}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {viewMode === 'list' && (
+        <div className="mt-6 bg-white shadow-sm rounded-lg overflow-hidden">
+          <div
+            ref={topScrollRef}
+            className="overflow-x-auto"
+            onScroll={() => {
+              if (!topScrollRef.current || !tableScrollRef.current) return;
+              if (tableScrollRef.current.scrollLeft !== topScrollRef.current.scrollLeft) {
+                tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+              }
+            }}
+          >
+            <div style={{ width: tableScrollWidth || 900, height: 1 }} />
+          </div>
+          <div
+            ref={tableScrollRef}
+            className="overflow-x-auto"
+            onScroll={() => {
+              if (!topScrollRef.current || !tableScrollRef.current) return;
+              if (topScrollRef.current.scrollLeft !== tableScrollRef.current.scrollLeft) {
+                topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+              }
+            }}
+          >
+            <table className="min-w-full divide-y divide-gray-200 table-fixed min-w-[900px]">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    #
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Thema
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Kategorie
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Priorität
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Autor
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Aktualisiert
+                  </th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-12 text-center">
+                      <ArrowPathIcon className="h-8 w-8 animate-spin mx-auto text-orange-600" />
+                      <p className="mt-2 text-sm text-gray-500">Lade Tickets...</p>
+                    </td>
+                  </tr>
+                ) : tickets.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                      Keine Tickets gefunden
+                    </td>
+                  </tr>
+                ) : (
+                  tickets.map((ticket) => (
+                    <tr
+                      key={ticket.id}
+                      onClick={() => navigate(`/service/troubleshooting/${ticket.id}`)}
+                      className="hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {ticket.legacy_id || ticket.ticket_number}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        <div className="max-w-md truncate">{ticket.title}</div>
+                        {ticket.affected_version && (
+                          <div className="text-xs text-gray-500">Version: {ticket.affected_version}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getCategoryBadge(ticket.category)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(ticket.status)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getPriorityBadge(ticket.priority)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {ticket.author_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(ticket.updated_at)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

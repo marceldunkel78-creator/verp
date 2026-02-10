@@ -28,6 +28,7 @@ const CATEGORY_OPTIONS = [
   { value: 'hardware', label: 'Hardware' },
   { value: 'software', label: 'Software' },
   { value: 'application', label: 'Applikation' },
+  { value: 'artefakte', label: 'Artefakte' },
   { value: 'other', label: 'Sonstiges' }
 ];
 
@@ -128,6 +129,16 @@ const TroubleshootingEdit = () => {
       alert('Fehler beim Hinzufügen des Kommentars');
     } finally {
       setAddingComment(false);
+    }
+  };
+
+  const setPrimaryAttachment = async (attachmentId) => {
+    try {
+      await api.post(`/service/troubleshooting/${id}/set_primary_attachment/${attachmentId}/`);
+      fetchData();
+    } catch (error) {
+      console.error('Error setting primary attachment:', error);
+      alert('Fehler beim Setzen des Hauptfotos');
     }
   };
 
@@ -346,10 +357,14 @@ const TroubleshootingEdit = () => {
                   attachments={ticket.attachments || []}
                   ticketId={ticket.id}
                   ticketType="troubleshooting"
+                  allowPrimary
+                  onSetPrimary={setPrimaryAttachment}
                   onUploadSuccess={(newAttachment) => {
                     setTicket(prev => ({
                       ...prev,
-                      attachments: [...(prev.attachments || []), newAttachment]
+                      attachments: (prev.attachments || []).map(att => (
+                        newAttachment.is_primary ? { ...att, is_primary: false } : att
+                      )).concat(newAttachment)
                     }));
                   }}
                   onDeleteSuccess={(attachmentId) => {

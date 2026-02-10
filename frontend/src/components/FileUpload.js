@@ -12,7 +12,7 @@ import api from '../services/api';
  * - onUploadSuccess: Callback when file is uploaded
  * - onDeleteSuccess: Callback when file is deleted
  */
-const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, onDeleteSuccess }) => {
+const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, onDeleteSuccess, allowPrimary = false, onSetPrimary }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
@@ -186,6 +186,11 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
           className="w-32 h-32 object-cover rounded border cursor-pointer hover:opacity-80 transition"
           onClick={() => setPreviewImage(attachment.file_url)}
         />
+        {allowPrimary && attachment.is_primary && (
+          <div className="absolute bottom-1 left-1 bg-yellow-500 text-white text-xs px-2 py-0.5 rounded shadow">
+            Hauptfoto
+          </div>
+        )}
         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition">
           <button
             type="button"
@@ -199,6 +204,21 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
             <X className="w-4 h-4" />
           </button>
         </div>
+        {allowPrimary && !attachment.is_primary && (
+          <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onSetPrimary) onSetPrimary(attachment.id);
+              }}
+              className="p-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+              title="Als Hauptfoto setzen"
+            >
+              ★
+            </button>
+          </div>
+        )}
         <div className="mt-1 text-xs text-gray-600 truncate w-32" title={attachment.filename}>
           {attachment.filename}
         </div>
