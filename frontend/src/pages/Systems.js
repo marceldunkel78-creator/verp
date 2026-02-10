@@ -359,6 +359,7 @@ const Systems = () => {
   const [createLoading, setCreateLoading] = useState(false);
   const topScrollRef = useRef(null);
   const tableScrollRef = useRef(null);
+  const suppressNextFetchRef = useRef(false);
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
 
   const canUseEmployeeFilter = true; // Alle authentifizierten User können den Mitarbeiterfilter nutzen
@@ -478,21 +479,43 @@ const Systems = () => {
     const params = Object.fromEntries([...searchParams]);
     const hasParams = Object.keys(params).length > 0 && !params.customer;
     if (hasParams) {
-      setSearchTerm(params.search || '');
-      setStatusFilter(params.status || '');
-      setCityFilter(params.city || '');
-      setCountryFilter(params.country || '');
-      setEmployeeFilter(params.employee || '');
-      setModelOrganismFilter(params.model_organism || '');
-      setResearchFieldFilter(params.research_field || '');
-      const page = params.page ? parseInt(params.page, 10) : 1;
-      setCurrentPage(page);
-      fetchSystems();
+      const nextSearchTerm = params.search || '';
+      const nextStatusFilter = params.status || '';
+      const nextCityFilter = params.city || '';
+      const nextCountryFilter = params.country || '';
+      const nextEmployeeFilter = params.employee || '';
+      const nextModelOrganismFilter = params.model_organism || '';
+      const nextResearchFieldFilter = params.research_field || '';
+      const nextPage = params.page ? parseInt(params.page, 10) : 1;
+
+      setSearchTerm(nextSearchTerm);
+      setStatusFilter(nextStatusFilter);
+      setCityFilter(nextCityFilter);
+      setCountryFilter(nextCountryFilter);
+      setEmployeeFilter(nextEmployeeFilter);
+      setModelOrganismFilter(nextModelOrganismFilter);
+      setResearchFieldFilter(nextResearchFieldFilter);
+      setCurrentPage(nextPage);
+      suppressNextFetchRef.current = true;
+      fetchSystems({
+        searchTerm: nextSearchTerm,
+        statusFilter: nextStatusFilter,
+        cityFilter: nextCityFilter,
+        countryFilter: nextCountryFilter,
+        employeeFilter: nextEmployeeFilter,
+        modelOrganismFilter: nextModelOrganismFilter,
+        researchFieldFilter: nextResearchFieldFilter,
+        page: nextPage
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
+    if (suppressNextFetchRef.current) {
+      suppressNextFetchRef.current = false;
+      return;
+    }
     fetchSystems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, statusFilter, cityFilter, countryFilter, employeeFilter, modelOrganismFilter, researchFieldFilter]);
@@ -551,23 +574,32 @@ const Systems = () => {
     }
   };
 
-  const fetchSystems = async () => {
+  const fetchSystems = async (overrides = {}) => {
     setLoading(true);
     try {
+      const effectiveSearchTerm = overrides.searchTerm ?? searchTerm;
+      const effectiveStatusFilter = overrides.statusFilter ?? statusFilter;
+      const effectiveCityFilter = overrides.cityFilter ?? cityFilter;
+      const effectiveCountryFilter = overrides.countryFilter ?? countryFilter;
+      const effectiveEmployeeFilter = overrides.employeeFilter ?? employeeFilter;
+      const effectiveModelOrganismFilter = overrides.modelOrganismFilter ?? modelOrganismFilter;
+      const effectiveResearchFieldFilter = overrides.researchFieldFilter ?? researchFieldFilter;
+      const effectivePage = overrides.page ?? currentPage;
+      const effectiveViewMode = overrides.viewMode ?? viewMode;
       const params = new URLSearchParams();
       // For map view, load up to 10000 systems; list/cards use pagination
-      const pageSize = viewMode === 'map' ? 10000 : listPageSize;
-      params.append('page', currentPage);
+      const pageSize = effectiveViewMode === 'map' ? 10000 : listPageSize;
+      params.append('page', effectivePage);
       params.append('page_size', pageSize);
-      if (searchTerm) params.append('search', searchTerm);
-      if (statusFilter) params.append('status', statusFilter);
-      if (cityFilter) params.append('location_city', cityFilter);
-      if (countryFilter) params.append('location_country', countryFilter);
-      if (employeeFilter && canUseEmployeeFilter) params.append('responsible_employee', employeeFilter);
-      if (modelOrganismFilter) params.append('model_organism', modelOrganismFilter);
-      if (researchFieldFilter) params.append('research_field', researchFieldFilter);
+      if (effectiveSearchTerm) params.append('search', effectiveSearchTerm);
+      if (effectiveStatusFilter) params.append('status', effectiveStatusFilter);
+      if (effectiveCityFilter) params.append('location_city', effectiveCityFilter);
+      if (effectiveCountryFilter) params.append('location_country', effectiveCountryFilter);
+      if (effectiveEmployeeFilter && canUseEmployeeFilter) params.append('responsible_employee', effectiveEmployeeFilter);
+      if (effectiveModelOrganismFilter) params.append('model_organism', effectiveModelOrganismFilter);
+      if (effectiveResearchFieldFilter) params.append('research_field', effectiveResearchFieldFilter);
       
-      console.log(`Fetching systems for ${viewMode} view with pageSize:`, pageSize);
+      console.log(`Fetching systems for ${effectiveViewMode} view with pageSize:`, pageSize);
       const response = await api.get(`/systems/systems/?${params.toString()}`);
       const systemsData = response.data.results || response.data;
       console.log(`API returned ${systemsData.length} systems (total count: ${response.data.count})`);
@@ -617,6 +649,17 @@ const Systems = () => {
     params.page = '1';
     setSearchParams(params);
     setCurrentPage(1);
+    suppressNextFetchRef.current = true;
+    fetchSystems({
+      searchTerm,
+      statusFilter,
+      cityFilter,
+      countryFilter,
+      employeeFilter,
+      modelOrganismFilter,
+      researchFieldFilter,
+      page: 1
+    });
   };
 
   const handleReset = () => {

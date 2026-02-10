@@ -236,6 +236,7 @@ const SystemEdit = () => {
   useEffect(() => {
     if (id) {
       fetchSystem();
+      fetchContactHistory();
     }
     // Lade Mitarbeiter für Dropdown (nur Vertrieb & Geschäftsführung)
     fetchResponsibleEmployees();
@@ -845,7 +846,7 @@ const SystemEdit = () => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/sales/systems')}
+            onClick={() => navigate(-1)}
             className="p-2 hover:bg-gray-100 rounded-lg"
           >
             <ArrowLeftIcon className="h-5 w-5" />
@@ -914,6 +915,11 @@ const SystemEdit = () => {
                 {tab.id === 'photos' && photos.length > 0 && (
                   <span className="ml-1 px-2 py-0.5 text-xs bg-gray-100 rounded-full">
                     {photos.length}
+                  </span>
+                )}
+                {tab.id === 'contact-history' && (
+                  <span className="ml-1 px-2 py-0.5 text-xs bg-gray-100 rounded-full">
+                    {contactHistoryLoading ? '...' : contactHistory.length}
                   </span>
                 )}
               </button>
