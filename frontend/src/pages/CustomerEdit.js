@@ -50,8 +50,15 @@ const CustomerEdit = () => {
   const [contactHistoryForm, setContactHistoryForm] = useState({
     contact_date: new Date().toISOString().split('T')[0],
     contact_type: 'EMAIL',
-    comment: ''
+    comment: '',
+    system_ids: []
   });
+
+  const resolveSystemIdFromNumber = (systemNumber) => {
+    if (!systemNumber || !customerSystems.length) return null;
+    const match = customerSystems.find((sys) => sys.system_number === systemNumber);
+    return match ? match.id : null;
+  };
 
   useEffect(() => {
     loadUsers();
@@ -152,17 +159,44 @@ const CustomerEdit = () => {
       alert('Bitte geben Sie einen Kommentar ein.');
       return;
     }
+
+    const selectedSystemIds = Array.isArray(contactHistoryForm.system_ids)
+      ? contactHistoryForm.system_ids
+      : [];
+
+    if (editingContactHistory && selectedSystemIds.length > 1) {
+      alert('Beim Bearbeiten kann nur ein System ausgewählt werden.');
+      return;
+    }
     
     try {
-      const payload = {
+      const basePayload = {
         ...contactHistoryForm,
         customer: id
       };
+
+      delete basePayload.system_ids;
       
       if (editingContactHistory) {
+        const payload = {
+          ...basePayload,
+          systems_system_id: selectedSystemIds[0] || null
+        };
         await api.patch(`/customers/contact-history/${editingContactHistory.id}/`, payload);
       } else {
-        await api.post('/customers/contact-history/', payload);
+        if (selectedSystemIds.length > 0) {
+          await Promise.all(
+            selectedSystemIds.map((systemId) => api.post('/customers/contact-history/', {
+              ...basePayload,
+              systems_system_id: systemId
+            }))
+          );
+        } else {
+          await api.post('/customers/contact-history/', {
+            ...basePayload,
+            systems_system_id: null
+          });
+        }
       }
       
       setShowContactHistoryModal(false);
@@ -170,7 +204,8 @@ const CustomerEdit = () => {
       setContactHistoryForm({
         contact_date: new Date().toISOString().split('T')[0],
         contact_type: 'EMAIL',
-        comment: ''
+        comment: '',
+        system_ids: []
       });
       fetchContactHistory();
     } catch (error) {
@@ -191,11 +226,13 @@ const CustomerEdit = () => {
   };
 
   const openEditContactHistory = (entry) => {
+    const resolvedSystemId = resolveSystemIdFromNumber(entry.system_number);
     setEditingContactHistory(entry);
     setContactHistoryForm({
       contact_date: entry.contact_date,
       contact_type: entry.contact_type,
-      comment: entry.comment
+      comment: entry.comment,
+      system_ids: resolvedSystemId ? [resolvedSystemId] : []
     });
     setShowContactHistoryModal(true);
   };
@@ -1271,7 +1308,8 @@ const CustomerEdit = () => {
                       setContactHistoryForm({
                         contact_date: new Date().toISOString().split('T')[0],
                         contact_type: 'EMAIL',
-                        comment: ''
+                        comment: '',
+                        system_ids: []
                       });
                       setShowContactHistoryModal(true);
                     }}
@@ -1405,6 +1443,35 @@ const CustomerEdit = () => {
                               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
                               placeholder="Beschreiben Sie den Kontakt..."
                             />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Systeme (optional)
+                            </label>
+                            {customerSystems.length === 0 ? (
+                              <div className="text-sm text-gray-500">Keine Systeme vorhanden.</div>
+                            ) : (
+                              <select
+                                multiple
+                                value={contactHistoryForm.system_ids.map(String)}
+                                onChange={(e) => {
+                                  const selected = Array.from(e.target.selectedOptions).map((opt) => parseInt(opt.value, 10));
+                                  setContactHistoryForm({ ...contactHistoryForm, system_ids: selected });
+                                }}
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                                size={Math.min(6, customerSystems.length)}
+                              >
+                                {customerSystems.map((sys) => (
+                                  <option key={sys.id} value={sys.id}>
+                                    {sys.system_number} - {sys.system_name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            <p className="mt-1 text-xs text-gray-500">
+                              Ohne Auswahl erscheint der Eintrag nur in der Kunden-Kontakthistorie.
+                            </p>
                           </div>
                         </div>
                         

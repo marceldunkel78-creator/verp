@@ -1,6 +1,6 @@
 from datetime import date
 from rest_framework import serializers
-from .models import System, SystemComponent, SystemPhoto
+from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption
 from customers.models import Customer
 
 
@@ -56,6 +56,18 @@ class SystemComponentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class ModelOrganismOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModelOrganismOption
+        fields = ['id', 'name', 'is_active']
+
+
+class ResearchFieldOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResearchFieldOption
+        fields = ['id', 'name', 'is_active']
+
+
 class SystemListSerializer(serializers.ModelSerializer):
     """Kompakter Serializer für Systemliste"""
     customer_name = serializers.SerializerMethodField()
@@ -70,12 +82,14 @@ class SystemListSerializer(serializers.ModelSerializer):
     last_contact_date = serializers.SerializerMethodField()
     contact_overdue = serializers.SerializerMethodField()
     visiview_license_serial = serializers.SerializerMethodField()
+    model_organisms = ModelOrganismOptionSerializer(many=True, read_only=True)
+    research_fields = ResearchFieldOptionSerializer(many=True, read_only=True)
     
     class Meta:
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
-            'description', 'status', 'status_display', 'model_organism', 'research_field', 'location', 'location_full',
+            'description', 'status', 'status_display', 'model_organisms', 'research_fields', 'location', 'location_full',
             'location_university', 'location_institute', 'location_department',
             'location_street', 'location_house_number', 'location_address_supplement',
             'location_postal_code', 'location_city', 'location_country',
@@ -224,13 +238,15 @@ class SystemDetailSerializer(serializers.ModelSerializer):
     location_full = serializers.SerializerMethodField()
     last_contact_date = serializers.SerializerMethodField()
     contact_overdue = serializers.SerializerMethodField()
+    model_organisms = ModelOrganismOptionSerializer(many=True, read_only=True)
+    research_fields = ResearchFieldOptionSerializer(many=True, read_only=True)
     
     class Meta:
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'customer_name',
             'customer_data', 'customer_details', 'customer_address', 'description', 'status', 'status_display',
-            'model_organism', 'research_field',
+            'model_organisms', 'research_fields',
             'location', 'location_full',
             'location_university', 'location_institute', 'location_department',
             'location_street', 'location_house_number', 'location_address_supplement',
@@ -410,12 +426,24 @@ class SystemDetailSerializer(serializers.ModelSerializer):
 class SystemCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für System erstellen/bearbeiten"""
     components = SystemComponentSerializer(many=True, required=False)
+    model_organism_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        required=False,
+        queryset=ModelOrganismOption.objects.all(),
+        source='model_organisms'
+    )
+    research_field_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        required=False,
+        queryset=ResearchFieldOption.objects.all(),
+        source='research_fields'
+    )
     
     class Meta:
         model = System
         fields = [
             'id', 'system_number', 'system_name', 'customer', 'description',
-            'status', 'model_organism', 'research_field', 'location', 
+            'status', 'model_organism_ids', 'research_field_ids', 'location', 
             'location_university', 'location_institute', 'location_department',
             'location_street', 'location_house_number', 'location_address_supplement',
             'location_postal_code', 'location_city', 'location_country',
@@ -426,7 +454,14 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         components_data = validated_data.pop('components', [])
+        model_organisms = validated_data.pop('model_organisms', [])
+        research_fields = validated_data.pop('research_fields', [])
         system = System.objects.create(**validated_data)
+
+        if model_organisms:
+            system.model_organisms.set(model_organisms)
+        if research_fields:
+            system.research_fields.set(research_fields)
         
         for idx, component_data in enumerate(components_data):
             component_data['position'] = idx + 1
@@ -436,11 +471,18 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         components_data = validated_data.pop('components', None)
+        model_organisms = validated_data.pop('model_organisms', None)
+        research_fields = validated_data.pop('research_fields', None)
         
         # Update System fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        if model_organisms is not None:
+            instance.model_organisms.set(model_organisms)
+        if research_fields is not None:
+            instance.research_fields.set(research_fields)
         
         # Update components if provided
         if components_data is not None:

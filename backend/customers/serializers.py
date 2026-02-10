@@ -275,10 +275,16 @@ class ContactHistorySerializer(serializers.ModelSerializer):
                     if not attrs.get('customer') and customer_system.customer:
                         attrs['customer'] = customer_system.customer
                 else:
-                    # Kein CustomerSystem gefunden - system bleibt None
-                    # aber Customer sollte trotzdem gesetzt werden
-                    if not attrs.get('customer') and systems_system.customer:
-                        attrs['customer'] = systems_system.customer
+                    # Kein CustomerSystem gefunden - lege es an, wenn Kunde vorhanden ist
+                    if systems_system.customer:
+                        customer_system = CustomerSystem.objects.create(
+                            customer=systems_system.customer,
+                            system_number=systems_system.system_number,
+                            name=systems_system.system_name or systems_system.system_number
+                        )
+                        attrs['system'] = customer_system
+                        if not attrs.get('customer'):
+                            attrs['customer'] = systems_system.customer
             except SystemsSystem.DoesNotExist:
                 pass
         

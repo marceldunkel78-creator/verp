@@ -7,10 +7,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
 from django.db.models import Q
 
-from .models import System, SystemComponent, SystemPhoto
+from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption
 from .serializers import (
     SystemListSerializer, SystemDetailSerializer, SystemCreateUpdateSerializer,
-    SystemComponentSerializer, SystemPhotoSerializer
+    SystemComponentSerializer, SystemPhotoSerializer,
+    ModelOrganismOptionSerializer, ResearchFieldOptionSerializer
 )
 from .star_names import get_unused_star_name, search_star_names, IAU_STAR_NAMES
 
@@ -26,8 +27,8 @@ class SystemViewSet(viewsets.ModelViewSet):
         'responsible_employee',
         'location_city',
         'location_country',
-        'model_organism',
-        'research_field'
+        'model_organisms',
+        'research_fields'
     ]
     # Use actual Customer model fields for related searches/ordering
     search_fields = [
@@ -35,7 +36,7 @@ class SystemViewSet(viewsets.ModelViewSet):
         'customer__customer_number', 'customer__first_name', 'customer__last_name',
         'location_city', 'location_university', 'location_institute', 'location_country',
         'visiview_license__serial_number', 'visiview_license__license_number',
-        'model_organism', 'research_field'
+        'model_organisms__name', 'research_fields__name'
     ]
     ordering_fields = ['system_number', 'system_name', 'created_at', 'customer__last_name']
     ordering = ['-created_at']
@@ -125,6 +126,26 @@ class SystemViewSet(viewsets.ModelViewSet):
             'service_tickets': [],  # Noch zu erstellen
             'visiview_tickets': [],  # Noch zu erstellen
         })
+
+
+class ModelOrganismOptionViewSet(viewsets.ModelViewSet):
+    queryset = ModelOrganismOption.objects.all()
+    serializer_class = ModelOrganismOptionSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+
+class ResearchFieldOptionViewSet(viewsets.ModelViewSet):
+    queryset = ResearchFieldOption.objects.all()
+    serializer_class = ResearchFieldOptionSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
     
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):

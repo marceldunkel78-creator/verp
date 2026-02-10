@@ -242,82 +242,6 @@ const SystemsMap = ({ systems, onSystemClick }) => {
   );
 };
 
-const MODEL_ORGANISM_OPTIONS = [
-  'Escherichia coli – Kolibakterium / Darmbakterium',
-  'Saccharomyces cerevisiae – Backhefe / Bäckerhefe',
-  'Schizosaccharomyces pombe – Spalthefe',
-  'Bacillus subtilis – Heubazillus',
-  'Dictyostelium discoideum – Schleimpilz / Zellulärer Schleimpilz',
-  'Arabidopsis thaliana – Ackerschmalwand / Thale-Kresse',
-  'Physcomitrella patens – Laubmoos / Knospiges Laubmoos',
-  'Marchantia polymorpha – Brunnenlebermoos / Gewöhnliches Lebermoos',
-  'Oryza sativa – Reis',
-  'Zea mays – Mais',
-  'Nicotiana benthamiana – Aufrechter Tabak',
-  'Medicago truncatula – Kleinfrüchtige Luzerne / Bartklee',
-  'Lotus japonicus – Japanischer Hornklee',
-  'Setaria viridis – Grünes Borstengras',
-  'Caenorhabditis elegans – Fadenwurm / Eleganter Fadenwurm',
-  'Drosophila melanogaster – Taufliege / Schwarze Fruchtfliege',
-  'Danio rerio – Zebrabärbling / Zebrafisch',
-  'Mus musculus – Hausmaus / Labormaus',
-  'Rattus norvegicus – Wanderratte / Laborratte',
-  'Xenopus laevis – Krallenfrosch / Afrikanischer Krallenfrosch',
-  'Xenopus tropicalis – Westafrikanischer Krallenfrosch',
-  'Gallus gallus – Haushuhn',
-  'Oryzias latipes – Medaka / Japanischer Reisfisch',
-  'Strongylocentrotus purpuratus – Purpur-Seeigel',
-  'Neurospora crassa – Brotschimmelpilz / Roter Brotschimmel',
-  'Chlamydomonas reinhardtii – Grünalge / Einzellige Grünalge',
-  'Tetrahymena thermophila – Wimperntierchen',
-  'Hydra vulgaris – Süßwasserpolyp',
-  'Nematostella vectensis – Sternanemone',
-  'Apis mellifera – Honigbiene',
-  'Tribolium castaneum – Rotbrauner Mehlkäfer',
-  'Bombyx mori – Seidenspinner',
-  'Macaca mulatta – Rhesusaffe',
-  'Rattus rattus – Hausratte (manchmal separat genutzt)',
-  'Ciona intestinalis – Seescheide / Schlauch-Seescheide',
-  'Branchiostoma floridae – Lanzettfischchen / Floridas Lanzettfischchen',
-  'Pisum sativum – Garten-Erbse',
-  'Solanum lycopersicum – Tomate',
-  'Brachypodium distachyon – Schmalblättriges Zittergras',
-  'Volvox carteri – Kugelalge / Volvox'
-];
-
-const RESEARCH_FIELD_OPTIONS = [
-  'Onkologie / Krebsforschung',
-  'Immunologie (inkl. Autoimmunerkrankungen, Impfstoffe, Checkpoint-Inhibitoren)',
-  'Neurowissenschaften / Neurologie (inkl. Neurodegeneration, Psyche)',
-  'Kardiologie / Herz-Kreislauf-Forschung',
-  'Infektiologie / Virologie / Mikrobiologie (inkl. Antibiotikaresistenz, Pandemievorbereitung)',
-  'Genetik / Genomik / Humangenetik',
-  'Molekularbiologie / Zellbiologie',
-  'Entwicklungsbiologie / Regenerative Medizin / Stammzellforschung',
-  'Endokrinologie / Stoffwechselforschung / Diabetes / Adipositas',
-  'Mikrobiom-Forschung (Darm-, Haut-, Lungenmikrobiom etc.)',
-  'Präzisionsmedizin / Personalisierte Medizin',
-  'Gentherapie / Genom-Editing (CRISPR, Prime Editing, Base Editing)',
-  'RNA-Therapeutika / mRNA-Technologien (über COVID hinaus)',
-  'Immuntherapien (CAR-T, bispezifische Antikörper, Krebsimpfstoffe)',
-  'Künstliche Intelligenz / Machine Learning in Biologie & Medizin (Drug Discovery, Bildanalyse, Prädiktive Modelle)',
-  'Single-Cell- & Spatial-Omics (Single-Cell RNA-seq, Spatial Transcriptomics, Multi-Omics)',
-  'Synthetische Biologie / Bioengineering',
-  'Alternsforschung / Biogerontologie / Senolytika / Longevity',
-  'Long Covid / Postvirale Syndrome',
-  'Frauengesundheit / Geschlechtersensible Medizin (Endometriose, Menopause, reproduktive Gesundheit – 2026 stark gefördert)',
-  'Organ-on-a-Chip / Organoids / Humane zelluläre Modelle',
-  'Neurodegenerative Erkrankungen (Alzheimer, Parkinson, ALS – inkl. Viren-Hypothese)',
-  'Kardiovaskuläre Präzisionsmedizin (Schwangerschafts-assoziierte Risiken, Menopause)',
-  'Antimicrobial Resistance / Neue Antibiotika / Phagentherapie',
-  'Zellfreie Biomanufacturing / Point-of-Care-Diagnostik',
-  'Klimawandel & Gesundheit (Infektionskrankheiten, Allergien, Hitzeextremereignisse)',
-  'Digital Health / Datengetriebene Medizin / Big Data in der Klinik',
-  'Kognitive Neurowissenschaften / Gehirn-Computer-Schnittstellen (BCI)',
-  'Krebsprävention / Früherkennung / Liquid Biopsy',
-  'Autoimmunerkrankungen & systemische Entzündung (Rheuma, Lupus, Multiple Sklerose)'
-];
-
 const Systems = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -343,6 +267,8 @@ const Systems = () => {
   const [employees, setEmployees] = useState([]);
   const [cities, setCities] = useState([]);
   const [countries, setCountries] = useState([]);
+  const [modelOrganismOptions, setModelOrganismOptions] = useState([]);
+  const [researchFieldOptions, setResearchFieldOptions] = useState([]);
   
   // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -447,8 +373,8 @@ const Systems = () => {
       if (restored.filters.cityFilter) params.city = restored.filters.cityFilter;
       if (restored.filters.countryFilter) params.country = restored.filters.countryFilter;
       if (restored.filters.employeeFilter) params.employee = restored.filters.employeeFilter;
-      if (restored.filters.modelOrganismFilter) params.model_organism = restored.filters.modelOrganismFilter;
-      if (restored.filters.researchFieldFilter) params.research_field = restored.filters.researchFieldFilter;
+      if (restored.filters.modelOrganismFilter) params.model_organisms = restored.filters.modelOrganismFilter;
+      if (restored.filters.researchFieldFilter) params.research_fields = restored.filters.researchFieldFilter;
       params.page = String(restored.page);
       setSearchParams(params);
     }
@@ -484,8 +410,8 @@ const Systems = () => {
       const nextCityFilter = params.city || '';
       const nextCountryFilter = params.country || '';
       const nextEmployeeFilter = params.employee || '';
-      const nextModelOrganismFilter = params.model_organism || '';
-      const nextResearchFieldFilter = params.research_field || '';
+      const nextModelOrganismFilter = params.model_organisms || '';
+      const nextResearchFieldFilter = params.research_fields || '';
       const nextPage = params.page ? parseInt(params.page, 10) : 1;
 
       setSearchTerm(nextSearchTerm);
@@ -522,6 +448,7 @@ const Systems = () => {
 
   useEffect(() => {
     fetchFilters();
+    fetchOptionFilters();
   }, []);
 
   useEffect(() => {
@@ -574,6 +501,19 @@ const Systems = () => {
     }
   };
 
+  const fetchOptionFilters = async () => {
+    try {
+      const [modelRes, researchRes] = await Promise.all([
+        api.get('/systems/model-organisms/?is_active=true&page_size=1000'),
+        api.get('/systems/research-fields/?is_active=true&page_size=1000')
+      ]);
+      setModelOrganismOptions(modelRes.data.results || modelRes.data || []);
+      setResearchFieldOptions(researchRes.data.results || researchRes.data || []);
+    } catch (error) {
+      console.error('Error fetching model/research options:', error);
+    }
+  };
+
   const fetchSystems = async (overrides = {}) => {
     setLoading(true);
     try {
@@ -596,8 +536,8 @@ const Systems = () => {
       if (effectiveCityFilter) params.append('location_city', effectiveCityFilter);
       if (effectiveCountryFilter) params.append('location_country', effectiveCountryFilter);
       if (effectiveEmployeeFilter && canUseEmployeeFilter) params.append('responsible_employee', effectiveEmployeeFilter);
-      if (effectiveModelOrganismFilter) params.append('model_organism', effectiveModelOrganismFilter);
-      if (effectiveResearchFieldFilter) params.append('research_field', effectiveResearchFieldFilter);
+      if (effectiveModelOrganismFilter) params.append('model_organisms', effectiveModelOrganismFilter);
+      if (effectiveResearchFieldFilter) params.append('research_fields', effectiveResearchFieldFilter);
       
       console.log(`Fetching systems for ${effectiveViewMode} view with pageSize:`, pageSize);
       const response = await api.get(`/systems/systems/?${params.toString()}`);
@@ -644,8 +584,8 @@ const Systems = () => {
     if (cityFilter) params.city = cityFilter;
     if (countryFilter) params.country = countryFilter;
     if (employeeFilter) params.employee = employeeFilter;
-    if (modelOrganismFilter) params.model_organism = modelOrganismFilter;
-    if (researchFieldFilter) params.research_field = researchFieldFilter;
+    if (modelOrganismFilter) params.model_organisms = modelOrganismFilter;
+    if (researchFieldFilter) params.research_fields = researchFieldFilter;
     params.page = '1';
     setSearchParams(params);
     setCurrentPage(1);
@@ -930,9 +870,9 @@ const Systems = () => {
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Alle Modellorganismen</option>
-                    {MODEL_ORGANISM_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
+                    {modelOrganismOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
                       </option>
                     ))}
                   </select>
@@ -948,9 +888,9 @@ const Systems = () => {
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Alle Forschungsgebiete</option>
-                    {RESEARCH_FIELD_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
+                    {researchFieldOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
                       </option>
                     ))}
                   </select>
@@ -1188,8 +1128,8 @@ const Systems = () => {
                     if (cityFilter) params.city = cityFilter;
                     if (countryFilter) params.country = countryFilter;
                     if (employeeFilter) params.employee = employeeFilter;
-                    if (modelOrganismFilter) params.model_organism = modelOrganismFilter;
-                    if (researchFieldFilter) params.research_field = researchFieldFilter;
+                    if (modelOrganismFilter) params.model_organisms = modelOrganismFilter;
+                    if (researchFieldFilter) params.research_fields = researchFieldFilter;
                     params.page = String(newPage);
                     setSearchParams(params);
                   }}
@@ -1211,8 +1151,8 @@ const Systems = () => {
                     if (cityFilter) params.city = cityFilter;
                     if (countryFilter) params.country = countryFilter;
                     if (employeeFilter) params.employee = employeeFilter;
-                    if (modelOrganismFilter) params.model_organism = modelOrganismFilter;
-                    if (researchFieldFilter) params.research_field = researchFieldFilter;
+                    if (modelOrganismFilter) params.model_organisms = modelOrganismFilter;
+                    if (researchFieldFilter) params.research_fields = researchFieldFilter;
                     params.page = String(newPage);
                     setSearchParams(params);
                   }}

@@ -376,9 +376,8 @@ class ContactHistoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet für Kontakthistorie.
     Kann nach customer oder system gefiltert werden.
-    Bei einem System werden alle Einträge zurückgegeben, die entweder:
-    - direkt mit diesem System verknüpft sind, ODER
-    - mit dem Kunden des Systems verknüpft sind (aber keinem anderen System)
+    Bei einem System werden nur Einträge zurückgegeben, die direkt
+    mit diesem System verknüpft sind.
     """
     queryset = ContactHistory.objects.all()
     serializer_class = ContactHistorySerializer
@@ -396,9 +395,7 @@ class ContactHistoryViewSet(viewsets.ModelViewSet):
         customer_id = self.request.query_params.get('customer', None)
         
         if system_id:
-            # Bei System: Zeige alle Einträge die:
-            # 1. direkt mit diesem System verknüpft sind, ODER
-            # 2. mit dem Kunden des Systems verknüpft sind (system ist null)
+            # Bei System: Zeige nur Einträge, die direkt mit diesem System verknüpft sind
             from .models import CustomerSystem
             from systems.models import System
             
@@ -421,17 +418,8 @@ class ContactHistoryViewSet(viewsets.ModelViewSet):
                 except CustomerSystem.DoesNotExist:
                     return queryset.none()
             
-            # Filter: Einträge mit diesem CustomerSystem ODER Kunden-Einträge ohne System
             if customer_system:
-                queryset = queryset.filter(
-                    Q(system=customer_system) |
-                    Q(customer_id=customer_for_filter, system__isnull=True)
-                )
-            elif customer_for_filter:
-                # Kein CustomerSystem gefunden, zeige nur Kunden-Einträge ohne System
-                queryset = queryset.filter(
-                    customer_id=customer_for_filter, system__isnull=True
-                )
+                queryset = queryset.filter(system=customer_system)
             else:
                 return queryset.none()
         elif customer_id:

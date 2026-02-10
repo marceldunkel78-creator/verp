@@ -40,82 +40,6 @@ const TABS = [
   { id: 'travel-reports', name: 'Reisebericht/Servicebericht', icon: DocumentTextIcon }
 ];
 
-const MODEL_ORGANISM_OPTIONS = [
-  'Escherichia coli – Kolibakterium / Darmbakterium',
-  'Saccharomyces cerevisiae – Backhefe / Bäckerhefe',
-  'Schizosaccharomyces pombe – Spalthefe',
-  'Bacillus subtilis – Heubazillus',
-  'Dictyostelium discoideum – Schleimpilz / Zellulärer Schleimpilz',
-  'Arabidopsis thaliana – Ackerschmalwand / Thale-Kresse',
-  'Physcomitrella patens – Laubmoos / Knospiges Laubmoos',
-  'Marchantia polymorpha – Brunnenlebermoos / Gewöhnliches Lebermoos',
-  'Oryza sativa – Reis',
-  'Zea mays – Mais',
-  'Nicotiana benthamiana – Aufrechter Tabak',
-  'Medicago truncatula – Kleinfrüchtige Luzerne / Bartklee',
-  'Lotus japonicus – Japanischer Hornklee',
-  'Setaria viridis – Grünes Borstengras',
-  'Caenorhabditis elegans – Fadenwurm / Eleganter Fadenwurm',
-  'Drosophila melanogaster – Taufliege / Schwarze Fruchtfliege',
-  'Danio rerio – Zebrabärbling / Zebrafisch',
-  'Mus musculus – Hausmaus / Labormaus',
-  'Rattus norvegicus – Wanderratte / Laborratte',
-  'Xenopus laevis – Krallenfrosch / Afrikanischer Krallenfrosch',
-  'Xenopus tropicalis – Westafrikanischer Krallenfrosch',
-  'Gallus gallus – Haushuhn',
-  'Oryzias latipes – Medaka / Japanischer Reisfisch',
-  'Strongylocentrotus purpuratus – Purpur-Seeigel',
-  'Neurospora crassa – Brotschimmelpilz / Roter Brotschimmel',
-  'Chlamydomonas reinhardtii – Grünalge / Einzellige Grünalge',
-  'Tetrahymena thermophila – Wimperntierchen',
-  'Hydra vulgaris – Süßwasserpolyp',
-  'Nematostella vectensis – Sternanemone',
-  'Apis mellifera – Honigbiene',
-  'Tribolium castaneum – Rotbrauner Mehlkäfer',
-  'Bombyx mori – Seidenspinner',
-  'Macaca mulatta – Rhesusaffe',
-  'Rattus rattus – Hausratte (manchmal separat genutzt)',
-  'Ciona intestinalis – Seescheide / Schlauch-Seescheide',
-  'Branchiostoma floridae – Lanzettfischchen / Floridas Lanzettfischchen',
-  'Pisum sativum – Garten-Erbse',
-  'Solanum lycopersicum – Tomate',
-  'Brachypodium distachyon – Schmalblättriges Zittergras',
-  'Volvox carteri – Kugelalge / Volvox'
-];
-
-const RESEARCH_FIELD_OPTIONS = [
-  'Onkologie / Krebsforschung',
-  'Immunologie (inkl. Autoimmunerkrankungen, Impfstoffe, Checkpoint-Inhibitoren)',
-  'Neurowissenschaften / Neurologie (inkl. Neurodegeneration, Psyche)',
-  'Kardiologie / Herz-Kreislauf-Forschung',
-  'Infektiologie / Virologie / Mikrobiologie (inkl. Antibiotikaresistenz, Pandemievorbereitung)',
-  'Genetik / Genomik / Humangenetik',
-  'Molekularbiologie / Zellbiologie',
-  'Entwicklungsbiologie / Regenerative Medizin / Stammzellforschung',
-  'Endokrinologie / Stoffwechselforschung / Diabetes / Adipositas',
-  'Mikrobiom-Forschung (Darm-, Haut-, Lungenmikrobiom etc.)',
-  'Präzisionsmedizin / Personalisierte Medizin',
-  'Gentherapie / Genom-Editing (CRISPR, Prime Editing, Base Editing)',
-  'RNA-Therapeutika / mRNA-Technologien (über COVID hinaus)',
-  'Immuntherapien (CAR-T, bispezifische Antikörper, Krebsimpfstoffe)',
-  'Künstliche Intelligenz / Machine Learning in Biologie & Medizin (Drug Discovery, Bildanalyse, Prädiktive Modelle)',
-  'Single-Cell- & Spatial-Omics (Single-Cell RNA-seq, Spatial Transcriptomics, Multi-Omics)',
-  'Synthetische Biologie / Bioengineering',
-  'Alternsforschung / Biogerontologie / Senolytika / Longevity',
-  'Long Covid / Postvirale Syndrome',
-  'Frauengesundheit / Geschlechtersensible Medizin (Endometriose, Menopause, reproduktive Gesundheit – 2026 stark gefördert)',
-  'Organ-on-a-Chip / Organoids / Humane zelluläre Modelle',
-  'Neurodegenerative Erkrankungen (Alzheimer, Parkinson, ALS – inkl. Viren-Hypothese)',
-  'Kardiovaskuläre Präzisionsmedizin (Schwangerschafts-assoziierte Risiken, Menopause)',
-  'Antimicrobial Resistance / Neue Antibiotika / Phagentherapie',
-  'Zellfreie Biomanufacturing / Point-of-Care-Diagnostik',
-  'Klimawandel & Gesundheit (Infektionskrankheiten, Allergien, Hitzeextremereignisse)',
-  'Digital Health / Datengetriebene Medizin / Big Data in der Klinik',
-  'Kognitive Neurowissenschaften / Gehirn-Computer-Schnittstellen (BCI)',
-  'Krebsprävention / Früherkennung / Liquid Biopsy',
-  'Autoimmunerkrankungen & systemische Entzündung (Rheuma, Lupus, Multiple Sklerose)'
-];
-
 const SystemEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -136,8 +60,8 @@ const SystemEdit = () => {
     customer: urlCustomerId || '',
     description: '',
     status: 'unbekannt',
-    model_organism: '',
-    research_field: '',
+    model_organism_ids: [],
+    research_field_ids: [],
     location: '',
     location_university: '',
     location_institute: '',
@@ -171,6 +95,11 @@ const SystemEdit = () => {
   const [licenseSearch, setLicenseSearch] = useState('');
   const [searchingLicenses, setSearchingLicenses] = useState(false);
   const [selectedLicense, setSelectedLicense] = useState(null);
+
+  const [modelOrganismOptions, setModelOrganismOptions] = useState([]);
+  const [researchFieldOptions, setResearchFieldOptions] = useState([]);
+  const [newModelOrganismName, setNewModelOrganismName] = useState('');
+  const [newResearchFieldName, setNewResearchFieldName] = useState('');
   
   // Components State
   const [components, setComponents] = useState([]);
@@ -240,6 +169,8 @@ const SystemEdit = () => {
     }
     // Lade Mitarbeiter für Dropdown (nur Vertrieb & Geschäftsführung)
     fetchResponsibleEmployees();
+    fetchModelOrganismOptions();
+    fetchResearchFieldOptions();
   }, [id]);
 
   // Load tab data when tab is selected
@@ -263,14 +194,16 @@ const SystemEdit = () => {
     try {
       const response = await api.get(`/systems/systems/${id}/`);
       const data = response.data;
+      const modelOrganismIds = (data.model_organisms || []).map((opt) => opt.id);
+      const researchFieldIds = (data.research_fields || []).map((opt) => opt.id);
       setSystem(data);
       setFormData({
         system_name: data.system_name || '',
         customer: data.customer || '',
         description: data.description || '',
         status: data.status || 'unbekannt',
-        model_organism: data.model_organism || '',
-        research_field: data.research_field || '',
+        model_organism_ids: modelOrganismIds,
+        research_field_ids: researchFieldIds,
         location: data.location || '',
         location_university: data.location_university || '',
         location_institute: data.location_institute || '',
@@ -310,6 +243,90 @@ const SystemEdit = () => {
       alert('Fehler beim Laden des Systems');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchModelOrganismOptions = async () => {
+    try {
+      const response = await api.get('/systems/model-organisms/?is_active=true&page_size=1000');
+      setModelOrganismOptions(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching model organisms:', error);
+    }
+  };
+
+  const fetchResearchFieldOptions = async () => {
+    try {
+      const response = await api.get('/systems/research-fields/?is_active=true&page_size=1000');
+      setResearchFieldOptions(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching research fields:', error);
+    }
+  };
+
+  const addModelOrganismOption = async () => {
+    const name = newModelOrganismName.trim();
+    if (!name) return;
+
+    const existing = modelOrganismOptions.find(
+      (opt) => opt.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      setFormData(prev => ({
+        ...prev,
+        model_organism_ids: Array.from(new Set([...prev.model_organism_ids, existing.id]))
+      }));
+      setHasChanges(true);
+      setNewModelOrganismName('');
+      return;
+    }
+
+    try {
+      const response = await api.post('/systems/model-organisms/', { name });
+      const created = response.data;
+      setModelOrganismOptions(prev => [...prev, created]);
+      setFormData(prev => ({
+        ...prev,
+        model_organism_ids: Array.from(new Set([...prev.model_organism_ids, created.id]))
+      }));
+      setHasChanges(true);
+      setNewModelOrganismName('');
+    } catch (error) {
+      console.error('Error adding model organism:', error);
+      alert('Fehler beim Hinzufügen des Modellorganismus');
+    }
+  };
+
+  const addResearchFieldOption = async () => {
+    const name = newResearchFieldName.trim();
+    if (!name) return;
+
+    const existing = researchFieldOptions.find(
+      (opt) => opt.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      setFormData(prev => ({
+        ...prev,
+        research_field_ids: Array.from(new Set([...prev.research_field_ids, existing.id]))
+      }));
+      setHasChanges(true);
+      setNewResearchFieldName('');
+      return;
+    }
+
+    try {
+      const response = await api.post('/systems/research-fields/', { name });
+      const created = response.data;
+      setResearchFieldOptions(prev => [...prev, created]);
+      setFormData(prev => ({
+        ...prev,
+        research_field_ids: Array.from(new Set([...prev.research_field_ids, created.id]))
+      }));
+      setHasChanges(true);
+      setNewResearchFieldName('');
+    } catch (error) {
+      console.error('Error adding research field:', error);
+      alert('Fehler beim Hinzufügen des Forschungsgebiets');
     }
   };
 
@@ -976,7 +993,7 @@ const SystemEdit = () => {
                   <div className="flex-1">
                     <button
                       type="button"
-                      onClick={() => navigate(`/customers/${selectedCustomer.id}`)}
+                      onClick={() => navigate(`/sales/customers/${selectedCustomer.id}`)}
                       className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
                     >
                       {selectedCustomer.full_name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`}
@@ -1167,17 +1184,39 @@ const SystemEdit = () => {
                 Modellorganismus
               </label>
               <select
-                value={formData.model_organism}
-                onChange={(e) => handleInputChange('model_organism', e.target.value)}
+                multiple
+                value={formData.model_organism_ids.map(String)}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((opt) => parseInt(opt.value, 10));
+                  setFormData(prev => ({ ...prev, model_organism_ids: selected }));
+                  setHasChanges(true);
+                }}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                size={Math.min(6, Math.max(2, modelOrganismOptions.length))}
               >
-                <option value="">-- Nicht gesetzt --</option>
-                {MODEL_ORGANISM_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
+                {modelOrganismOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-gray-500">Mehrfachauswahl mit Strg/Ctrl oder Shift.</p>
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newModelOrganismName}
+                  onChange={(e) => setNewModelOrganismName(e.target.value)}
+                  placeholder="Neuen Modellorganismus hinzufügen"
+                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addModelOrganismOption}
+                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                >
+                  Hinzufügen
+                </button>
+              </div>
             </div>
 
             <div>
@@ -1185,17 +1224,39 @@ const SystemEdit = () => {
                 Forschungsgebiet
               </label>
               <select
-                value={formData.research_field}
-                onChange={(e) => handleInputChange('research_field', e.target.value)}
+                multiple
+                value={formData.research_field_ids.map(String)}
+                onChange={(e) => {
+                  const selected = Array.from(e.target.selectedOptions).map((opt) => parseInt(opt.value, 10));
+                  setFormData(prev => ({ ...prev, research_field_ids: selected }));
+                  setHasChanges(true);
+                }}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                size={Math.min(6, Math.max(2, researchFieldOptions.length))}
               >
-                <option value="">-- Nicht gesetzt --</option>
-                {RESEARCH_FIELD_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
+                {researchFieldOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.name}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-gray-500">Mehrfachauswahl mit Strg/Ctrl oder Shift.</p>
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  value={newResearchFieldName}
+                  onChange={(e) => setNewResearchFieldName(e.target.value)}
+                  placeholder="Neues Forschungsgebiet hinzufügen"
+                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={addResearchFieldOption}
+                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                >
+                  Hinzufügen
+                </button>
+              </div>
             </div>
 
             <div>
