@@ -945,6 +945,17 @@ const Systems = () => {
                       onClick={() => navigate(`/sales/systems/${system.id}`)}
                       className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer overflow-hidden"
                     >
+                      {system.primary_photo_url ? (
+                        <div className="h-36 bg-gray-100">
+                          <img
+                            src={system.primary_photo_url}
+                            alt={system.system_name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-2 bg-blue-600" />
+                      )}
                       <div className="px-4 py-3 border-b bg-gray-50 flex justify-between items-center">
                         <span className="font-mono font-medium text-blue-600">{system.system_number}</span>
                         <div className="flex items-center gap-2">
