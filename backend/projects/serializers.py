@@ -50,10 +50,7 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
         return None
     
     def get_file_url(self, obj):
-        request = self.context.get('request')
-        if obj.file and request:
-            return request.build_absolute_uri(obj.file.url)
-        elif obj.file:
+        if obj.file:
             return obj.file.url
         return None
 

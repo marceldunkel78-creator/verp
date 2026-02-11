@@ -43,7 +43,7 @@ def dashboard_stats(request):
     
     # System-Statistiken
     total_systems = System.objects.count()
-    active_systems = System.objects.filter(status='aktiv').count()
+    active_systems = System.objects.filter(status='in_nutzung').count()
     
     # VisiView-Lizenz-Statistiken
     total_licenses = VisiViewLicense.objects.count()

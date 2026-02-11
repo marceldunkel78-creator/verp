@@ -241,9 +241,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
     
     def get_signature_image_url(self, obj):
         if obj.signature_image:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.signature_image.url)
             return obj.signature_image.url
         return None
 
@@ -446,9 +443,6 @@ class TravelExpenseItemSerializer(serializers.ModelSerializer):
 
     def get_receipt_url(self, obj):
         if obj.receipt:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.receipt.url)
             return obj.receipt.url
         return None
 

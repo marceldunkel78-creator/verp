@@ -579,7 +579,7 @@ const OrderFormNew = () => {
     // For online orders prefer the uploaded order_document; if none, show message
     if (formData.order_type === 'online') {
       if (formData.order_document) {
-        const url = formData.order_document.startsWith('http') ? formData.order_document : `${window.location.origin}${formData.order_document}`;
+        const url = formData.order_document;
         const link = document.createElement('a');
         link.href = url;
         link.setAttribute('download', `Bestellnachweis_${formData.order_number || orderId}.pdf`);
@@ -621,7 +621,7 @@ const OrderFormNew = () => {
     // For online orders, show uploaded order_document if present
     if (formData.order_type === 'online') {
       if (formData.order_document) {
-        const url = formData.order_document.startsWith('http') ? formData.order_document : `${window.location.origin}${formData.order_document}`;
+        const url = formData.order_document;
         window.open(url, '_blank');
         return;
       }
@@ -965,8 +965,7 @@ const OrderFormNew = () => {
               <button
                 type="button"
                 onClick={() => {
-                  const url = formData.order_document.startsWith('http') ? formData.order_document : `${window.location.origin}${formData.order_document}`;
-                  window.open(url, '_blank');
+                  window.open(formData.order_document, '_blank');
                 }}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
               >
@@ -1664,7 +1663,7 @@ const OrderFormNew = () => {
                     📄 {formData.order_document.split('/').pop()}
                   </span>
                   <a
-                    href={formData.order_document.startsWith('http') ? formData.order_document : `http://localhost:8000${formData.order_document}`}
+                    href={formData.order_document}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-600 hover:text-blue-800"

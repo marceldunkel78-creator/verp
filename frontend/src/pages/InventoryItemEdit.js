@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import api from '../services/api';
 import SupplierSearch from '../components/SupplierSearch';
 import {
   ArrowLeftIcon,
@@ -12,8 +13,8 @@ import {
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 
-// Get backend base URL - Backend URLs already include /api/ prefix
-const BACKEND_BASE = 'http://localhost:8000';
+// Get backend base URL from api service
+const BACKEND_BASE = process.env.REACT_APP_BACKEND_BASE || '';
 
 const TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },

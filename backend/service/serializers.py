@@ -183,9 +183,6 @@ class ServiceTicketAttachmentSerializer(serializers.ModelSerializer):
     
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
             return obj.file.url
         return None
 
@@ -459,12 +456,6 @@ class TroubleshootingAttachmentSerializer(serializers.ModelSerializer):
     
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                from django.conf import settings
-                if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
-                    return settings.MEDIA_BASE_URL + obj.file.url
-                return request.build_absolute_uri(obj.file.url)
             return obj.file.url
         return None
 
@@ -502,17 +493,11 @@ class TroubleshootingListSerializer(serializers.ModelSerializer):
         return None
 
     def get_main_photo_url(self, obj):
-        request = self.context.get('request')
         attachments = list(obj.attachments.all())
         primary = next((att for att in attachments if att.is_primary and att.is_image), None)
         if not primary:
             primary = next((att for att in attachments if att.is_image), None)
         if primary and primary.file:
-            from django.conf import settings
-            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
-                return settings.MEDIA_BASE_URL + primary.file.url
-            if request:
-                return request.build_absolute_uri(primary.file.url)
             return primary.file.url
         return None
 
@@ -563,17 +548,11 @@ class TroubleshootingDetailSerializer(serializers.ModelSerializer):
         return None
 
     def get_main_photo_url(self, obj):
-        request = self.context.get('request')
         attachments = list(obj.attachments.all())
         primary = next((att for att in attachments if att.is_primary and att.is_image), None)
         if not primary:
             primary = next((att for att in attachments if att.is_image), None)
         if primary and primary.file:
-            from django.conf import settings
-            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
-                return settings.MEDIA_BASE_URL + primary.file.url
-            if request:
-                return request.build_absolute_uri(primary.file.url)
             return primary.file.url
         return None
 

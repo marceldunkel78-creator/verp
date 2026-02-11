@@ -22,9 +22,6 @@ class LoanItemPhotoSerializer(serializers.ModelSerializer):
     
     def get_photo_url(self, obj):
         if obj.photo:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.photo.url)
             return obj.photo.url
         return None
 
@@ -86,17 +83,11 @@ class LoanReceiptSerializer(serializers.ModelSerializer):
     
     def get_delivery_note_url(self, obj):
         if obj.delivery_note:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.delivery_note.url)
             return obj.delivery_note.url
         return None
     
     def get_loan_agreement_url(self, obj):
         if obj.loan_agreement:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.loan_agreement.url)
             return obj.loan_agreement.url
         return None
 

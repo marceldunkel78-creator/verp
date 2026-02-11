@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import storage from '../utils/sessionStore';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -35,8 +36,11 @@ const CATEGORY_LABELS = {
   'other': { label: 'Sonstiges', color: 'bg-gray-100 text-gray-800' }
 };
 
+const SESSION_KEY = 'troubleshooting_search_state';
+
 const Troubleshooting = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,6 +54,46 @@ const Troubleshooting = () => {
   const topScrollRef = useRef(null);
   const tableScrollRef = useRef(null);
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
+  const restoredRef = useRef(false);
+
+  const loadSearchState = useCallback(() => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.searchTerm !== undefined) setSearchTerm(st.searchTerm);
+      if (st.statusFilter !== undefined) setStatusFilter(st.statusFilter);
+      if (st.categoryFilter !== undefined) setCategoryFilter(st.categoryFilter);
+      if (st.viewMode !== undefined) setViewMode(st.viewMode);
+      if (st.tickets) setTickets(st.tickets);
+      if (st.statistics) setStatistics(st.statistics);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.totalCount !== undefined) setTotalCount(st.totalCount);
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      return true;
+    } catch (e) {
+      console.warn('Failed to load troubleshooting search state', e);
+      return false;
+    }
+  }, []);
+
+  const saveSearchState = useCallback(() => {
+    try {
+      const st = {
+        searchTerm,
+        statusFilter,
+        categoryFilter,
+        viewMode,
+        currentPage,
+        tickets,
+        statistics,
+        totalPages,
+        totalCount
+      };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save troubleshooting search state', e);
+    }
+  }, [searchTerm, statusFilter, categoryFilter, viewMode, currentPage, tickets, statistics, totalPages, totalCount]);
 
   const fetchStatistics = useCallback(async () => {
     try {
@@ -95,10 +139,65 @@ const Troubleshooting = () => {
     }
   }, [currentPage, searchTerm, statusFilter, categoryFilter]);
 
+  // Mount: restore from URL or sessionStorage
   useEffect(() => {
+    const urlParams = Object.fromEntries([...searchParams]);
+    const hasRelevantParams = ['search', 'status', 'category', 'page'].some(k => urlParams[k]);
+
+    if (hasRelevantParams) {
+      // URL params take priority
+      if (urlParams.search) setSearchTerm(urlParams.search);
+      if (urlParams.status) setStatusFilter(urlParams.status);
+      if (urlParams.category) setCategoryFilter(urlParams.category);
+      if (urlParams.page) setCurrentPage(parseInt(urlParams.page, 10));
+      restoredRef.current = true;
+    } else {
+      // Fall back to sessionStorage
+      try {
+        const st = storage.get(SESSION_KEY);
+        if (st) {
+          if (st.searchTerm !== undefined) setSearchTerm(st.searchTerm);
+          if (st.statusFilter !== undefined) setStatusFilter(st.statusFilter);
+          if (st.categoryFilter !== undefined) setCategoryFilter(st.categoryFilter);
+          if (st.currentPage) setCurrentPage(st.currentPage);
+          restoredRef.current = true;
+        }
+      } catch (e) {
+        console.warn('Failed to load search state from storage', e);
+      }
+    }
     fetchStatistics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // URL ← state: sync to URL whenever filters change
+  useEffect(() => {
+    if (restoredRef.current) {
+      restoredRef.current = false;
+      return; // Skip first update after mount to avoid overwriting restored params
+    }
+    const params = {};
+    if (searchTerm) params.search = searchTerm;
+    if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+    if (categoryFilter && categoryFilter !== 'all') params.category = categoryFilter;
+    if (currentPage > 1) params.page = String(currentPage);
+    setSearchParams(params);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, categoryFilter, currentPage]);
+
+  // Fetch tickets when filters/page change; skip once if restored
+  useEffect(() => {
+    if (restoredRef.current) {
+      restoredRef.current = false;
+      return;
+    }
     fetchTickets();
-  }, [fetchStatistics, fetchTickets]);
+  }, [fetchTickets]);
+
+  // Persist state
+  useEffect(() => {
+    saveSearchState();
+  }, [saveSearchState]);
 
   useEffect(() => {
     if (tableScrollRef.current) {

@@ -47,9 +47,6 @@ class SalesPriceListListSerializer(serializers.ModelSerializer):
     
     def get_pdf_url(self, obj):
         if obj.pdf_file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.pdf_file.url)
             return obj.pdf_file.url
         return None
 
@@ -100,9 +97,6 @@ class SalesPriceListDetailSerializer(serializers.ModelSerializer):
     
     def get_pdf_url(self, obj):
         if obj.pdf_file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.pdf_file.url)
             return obj.pdf_file.url
         return None
     

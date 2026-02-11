@@ -16,9 +16,6 @@ class TravelReportPhotoSerializer(serializers.ModelSerializer):
     
     def get_photo_url(self, obj):
         if obj.photo:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.photo.url)
             return obj.photo.url
         return None
 

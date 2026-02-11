@@ -15,6 +15,8 @@ const myverpTabMapping = {
   'travel-expenses': 'travel-expenses',
 };
 
+const MYVERP_WIDGET_IDS = Object.keys(myverpTabMapping);
+
 // Alle verfügbaren Module (gleiche Definition wie in MyVERP)
 // permission: null oder undefined = immer sichtbar
 // permission: 'can_read_xyz' = nur sichtbar wenn User diese Berechtigung hat
@@ -110,6 +112,18 @@ const Dashboard = () => {
   const [overdueContactSystems, setOverdueContactSystems] = useState([]);
   const [loadingOverdueContact, setLoadingOverdueContact] = useState(false);
 
+  const visibleTabIds = user?.myverp_visible_tabs || [];
+  const allowedMyverpIds = new Set(
+    (visibleTabIds.length === 0
+      ? MYVERP_WIDGET_IDS
+      : visibleTabIds.filter((id) => MYVERP_WIDGET_IDS.includes(id)))
+  );
+
+  const normalizeMyverpSelection = (ids) => {
+    if (!Array.isArray(ids)) return [];
+    return Array.from(new Set(ids.filter((id) => allowedMyverpIds.has(id))));
+  };
+
   // Filtere Module basierend auf Benutzerberechtigungen
   const permittedModules = allModules.filter(module => {
     if (!module.permission) return true; // Keine Berechtigung erforderlich
@@ -156,14 +170,14 @@ const Dashboard = () => {
     try {
       const raw = localStorage.getItem(MAIN_DASHBOARD_KEY);
       if (raw) {
-        const sel = JSON.parse(raw);
-        if (Array.isArray(sel) && sel.length > 0) {
+        const sel = normalizeMyverpSelection(JSON.parse(raw));
+        if (sel.length > 0) {
           setMyverpSelection(sel);
           fetchMyverpWidgets(sel);
         }
       } else {
         // Default widgets
-        const defaultWidgets = ['time-tracking', 'messages', 'reminders'];
+        const defaultWidgets = normalizeMyverpSelection(['time-tracking', 'messages', 'reminders']);
         setMyverpSelection(defaultWidgets);
         fetchMyverpWidgets(defaultWidgets);
       }

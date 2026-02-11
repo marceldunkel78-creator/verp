@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import storage from '../utils/sessionStore';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -19,8 +20,11 @@ const STATUS_LABELS = {
   'deprecated': { label: 'Veraltet', color: 'bg-gray-100 text-gray-800' }
 };
 
+const SESSION_KEY = 'visiview_macros_search_state';
+
 const VisiViewMacros = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [macros, setMacros] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,6 +38,52 @@ const VisiViewMacros = () => {
   const [statistics, setStatistics] = useState(null);
   const [categories, setCategories] = useState([]);
   const [keywords, setKeywords] = useState([]);
+  const restoredRef = useRef(false);
+
+  const loadSearchState = useCallback(() => {
+    try {
+      const st = storage.get(SESSION_KEY);
+      if (!st) return false;
+      if (st.searchTerm !== undefined) setSearchTerm(st.searchTerm);
+      if (st.statusFilter !== undefined) setStatusFilter(st.statusFilter);
+      if (st.categoryFilter !== undefined) setCategoryFilter(st.categoryFilter);
+      if (st.keywordFilter !== undefined) setKeywordFilter(st.keywordFilter);
+      if (st.sortBy !== undefined) setSortBy(st.sortBy);
+      if (st.currentPage) setCurrentPage(st.currentPage);
+      if (st.macros) setMacros(st.macros);
+      if (st.statistics) setStatistics(st.statistics);
+      if (st.categories) setCategories(st.categories);
+      if (st.keywords) setKeywords(st.keywords);
+      if (st.totalPages) setTotalPages(st.totalPages);
+      if (st.totalCount !== undefined) setTotalCount(st.totalCount);
+      return true;
+    } catch (e) {
+      console.warn('Failed to load macros search state', e);
+      return false;
+    }
+  }, []);
+
+  const saveSearchState = useCallback(() => {
+    try {
+      const st = {
+        searchTerm,
+        statusFilter,
+        categoryFilter,
+        keywordFilter,
+        sortBy,
+        currentPage,
+        macros,
+        statistics,
+        categories,
+        keywords,
+        totalPages,
+        totalCount
+      };
+      storage.set(SESSION_KEY, st);
+    } catch (e) {
+      console.warn('Failed to save macros search state', e);
+    }
+  }, [searchTerm, statusFilter, categoryFilter, keywordFilter, sortBy, currentPage, macros, statistics, categories, keywords, totalPages, totalCount]);
 
   const fetchStatistics = useCallback(async () => {
     try {
@@ -95,15 +145,73 @@ const VisiViewMacros = () => {
     }
   }, [currentPage, searchTerm, statusFilter, categoryFilter, keywordFilter, sortBy]);
 
+  // Mount: restore from URL or sessionStorage
   useEffect(() => {
+    const urlParams = Object.fromEntries([...searchParams]);
+    const hasRelevantParams = ['search', 'status', 'category', 'keyword', 'sort', 'page'].some(k => urlParams[k]);
+
+    if (hasRelevantParams) {
+      // URL params take priority
+      if (urlParams.search) setSearchTerm(urlParams.search);
+      if (urlParams.status) setStatusFilter(urlParams.status);
+      if (urlParams.category) setCategoryFilter(urlParams.category);
+      if (urlParams.keyword) setKeywordFilter(urlParams.keyword);
+      if (urlParams.sort) setSortBy(urlParams.sort);
+      if (urlParams.page) setCurrentPage(parseInt(urlParams.page, 10));
+      restoredRef.current = true;
+    } else {
+      // Fall back to sessionStorage
+      try {
+        const st = storage.get(SESSION_KEY);
+        if (st) {
+          if (st.searchTerm !== undefined) setSearchTerm(st.searchTerm);
+          if (st.statusFilter !== undefined) setStatusFilter(st.statusFilter);
+          if (st.categoryFilter !== undefined) setCategoryFilter(st.categoryFilter);
+          if (st.keywordFilter !== undefined) setKeywordFilter(st.keywordFilter);
+          if (st.sortBy !== undefined) setSortBy(st.sortBy);
+          if (st.currentPage) setCurrentPage(st.currentPage);
+          restoredRef.current = true;
+        }
+      } catch (e) {
+        console.warn('Failed to load search state from storage', e);
+      }
+    }
     fetchStatistics();
     fetchCategories();
     fetchKeywords();
-  }, [fetchStatistics, fetchCategories, fetchKeywords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // URL ← state: sync to URL whenever filters change
   useEffect(() => {
+    if (restoredRef.current) {
+      restoredRef.current = false;
+      return; // Skip first update after mount to avoid overwriting restored params
+    }
+    const params = {};
+    if (searchTerm) params.search = searchTerm;
+    if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+    if (categoryFilter) params.category = categoryFilter;
+    if (keywordFilter) params.keyword = keywordFilter;
+    if (sortBy && sortBy !== '-macro_id') params.sort = sortBy;
+    if (currentPage > 1) params.page = String(currentPage);
+    setSearchParams(params);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, categoryFilter, keywordFilter, sortBy, currentPage]);
+
+  // Fetch macros when filters/page change; skip once if restored
+  useEffect(() => {
+    if (restoredRef.current) {
+      restoredRef.current = false;
+      return;
+    }
     fetchMacros();
   }, [fetchMacros]);
+
+  // Persist state
+  useEffect(() => {
+    saveSearchState();
+  }, [saveSearchState]);
 
   const handleSearch = (e) => {
     e.preventDefault();

@@ -274,7 +274,7 @@ const OrderDetail = () => {
               <label className="block text-sm font-medium text-gray-600">Auftragsbestätigung (Dokument)</label>
               <div className="mt-1">
                 <a
-                  href={order.supplier_confirmation_document.startsWith('http') ? order.supplier_confirmation_document : `${window.location.origin}${order.supplier_confirmation_document}`}
+                  href={order.supplier_confirmation_document}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
@@ -337,7 +337,7 @@ const OrderDetail = () => {
               <label className="block text-sm font-medium text-gray-600">Bestelldokument</label>
               <div className="mt-1">
                 <a
-                  href={order.order_document.startsWith('http') ? order.order_document : `http://localhost:8000/media/${order.order_document}`}
+                  href={order.order_document}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"

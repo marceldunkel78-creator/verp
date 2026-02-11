@@ -2423,15 +2423,23 @@ const PersonalDashboardTab = () => {
   
   // MyVERP-spezifische Widgets für das Haupt-Dashboard (basierend auf MyVERP Tabs)
   const myverpWidgets = [
-    { id: 'dashboard', name: 'Dashboard', icon: '📊', description: 'Persönliches Dashboard' },
-    { id: 'time-tracking', name: 'Zeiterfassung', icon: '⏱️', description: 'Arbeitszeitübersicht' },
-    { id: 'my-tickets', name: 'Meine Tickets', icon: '🎫', description: 'Zugewiesene Tickets' },
-    { id: 'messages', name: 'Nachrichten', icon: '💬', description: 'Ungelesene Nachrichten' },
-    { id: 'reporting', name: 'Reporting', icon: '📈', description: 'Auswertungen & Berichte' },
-    { id: 'reminders', name: 'Erinnerungen', icon: '🔔', description: 'Anstehende Erinnerungen' },
-    { id: 'vacation', name: 'Urlaub', icon: '🏖️', description: 'Urlaubsanträge & Guthaben' },
-    { id: 'travel-expenses', name: 'Reisekosten', icon: '✈️', description: 'Reisekostenabrechnungen' },
+    { id: 'dashboard', tabId: 'dashboard', name: 'Dashboard', icon: '📊', description: 'Persönliches Dashboard' },
+    { id: 'time-tracking', tabId: 'time-tracking', name: 'Zeiterfassung', icon: '⏱️', description: 'Arbeitszeitübersicht' },
+    { id: 'my-tickets', tabId: 'my-tickets', name: 'Meine Tickets', icon: '🎫', description: 'Zugewiesene Tickets' },
+    { id: 'messages', tabId: 'messages', name: 'Nachrichten', icon: '💬', description: 'Ungelesene Nachrichten' },
+    { id: 'reporting', tabId: 'reporting', name: 'Reporting', icon: '📈', description: 'Auswertungen & Berichte' },
+    { id: 'reminders', tabId: 'reminders', name: 'Erinnerungen', icon: '🔔', description: 'Anstehende Erinnerungen' },
+    { id: 'vacation', tabId: 'vacation', name: 'Urlaub', icon: '🏖️', description: 'Urlaubsanträge & Guthaben' },
+    { id: 'travel-expenses', tabId: 'travel-expenses', name: 'Reisekosten', icon: '✈️', description: 'Reisekostenabrechnungen' },
   ];
+
+  // MyVERP-Widgets auf Basis der sichtbaren Tabs filtern
+  const visibleTabIds = user?.myverp_visible_tabs || [];
+  const permittedMyverpWidgets = myverpWidgets.filter((widget) => {
+    if (user?.is_superuser) return true;
+    if (visibleTabIds.length === 0) return true;
+    return visibleTabIds.includes(widget.tabId);
+  });
   
   // Alle verfügbaren Module - hierarchisch nach Hauptmodulen gegliedert
   // permission: null/undefined = immer sichtbar, sonst Berechtigung erforderlich
@@ -2512,9 +2520,15 @@ const PersonalDashboardTab = () => {
     return user?.[module.permission] === true;
   });
   
+  const normalizeWidgetIds = (ids) => {
+    if (!Array.isArray(ids)) return [];
+    const validIds = new Set(permittedMyverpWidgets.map(w => w.id));
+    return Array.from(new Set(ids.filter(id => validIds.has(id))));
+  };
+
   // Standard-Module die initial aktiviert sind
   const defaultModules = ['customers', 'quotations', 'orders', 'suppliers', 'trading', 'inventory'];
-  const defaultMainDashboardWidgets = ['time-tracking', 'messages', 'reminders'];
+  const defaultMainDashboardWidgets = normalizeWidgetIds(['time-tracking', 'messages', 'reminders']);
   
   // Legacy-ID-Mapping für Abwärtskompatibilität (alte IDs -> neue IDs)
   const LEGACY_MODULE_ID_MAP = {
@@ -2545,7 +2559,7 @@ const PersonalDashboardTab = () => {
   const loadMainDashboardWidgets = () => {
     try {
       const saved = localStorage.getItem(MAIN_DASHBOARD_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) return normalizeWidgetIds(JSON.parse(saved));
     } catch (e) {
       console.warn('Fehler beim Laden der Haupt-Dashboard-Widgets:', e);
     }
@@ -2554,8 +2568,17 @@ const PersonalDashboardTab = () => {
   
   const [selectedModules, setSelectedModules] = React.useState(loadSavedModules);
   const [mainDashboardWidgets, setMainDashboardWidgets] = React.useState(loadMainDashboardWidgets);
-  const [showSettings, setShowSettings] = React.useState(false);
   
+  React.useEffect(() => {
+    setMainDashboardWidgets((prev) => {
+      const next = normalizeWidgetIds(prev);
+      if (next.length === prev.length && next.every((id, idx) => id === prev[idx])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [permittedMyverpWidgets]);
+
   // Speichern bei Änderung
   React.useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedModules));
@@ -2586,195 +2609,99 @@ const PersonalDashboardTab = () => {
   };
   
   // Nur Module anzeigen, für die der User Berechtigung hat
-  const activeModules = permittedModules.filter(m => selectedModules.includes(m.id));
   const categories = [...new Set(permittedModules.map(m => m.category))];
-  
-  const colorClasses = {
-    'Finance': 'bg-emerald-500 hover:bg-emerald-600',
-    'Procurement': 'bg-orange-500 hover:bg-orange-600',
-    'Inventory': 'bg-violet-500 hover:bg-violet-600',
-    'Sales / Orders': 'bg-blue-500 hover:bg-blue-600',
-    'HR': 'bg-pink-500 hover:bg-pink-600',
-    'Manufacturing': 'bg-gray-600 hover:bg-gray-700',
-    'VisiView': 'bg-cyan-500 hover:bg-cyan-600',
-    'Service': 'bg-amber-500 hover:bg-amber-600',
-    'BI': 'bg-indigo-500 hover:bg-indigo-600',
-    'Documents': 'bg-teal-500 hover:bg-teal-600',
-    'Settings': 'bg-purple-500 hover:bg-purple-600',
-  };
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-medium text-gray-900">Mein Dashboard</h2>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-        >
-          ⚙️ Anpassen
-        </button>
+      <div className="mb-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-1">Dashboard-Konfiguration</h2>
+        <p className="text-sm text-gray-500">
+          Passen Sie hier an, welche Widgets und Module auf dem Haupt-Dashboard angezeigt werden.
+        </p>
       </div>
       
-      {/* MyVERP Quick Links */}
-      {!showSettings && (
-        <>
-          <div className="mb-6">
-            <h3 className="text-md font-medium text-gray-700 mb-3">MyVERP Schnellzugriff</h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-sky-500 hover:bg-sky-600 text-white p-4 rounded-lg shadow-lg transition-all">
-                <div className="text-center">
-                  <div className="text-2xl mb-1">⏱️</div>
-                  <div className="text-sm font-semibold">Zeiterfassung</div>
-                </div>
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-indigo-500 hover:bg-indigo-600 text-white p-4 rounded-lg shadow-lg transition-all">
-                <div className="text-center">
-                  <div className="text-2xl mb-1">💬</div>
-                  <div className="text-sm font-semibold">Nachrichten</div>
-                </div>
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-lg shadow-lg transition-all">
-                <div className="text-center">
-                  <div className="text-2xl mb-1">🔔</div>
-                  <div className="text-sm font-semibold">Erinnerungen</div>
-                </div>
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-lg shadow-lg transition-all">
-                <div className="text-center">
-                  <div className="text-2xl mb-1">🏖️</div>
-                  <div className="text-sm font-semibold">Urlaub</div>
-                </div>
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); }} className="bg-rose-500 hover:bg-rose-600 text-white p-4 rounded-lg shadow-lg transition-all">
-                <div className="text-center">
-                  <div className="text-2xl mb-1">✈️</div>
-                  <div className="text-sm font-semibold">Reisekosten</div>
-                </div>
-              </a>
-            </div>
-          </div>
-          
-          <div className="mb-6">
-            <h3 className="text-md font-medium text-gray-700 mb-3">Modul-Schnellzugriff</h3>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {activeModules.map((module) => {
-                const colorClass = colorClasses[module.category] || 'bg-gray-500 hover:bg-gray-600';
-                return (
-                  <a
-                    key={module.id}
-                    href={module.route}
-                    className={`${colorClass} text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
-                  >
-                    <div className="text-center">
-                      <div className="text-3xl mb-2">{module.icon}</div>
-                      <div className="text-lg font-semibold">{module.name}</div>
-                      <div className="text-xs opacity-75">{module.category}</div>
-                    </div>
-                  </a>
-                );
-              })}
-              {activeModules.length === 0 && (
-                <div className="col-span-full text-center text-gray-500 py-8">
-                  Keine Module ausgewählt. Klicken Sie auf "Anpassen", um Module hinzuzufügen.
-                </div>
+      {/* Haupt-Dashboard Widget Auswahl */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Widgets im Haupt-Dashboard</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Wählen Sie die MyVERP-Widgets aus, die auf dem Haupt-Dashboard angezeigt werden sollen.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {permittedMyverpWidgets.map(widget => (
+            <label
+              key={widget.id}
+              className={`flex flex-col items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                mainDashboardWidgets.includes(widget.id)
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={mainDashboardWidgets.includes(widget.id)}
+                onChange={() => toggleMainDashboardWidget(widget.id)}
+                className="sr-only"
+              />
+              <span className="text-2xl mb-2">{widget.icon}</span>
+              <span className="text-sm font-medium text-gray-700 text-center">{widget.name}</span>
+              <span className="text-xs text-gray-500 text-center">{widget.description}</span>
+              {mainDashboardWidgets.includes(widget.id) && (
+                <span className="mt-2 text-blue-500 text-lg">✓</span>
               )}
-            </div>
-          </div>
-        </>
-      )}
+            </label>
+          ))}
+        </div>
+      </div>
       
-      {/* Einstellungen / Modul-Auswahl */}
-      {showSettings && (
-        <div className="bg-white shadow rounded-lg p-6">
-          {/* Haupt-Dashboard Widget Auswahl */}
-          <div className="mb-8">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Widgets im Haupt-Dashboard</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Wählen Sie die MyVERP-Widgets aus, die auf dem Haupt-Dashboard angezeigt werden sollen.
-            </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {myverpWidgets.map(widget => (
+      {/* Modul-Schnellzugriff Auswahl */}
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Modul-Schnellzugriff</h3>
+        <p className="text-sm text-gray-500 mb-6">
+          Wählen Sie die Module aus, die als Schnellzugriff auf dem Haupt-Dashboard angezeigt werden sollen.
+        </p>
+        
+        {categories.map(category => (
+          <div key={category} className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">{category}</h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {permittedModules.filter(m => m.category === category).map(module => (
                 <label
-                  key={widget.id}
-                  className={`flex flex-col items-center p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    mainDashboardWidgets.includes(widget.id)
+                  key={module.id}
+                  className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    selectedModules.includes(module.id)
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <input
                     type="checkbox"
-                    checked={mainDashboardWidgets.includes(widget.id)}
-                    onChange={() => toggleMainDashboardWidget(widget.id)}
+                    checked={selectedModules.includes(module.id)}
+                    onChange={() => toggleModule(module.id)}
                     className="sr-only"
                   />
-                  <span className="text-2xl mb-2">{widget.icon}</span>
-                  <span className="text-sm font-medium text-gray-700 text-center">{widget.name}</span>
-                  <span className="text-xs text-gray-500 text-center">{widget.description}</span>
-                  {mainDashboardWidgets.includes(widget.id) && (
-                    <span className="mt-2 text-blue-500 text-lg">✓</span>
+                  <span className="text-2xl mr-3">{module.icon}</span>
+                  <span className="text-sm font-medium text-gray-700">{module.name}</span>
+                  {selectedModules.includes(module.id) && (
+                    <span className="ml-auto text-blue-500">✓</span>
                   )}
                 </label>
               ))}
             </div>
           </div>
-          
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Module für Schnellzugriff auswählen</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              Wählen Sie die Module aus, die in Ihrem persönlichen Dashboard angezeigt werden sollen.
-            </p>
-            
-            {categories.map(category => (
-              <div key={category} className="mb-6">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3 border-b pb-2">{category}</h4>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {permittedModules.filter(m => m.category === category).map(module => (
-                    <label
-                      key={module.id}
-                      className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                        selectedModules.includes(module.id)
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedModules.includes(module.id)}
-                        onChange={() => toggleModule(module.id)}
-                        className="sr-only"
-                      />
-                      <span className="text-2xl mr-3">{module.icon}</span>
-                      <span className="text-sm font-medium text-gray-700">{module.name}</span>
-                      {selectedModules.includes(module.id) && (
-                        <span className="ml-auto text-blue-500">✓</span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="flex justify-between items-center mt-6 pt-4 border-t">
-            <button
-              onClick={() => {
-                setSelectedModules(defaultModules);
-                setMainDashboardWidgets(defaultMainDashboardWidgets);
-              }}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              Auf Standard zurücksetzen
-            </button>
-            <button
-              onClick={() => setShowSettings(false)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Fertig
-            </button>
-          </div>
+        ))}
+        
+        <div className="flex justify-end items-center mt-4 pt-4 border-t">
+          <button
+            onClick={() => {
+              setSelectedModules(defaultModules);
+              setMainDashboardWidgets(defaultMainDashboardWidgets);
+            }}
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Auf Standard zurücksetzen
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 };

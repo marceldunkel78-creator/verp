@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
-const BACKEND_BASE = process.env.REACT_APP_BACKEND_BASE || 'http://localhost:8000';
+const BACKEND_BASE = process.env.REACT_APP_BACKEND_BASE || '';
 
 /**
  * Supplier Search Component mit Autocomplete

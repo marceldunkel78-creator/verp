@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_BASE = process.env.REACT_APP_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -67,7 +67,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8000/api'}/auth/refresh/`;
+        const refreshUrl = `${process.env.REACT_APP_API_URL || '/api'}/auth/refresh/`;
         await axios.post(refreshUrl, {}, { withCredentials: true });
         isRefreshing = false;
         onRefreshed();

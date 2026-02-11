@@ -155,9 +155,6 @@ class VSHardwareDocumentSerializer(serializers.ModelSerializer):
     
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
             return obj.file.url
         return None
     
@@ -245,17 +242,11 @@ class VSHardwareDetailSerializer(serializers.ModelSerializer):
     
     def get_release_manual_url(self, obj):
         if obj.release_manual:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.release_manual.url)
             return obj.release_manual.url
         return None
     
     def get_draft_manual_url(self, obj):
         if obj.draft_manual:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.draft_manual.url)
             return obj.draft_manual.url
         return None
     
@@ -451,10 +442,7 @@ class ProductionOrderDetailSerializer(serializers.ModelSerializer):
         """Gibt die Fertigungspläne (Dokumente) der VS-Hardware zurück"""
         documents = []
         for doc in obj.vs_hardware.documents.all():
-            request = self.context.get('request')
             file_url = doc.file.url if doc.file else None
-            if request and file_url:
-                file_url = request.build_absolute_uri(file_url)
             
             documents.append({
                 'id': doc.id,

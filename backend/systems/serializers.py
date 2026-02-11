@@ -17,16 +17,8 @@ class SystemPhotoSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'uploaded_by', 'created_at']
     
     def get_image_url(self, obj):
-        request = self.context.get('request')
         if obj.image:
-            # Use MEDIA_BASE_URL if configured, otherwise build from request
-            from django.conf import settings
-            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
-                return settings.MEDIA_BASE_URL + obj.image.url
-            elif request:
-                return request.build_absolute_uri(obj.image.url)
-            else:
-                return obj.image.url
+            return obj.image.url
         return None
 
 
@@ -148,12 +140,11 @@ class SystemListSerializer(serializers.ModelSerializer):
         ).distinct().count()
     
     def get_primary_photo_url(self, obj):
-        request = self.context.get('request')
         primary = obj.photos.filter(is_primary=True).first()
         if not primary:
             primary = obj.photos.first()
-        if primary and primary.image and request:
-            return request.build_absolute_uri(primary.image.url)
+        if primary and primary.image:
+            return primary.image.url
         return None
 
     def get_last_contact_date(self, obj):

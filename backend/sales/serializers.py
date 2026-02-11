@@ -284,9 +284,6 @@ class QuotationDetailSerializer(serializers.ModelSerializer):
     def get_pdf_file_url(self, obj):
         """URL zur PDF-Datei"""
         if obj.pdf_file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.pdf_file.url)
             return obj.pdf_file.url
         return None
     
@@ -425,9 +422,6 @@ class MarketingItemFileSerializer(serializers.ModelSerializer):
     def get_file_url(self, obj):
         """Gibt die vollständige URL zur Datei zurück"""
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
             return obj.file.url
         return None
     
@@ -514,9 +508,6 @@ class SalesTicketAttachmentSerializer(serializers.ModelSerializer):
     
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
             return obj.file.url
         return None
     

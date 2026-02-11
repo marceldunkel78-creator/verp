@@ -442,13 +442,11 @@ const CustomerOrderEdit = () => {
       } else if (productType === 'VISIVIEW') {
         // Search VisiView licenses by customer
         if (order.customer) {
-          const BACKEND_BASE = 'http://localhost:8000';
-          const response = await axios.get(`${BACKEND_BASE}/api/visiview/licenses/search_by_customer/`, {
+          const response = await api.get(`/visiview/licenses/search_by_customer/`, {
             params: {
               customer_id: order.customer,
               article_number: item.article_number
-            },
-            withCredentials: true
+            }
           });
           suggestions = response.data.results.map(lic => ({
             id: lic.id,
@@ -459,12 +457,10 @@ const CustomerOrderEdit = () => {
         }
       } else if (productType === 'VS_HARDWARE' || productType === 'TRADING_PRODUCT' || productType === 'WARENSAMMLUNG') {
         // Search warehouse inventory
-        const BACKEND_BASE = 'http://localhost:8000';
-        const response = await axios.get(`${BACKEND_BASE}/api/inventory/inventory-items/search_by_article/`, {
+        const response = await api.get(`/inventory/inventory-items/search_by_article/`, {
           params: {
             article_number: item.article_number
-          },
-          withCredentials: true
+          }
         });
         suggestions = response.data.results.map(inv => ({
           id: inv.id,
@@ -2856,7 +2852,7 @@ const CustomerOrderEdit = () => {
                             if (serialNumber) {
                               itemUpdates.push(
                                 axios.patch(
-                                  `http://localhost:8000/api/customer-orders/items/${itemId}/`,
+                                  `/api/customer-orders/items/${itemId}/`,
                                   { serial_number: serialNumber },
                                   { withCredentials: true }
                                 )
@@ -3008,7 +3004,7 @@ const CustomerOrderEdit = () => {
                                       if (newSerial !== null) {
                                         try {
                                           await axios.patch(
-                                            `http://localhost:8000/api/customer-orders/items/${item.id}/`,
+                                            `/api/customer-orders/items/${item.id}/`,
                                             { serial_number: newSerial },
                                             { withCredentials: true }
                                           );

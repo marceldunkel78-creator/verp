@@ -115,7 +115,7 @@ const OrderFileUpload = ({
 
   const getFileUrl = () => {
     if (currentFile && typeof currentFile === 'string') {
-      return currentFile.startsWith('http') ? currentFile : `http://localhost:8000${currentFile}`;
+      return currentFile;
     }
     return null;
   };
