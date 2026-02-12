@@ -16,7 +16,6 @@ from datetime import datetime, timedelta, date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.utils import timezone
 
 from redminelib import Redmine
@@ -1294,7 +1293,6 @@ def preview_sync(modules=None, url=None, api_key=None, limit=100):
     return results
 
 
-@transaction.atomic
 def execute_sync(modules=None, url=None, api_key=None, limit=500, full_sync=False):
     """
     Führt die Synchronisation aus.
