@@ -6,7 +6,9 @@ import { useAuth } from '../context/AuthContext';
 import storage from '../utils/sessionStore';
 import {
   PlusIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  Squares2X2Icon,
+  ListBulletIcon
 } from '@heroicons/react/24/outline';
 
 const OrderProcessing = () => {
@@ -17,6 +19,7 @@ const OrderProcessing = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasSearched, setHasSearched] = useState(false);
+  const [viewMode, setViewMode] = useState('cards');
   const [filters, setFilters] = useState({
     search: '',
     status: '',
@@ -24,6 +27,7 @@ const OrderProcessing = () => {
   });
 
   const SESSION_KEY = 'orderprocessing_search_state';
+  const listPageSize = 50;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const loadSearchState = () => {
@@ -35,6 +39,7 @@ const OrderProcessing = () => {
       if (st.orders) setOrders(st.orders);
       if (st.totalPages) setTotalPages(st.totalPages);
       if (st.hasSearched) setHasSearched(true);
+      if (st.viewMode) setViewMode(st.viewMode);
       return { page: st.currentPage || 1, filters: st.filters || null };
     } catch (e) {
       console.warn('Failed to load orderprocessing search state', e);
@@ -45,6 +50,7 @@ const OrderProcessing = () => {
   const saveSearchState = () => {
     try {
       const st = { filters, currentPage, orders, totalPages, hasSearched };
+      st.viewMode = viewMode;
       storage.set(SESSION_KEY, st);
     } catch (e) {
       console.warn('Failed to save orderprocessing search state', e);
@@ -81,7 +87,7 @@ const OrderProcessing = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     saveSearchState();
-  }, [filters, currentPage, orders, totalPages, hasSearched]);
+  }, [filters, currentPage, orders, totalPages, hasSearched, viewMode]);
 
   useEffect(() => {
     const params = Object.fromEntries([...searchParams]);
@@ -121,7 +127,7 @@ const OrderProcessing = () => {
       if (useFilters.year) params.append('year', useFilters.year);
 
       params.append('page', page);
-      params.append('page_size', '9');
+      params.append('page_size', String(listPageSize));
 
       url += `?${params.toString()}`;
 
@@ -136,7 +142,7 @@ const OrderProcessing = () => {
       }
 
       setOrders(ordersData);
-      setTotalPages(Math.ceil((data.count || ordersData.length) / 9));
+      setTotalPages(Math.ceil((data.count || ordersData.length) / listPageSize));
       setHasSearched(true);
 
       try { saveSearchState(); } catch (e) { console.warn('Could not persist orderprocessing search state', e); }
@@ -198,15 +204,33 @@ const OrderProcessing = () => {
           </h1>
           <p className="mt-2 text-sm text-gray-600">Kundenaufträge anzeigen und verwalten</p>
         </div>
-        {canWrite && (
-          <button
-            onClick={() => navigate('/sales/order-processing/new')}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Neuer Auftrag
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-2 ${viewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Kachelansicht"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              title="Listenansicht"
+            >
+              <ListBulletIcon className="h-5 w-5" />
+            </button>
+          </div>
+          {canWrite && (
+            <button
+              onClick={() => navigate('/sales/order-processing/new')}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Neuer Auftrag
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white shadow rounded-lg p-6 mb-6">
@@ -284,35 +308,72 @@ const OrderProcessing = () => {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-            {orders.map((order) => (
-              <div key={order.id} className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer" onClick={() => navigate(`/sales/order-processing/${order.id}`)}>
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 font-mono">{order.order_number}</h3>
-                    <div className="text-sm text-gray-600 mt-1">{order.supplier_name || order.customer_name || ''}</div>
+          {viewMode === 'cards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+              {orders.map((order) => (
+                <div key={order.id} className="bg-white shadow rounded-lg p-6 hover:shadow-lg transition-shadow duration-200 cursor-pointer" onClick={() => navigate(`/sales/order-processing/${order.id}`)}>
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 font-mono">{order.order_number}</h3>
+                      <div className="text-sm text-gray-600 mt-1">{order.customer_name || order.supplier_name || ''}</div>
+                    </div>
+                    <div className="text-sm text-gray-500">{order.status_display}</div>
                   </div>
-                  <div className="text-sm text-gray-500">{order.status_display}</div>
-                </div>
 
-                <div className="border-t pt-3 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Positionen:</span>
-                    <span className="font-medium text-gray-900">{order.items_count}</span>
-                  </div>
-                  <div className="flex justify-between text-sm mt-2">
-                    <span className="text-gray-600">Summe:</span>
-                    <span className="font-bold text-gray-900">{order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</span>
+                  <div className="border-t pt-3 mb-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Positionen:</span>
+                      <span className="font-medium text-gray-900">{order.items_count}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span className="text-gray-600">Summe:</span>
+                      <span className="font-bold text-gray-900">{order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</span>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+
+          {viewMode === 'list' && (
+            <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
+              <div className="overflow-x-auto overflow-y-auto max-h-[60vh] md:max-h-none">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auftragsnr.</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kunde</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Positionen</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Summe</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {orders.map((order) => (
+                      <tr
+                        key={order.id}
+                        onClick={() => navigate(`/sales/order-processing/${order.id}`)}
+                        className="hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="px-4 py-3 font-mono text-sm text-gray-900">{order.order_number || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{order.customer_name || order.supplier_name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.status_display || order.status}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.order_date || ''}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right">{order.items_count || 0}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right">{order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
           {totalPages > 1 && (
             <div className="bg-white shadow rounded-lg p-4 flex items-center justify-between">
               <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Zurück</button>
-              <span className="text-sm text-gray-700">Seite {currentPage} von {totalPages}</span>
+              <span className="text-sm text-gray-700">Seite {currentPage} von {totalPages} (50 pro Seite)</span>
               <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Weiter</button>
             </div>
           )}

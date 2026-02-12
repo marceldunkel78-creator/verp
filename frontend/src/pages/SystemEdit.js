@@ -1183,38 +1183,83 @@ const SystemEdit = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Modellorganismus
               </label>
-              <select
-                multiple
-                value={formData.model_organism_ids.map(String)}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((opt) => parseInt(opt.value, 10));
-                  setFormData(prev => ({ ...prev, model_organism_ids: selected }));
-                  setHasChanges(true);
-                }}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                size={Math.min(6, Math.max(2, modelOrganismOptions.length))}
-              >
-                {modelOrganismOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500">Mehrfachauswahl mit Strg/Ctrl oder Shift.</p>
+              {/* Ausgewählte Modellorganismen als Tags */}
+              {formData.model_organism_ids.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {formData.model_organism_ids.map(id => {
+                    const opt = modelOrganismOptions.find(o => o.id === id);
+                    return opt ? (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                      >
+                        {opt.name}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              model_organism_ids: prev.model_organism_ids.filter(i => i !== id)
+                            }));
+                            setHasChanges(true);
+                          }}
+                          className="ml-1 text-blue-600 hover:text-blue-800"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
+              {/* Dropdown + Hinzufügen-Button */}
+              <div className="flex gap-2">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const selectedId = parseInt(e.target.value, 10);
+                    if (selectedId && !formData.model_organism_ids.includes(selectedId)) {
+                      setFormData(prev => ({
+                        ...prev,
+                        model_organism_ids: [...prev.model_organism_ids, selectedId]
+                      }));
+                      setHasChanges(true);
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Modellorganismus auswählen --</option>
+                  {modelOrganismOptions
+                    .filter(opt => !formData.model_organism_ids.includes(opt.id))
+                    .map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              {/* Neuen Modellorganismus erstellen */}
               <div className="flex gap-2 mt-2">
                 <input
                   type="text"
                   value={newModelOrganismName}
                   onChange={(e) => setNewModelOrganismName(e.target.value)}
-                  placeholder="Neuen Modellorganismus hinzufügen"
+                  placeholder="Neuen Modellorganismus erstellen"
                   className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addModelOrganismOption();
+                    }
+                  }}
                 />
                 <button
                   type="button"
                   onClick={addModelOrganismOption}
-                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                  disabled={!newModelOrganismName.trim()}
+                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Hinzufügen
+                  <PlusIcon className="h-5 w-5" />
                 </button>
               </div>
             </div>
@@ -1223,38 +1268,83 @@ const SystemEdit = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Forschungsgebiet
               </label>
-              <select
-                multiple
-                value={formData.research_field_ids.map(String)}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((opt) => parseInt(opt.value, 10));
-                  setFormData(prev => ({ ...prev, research_field_ids: selected }));
-                  setHasChanges(true);
-                }}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                size={Math.min(6, Math.max(2, researchFieldOptions.length))}
-              >
-                {researchFieldOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.name}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500">Mehrfachauswahl mit Strg/Ctrl oder Shift.</p>
+              {/* Ausgewählte Forschungsgebiete als Tags */}
+              {formData.research_field_ids.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {formData.research_field_ids.map(id => {
+                    const opt = researchFieldOptions.find(o => o.id === id);
+                    return opt ? (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+                      >
+                        {opt.name}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              research_field_ids: prev.research_field_ids.filter(i => i !== id)
+                            }));
+                            setHasChanges(true);
+                          }}
+                          className="ml-1 text-green-600 hover:text-green-800"
+                        >
+                          <XMarkIcon className="h-4 w-4" />
+                        </button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              )}
+              {/* Dropdown + Hinzufügen */}
+              <div className="flex gap-2">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const selectedId = parseInt(e.target.value, 10);
+                    if (selectedId && !formData.research_field_ids.includes(selectedId)) {
+                      setFormData(prev => ({
+                        ...prev,
+                        research_field_ids: [...prev.research_field_ids, selectedId]
+                      }));
+                      setHasChanges(true);
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Forschungsgebiet auswählen --</option>
+                  {researchFieldOptions
+                    .filter(opt => !formData.research_field_ids.includes(opt.id))
+                    .map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              {/* Neues Forschungsgebiet erstellen */}
               <div className="flex gap-2 mt-2">
                 <input
                   type="text"
                   value={newResearchFieldName}
                   onChange={(e) => setNewResearchFieldName(e.target.value)}
-                  placeholder="Neues Forschungsgebiet hinzufügen"
+                  placeholder="Neues Forschungsgebiet erstellen"
                   className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addResearchFieldOption();
+                    }
+                  }}
                 />
                 <button
                   type="button"
                   onClick={addResearchFieldOption}
-                  className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+                  disabled={!newResearchFieldName.trim()}
+                  className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Hinzufügen
+                  <PlusIcon className="h-5 w-5" />
                 </button>
               </div>
             </div>

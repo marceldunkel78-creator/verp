@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
-  BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon
+  BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon,
+  ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -55,6 +56,13 @@ const Settings = () => {
       icon: ArrowsRightLeftIcon,
       path: '/settings/customer-sync',
       color: 'indigo'
+    },
+    {
+      name: 'Legacy-Auftragsimport',
+      description: 'Kundenaufträge aus SQL Server Datenbank importieren',
+      icon: ArchiveBoxIcon,
+      path: '/settings/order-import',
+      color: 'teal'
     },
     {
       name: 'Admin Löschmodul',
