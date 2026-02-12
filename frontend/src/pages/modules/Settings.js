@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
   BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon,
-  ArchiveBoxIcon
+  ArchiveBoxIcon, TicketIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -63,6 +63,13 @@ const Settings = () => {
       icon: ArchiveBoxIcon,
       path: '/settings/order-import',
       color: 'teal'
+    },
+    {
+      name: 'Redmine Ticket-Sync',
+      description: 'Tickets und Zeitaufwendungen aus Redmine synchronisieren',
+      icon: TicketIcon,
+      path: '/settings/redmine-sync',
+      color: 'orange'
     },
     {
       name: 'Admin Löschmodul',

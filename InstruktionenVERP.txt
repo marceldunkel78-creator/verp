@@ -40,21 +40,6 @@ Umgebungsvariablen konfigurieren (.env Datei):
   python tools/generate_secret_key.py
 
 
-Medien-Speicherstruktur (VERP-Media):
-Der MEDIA_ROOT Ordner enthält alle hochgeladenen und generierten Dateien:
-  /customer_orders/Jahr/Auftragsnummer/    - Kundenaufträge
-  /orders/Jahr/Bestellnummer/              - Lieferantenbestellungen
-  /quotations/Jahr/Angebotsnummer/         - Angebote
-  /Systems/Systemnummer/                   - Systeme
-  /projects/Projektnummer/                 - Projekte
-  /HR/Mitarbeiternummer/                   - Personal (DSGVO-geschützt)
-  /Trading Goods/VS-Artikelnummer/         - Handelswaren
-  /M&S/VS-Artikelnummer/                   - Material & Supplies
-  /Service/Serviceticketnummer/            - Service-Tickets
-  /Manufacturing/Produktnummer/            - Fertigung
-  /VisiView/Lizenznummer/                  - VisiView Lizenzen
-  /company/                                - Firmenlogos/Header
-
 
 Superuser erstellen bei activated venv
 python manage.py createsuperuser
@@ -67,20 +52,8 @@ Firmeneinstellungen konfigurieren:
 4. Bankverbindung, Geschäftsführer, Handelsregister-Nr. eintragen
 
 
-Bestelldokumente:
-- Beim Erstellen/Bearbeiten einer Bestellung können Sie:
-  * Ein Bestelldokument hochladen (z.B. PDF von Online-Bestellung)
-  * Ein professionelles PDF-Bestelldokument generieren (Button "Speichern und PDF generieren")
-- Das generierte PDF enthält:
-  * Firmen-Logo (aus Company Settings)
-  * Lieferantenadresse
-  * Bestellpositionen mit allen Details
-  * Footer mit Firmendaten, Bankverbindung und rechtlichen Informationen
-- HINWEIS: PDFs werden nur beim Klick auf "Speichern und PDF generieren" erstellt,
-  nicht bei jedem Speichervorgang.
 
-
-server starten :
+entwicklungsserver starten :
 
 # Backend (Terminal 1)
 cd backend
@@ -106,9 +79,16 @@ python import_addresses.py --live
 # Bei identischen Namen werden mehrere Adressen dem selben Kunden zugeordnet.
 # Felder die zu lang sind werden automatisch gekürzt (Stadt: 100, Straße: 200, Tel: 50 Zeichen)
 
+VisiView Lizenezn aktualisieren
 cd backend
-python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv"        # Dry-run
-python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv" --live # Live-Import
+# Dry-run mit detaillierten Match-Infos
+python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv"
+
+# Live-Run mit per-row Ausgabe
+python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv" --live --verbose
+
+# Optional: Relinking erlauben (falls bestehende Verknüpfung korrigiert werden soll)
+python import_visiview_licenses.py "C:\Users\mdunk\Documents\VERP\Datenvorlagen\Licenses.csv" --live --verbose --relink
 
 cd backend
 python import_visiview_macros.py --dry-run
@@ -139,7 +119,7 @@ cd backend
 update nach Änderung
 cd C:\VERP
 git pull origin main
-.\venv\Scripts\Activate
+cd C:\VERP
 python manage.py migrate
 Restart-Service VERP-Backend
 
@@ -203,3 +183,11 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 # 4) Dienst neu starten
 #      Restart-Service VERP-Backend
 
+JSON: Nein, Backup/Restore ist nicht problematisch.
+Das ist ein typisches Problem nach Restore/Import: Die Sequenzen (Auto‑ID‑Zähler) werden nicht automatisch auf MAX(id) gesetzt. Daher entstehen „duplicate key“ Fehler.
+
+So ist es sauber:
+
+Nach Restore einmal fix_sequences.py laufen lassen.
+Danach ist alles wieder stabil.
+Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequences.py automatisch nach dem Restore läuft.
