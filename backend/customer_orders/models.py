@@ -298,8 +298,12 @@ class CustomerOrderItem(models.Model):
     """
     order = models.ForeignKey(CustomerOrder, on_delete=models.CASCADE, related_name='items')
     
-    # Position aus Angebot
-    quotation_position = models.PositiveIntegerField(default=0, verbose_name='Angebotsposition')
+    # Position aus Angebot (nullable für Legacy-Aufträge ohne Angebot)
+    quotation_position = models.PositiveIntegerField(
+        null=True, blank=True, default=None,
+        verbose_name='Angebotsposition',
+        help_text='Position aus dem zugeordneten Angebot (null bei Legacy-Aufträgen)'
+    )
     position = models.PositiveIntegerField(default=1, verbose_name='Position')
     # Positionsanzeige als String für Unterpositionen (z.B. "5.01", "5.02" für Warensammlungen)
     position_display = models.CharField(max_length=20, blank=True, verbose_name='Positionsanzeige')

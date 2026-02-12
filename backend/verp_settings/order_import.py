@@ -566,6 +566,8 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
     Returns:
         dict mit Import-Statistiken
     """
+    from users.models import Employee
+    
     conn = get_mssql_connection(server, database, use_dsn, dsn_name)
 
     try:
@@ -576,6 +578,14 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
         auftraege = fetch_auftraege(conn)
         positionen = fetch_auftragspositionen(conn)
         adressen = fetch_adressen(conn)
+        
+        # Mitarbeiter aus SQL laden
+        try:
+            mitarbeiter_sql = fetch_mitarbeiter(conn)
+            logger.info(f"Mitarbeiter aus SQL geladen: {len(mitarbeiter_sql)}")
+        except Exception as e:
+            logger.warning(f"Konnte Mitarbeiter-Tabelle nicht laden: {e}")
+            mitarbeiter_sql = []
 
         # Optionale Tabellen
         try:
@@ -586,6 +596,42 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
         # ================================================================
         # Lookups aufbauen
         # ================================================================
+        # Mitarbeiter-Lookup: SQL MitarbeiterID -> Employee 
+        employee_lookup = {}
+        if mitarbeiter_sql:
+            # Alle Employees aus VERP laden
+            verp_employees = {}
+            for emp in Employee.objects.all():
+                # Normalisierte Namen als Key (lowercase, keine Leerzeichen)
+                key = f"{emp.first_name.lower().strip()} {emp.last_name.lower().strip()}"
+                verp_employees[key] = emp
+            
+            # SQL-Mitarbeiter auf VERP-Employees mappen
+            for mit in mitarbeiter_sql:
+                mit_id = mit.get('MitarbeiterID')
+                vorname = str(mit.get('Vorname', '') or '').strip()
+                nachname = str(mit.get('Name', '') or '').strip()
+                
+                if vorname and nachname:
+                    key = f"{vorname.lower()} {nachname.lower()}"
+                    verp_emp = verp_employees.get(key)
+                    if verp_emp:
+                        employee_lookup[mit_id] = verp_emp
+                        logger.info(f"Mitarbeiter gemappt: SQL ID {mit_id} ({vorname} {nachname}) -> VERP Employee {verp_emp.employee_id}")
+                    else:
+                        logger.warning(f"Kein VERP-Employee gefunden für SQL-Mitarbeiter ID {mit_id}: {vorname} {nachname}")
+            
+            logger.info(f"Employee-Lookup aufgebaut: {len(employee_lookup)} Mitarbeiter gemappt")
+        else:
+            logger.warning("Keine Mitarbeiter-Daten aus SQL verfügbar - verwende Fallback-Mapping")
+            # Fallback: Hartkodiertes Mapping über Username
+            users = {u.username.lower(): u for u in User.objects.all()}
+            for mit_id, username in MITARBEITER_MAPPING.items():
+                if username:
+                    user = users.get(username)
+                    if user and user.employee:
+                        employee_lookup[mit_id] = user.employee
+        
         address_lookup = {row.get('AdressenID'): row for row in adressen}
 
         positions_by_auftrags_id = defaultdict(list)
@@ -661,10 +707,25 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
             # Mitarbeiter-Zuordnung
             verkaeufer_id = _safe_int(row.get('VerkäuferID'))
             verwaltung_id = _safe_int(row.get('VerwaltungID'))
-            sales_username = MITARBEITER_MAPPING.get(verkaeufer_id)
-            creator_username = MITARBEITER_MAPPING.get(verwaltung_id)
-            sales_person = users.get(sales_username) if sales_username else None
-            creator = users.get(creator_username) if creator_username else None
+            
+            # Employee-Lookup (direkt)
+            sales_employee = employee_lookup.get(verkaeufer_id)
+            creator_employee = employee_lookup.get(verwaltung_id)
+            
+            # Sales-Person und Creator (User) ermitteln
+            sales_person = None
+            creator = None
+            
+            if sales_employee:
+                # User des Employees finden (falls vorhanden)
+                sales_person = sales_employee.users.first() if sales_employee.users.exists() else None
+            
+            if creator_employee:
+                creator = creator_employee.users.first() if creator_employee.users.exists() else None
+            
+            # Fallback: created_by_user
+            if not creator:
+                creator = created_by_user
 
             # Adressen
             confirmation_addr = _clean_text(row.get('Bestätigungadresse', ''))
@@ -752,12 +813,17 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
                             created_by=creator or created_by_user,
                         )
 
-                        # Provisionsempfaenger: Verkaeufer mit 100% (falls Mitarbeiterkonto vorhanden)
-                        if sales_person and getattr(sales_person, 'employee', None):
+                        # Provisionsempfaenger: Verkaeufer mit 100% (falls Employee gefunden)
+                        if sales_employee:
                             CustomerOrderCommissionRecipient.objects.create(
                                 customer_order=order,
-                                employee=sales_person.employee,
+                                employee=sales_employee,
                                 commission_percentage=Decimal('100.00')
+                            )
+                            logger.debug(f"Provisionsempfänger gesetzt: {sales_employee} (100%)")
+                        elif verkaeufer_id:
+                            logger.warning(
+                                f"Auftrag {order_number}: VerkäuferID {verkaeufer_id} konnte keinem Employee zugeordnet werden"
                             )
 
                         # Positionen anlegen

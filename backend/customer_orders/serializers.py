@@ -36,6 +36,7 @@ class CustomerOrderItemSerializer(serializers.ModelSerializer):
 
 class CustomerOrderItemCreateSerializer(serializers.ModelSerializer):
     """Serializer zum Erstellen/Bearbeiten von Positionen"""
+    quotation_position = serializers.IntegerField(required=False, allow_null=True)
     
     class Meta:
         model = CustomerOrderItem
