@@ -11,6 +11,10 @@ from .customer_sync_views import (
     CustomerSyncStatusView, CustomerSyncTestConnectionView,
     CustomerSyncPreviewView, CustomerSyncExecuteView
 )
+from .order_import_views import (
+    OrderImportStatusView, OrderImportTestConnectionView,
+    OrderImportPreviewView, OrderImportExecuteView
+)
 
 router = DefaultRouter()
 router.register(r'exchange-rates', ExchangeRateViewSet, basename='exchange-rate')
@@ -35,4 +39,9 @@ urlpatterns = [
     path('customer-sync/test-connection/', CustomerSyncTestConnectionView.as_view(), name='customer-sync-test'),
     path('customer-sync/preview/', CustomerSyncPreviewView.as_view(), name='customer-sync-preview'),
     path('customer-sync/execute/', CustomerSyncExecuteView.as_view(), name='customer-sync-execute'),
+    # Legacy Order Import aus SQL Server
+    path('order-import/status/', OrderImportStatusView.as_view(), name='order-import-status'),
+    path('order-import/test-connection/', OrderImportTestConnectionView.as_view(), name='order-import-test'),
+    path('order-import/preview/', OrderImportPreviewView.as_view(), name='order-import-preview'),
+    path('order-import/execute/', OrderImportExecuteView.as_view(), name='order-import-execute'),
 ]

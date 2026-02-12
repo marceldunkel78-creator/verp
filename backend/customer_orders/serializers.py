@@ -432,7 +432,8 @@ class CustomerOrderListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_number', 'customer', 'customer_name',
             'status', 'status_display', 'order_date', 'delivery_date',
-            'total_amount', 'items_count', 'created_at'
+            'total_amount', 'items_count', 'created_at',
+            'legacy_customer_name', 'legacy_customer_company',
         ]
     
     def get_total_amount(self, obj):
@@ -443,12 +444,17 @@ class CustomerOrderListSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj):
         cust = getattr(obj, 'customer', None)
-        if not cust:
-            return None
-        name = getattr(cust, 'company_name', None)
-        if name:
-            return name
-        return f"{getattr(cust, 'first_name', '')} {getattr(cust, 'last_name', '')}".strip()
+        if cust:
+            name = getattr(cust, 'company_name', None)
+            if name:
+                return name
+            return f"{getattr(cust, 'first_name', '')} {getattr(cust, 'last_name', '')}".strip()
+        # Fallback: Legacy-Kundeninfos
+        if obj.legacy_customer_company:
+            return obj.legacy_customer_company
+        if obj.legacy_customer_name:
+            return obj.legacy_customer_name
+        return None
 
 
 class CustomerOrderDetailSerializer(serializers.ModelSerializer):
@@ -486,6 +492,8 @@ class CustomerOrderDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_number', 'status', 'status_display',
             'customer', 'customer_name', 'customer_data',
+            'legacy_customer_name', 'legacy_customer_company',
+            'legacy_customer_address', 'legacy_adressen_id',
             'quotation', 'quotation_number',
             'project_reference', 'system_reference',
             'order_date', 'delivery_date', 'confirmation_date',
@@ -512,6 +520,27 @@ class CustomerOrderDetailSerializer(serializers.ModelSerializer):
     def get_customer_data(self, obj):
         """Vollständige Kundendaten für Formulare"""
         if not obj.customer:
+            # Fallback: Legacy-Kundeninfos als customer_data zurueckgeben
+            if obj.legacy_customer_name or obj.legacy_customer_company:
+                return {
+                    'id': None,
+                    'company_name': obj.legacy_customer_company or '',
+                    'full_name': obj.legacy_customer_name or '',
+                    'salutation': '',
+                    'title': '',
+                    'first_name': '',
+                    'last_name': obj.legacy_customer_name or '',
+                    'email': None,
+                    'phone': None,
+                    'address': obj.legacy_customer_address or '',
+                    'postal_code': '',
+                    'city': '',
+                    'country': '',
+                    'addresses': [],
+                    'primary_email': None,
+                    'is_legacy': True,
+                    'legacy_adressen_id': obj.legacy_adressen_id,
+                }
             return None
         cust = obj.customer
         # Try to gather email/phone/address from related objects if available
@@ -575,12 +604,17 @@ class CustomerOrderDetailSerializer(serializers.ModelSerializer):
 
     def get_customer_name(self, obj):
         cust = getattr(obj, 'customer', None)
-        if not cust:
-            return None
-        name = getattr(cust, 'company_name', None)
-        if name:
-            return name
-        return f"{getattr(cust, 'first_name', '')} {getattr(cust, 'last_name', '')}".strip()
+        if cust:
+            name = getattr(cust, 'company_name', None)
+            if name:
+                return name
+            return f"{getattr(cust, 'first_name', '')} {getattr(cust, 'last_name', '')}".strip()
+        # Fallback: Legacy-Kundeninfos
+        if obj.legacy_customer_company:
+            return obj.legacy_customer_company
+        if obj.legacy_customer_name:
+            return obj.legacy_customer_name
+        return None
     
     def get_total_net(self, obj):
         return obj.calculate_total()

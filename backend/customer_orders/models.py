@@ -58,7 +58,12 @@ class CustomerOrder(models.Model):
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='angelegt')
     
     # Verknüpfungen
-    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='customer_orders')
+    customer = models.ForeignKey(
+        Customer, on_delete=models.PROTECT, related_name='customer_orders',
+        null=True, blank=True,
+        verbose_name='Kunde',
+        help_text='Verknüpfter VERP-Kunde (kann bei Legacy-Aufträgen leer sein)'
+    )
     quotation = models.ForeignKey(
         'sales.Quotation', 
         on_delete=models.SET_NULL, 
@@ -68,6 +73,28 @@ class CustomerOrder(models.Model):
         verbose_name='Angebot'
     )
     
+    # Legacy-Kundeninformationen (für Aufträge ohne verknüpften VERP-Kunden)
+    legacy_customer_name = models.CharField(
+        max_length=200, blank=True,
+        verbose_name='Legacy Kundenname',
+        help_text='Name des Kunden aus der Legacy-Datenbank'
+    )
+    legacy_customer_company = models.CharField(
+        max_length=300, blank=True,
+        verbose_name='Legacy Firma/Uni',
+        help_text='Firma/Universität aus der Legacy-Datenbank'
+    )
+    legacy_customer_address = models.TextField(
+        blank=True,
+        verbose_name='Legacy Kundenadresse',
+        help_text='Vollständige Adresse aus der Legacy-Datenbank'
+    )
+    legacy_adressen_id = models.IntegerField(
+        null=True, blank=True,
+        verbose_name='Legacy AdressenID',
+        help_text='Originale AdressenID aus der SQL-Datenbank'
+    )
+
     # Referenzen
     project_reference = models.CharField(max_length=200, blank=True, verbose_name='Projekt-Referenz')
     system_reference = models.CharField(max_length=200, blank=True, verbose_name='System-Referenz')

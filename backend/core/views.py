@@ -551,6 +551,11 @@ DELETABLE_MODELS = {
     'visiview_license': ('visiview', 'VisiViewLicense', 'serial_number', 'VisiView-Lizenz'),
     'trading_product': ('suppliers', 'TradingProduct', 'vs_article_number', 'Handelsware'),
     'inventory_item': ('inventory', 'InventoryItem', 'inventory_number', 'Warenlager-Eintrag'),
+    'model_organism': ('systems', 'ModelOrganismOption', 'name', 'Modellorganismus'),
+    'research_field': ('systems', 'ResearchFieldOption', 'name', 'Forschungsgebiet'),
+    'visiview_macro': ('visiview', 'VisiViewMacro', 'macro_id', 'VisiView-Makro'),
+    'troubleshooting_ticket': ('service', 'TroubleshootingTicket', 'ticket_number', 'Troubleshooting-Ticket'),
+    'sales_ticket': ('sales', 'SalesTicket', 'ticket_number', 'Sales-Ticket'),
 }
 
 
