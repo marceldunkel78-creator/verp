@@ -788,6 +788,21 @@ class VisiViewTicket(models.Model):
         verbose_name='Geschlossen am'
     )
     
+    # Redmine-Synchronisation
+    redmine_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name='Redmine Issue ID',
+        help_text='ID des Tickets im Redmine-System'
+    )
+    redmine_updated_on = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Redmine Aktualisiert am',
+        help_text='Letzter Aktualisierungszeitpunkt in Redmine'
+    )
+    
     # Import-Timestamps (für CSV-Import)
     imported_created_at = models.DateTimeField(
         null=True,
@@ -876,6 +891,15 @@ class VisiViewTicketComment(models.Model):
     is_imported = models.BooleanField(
         default=False,
         verbose_name='Importiert'
+    )
+    
+    # Redmine-Synchronisation
+    redmine_journal_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name='Redmine Journal ID',
+        help_text='ID des Journals/Kommentars im Redmine-System'
     )
     
     created_by = models.ForeignKey(
@@ -1402,6 +1426,20 @@ class MaintenanceTimeCredit(models.Model):
         related_name='maintenance_credits_assigned',
         verbose_name='Mitarbeiter'
     )
+    # Redmine-Synchronisation
+    redmine_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name='Redmine Issue ID',
+        help_text='ID des Zeitgutschrift-Tickets im Redmine-System'
+    )
+    redmine_updated_on = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Redmine Aktualisiert am'
+    )
+    
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -1514,6 +1552,15 @@ class MaintenanceTimeExpenditure(models.Model):
         default=0,
         verbose_name='Erzeugte Zeitschuld (h)'
     )
+    # Redmine-Synchronisation
+    redmine_time_entry_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name='Redmine Time Entry ID',
+        help_text='ID des Zeiteintrags im Redmine-System'
+    )
+    
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

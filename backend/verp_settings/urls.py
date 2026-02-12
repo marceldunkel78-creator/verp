@@ -15,6 +15,10 @@ from .order_import_views import (
     OrderImportStatusView, OrderImportTestConnectionView,
     OrderImportPreviewView, OrderImportExecuteView
 )
+from .redmine_sync_views import (
+    RedmineSyncStatusView, RedmineSyncTestConnectionView,
+    RedmineSyncPreviewView, RedmineSyncExecuteView
+)
 
 router = DefaultRouter()
 router.register(r'exchange-rates', ExchangeRateViewSet, basename='exchange-rate')
@@ -44,4 +48,9 @@ urlpatterns = [
     path('order-import/test-connection/', OrderImportTestConnectionView.as_view(), name='order-import-test'),
     path('order-import/preview/', OrderImportPreviewView.as_view(), name='order-import-preview'),
     path('order-import/execute/', OrderImportExecuteView.as_view(), name='order-import-execute'),
+    # Redmine Ticket-Sync
+    path('redmine-sync/status/', RedmineSyncStatusView.as_view(), name='redmine-sync-status'),
+    path('redmine-sync/test-connection/', RedmineSyncTestConnectionView.as_view(), name='redmine-sync-test'),
+    path('redmine-sync/preview/', RedmineSyncPreviewView.as_view(), name='redmine-sync-preview'),
+    path('redmine-sync/execute/', RedmineSyncExecuteView.as_view(), name='redmine-sync-execute'),
 ]

@@ -339,6 +339,20 @@ class ServiceTicket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
     
+    # Redmine-Synchronisation
+    redmine_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name='Redmine Issue ID',
+        help_text='ID des Tickets im Redmine-System'
+    )
+    redmine_updated_on = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Redmine Aktualisiert am'
+    )
+    
     class Meta:
         verbose_name = 'Service Ticket'
         verbose_name_plural = 'Service Tickets'
@@ -908,6 +922,20 @@ class TroubleshootingTicket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name='Geschlossen am')
+    
+    # Redmine-Synchronisation
+    redmine_id = models.IntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name='Redmine Issue ID',
+        help_text='ID des Tickets im Redmine-System'
+    )
+    redmine_updated_on = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Redmine Aktualisiert am'
+    )
     
     class Meta:
         verbose_name = 'Troubleshooting Ticket'
