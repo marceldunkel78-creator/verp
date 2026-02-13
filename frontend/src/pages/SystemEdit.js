@@ -44,7 +44,8 @@ const SystemEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isNew = id === 'new';
+  // Treat missing or explicit 'new' id as creation mode to avoid PATCH to 'undefined'
+  const isNew = !id || id === 'new';
   const [activeTab, setActiveTab] = useState('basic');
   const [system, setSystem] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -706,22 +707,46 @@ const SystemEdit = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Sanitize payload: remove empty-string fields so DRF treats them as null/omitted
+      const payload = { ...formData };
+      Object.keys(payload).forEach((k) => {
+        if (payload[k] === '') {
+          delete payload[k];
+        }
+        // normalize date fields: ensure empty -> removed, already handled above
+        // normalize numeric/string IDs: if NaN or not present, remove
+      });
+
       if (isNew) {
         // Create new system
-        const response = await api.post('/systems/systems/', formData);
+        const response = await api.post('/systems/systems/', payload);
         setSaveMessage({ type: 'success', text: 'System erstellt!' });
         // Navigate to the newly created system
         navigate(`/sales/systems/${response.data.id}`);
       } else {
         // Update existing system
-        await api.patch(`/systems/systems/${id}/`, formData);
+        await api.patch(`/systems/systems/${id}/`, payload);
         setSaveMessage({ type: 'success', text: 'Änderungen gespeichert!' });
         setHasChanges(false);
       }
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error) {
       console.error('Error saving system:', error);
-      setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
+      // Show detailed server validation errors when available
+      const serverData = error.response?.data;
+      if (serverData) {
+        if (typeof serverData === 'string') {
+          setSaveMessage({ type: 'error', text: serverData });
+        } else if (serverData.detail) {
+          setSaveMessage({ type: 'error', text: serverData.detail });
+        } else {
+          // Flatten field errors
+          const msgs = Object.entries(serverData).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join('; ') : v}`).join(' — ');
+          setSaveMessage({ type: 'error', text: msgs || 'Fehler beim Speichern' });
+        }
+      } else {
+        setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
+      }
     } finally {
       setSaving(false);
     }
@@ -946,7 +971,8 @@ const SystemEdit = () => {
         {(hasChanges || isNew) && (
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || (isNew && (!formData.system_name || !formData.system_name.trim()))}
+            title={isNew && (!formData.system_name || !formData.system_name.trim()) ? 'Bitte Systemname ausfüllen' : ''}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             <CheckIcon className="h-5 w-5" />
