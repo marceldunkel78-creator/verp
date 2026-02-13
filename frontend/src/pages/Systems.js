@@ -272,7 +272,9 @@ const Systems = () => {
   
   // Create Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [newSystem, setNewSystem] = useState({
     customer: '',
     system_name: '',
@@ -355,6 +357,8 @@ const Systems = () => {
     const urlCustomerId = searchParams.get('customer');
     if (urlCustomerId) {
       setNewSystem(prev => ({ ...prev, customer: urlCustomerId }));
+      // Load customer details for display
+      fetchCustomerById(urlCustomerId);
       setShowCreateModal(true);
       return;
     }
@@ -456,12 +460,6 @@ const Systems = () => {
       setTableScrollWidth(tableScrollRef.current.scrollWidth || 0);
     }
   }, [systems, viewMode]);
-
-  useEffect(() => {
-    if (showCreateModal) {
-      fetchCustomers();
-    }
-  }, [showCreateModal]);
 
   const fetchFilters = async () => {
     try {
@@ -567,13 +565,50 @@ const Systems = () => {
     }
   };
 
-  const fetchCustomers = async () => {
+  const fetchCustomerById = async (customerId) => {
     try {
-      const response = await api.get('/customers/customers/?is_active=true&page_size=1000');
-      setCustomers(response.data.results || response.data);
+      const response = await api.get(`/customers/customers/${customerId}/`);
+      setSelectedCustomer(response.data);
     } catch (error) {
-      console.error('Error fetching customers:', error);
+      console.error('Error fetching customer:', error);
     }
+  };
+
+  const searchCustomers = async (query) => {
+    if (query.length < 3) {
+      setCustomerSearchResults([]);
+      return;
+    }
+    try {
+      const response = await api.get(`/customers/customers/?search=${encodeURIComponent(query)}&is_active=true&page_size=20`);
+      setCustomerSearchResults(response.data.results || response.data);
+    } catch (error) {
+      console.error('Error searching customers:', error);
+    }
+  };
+
+  const handleCustomerSelect = (customer) => {
+    setSelectedCustomer(customer);
+    setNewSystem(prev => ({ ...prev, customer: customer.id }));
+    setCustomerSearch('');
+    setCustomerSearchResults([]);
+  };
+
+  const handleClearCustomer = () => {
+    setSelectedCustomer(null);
+    setNewSystem(prev => ({ ...prev, customer: '' }));
+    setCustomerSearch('');
+  };
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+    setSelectedCustomer(null);
+    setCustomerSearch('');
+    setCustomerSearchResults([]);
+    setNewSystem({ customer: '', system_name: '', description: '' });
+    setStarNameSearch('');
+    setStarNameSuggestions([]);
+    setShowStarSearch(false);
   };
 
   const handleSearch = (e) => {
@@ -666,8 +701,7 @@ const Systems = () => {
     setCreateLoading(true);
     try {
       const response = await api.post('/systems/systems/', newSystem);
-      setShowCreateModal(false);
-      setNewSystem({ customer: '', system_name: '', description: '' });
+      handleCloseModal();
       navigate(`/sales/systems/${response.data.id}`);
     } catch (error) {
       console.error('Error creating system:', error);
@@ -1182,13 +1216,13 @@ const Systems = () => {
       {showCreateModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen px-4">
-            <div className="fixed inset-0 bg-black opacity-50" onClick={() => setShowCreateModal(false)}></div>
+            <div className="fixed inset-0 bg-black opacity-50" onClick={handleCloseModal}></div>
             
             <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold">Neues System erstellen</h2>
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={handleCloseModal}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <XMarkIcon className="h-6 w-6" />
@@ -1200,19 +1234,57 @@ const Systems = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Kunde *
                   </label>
-                  <select
-                    value={newSystem.customer}
-                    onChange={(e) => setNewSystem(prev => ({ ...prev, customer: e.target.value }))}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Kunde auswählen...</option>
-                    {customers.map(customer => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.customer_number} - {customer.title} {customer.first_name} {customer.last_name}
-                      </option>
-                    ))}
-                  </select>
+                  
+                  {/* Selected Customer Display */}
+                  {selectedCustomer ? (
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {selectedCustomer.title} {selectedCustomer.first_name} {selectedCustomer.last_name}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {selectedCustomer.customer_number}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearCustomer}
+                        className="text-gray-500 hover:text-red-600"
+                      >
+                        <XMarkIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          searchCustomers(e.target.value);
+                        }}
+                        placeholder="Mindestens 3 Zeichen eingeben..."
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                      {customerSearchResults.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+                          {customerSearchResults.map((customer) => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              onClick={() => handleCustomerSelect(customer)}
+                              className="w-full px-4 py-2 text-left hover:bg-blue-50 flex justify-between items-center border-b last:border-b-0"
+                            >
+                              <span>
+                                {customer.title} {customer.first_name} {customer.last_name}
+                              </span>
+                              <span className="text-sm text-gray-500">{customer.customer_number}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mb-4">
@@ -1291,7 +1363,7 @@ const Systems = () => {
                 <div className="flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={handleCloseModal}
                     className="px-4 py-2 border rounded-lg hover:bg-gray-50"
                   >
                     Abbrechen
