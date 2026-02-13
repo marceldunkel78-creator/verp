@@ -1192,14 +1192,6 @@ const CustomerEdit = () => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">VisiView Lizenzen ({customerLicensesTotal})</h3>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/visiview/licenses/new?customer=${id}`)}
-                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm rounded-md text-white bg-purple-600 hover:bg-purple-700"
-                  >
-                    <PlusIcon className="h-4 w-4 mr-2" />
-                    Neue Lizenz
-                  </button>
                 </div>
                 {customerLicenses.length === 0 ? (
                   <p className="text-gray-500 text-center py-8">Keine VisiView Lizenzen vorhanden</p>

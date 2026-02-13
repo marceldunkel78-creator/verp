@@ -28,7 +28,7 @@ class DealerEmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = DealerEmployee
         fields = [
-            'id', 'salutation', 'title', 'first_name', 'last_name', 'full_name',
+            'id', 'dealer', 'salutation', 'title', 'first_name', 'last_name', 'full_name',
             'language', 'language_display',
             'phone', 'mobile', 'fax', 'email',
             'street', 'house_number', 'postal_code', 'city', 'country',

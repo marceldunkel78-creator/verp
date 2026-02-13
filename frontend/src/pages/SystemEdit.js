@@ -44,6 +44,7 @@ const SystemEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isNew = id === 'new';
   const [activeTab, setActiveTab] = useState('basic');
   const [system, setSystem] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,7 @@ const SystemEdit = () => {
   
   // Get customer from URL params (for pre-filled customer from CustomerModal)
   const urlCustomerId = searchParams.get('customer');
+  const urlLicenseId = searchParams.get('license');
   
   // Basic Info State
   const [formData, setFormData] = useState({
@@ -76,8 +78,10 @@ const SystemEdit = () => {
     location_longitude: null,
     installation_date: '',
     notes: '',
-    visiview_license: '',
-    responsible_employee: ''
+    visiview_license: urlLicenseId || '',
+    responsible_employee: '',
+    maintenance_offer_received: false,
+    maintenance_offer_declined: false
   });
   const [customers, setCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState('');
@@ -163,9 +167,13 @@ const SystemEdit = () => {
   });
 
   useEffect(() => {
-    if (id) {
+    if (id && id !== 'new') {
       fetchSystem();
       fetchContactHistory();
+    } else {
+      // For new systems, set loading to false and create placeholder system
+      setSystem({ id: 'new', system_number: '', system_name: '' });
+      setLoading(false);
     }
     // Lade Mitarbeiter für Dropdown (nur Vertrieb & Geschäftsführung)
     fetchResponsibleEmployees();
@@ -175,7 +183,7 @@ const SystemEdit = () => {
 
   // Load tab data when tab is selected
   useEffect(() => {
-    if (!id) return;
+    if (!id || id === 'new') return;
     if (activeTab === 'projects' && !projects.length && !projectsLoading) {
       fetchProjects();
     } else if (activeTab === 'orders' && !customerOrders.length && !ordersLoading) {
@@ -188,6 +196,36 @@ const SystemEdit = () => {
       fetchContactHistory();
     }
   }, [activeTab, id]);
+
+  // Load VisiView License details from URL parameter for new systems
+  useEffect(() => {
+    if (id === 'new' && urlLicenseId) {
+      const fetchLicenseDetails = async () => {
+        try {
+          const response = await api.get(`/visiview/licenses/${urlLicenseId}/`);
+          setSelectedLicense(response.data);
+        } catch (error) {
+          console.error('Error fetching license details:', error);
+        }
+      };
+      fetchLicenseDetails();
+    }
+  }, [id, urlLicenseId]);
+
+  // Load Customer details from URL parameter for new systems
+  useEffect(() => {
+    if (id === 'new' && urlCustomerId) {
+      const fetchCustomerDetails = async () => {
+        try {
+          const response = await api.get(`/customers/customers/${urlCustomerId}/`);
+          setSelectedCustomer(response.data);
+        } catch (error) {
+          console.error('Error fetching customer details:', error);
+        }
+      };
+      fetchCustomerDetails();
+    }
+  }, [id, urlCustomerId]);
 
   const fetchSystem = async () => {
     setLoading(true);
@@ -219,7 +257,9 @@ const SystemEdit = () => {
         installation_date: data.installation_date || '',
         notes: data.notes || '',
         visiview_license: data.visiview_license || '',
-        responsible_employee: data.responsible_employee || ''
+        responsible_employee: data.responsible_employee || '',
+        maintenance_offer_received: data.maintenance_offer_received || false,
+        maintenance_offer_declined: data.maintenance_offer_declined || false
       });
       setComponents(data.components || []);
       setPhotos(data.photos || []);
@@ -666,9 +706,18 @@ const SystemEdit = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/systems/systems/${id}/`, formData);
-      setSaveMessage({ type: 'success', text: 'Änderungen gespeichert!' });
-      setHasChanges(false);
+      if (isNew) {
+        // Create new system
+        const response = await api.post('/systems/systems/', formData);
+        setSaveMessage({ type: 'success', text: 'System erstellt!' });
+        // Navigate to the newly created system
+        navigate(`/sales/systems/${response.data.id}`);
+      } else {
+        // Update existing system
+        await api.patch(`/systems/systems/${id}/`, formData);
+        setSaveMessage({ type: 'success', text: 'Änderungen gespeichert!' });
+        setHasChanges(false);
+      }
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error) {
       console.error('Error saving system:', error);
@@ -871,29 +920,37 @@ const SystemEdit = () => {
           <div>
             <div className="flex items-center gap-3">
               <ComputerDesktopIcon className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold">{system.system_number}</h1>
-              <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(system.status)}`}>
-                {system.status_display || system.status}
-              </span>
-              {system.contact_overdue && (
-                <span className="flex items-center gap-1 px-2 py-1 text-sm rounded-full bg-orange-100 text-orange-700">
-                  <ExclamationTriangleIcon className="h-4 w-4" />
-                  Letzter Kontakt &gt; 6 Monate
-                </span>
+              <h1 className="text-2xl font-bold">
+                {isNew ? 'Neues System' : system?.system_number}
+              </h1>
+              {!isNew && system && (
+                <>
+                  <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(system.status)}`}>
+                    {system.status_display || system.status}
+                  </span>
+                  {system.contact_overdue && (
+                    <span className="flex items-center gap-1 px-2 py-1 text-sm rounded-full bg-orange-100 text-orange-700">
+                      <ExclamationTriangleIcon className="h-4 w-4" />
+                      Letzter Kontakt &gt; 6 Monate
+                    </span>
+                  )}
+                </>
               )}
             </div>
-            <p className="text-gray-600 mt-1">{system.system_name} - {system.customer_name}</p>
+            {!isNew && system && (
+              <p className="text-gray-600 mt-1">{system.system_name} - {system.customer_name}</p>
+            )}
           </div>
         </div>
         
-        {hasChanges && (
+        {(hasChanges || isNew) && (
           <button
             onClick={handleSave}
             disabled={saving}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             <CheckIcon className="h-5 w-5" />
-            {saving ? 'Speichern...' : 'Änderungen speichern'}
+            {saving ? 'Speichern...' : (isNew ? 'System erstellen' : 'Änderungen speichern')}
           </button>
         )}
       </div>
@@ -912,13 +969,17 @@ const SystemEdit = () => {
         <nav className="tab-scroll flex gap-4">
           {TABS.map((tab) => {
             const Icon = tab.icon;
+            const isDisabled = isNew && tab.id !== 'basic';
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => !isDisabled && setActiveTab(tab.id)}
+                disabled={isDisabled}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
                   activeTab === tab.id
                     ? 'border-blue-600 text-blue-600'
+                    : isDisabled
+                    ? 'border-transparent text-gray-300 cursor-not-allowed'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -2084,6 +2145,90 @@ const SystemEdit = () => {
                   >
                     <ArrowTopRightOnSquareIcon className="h-5 w-5" />
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Maintenance Status */}
+            {selectedLicense && (
+              <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-4 flex items-center gap-2">
+                  <WrenchScrewdriverIcon className="h-5 w-5 text-gray-600" />
+                  Maintenance Status
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  {/* Wartung bis */}
+                  <div className="p-3 rounded-lg border" style={{
+                    borderColor: selectedLicense.maintenance_date && new Date(selectedLicense.maintenance_date) < new Date() ? '#ef4444' : '#d1d5db',
+                    backgroundColor: selectedLicense.maintenance_date && new Date(selectedLicense.maintenance_date) < new Date() ? '#fef2f2' : '#f9fafb'
+                  }}>
+                    <div className="text-xs text-gray-500 uppercase">Wartung bis</div>
+                    <div className={`text-lg font-semibold ${
+                      selectedLicense.maintenance_date && new Date(selectedLicense.maintenance_date) < new Date()
+                        ? 'text-red-600' : 'text-gray-900'
+                    }`}>
+                      {selectedLicense.maintenance_date
+                        ? new Date(selectedLicense.maintenance_date).toLocaleDateString('de-DE')
+                        : '—'}
+                    </div>
+                    {selectedLicense.maintenance_date && new Date(selectedLicense.maintenance_date) < new Date() && (
+                      <div className="text-xs text-red-500 mt-1">Abgelaufen</div>
+                    )}
+                  </div>
+                  {/* Zeitguthaben */}
+                  <div className="p-3 rounded-lg border" style={{
+                    borderColor: selectedLicense.maintenance_total_hours > 0 && selectedLicense.maintenance_remaining_hours <= 0 ? '#ef4444' : '#d1d5db',
+                    backgroundColor: selectedLicense.maintenance_total_hours > 0 && selectedLicense.maintenance_remaining_hours <= 0 ? '#fef2f2' : '#f9fafb'
+                  }}>
+                    <div className="text-xs text-gray-500 uppercase">Zeitguthaben</div>
+                    <div className={`text-lg font-semibold ${
+                      selectedLicense.maintenance_total_hours > 0 && selectedLicense.maintenance_remaining_hours <= 0
+                        ? 'text-red-600' : 'text-gray-900'
+                    }`}>
+                      {selectedLicense.maintenance_total_hours > 0
+                        ? `${selectedLicense.maintenance_remaining_hours}h / ${selectedLicense.maintenance_total_hours}h`
+                        : '—'}
+                    </div>
+                    {selectedLicense.maintenance_total_hours > 0 && selectedLicense.maintenance_remaining_hours <= 0 && (
+                      <div className="text-xs text-red-500 mt-1">Aufgebraucht</div>
+                    )}
+                  </div>
+                  {/* Guthaben gültig bis */}
+                  <div className="p-3 rounded-lg border border-gray-200 bg-gray-50">
+                    <div className="text-xs text-gray-500 uppercase">Guthaben gültig bis</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {selectedLicense.maintenance_credit_end_date
+                        ? new Date(selectedLicense.maintenance_credit_end_date).toLocaleDateString('de-DE')
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
+                {/* Checkboxes */}
+                <div className="flex gap-6 border-t pt-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.maintenance_offer_received}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, maintenance_offer_received: e.target.checked }));
+                        setHasChanges(true);
+                      }}
+                      className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Maintenance Angebot erhalten</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.maintenance_offer_declined}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, maintenance_offer_declined: e.target.checked }));
+                        setHasChanges(true);
+                      }}
+                      className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                    />
+                    <span className="text-sm text-gray-700">Maintenance Angebot abgelehnt</span>
+                  </label>
                 </div>
               </div>
             )}

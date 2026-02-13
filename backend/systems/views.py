@@ -126,30 +126,10 @@ class SystemViewSet(viewsets.ModelViewSet):
             'service_tickets': [],  # Noch zu erstellen
             'visiview_tickets': [],  # Noch zu erstellen
         })
-
-
-class ModelOrganismOptionViewSet(viewsets.ModelViewSet):
-    queryset = ModelOrganismOption.objects.all()
-    serializer_class = ModelOrganismOptionSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active']
-    search_fields = ['name']
-    ordering_fields = ['name', 'created_at']
-    ordering = ['name']
-
-
-class ResearchFieldOptionViewSet(viewsets.ModelViewSet):
-    queryset = ResearchFieldOption.objects.all()
-    serializer_class = ResearchFieldOptionSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active']
-    search_fields = ['name']
-    ordering_fields = ['name', 'created_at']
-    ordering = ['name']
     
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
-        """Gibt die komplette Historie eines Systems zurück (Projekte, Aufträge, Bestellungen, Tickets)"""
+        """Gibt die komplette Historie eines Systems zurück"""
         system = self.get_object()
         
         # Projekte mit diesem System
@@ -421,6 +401,108 @@ class ResearchFieldOptionViewSet(viewsets.ModelViewSet):
             'count': len(overdue_systems),
             'systems': overdue_systems[:20]  # Max 20 für Dashboard
         })
+
+    @action(detail=False, methods=['get'])
+    def maintenance_expired(self, request):
+        """
+        Liefert alle Systeme deren VisiView-Lizenz-Wartung abgelaufen ist oder
+        deren Maintenance-Zeitguthaben aufgebraucht wurde.
+        Systeme bei denen 'maintenance_offer_declined' gesetzt ist, werden ausgeschlossen.
+        """
+        from visiview.models import MaintenanceTimeCredit
+        from datetime import date
+        from users.models import Employee
+
+        today = date.today()
+
+        # Finde den Employee zum eingeloggten User
+        employee = getattr(request.user, 'employee', None)
+        if not employee:
+            try:
+                employee = Employee.objects.get(users=request.user)
+            except (Employee.DoesNotExist, Employee.MultipleObjectsReturned):
+                employee = Employee.objects.filter(users=request.user).first()
+
+        # Alle aktiven Systeme mit VisiView-Lizenz, die NICHT abgelehnt wurden
+        systems = System.objects.filter(
+            status__in=['aktiv', 'in_nutzung', 'unbekannt'],
+            visiview_license__isnull=False,
+            maintenance_offer_declined=False
+        ).select_related('customer', 'responsible_employee', 'visiview_license')
+
+        # Filter nach verantwortlichem Mitarbeiter (wenn User kein Superuser)
+        if not request.user.is_superuser and employee:
+            systems = systems.filter(responsible_employee=employee)
+
+        expired_systems = []
+        for system in systems:
+            lic = system.visiview_license
+            maintenance_date_expired = False
+            credit_exhausted = False
+            maintenance_date = lic.maintenance_date
+            remaining_hours = None
+            total_hours = None
+
+            # Prüfe ob Wartung bis Datum überschritten
+            if maintenance_date and maintenance_date < today:
+                maintenance_date_expired = True
+
+            # Prüfe ob Zeitguthaben aufgebraucht
+            active_credits = MaintenanceTimeCredit.objects.filter(
+                license=lic, end_date__gte=today
+            )
+            if active_credits.exists():
+                total_hours = float(sum(c.credit_hours for c in active_credits))
+                remaining_hours = float(sum(c.remaining_hours for c in active_credits))
+                if remaining_hours <= 0:
+                    credit_exhausted = True
+
+            if maintenance_date_expired or credit_exhausted:
+                expired_systems.append({
+                    'id': system.id,
+                    'system_number': system.system_number,
+                    'system_name': system.system_name,
+                    'customer_name': f"{system.customer.first_name} {system.customer.last_name}".strip() if system.customer else None,
+                    'customer_id': system.customer_id,
+                    'license_number': lic.license_number,
+                    'license_id': lic.id,
+                    'maintenance_date': maintenance_date,
+                    'maintenance_date_expired': maintenance_date_expired,
+                    'credit_exhausted': credit_exhausted,
+                    'remaining_hours': remaining_hours,
+                    'total_hours': total_hours,
+                    'maintenance_offer_received': system.maintenance_offer_received,
+                    'responsible_employee': system.responsible_employee.get_full_name() if system.responsible_employee else None,
+                })
+
+        # Sortieren: zuerst nach Maintenance-Datum abgelaufen, dann nach Datum
+        expired_systems.sort(key=lambda x: x['maintenance_date'] or '0000-00-00')
+
+        return Response({
+            'count': len(expired_systems),
+            'systems': expired_systems
+        })
+
+
+class ModelOrganismOptionViewSet(viewsets.ModelViewSet):
+    queryset = ModelOrganismOption.objects.all()
+    serializer_class = ModelOrganismOptionSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+
+class ResearchFieldOptionViewSet(viewsets.ModelViewSet):
+    queryset = ResearchFieldOption.objects.all()
+    serializer_class = ResearchFieldOptionSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
 
 
 class SystemComponentViewSet(viewsets.ModelViewSet):

@@ -108,11 +108,11 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     """ViewSet für VisiView Lizenzen"""
     from verp.pagination import InfinitePagination
     pagination_class = InfinitePagination
-    queryset = VisiViewLicense.objects.select_related('customer', 'created_by').all()
+    queryset = VisiViewLicense.objects.select_related('customer', 'created_by', 'dealer').all()
     permission_classes = [IsAuthenticated, VisiViewLicensePermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'is_demo', 'is_loaner', 'customer', 'is_outdated']
-    search_fields = ['license_number', 'serial_number', 'customer_name_legacy', 'customer__last_name', 'distributor']
+    filterset_fields = ['status', 'is_demo', 'is_loaner', 'customer', 'dealer', 'is_outdated']
+    search_fields = ['license_number', 'serial_number', 'customer_name_legacy', 'customer__last_name', 'dealer__company_name', 'distributor_legacy']
     ordering_fields = ['license_number', 'serial_number', 'delivery_date', 'created_at']
     ordering = ['-serial_number']
     

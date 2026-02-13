@@ -315,11 +315,22 @@ class VisiViewLicense(models.Model):
         help_text='Importierte Adresse vor Verknüpfung'
     )
     
-    # Distributor
-    distributor = models.CharField(
+    # Händlerverknüpfung (Dealer)
+    dealer = models.ForeignKey(
+        'dealers.Dealer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='visiview_licenses',
+        verbose_name='Händler'
+    )
+    
+    # Distributor (Legacy - Text)
+    distributor_legacy = models.CharField(
         max_length=200,
         blank=True,
-        verbose_name='Distributor'
+        verbose_name='Distributor (Import)',
+        help_text='Legacy: Importierter Distributor-Name als Text'
     )
     
     # Software-Version
@@ -1469,6 +1480,15 @@ class MaintenanceTimeCredit(models.Model):
         if not self.pk and not self.remaining_hours:
             self.remaining_hours = self.credit_hours
         super().save(*args, **kwargs)
+        
+        # Aktualisiere maintenance_date der Lizenz auf das späteste end_date
+        # aller Zeitgutschriften dieser Lizenz
+        latest_end = MaintenanceTimeCredit.objects.filter(
+            license=self.license
+        ).order_by('-end_date').values_list('end_date', flat=True).first()
+        if latest_end and (not self.license.maintenance_date or latest_end > self.license.maintenance_date):
+            self.license.maintenance_date = latest_end
+            self.license.save(update_fields=['maintenance_date'])
     
     @property
     def is_active(self):

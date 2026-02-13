@@ -378,14 +378,24 @@ const VisiViewLicenses = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/customers/${license.customer}`);
+                              navigate(`/sales/customers/${license.customer}`);
                             }}
                             className="text-indigo-600 hover:underline text-left pointer-events-auto"
                           >
                             {license.customer_name}
                           </button>
+                        ) : license.dealer ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/sales/dealers/${license.dealer}`);
+                            }}
+                            className="text-purple-600 hover:underline text-left pointer-events-auto"
+                          >
+                            {license.dealer_name}
+                          </button>
                         ) : (
-                          <span className="text-gray-700">{license.customer_name_legacy || '-'}</span>
+                          <span className="text-gray-700">{license.customer_name_legacy || license.distributor_legacy || '-'}</span>
                         )}
                         {license.customer_number && (
                           <span className="text-xs text-gray-500 ml-2">({license.customer_number})</span>
@@ -468,7 +478,7 @@ const VisiViewLicenses = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {license.customer_name || license.customer_name_legacy || '-'}
+                          {license.customer_name || license.dealer_name || license.customer_name_legacy || license.distributor_legacy || '-'}
                         </div>
                         {license.customer_number && (
                           <div className="text-xs text-gray-500">{license.customer_number}</div>

@@ -215,6 +215,7 @@ function App() {
             <Route path="sales/projects/new" element={<ProjectEdit />} />
             <Route path="sales/projects/:id" element={<ProjectEdit />} />
             <Route path="sales/systems" element={<Systems />} />
+            <Route path="sales/systems/new" element={<SystemEdit />} />
             <Route path="sales/systems/:id" element={<SystemEdit />} />
             <Route path="sales/quotations" element={<Quotations />} />
             <Route path="sales/order-processing" element={<OrderProcessing />} />

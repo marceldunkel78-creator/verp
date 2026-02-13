@@ -168,6 +168,7 @@ class VisiViewLicenseListSerializer(serializers.ModelSerializer):
     """Kompakter Serializer für Lizenzliste"""
     customer_name = serializers.SerializerMethodField()
     customer_number = serializers.CharField(source='customer.customer_number', read_only=True)
+    dealer_name = serializers.CharField(source='dealer.company_name', read_only=True)
     options_count = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
@@ -178,9 +179,10 @@ class VisiViewLicenseListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'license_number', 'serial_number', 'internal_serial',
             'customer', 'customer_name', 'customer_number', 'customer_name_legacy',
+            'dealer', 'dealer_name', 'distributor_legacy',
             'version', 'delivery_date', 'expire_date', 'maintenance_date',
             'status', 'status_display', 'is_demo', 'is_loaner', 'is_active', 'is_maintenance_valid',
-            'options_count', 'distributor',
+            'options_count',
             'created_at', 'updated_at'
         ]
     
@@ -214,9 +216,11 @@ class VisiViewLicenseDetailSerializer(serializers.ModelSerializer):
     """Detaillierter Serializer für Lizenzanzeige"""
     customer_name = serializers.SerializerMethodField()
     customer_number = serializers.CharField(source='customer.customer_number', read_only=True)
+    dealer_name = serializers.CharField(source='dealer.company_name', read_only=True, allow_null=True)
     active_options = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    associated_systems = serializers.SerializerMethodField()
     
     class Meta:
         model = VisiViewLicense
@@ -224,7 +228,8 @@ class VisiViewLicenseDetailSerializer(serializers.ModelSerializer):
             'id', 'license_number', 'serial_number', 'internal_serial',
             'customer', 'customer_name', 'customer_number',
             'customer_name_legacy', 'customer_address_legacy',
-            'distributor', 'version',
+            'dealer', 'dealer_name', 'distributor_legacy',
+            'version',
             'options_bitmask', 'options_upper_32bit', 'active_options',
             'delivery_date', 'expire_date', 'maintenance_date',
             'purchase_order',
@@ -236,6 +241,7 @@ class VisiViewLicenseDetailSerializer(serializers.ModelSerializer):
             'dongle_batch_id', 'dongle_version', 'dongle_mod_count',
             'support_end', 'support_warning',
             'info', 'todo', 'legacy_id',
+            'associated_systems',
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
     
@@ -256,6 +262,24 @@ class VisiViewLicenseDetailSerializer(serializers.ModelSerializer):
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
 
+    def get_associated_systems(self, obj):
+        """Gibt verknüpfte Systeme zurück (über System.visiview_license FK)"""
+        systems = obj.associated_systems.select_related('customer').all()
+        return [
+            {
+                'id': s.id,
+                'system_number': s.system_number,
+                'system_name': s.system_name,
+                'status': s.status,
+                'customer_id': s.customer_id,
+                'customer_name': (
+                    f"{s.customer.title} {s.customer.first_name} {s.customer.last_name}".strip()
+                    if s.customer else '-'
+                ),
+            }
+            for s in systems
+        ]
+
 
 class VisiViewLicenseCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Lizenz erstellen/bearbeiten"""
@@ -265,7 +289,8 @@ class VisiViewLicenseCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'license_number', 'serial_number', 'internal_serial',
             'customer', 'customer_name_legacy', 'customer_address_legacy',
-            'distributor', 'version',
+            'dealer', 'distributor_legacy',
+            'version',
             'options_bitmask', 'options_upper_32bit',
             'delivery_date', 'expire_date', 'maintenance_date',
             'purchase_order',

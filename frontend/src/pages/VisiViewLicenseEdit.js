@@ -13,7 +13,9 @@ import {
   ClockIcon,
   PlusIcon,
   TrashIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  ComputerDesktopIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 
 const VisiViewLicenseEdit = () => {
@@ -27,7 +29,9 @@ const VisiViewLicenseEdit = () => {
     customer: null,
     customer_name_legacy: '',
     customer_address_legacy: '',
-    distributor: '',
+    dealer: null,
+    dealer_name: '',
+    distributor_legacy: '',
     version: '',
     options_bitmask: 0,
     options_upper_32bit: 0,
@@ -59,6 +63,8 @@ const VisiViewLicenseEdit = () => {
   const [allOptions, setAllOptions] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [dealers, setDealers] = useState([]);
+  const [dealerSearch, setDealerSearch] = useState('');
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
@@ -98,6 +104,12 @@ const VisiViewLicenseEdit = () => {
   const [historyData, setHistoryData] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Systems state
+  const [associatedSystems, setAssociatedSystems] = useState([]);
+  const [systemSearch, setSystemSearch] = useState('');
+  const [systemSearchResults, setSystemSearchResults] = useState([]);
+  const [searchingSystems, setSearchingSystems] = useState(false);
+
   useEffect(() => {
     fetchOptions();
     fetchEmployees();
@@ -124,6 +136,7 @@ const VisiViewLicenseEdit = () => {
       
       setLicense(data);
       setActiveOptions(data.active_options || []);
+      setAssociatedSystems(data.associated_systems || []);
       
       // Fetch maintenance data
       await fetchMaintenance();
@@ -179,6 +192,50 @@ const VisiViewLicenseEdit = () => {
     }
   };
 
+  const searchSystems = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setSystemSearchResults([]);
+      return;
+    }
+    setSearchingSystems(true);
+    try {
+      const response = await api.get(`/systems/systems/?search=${encodeURIComponent(query.trim())}&page_size=10`);
+      const results = response.data.results || response.data || [];
+      // Filter out systems that are already linked to this license
+      const linkedIds = new Set(associatedSystems.map(s => s.id));
+      setSystemSearchResults(results.filter(s => !linkedIds.has(s.id)));
+    } catch (error) {
+      console.error('Error searching systems:', error);
+    } finally {
+      setSearchingSystems(false);
+    }
+  };
+
+  const handleLinkSystem = async (system) => {
+    try {
+      await api.patch(`/systems/systems/${system.id}/`, { visiview_license: parseInt(id) });
+      // Refresh license data to get updated associated_systems
+      const response = await api.get(`/visiview/licenses/${id}/`);
+      setAssociatedSystems(response.data.associated_systems || []);
+      setSystemSearch('');
+      setSystemSearchResults([]);
+    } catch (error) {
+      console.error('Error linking system:', error);
+      setError('Fehler beim Verknüpfen des Systems.');
+    }
+  };
+
+  const handleUnlinkSystem = async (systemId) => {
+    if (!window.confirm('Verknüpfung zum System wirklich entfernen?')) return;
+    try {
+      await api.patch(`/systems/systems/${systemId}/`, { visiview_license: null });
+      setAssociatedSystems(prev => prev.filter(s => s.id !== systemId));
+    } catch (error) {
+      console.error('Error unlinking system:', error);
+      setError('Fehler beim Entfernen der Systemverknüpfung.');
+    }
+  };
+
   const fetchOptions = async () => {
     try {
       const response = await api.get('/visiview/options/?is_active=true');
@@ -217,6 +274,29 @@ const VisiViewLicenseEdit = () => {
     }));
     setCustomerSearch('');
     setCustomers([]);
+  };
+
+  const searchDealers = async (query) => {
+    if (query.length < 2) {
+      setDealers([]);
+      return;
+    }
+    try {
+      const response = await api.get(`/dealers/dealers/?search=${encodeURIComponent(query)}`);
+      setDealers(response.data.results || response.data);
+    } catch (error) {
+      console.error('Error searching dealers:', error);
+    }
+  };
+
+  const handleDealerSelect = (dealer) => {
+    setLicense(prev => ({
+      ...prev,
+      dealer: dealer.id,
+      dealer_name: dealer.company_name
+    }));
+    setDealerSearch('');
+    setDealers([]);
   };
 
   const handleToggleOption = async (bitPosition) => {
@@ -434,6 +514,7 @@ const VisiViewLicenseEdit = () => {
     { id: 'details', name: 'Details', icon: DocumentTextIcon },
     { id: 'options', name: 'Optionen', icon: CogIcon },
     { id: 'customer', name: 'Kunde', icon: UserIcon },
+    { id: 'systems', name: 'Systeme', icon: ComputerDesktopIcon, count: associatedSystems.length },
     { id: 'maintenance', name: 'Maintenance', icon: ClockIcon },
     { id: 'history', name: 'History', icon: ClipboardDocumentListIcon },
   ];
@@ -500,6 +581,11 @@ const VisiViewLicenseEdit = () => {
             >
               <tab.icon className="h-5 w-5" />
               {tab.name}
+              {tab.count > 0 && (
+                <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700">
+                  {tab.count}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -812,7 +898,7 @@ const VisiViewLicenseEdit = () => {
                         Verknüpft mit Kunde
                       </div>
                       <button
-                        onClick={() => navigate(`/customers/${license.customer}`)}
+                        onClick={() => navigate(`/sales/customers/${license.customer}`)}
                         className="text-indigo-600 hover:underline"
                       >
                         {license.customer_name_legacy || 'Kunde anzeigen'}
@@ -859,6 +945,210 @@ const VisiViewLicenseEdit = () => {
                 </div>
               </div>
             </div>
+            
+            {/* Händler/Distributor */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Händler</h3>
+              
+              {/* Händlerverknüpfung */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Händler verknüpfen
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={dealerSearch}
+                    onChange={(e) => {
+                      setDealerSearch(e.target.value);
+                      searchDealers(e.target.value);
+                    }}
+                    placeholder="Händlername oder Händlernummer suchen..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  />
+                  {dealers.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+                      {dealers.map((dealer) => (
+                        <button
+                          key={dealer.id}
+                          onClick={() => handleDealerSelect(dealer)}
+                          className="w-full px-4 py-2 text-left hover:bg-indigo-50 flex justify-between items-center"
+                        >
+                          <span>{dealer.company_name}</span>
+                          <span className="text-sm text-gray-500">{dealer.dealer_number}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Aktueller Händler */}
+              {license.dealer && (
+                <div className="bg-indigo-50 p-4 rounded-lg mb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <LinkIcon className="h-5 w-5 text-indigo-600" />
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          Verknüpft mit Händler
+                        </div>
+                        <button
+                          onClick={() => navigate(`/sales/dealers/${license.dealer}`)}
+                          className="text-indigo-600 hover:underline"
+                        >
+                          {license.dealer_name || 'Händler anzeigen'}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setLicense(prev => ({ ...prev, dealer: null, dealer_name: '' }))}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      Verknüpfung entfernen
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Legacy Distributor */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Distributor (Import)
+                </label>
+                <input
+                  type="text"
+                  name="distributor_legacy"
+                  value={license.distributor_legacy}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
+                  placeholder="Legacy-Distributordaten aus Import"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Systems Tab */}
+        {activeTab === 'systems' && !isNew && (
+          <div className="space-y-6">
+            {/* Linked Systems */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Verknüpfte Systeme ({associatedSystems.length})</h3>
+                {associatedSystems.length === 0 && (
+                  <button
+                    onClick={() => navigate(`/sales/systems/new?customer=${license.customer || ''}&license=${id}`)}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 text-sm"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Neues System
+                  </button>
+                )}
+              </div>
+
+              {associatedSystems.length > 0 ? (
+                <div className="space-y-3">
+                  {associatedSystems.map((system) => (
+                    <div key={system.id} className="bg-white border rounded-lg p-4 flex items-center justify-between hover:shadow-sm">
+                      <div className="flex items-center gap-4 flex-1">
+                        <ComputerDesktopIcon className="h-8 w-8 text-indigo-500 flex-shrink-0" />
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {system.system_number} — {system.system_name || 'Unbenannt'}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Kunde: {system.customer_name}
+                            {system.status && (
+                              <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                                system.status === 'active' ? 'bg-green-100 text-green-800' :
+                                system.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {system.status}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => navigate(`/sales/systems/${system.id}`)}
+                          className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                        >
+                          Öffnen
+                        </button>
+                        <button
+                          onClick={() => handleUnlinkSystem(system.id)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                          title="Verknüpfung entfernen"
+                        >
+                          <XMarkIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+                  <ComputerDesktopIcon className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Kein System mit dieser Lizenz verknüpft.</p>
+                  <p className="text-sm mt-1">Verknüpfen Sie ein bestehendes System oder erstellen Sie ein neues.</p>
+                </div>
+              )}
+            </div>
+
+            {/* System Search */}
+            <div className="border-t pt-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Bestehendes System verknüpfen</h3>
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={systemSearch}
+                      onChange={(e) => {
+                        setSystemSearch(e.target.value);
+                        searchSystems(e.target.value);
+                      }}
+                      placeholder="System-ID, Systemname oder Kunde suchen..."
+                      className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                    <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-2.5" />
+                  </div>
+                </div>
+                {systemSearchResults.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+                    {systemSearchResults.map((system) => (
+                      <button
+                        key={system.id}
+                        onClick={() => handleLinkSystem(system)}
+                        className="w-full px-4 py-3 text-left hover:bg-indigo-50 border-b last:border-b-0"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium">{system.system_number}</span>
+                            <span className="ml-2 text-gray-700">{system.system_name}</span>
+                          </div>
+                          <span className="text-sm text-gray-500">{system.customer_name || ''}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {searchingSystems && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg p-4 text-center text-gray-500">
+                    Suche...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'systems' && isNew && (
+          <div className="text-center py-12 text-gray-500">
+            Systeme können erst nach dem Speichern der Lizenz verknüpft werden.
           </div>
         )}
 

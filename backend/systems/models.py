@@ -221,6 +221,16 @@ class System(models.Model):
         verbose_name='Zuständiger Mitarbeiter'
     )
     
+    # Maintenance-Status
+    maintenance_offer_received = models.BooleanField(
+        default=False,
+        verbose_name='Maintenance Angebot erhalten'
+    )
+    maintenance_offer_declined = models.BooleanField(
+        default=False,
+        verbose_name='Maintenance Angebot abgelehnt'
+    )
+    
     # Metadaten
     created_by = models.ForeignKey(
         User,

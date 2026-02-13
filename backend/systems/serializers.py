@@ -246,6 +246,7 @@ class SystemDetailSerializer(serializers.ModelSerializer):
             'installation_date', 'notes',
             'visiview_license', 'visiview_license_details',
             'responsible_employee', 'responsible_employee_details',
+            'maintenance_offer_received', 'maintenance_offer_declined',
             'components', 'photos', 'created_by', 'created_by_name',
             'created_at', 'updated_at',
             'last_contact_date', 'contact_overdue'
@@ -340,12 +341,25 @@ class SystemDetailSerializer(serializers.ModelSerializer):
     def get_visiview_license_details(self, obj):
         if obj.visiview_license:
             lic = obj.visiview_license
+            # Maintenance time credit info
+            from visiview.models import MaintenanceTimeCredit
+            from datetime import date
+            active_credits = MaintenanceTimeCredit.objects.filter(
+                license=lic, end_date__gte=date.today()
+            ).order_by('-end_date')
+            total_remaining = sum(float(c.remaining_hours) for c in active_credits)
+            total_credit = sum(float(c.credit_hours) for c in active_credits)
+            latest_end_date = active_credits.first().end_date if active_credits.exists() else None
             return {
                 'id': lic.id,
                 'license_number': lic.license_number,
                 'serial_number': lic.serial_number,
                 'version': lic.version or '',
                 'status': lic.status,
+                'maintenance_date': lic.maintenance_date,
+                'maintenance_remaining_hours': total_remaining,
+                'maintenance_total_hours': total_credit,
+                'maintenance_credit_end_date': latest_end_date,
             }
         return None
     
@@ -439,7 +453,8 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
             'location_street', 'location_house_number', 'location_address_supplement',
             'location_postal_code', 'location_city', 'location_country',
             'location_latitude', 'location_longitude',
-            'installation_date', 'notes', 'visiview_license', 'responsible_employee', 'components'
+            'installation_date', 'notes', 'visiview_license', 'responsible_employee',
+            'maintenance_offer_received', 'maintenance_offer_declined', 'components'
         ]
         read_only_fields = ['id', 'system_number']
     

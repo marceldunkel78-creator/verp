@@ -73,7 +73,7 @@ class VisiViewLicenseAdmin(admin.ModelAdmin):
             'fields': ('license_number', 'serial_number', 'internal_serial')
         }),
         ('Kunde', {
-            'fields': ('customer', 'customer_name_legacy', 'customer_address_legacy', 'distributor')
+            'fields': ('customer', 'customer_name_legacy', 'customer_address_legacy', 'dealer', 'distributor_legacy')
         }),
         ('Software', {
             'fields': ('version', 'options_bitmask', 'options_upper_32bit')

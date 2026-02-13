@@ -111,6 +111,8 @@ const Dashboard = () => {
   const [selectedModules, setSelectedModules] = useState([]);
   const [overdueContactSystems, setOverdueContactSystems] = useState([]);
   const [loadingOverdueContact, setLoadingOverdueContact] = useState(false);
+  const [maintenanceExpiredSystems, setMaintenanceExpiredSystems] = useState([]);
+  const [loadingMaintenanceExpired, setLoadingMaintenanceExpired] = useState(false);
 
   const visibleTabIds = user?.myverp_visible_tabs || [];
   const allowedMyverpIds = new Set(
@@ -136,6 +138,7 @@ const Dashboard = () => {
     loadMyverpSelection();
     loadModuleSelection();
     fetchOverdueContactSystems();
+    fetchMaintenanceExpiredSystems();
   }, []);
 
   const loadModuleSelection = () => {
@@ -163,6 +166,19 @@ const Dashboard = () => {
       setOverdueContactSystems([]);
     } finally {
       setLoadingOverdueContact(false);
+    }
+  };
+
+  const fetchMaintenanceExpiredSystems = async () => {
+    setLoadingMaintenanceExpired(true);
+    try {
+      const response = await api.get('/systems/systems/maintenance_expired/');
+      setMaintenanceExpiredSystems(response.data.systems || []);
+    } catch (error) {
+      console.error('Error fetching maintenance expired systems:', error);
+      setMaintenanceExpiredSystems([]);
+    } finally {
+      setLoadingMaintenanceExpired(false);
     }
   };
 
@@ -487,6 +503,116 @@ const Dashboard = () => {
               {myverpSelection.length === 0 && activeModules.length === 0 && (
                 <div className="col-span-full text-center text-gray-500 py-8 bg-gray-50 rounded-lg">
                   Keine Widgets oder Module ausgewählt. <Link to="/myverp?tab=dashboard" className="text-blue-600 hover:underline">Klicken Sie hier</Link>, um diese hinzuzufügen.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Systeme mit abgelaufener Maintenance */}
+      {maintenanceExpiredSystems.length > 0 && (
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <span className="text-red-500">🛠️</span>
+              System Maintenance abgelaufen
+            </h2>
+            <Link to="/sales/systems" className="text-sm text-blue-600 hover:underline">
+              Alle Systeme →
+            </Link>
+          </div>
+          
+          {loadingMaintenanceExpired ? (
+            <div className="text-center py-4 text-gray-500">Lade...</div>
+          ) : (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-red-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">System</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kunde</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lizenz</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Wartung bis</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zeitguthaben</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verantwortlich</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {maintenanceExpiredSystems.slice(0, 20).map((system) => (
+                    <tr key={system.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <Link to={`/sales/systems/${system.id}`} className="text-blue-600 hover:underline">
+                          <div className="font-medium">{system.system_number}</div>
+                          <div className="text-sm text-gray-500">{system.system_name}</div>
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {system.customer_id ? (
+                          <Link to={`/sales/customers/${system.customer_id}`} className="text-blue-600 hover:underline">
+                            {system.customer_name || '-'}
+                          </Link>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <Link to={`/visiview/licenses/${system.license_id}`} className="text-purple-600 hover:underline font-mono">
+                          {system.license_number}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className={`text-sm ${system.maintenance_date_expired ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                          {system.maintenance_date
+                            ? new Date(system.maintenance_date).toLocaleDateString('de-DE')
+                            : '—'}
+                        </div>
+                        {system.maintenance_date_expired && (
+                          <div className="text-xs text-red-500">Abgelaufen</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {system.total_hours != null ? (
+                          <div>
+                            <div className={`text-sm ${system.credit_exhausted ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                              {system.remaining_hours}h / {system.total_hours}h
+                            </div>
+                            {system.credit_exhausted && (
+                              <div className="text-xs text-red-500">Aufgebraucht</div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          {system.maintenance_date_expired && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                              Wartung
+                            </span>
+                          )}
+                          {system.credit_exhausted && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                              Stunden
+                            </span>
+                          )}
+                          {system.maintenance_offer_received && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                              Angebot
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {system.responsible_employee || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {maintenanceExpiredSystems.length > 20 && (
+                <div className="px-4 py-2 bg-gray-50 text-sm text-gray-500 text-center">
+                  + {maintenanceExpiredSystems.length - 20} weitere Systeme
                 </div>
               )}
             </div>
