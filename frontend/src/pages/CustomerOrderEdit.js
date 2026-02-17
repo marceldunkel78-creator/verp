@@ -1340,7 +1340,7 @@ const CustomerOrderEdit = () => {
                     <div className="flex justify-between items-start">
                       <div>
                         <Link
-                          to={`/customers/${selectedCustomer.id}`}
+                          to={`/sales/customers/${selectedCustomer.id}`}
                           className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           {selectedCustomer.company_name || selectedCustomer.full_name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`.trim() || 'Unbekannter Kunde'}

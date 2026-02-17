@@ -314,8 +314,13 @@ const CustomerEdit = () => {
         console.log('Save response:', response && response.data);
         // Invalidate cached customer list so the new customer appears immediately
         try { storage.remove('customers_search_state'); } catch (e) { /* ignore */ }
-        // Navigate to list only after creating new customer
-        navigate('/sales/customers');
+        // Navigate to edit page so user can continue editing (add addresses, phones, etc.)
+        const newId = response?.data?.id;
+        if (newId) {
+          navigate(`/sales/customers/${newId}`, { replace: true });
+        } else {
+          navigate('/sales/customers');
+        }
       }
     } catch (error) {
       console.error('Error saving customer:', error);

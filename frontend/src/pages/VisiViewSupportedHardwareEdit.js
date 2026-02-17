@@ -852,7 +852,7 @@ const VisiViewSupportedHardwareEdit = () => {
                         <td className="px-4 py-3 text-sm">
                           {uc.customer ? (
                             <Link 
-                              to={`/customers/${uc.customer}`}
+                              to={`/sales/customers/${uc.customer}`}
                               className="text-blue-600 hover:underline"
                             >
                               {uc.customer_name}
