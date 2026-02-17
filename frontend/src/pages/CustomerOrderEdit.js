@@ -338,7 +338,7 @@ const CustomerOrderEdit = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get(`/customer-orders/customer-orders/${orderId}/`);
+      const response = await api.get(`/customer-orders/customer-orders/${orderId}/?_t=${Date.now()}`);
       const data = response.data;
       
       setOrder({

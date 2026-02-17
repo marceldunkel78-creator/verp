@@ -243,7 +243,7 @@ const CustomerEdit = () => {
       const [systemsRes, projectsRes, ordersRes, quotationsRes] = await Promise.all([
         api.get(`/customers/customers/${customerId}/systems/`).catch(() => ({ data: [] })),
         api.get(`/customers/customers/${customerId}/projects/`).catch(() => ({ data: [] })),
-        api.get(`/customer-orders/customer-orders/?customer=${customerId}`).catch(() => ({ data: { results: [] } })),
+        api.get(`/customer-orders/customer-orders/?customer=${customerId}&page_size=10000`).catch(() => ({ data: { results: [] } })),
         api.get(`/sales/quotations/?customer=${customerId}`).catch(() => ({ data: { results: [] } }))
       ]);
       setCustomerSystems(systemsRes.data || []);
