@@ -42,6 +42,18 @@
                     <action type="Rewrite" url="/" />
                 </rule>
             </rules>
+            <outboundRules>
+                <!-- Prevent IIS/ARR from caching API responses -->
+                <rule name="API No Cache" preCondition="IsAPIResponse">
+                    <match serverVariable="RESPONSE_Cache-Control" pattern=".*" />
+                    <action type="Rewrite" value="no-store, no-cache, must-revalidate, max-age=0" />
+                </rule>
+                <preConditions>
+                    <preCondition name="IsAPIResponse">
+                        <add input="{URL}" pattern="^/api/" />
+                    </preCondition>
+                </preConditions>
+            </outboundRules>
         </rewrite>
         
         <!-- Statische Dateien Caching -->

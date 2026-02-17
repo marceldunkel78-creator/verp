@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
+import storage from '../utils/sessionStore';
 import { XMarkIcon, PlusIcon, TrashIcon, MapPinIcon, BuildingOfficeIcon, BeakerIcon, WrenchScrewdriverIcon, ArrowTopRightOnSquareIcon, DocumentTextIcon, UserIcon, KeyIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import AddressMap from '../components/AddressMap';
 
@@ -311,6 +312,8 @@ const CustomerEdit = () => {
       } else {
         response = await api.post('/customers/customers/', submitData);
         console.log('Save response:', response && response.data);
+        // Invalidate cached customer list so the new customer appears immediately
+        try { storage.remove('customers_search_state'); } catch (e) { /* ignore */ }
         // Navigate to list only after creating new customer
         navigate('/sales/customers');
       }
