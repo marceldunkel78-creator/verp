@@ -229,7 +229,7 @@ class MaterialSupplyViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['supplier', 'category', 'is_active', 'list_price_currency']
     search_fields = ['name', 'visitron_part_number', 'supplier_part_number', 'description']
-    ordering_fields = ['visitron_part_number', 'name', 'category', 'supplier__company_name', 'price_valid_from', 'price_valid_until', 'created_at']
+    ordering_fields = ['visitron_part_number', 'name', 'supplier_part_number', 'category', 'supplier__company_name', 'is_active', 'price_valid_from', 'price_valid_until', 'created_at']
     ordering = ['visitron_part_number']
     
     def get_serializer_class(self):

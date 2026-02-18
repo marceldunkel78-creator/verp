@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router-dom';
 import storage from '../utils/sessionStore';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import SortableHeader from '../components/SortableHeader';
 
 const MaterialSupplies = () => {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ const MaterialSupplies = () => {
   const [sortBy, setSortBy] = useState('visitron_part_number');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterActive, setFilterActive] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [calculatedPurchasePrice, setCalculatedPurchasePrice] = useState(0);
   
@@ -210,7 +212,7 @@ const MaterialSupplies = () => {
 
   const fetchSuppliers = async () => {
     try {
-      const response = await api.get('/suppliers/suppliers/');
+      const response = await api.get('/suppliers/suppliers/?page_size=1000');
       const data = response.data.results || response.data;
       setSuppliers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -297,9 +299,21 @@ const MaterialSupplies = () => {
     try {
       await api.delete(`/suppliers/material-supplies/${id}/`);
       setRefreshKey(prev => prev + 1);
+      alert('Material erfolgreich gelöscht.');
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
-      alert('Fehler beim Löschen');
+      
+      // Prüfe ob es ein PROTECT constraint error ist
+      if (error.response?.status === 500 || error.response?.status === 400) {
+        const errorMsg = error.response?.data?.detail || error.response?.data?.error || '';
+        if (errorMsg.toLowerCase().includes('protect') || errorMsg.toLowerCase().includes('constraint') || errorMsg.toLowerCase().includes('referenced')) {
+          alert('Dieses Material kann nicht gelöscht werden, da es bereits in VS-Hardware, Entwicklungsprojekten oder anderen Bereichen verwendet wird.\n\nBitte deaktivieren Sie das Material stattdessen, um es aus der aktiven Liste zu entfernen.');
+        } else {
+          alert('Fehler beim Löschen:\n' + (errorMsg || 'Unbekannter Fehler'));
+        }
+      } else {
+        alert('Fehler beim Löschen:\n' + (error.response?.data?.detail || error.message || 'Unbekannter Fehler'));
+      }
     }
   };
 
@@ -401,6 +415,17 @@ const MaterialSupplies = () => {
     return validFrom <= today && validUntil >= today;
   };
 
+  // Client-side search filtering
+  const filteredProducts = React.useMemo(() => {
+    if (!searchQuery.trim()) return products;
+    const q = searchQuery.toLowerCase().trim();
+    return products.filter((p) =>
+      (p.visitron_part_number || '').toLowerCase().includes(q) ||
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.supplier_part_number || '').toLowerCase().includes(q)
+    );
+  }, [products, searchQuery]);
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Lade...</div>;
   }
@@ -411,7 +436,7 @@ const MaterialSupplies = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Material & Supplies</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Roh-, Hilfs- und Betriebsstoffe - {products.length} Einträge
+            Roh-, Hilfs- und Betriebsstoffe - {searchQuery ? `${filteredProducts.length} von ${products.length}` : products.length} Einträge
           </p>
           {!canWrite && (
             <p className="text-sm text-gray-500 mt-1">
@@ -433,25 +458,25 @@ const MaterialSupplies = () => {
         )}
       </div>
 
-      {/* Filter und Sortierung */}
+      {/* Suche und Filter */}
       <div className="bg-white shadow rounded-lg p-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sortieren nach
+              Suche
             </label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-            >
-              <option value="visitron_part_number">Visitron-Partnummer</option>
-              <option value="name">Name</option>
-              <option value="supplier__company_name">Lieferant</option>
-              <option value="category">Kategorie</option>
-              <option value="price_valid_from">Preis gültig ab</option>
-              <option value="-price_valid_from">Preis gültig ab (absteigend)</option>
-            </select>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <MagnifyingGlassIcon className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Artikelnr. / Name / Lief.-Artikelnr."
+                className="pl-9 w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+              />
+            </div>
           </div>
           
           <div>
@@ -490,65 +515,52 @@ const MaterialSupplies = () => {
       </div>
 
       {/* Produktliste */}
-      <div className="bg-white shadow overflow-hidden rounded-lg">
+      <div className="bg-white shadow overflow-hidden rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Visitron-Nr.
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Lieferant
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kategorie
-              </th>
+              <SortableHeader field="visitron_part_number" label="Visitron-Nr." sortBy={sortBy} setSortBy={setSortBy} />
+              <SortableHeader field="name" label="Name" sortBy={sortBy} setSortBy={setSortBy} style={{maxWidth: '250px'}} />
+              <SortableHeader field="supplier_part_number" label="Lief.-Artikelnr." sortBy={sortBy} setSortBy={setSortBy} />
+              <SortableHeader field="supplier__company_name" label="Lieferant" sortBy={sortBy} setSortBy={setSortBy} style={{maxWidth: '150px'}} />
+              <SortableHeader field="category" label="Kategorie" sortBy={sortBy} setSortBy={setSortBy} />
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Einkaufspreis
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Preisgültigkeit bis
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
+              <SortableHeader field="is_active" label="Status" sortBy={sortBy} setSortBy={setSortBy} />
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Aktionen
               </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {products.map((product) => (
-              <tr key={product.id} className="hover:bg-gray-50">
+            {filteredProducts.map((product) => (
+              <tr 
+                key={product.id} 
+                className="hover:bg-gray-50 cursor-pointer"
+                onClick={() => canWrite && openEditModal(product)}
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {product.visitron_part_number}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {product.name}
+                <td className="px-6 py-4 text-sm text-gray-900" style={{maxWidth: '250px'}}>
+                  <div className="truncate" title={product.name}>
+                    {product.name}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {product.supplier_name || '-'}
+                  {product.supplier_part_number || '-'}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-500" style={{maxWidth: '150px'}}>
+                  <div className="truncate" title={product.supplier_name || '-'}>
+                    {product.supplier_name || '-'}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {product.category_display || '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-900">
                   {Number(product.purchase_price_eur).toFixed(2)} EUR
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <div className="flex flex-col">
-                    <span>
-                      Bis: {product.price_valid_until 
-                        ? new Date(product.price_valid_until).toLocaleDateString('de-DE')
-                        : 'unbeschränkt'}
-                    </span>
-                    {!isPriceValid(product) && (
-                      <span className="text-red-600 text-xs">Ungültig</span>
-                    )}
-                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span
@@ -563,22 +575,16 @@ const MaterialSupplies = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   {canWrite && (
-                    <>
-                      <button
-                        onClick={() => openEditModal(product)}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                        title="Bearbeiten"
-                      >
-                        <PencilIcon className="h-5 w-5 inline" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Löschen"
-                      >
-                        <TrashIcon className="h-5 w-5 inline" />
-                      </button>
-                    </>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(product.id);
+                      }}
+                      className="text-red-600 hover:text-red-900"
+                      title="Löschen"
+                    >
+                      <TrashIcon className="h-5 w-5 inline" />
+                    </button>
                   )}
                 </td>
               </tr>

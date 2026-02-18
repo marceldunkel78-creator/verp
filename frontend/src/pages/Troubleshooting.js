@@ -12,6 +12,7 @@ import {
   Squares2X2Icon,
   ListBulletIcon
 } from '@heroicons/react/24/outline';
+import SortableHeader from '../components/SortableHeader';
 
 // Status mapping
 const STATUS_LABELS = {
@@ -51,6 +52,7 @@ const Troubleshooting = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [statistics, setStatistics] = useState(null);
   const [viewMode, setViewMode] = useState('list');
+  const [sortBy, setSortBy] = useState('-updated_at');
   const topScrollRef = useRef(null);
   const tableScrollRef = useRef(null);
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
@@ -125,6 +127,7 @@ const Troubleshooting = () => {
       if (categoryFilter !== 'all') {
         params.append('category', categoryFilter);
       }
+      params.append('ordering', sortBy);
       
       const response = await api.get(`/service/troubleshooting/?${params.toString()}`);
       setTickets(response.data.results || response.data);
@@ -137,7 +140,7 @@ const Troubleshooting = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, statusFilter, categoryFilter]);
+  }, [currentPage, searchTerm, statusFilter, categoryFilter, sortBy]);
 
   // Mount: restore from URL or sessionStorage
   useEffect(() => {
@@ -501,27 +504,13 @@ const Troubleshooting = () => {
             <table className="min-w-full divide-y divide-gray-200 table-fixed min-w-[900px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    #
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Thema
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Kategorie
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priorität
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Autor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Aktualisiert
-                  </th>
+                  <SortableHeader field="ticket_number" label="#" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="title" label="Thema" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="category" label="Kategorie" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="priority" label="Priorität" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="author__last_name" label="Autor" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="updated_at" label="Aktualisiert" sortBy={sortBy} setSortBy={setSortBy} />
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">

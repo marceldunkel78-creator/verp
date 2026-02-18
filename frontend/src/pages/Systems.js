@@ -25,6 +25,7 @@ import {
   ExclamationTriangleIcon,
   KeyIcon
 } from '@heroicons/react/24/outline';
+import SortableHeader from '../components/SortableHeader';
 
 // Simple Map Component using Leaflet (if available) or placeholder
 const SystemsMap = ({ systems, onSystemClick }) => {
@@ -288,6 +289,7 @@ const Systems = () => {
   const topScrollRef = useRef(null);
   const tableScrollRef = useRef(null);
   const suppressNextFetchRef = useRef(false);
+  const [sortBy, setSortBy] = useState('system_number');
   const [tableScrollWidth, setTableScrollWidth] = useState(0);
 
   const canUseEmployeeFilter = true; // Alle authentifizierten User können den Mitarbeiterfilter nutzen
@@ -448,7 +450,7 @@ const Systems = () => {
     }
     fetchSystems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, statusFilter, cityFilter, countryFilter, employeeFilter, modelOrganismFilter, researchFieldFilter]);
+  }, [currentPage, statusFilter, cityFilter, countryFilter, employeeFilter, modelOrganismFilter, researchFieldFilter, sortBy]);
 
   useEffect(() => {
     fetchFilters();
@@ -536,6 +538,7 @@ const Systems = () => {
       if (effectiveEmployeeFilter && canUseEmployeeFilter) params.append('responsible_employee', effectiveEmployeeFilter);
       if (effectiveModelOrganismFilter) params.append('model_organisms', effectiveModelOrganismFilter);
       if (effectiveResearchFieldFilter) params.append('research_fields', effectiveResearchFieldFilter);
+      params.append('ordering', sortBy);
       
       console.log(`Fetching systems for ${effectiveViewMode} view with pageSize:`, pageSize);
       const response = await api.get(`/systems/systems/?${params.toString()}`);
@@ -1078,24 +1081,12 @@ const Systems = () => {
                     <table className="min-w-full divide-y divide-gray-200 table-fixed min-w-[1100px]">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
-                          System
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Kunde
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Standort
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          VisiView Lizenz
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Zuständig
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
+                        <SortableHeader field="system_number" label="System" sortBy={sortBy} setSortBy={setSortBy} style={{width: '12rem'}} />
+                        <SortableHeader field="customer__last_name" label="Kunde" sortBy={sortBy} setSortBy={setSortBy} />
+                        <SortableHeader field="location_city" label="Standort" sortBy={sortBy} setSortBy={setSortBy} />
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">VisiView Lizenz</th>
+                        <SortableHeader field="responsible_employee__last_name" label="Zuständig" sortBy={sortBy} setSortBy={setSortBy} />
+                        <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} />
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">

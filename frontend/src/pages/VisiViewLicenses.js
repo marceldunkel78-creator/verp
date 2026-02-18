@@ -13,6 +13,7 @@ import {
   Squares2X2Icon,
   ListBulletIcon
 } from '@heroicons/react/24/outline';
+import SortableHeader from '../components/SortableHeader';
 
 const VisiViewLicenses = () => {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ const VisiViewLicenses = () => {
   const [pageSize] = useState(9); // show up to 9 tiles per page
   const [totalCount, setTotalCount] = useState(0);
   const [viewMode, setViewMode] = useState('cards');
+  const [sortBy, setSortBy] = useState('serial_number');
 
   const SESSION_KEY = 'visiview_licenses_search_state';
 
@@ -99,6 +101,14 @@ const VisiViewLicenses = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Re-fetch when sort changes
+  useEffect(() => {
+    if (hasSearched) {
+      fetchLicenses(searchTerm, page, statusFilter, showOutdated);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy]);
+
   // Save state whenever relevant values change
   useEffect(() => {
     saveSearchState();
@@ -112,6 +122,7 @@ const VisiViewLicenses = () => {
       if (status) params.append('status', status);
       if (!outdated) params.append('is_outdated', 'false');
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
+      params.append('ordering', sortBy);
       params.append('page_size', String(pageSize));
       params.append('page', String(pageNumber));
 
@@ -438,27 +449,14 @@ const VisiViewLicenses = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Seriennummer
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Kunde
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lieferdatum
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Version
-                    </th>
+                    <SortableHeader field="serial_number" label="Seriennummer" sortBy={sortBy} setSortBy={setSortBy} />
+                    <SortableHeader field="customer__last_name" label="Kunde" sortBy={sortBy} setSortBy={setSortBy} />
+                    <SortableHeader field="delivery_date" label="Lieferdatum" sortBy={sortBy} setSortBy={setSortBy} />
+                    <SortableHeader field="version" label="Version" sortBy={sortBy} setSortBy={setSortBy} />
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Optionen
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Typ
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
+                    <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} />
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -500,19 +498,6 @@ const VisiViewLicenses = () => {
                             <XCircleIcon className="h-4 w-4 text-gray-400" />
                           )}
                           {license.options_count}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex gap-1">
-                          {license.is_demo && (
-                            <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">Demo</span>
-                          )}
-                          {license.is_loaner && (
-                            <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded-full">Leih</span>
-                          )}
-                          {!license.is_demo && !license.is_loaner && (
-                            <span className="text-sm text-gray-500">-</span>
-                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

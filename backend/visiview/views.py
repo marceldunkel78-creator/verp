@@ -113,7 +113,7 @@ class VisiViewLicenseViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'is_demo', 'is_loaner', 'customer', 'dealer', 'is_outdated']
     search_fields = ['license_number', 'serial_number', 'customer_name_legacy', 'customer__last_name', 'dealer__company_name', 'distributor_legacy']
-    ordering_fields = ['license_number', 'serial_number', 'delivery_date', 'created_at']
+    ordering_fields = ['license_number', 'serial_number', 'delivery_date', 'created_at', 'customer__last_name', 'version', 'status']
     ordering = ['-serial_number']
     
     def get_serializer_class(self):

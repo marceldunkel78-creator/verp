@@ -65,7 +65,7 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
                      'customer__first_name', 'customer__last_name', 
                      'customer__addresses__university', 'customer__addresses__institute',
                      'customer_contact_name']
-    ordering_fields = ['order_number', 'order_date', 'created_at', 'status']
+    ordering_fields = ['order_number', 'order_date', 'created_at', 'status', 'customer__last_name']
     ordering = ['-created_at']
     pagination_class = CustomerOrderPagination
 

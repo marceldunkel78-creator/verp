@@ -10,6 +10,7 @@ import {
   Squares2X2Icon,
   ListBulletIcon
 } from '@heroicons/react/24/outline';
+import SortableHeader from '../components/SortableHeader';
 
 const OrderProcessing = () => {
   const { user } = useAuth();
@@ -25,6 +26,7 @@ const OrderProcessing = () => {
     status: '',
     year: ''
   });
+  const [sortBy, setSortBy] = useState('order_number');
 
   const SESSION_KEY = 'orderprocessing_search_state';
   const listPageSize = 50;
@@ -82,7 +84,7 @@ const OrderProcessing = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (hasSearched) fetchOrders();
-  }, [currentPage]);
+  }, [currentPage, sortBy]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -108,10 +110,6 @@ const OrderProcessing = () => {
 
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_sales;
 
-  useEffect(() => {
-    if (hasSearched) fetchOrders();
-  }, [currentPage]);
-
   const fetchOrders = async (pageArg = null, filtersArg = null) => {
     const page = pageArg || currentPage;
     const useFilters = filtersArg || filters;
@@ -126,6 +124,7 @@ const OrderProcessing = () => {
       if (useFilters.status) params.append('status', useFilters.status);
       if (useFilters.year) params.append('year', useFilters.year);
 
+      params.append('ordering', sortBy);
       params.append('page', page);
       params.append('page_size', String(listPageSize));
 
@@ -341,10 +340,10 @@ const OrderProcessing = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auftragsnr.</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kunde</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
+                      <SortableHeader field="order_number" label="Auftragsnr." sortBy={sortBy} setSortBy={setSortBy} className="px-4 py-3" />
+                      <SortableHeader field="customer__last_name" label="Kunde" sortBy={sortBy} setSortBy={setSortBy} className="px-4 py-3" style={{maxWidth: '20ch'}} />
+                      <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} className="px-4 py-3" />
+                      <SortableHeader field="order_date" label="Datum" sortBy={sortBy} setSortBy={setSortBy} className="px-4 py-3" />
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Positionen</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Summe</th>
                     </tr>
@@ -357,7 +356,7 @@ const OrderProcessing = () => {
                         className="hover:bg-gray-50 cursor-pointer"
                       >
                         <td className="px-4 py-3 font-mono text-sm text-gray-900">{order.order_number || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{order.customer_name || order.supplier_name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900" style={{maxWidth: '20ch', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{order.customer_name || order.supplier_name || '-'}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{order.status_display || order.status}</td>
                         <td className="px-4 py-3 text-sm text-gray-600">{order.order_date || ''}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right">{order.items_count || 0}</td>

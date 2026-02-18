@@ -94,7 +94,7 @@ class ServiceTicketViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'billing', 'customer', 'assigned_to', 'linked_system']
     search_fields = ['ticket_number', 'title', 'description', 'contact_email']
-    ordering_fields = ['ticket_number', 'created_at', 'updated_at', 'status']
+    ordering_fields = ['ticket_number', 'created_at', 'updated_at', 'status', 'title', 'category', 'priority', 'author__last_name']
     ordering = ['-updated_at']
     
     def get_serializer_class(self):

@@ -38,7 +38,7 @@ class SystemViewSet(viewsets.ModelViewSet):
         'visiview_license__serial_number', 'visiview_license__license_number',
         'model_organisms__name', 'research_fields__name'
     ]
-    ordering_fields = ['system_number', 'system_name', 'created_at', 'customer__last_name']
+    ordering_fields = ['system_number', 'system_name', 'created_at', 'customer__last_name', 'location_city', 'status', 'responsible_employee__last_name']
     ordering = ['-created_at']
     
     def get_serializer_class(self):
