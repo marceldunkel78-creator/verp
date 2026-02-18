@@ -552,6 +552,8 @@ DELETABLE_MODELS = {
     'trading_product': ('suppliers', 'TradingProduct', 'vs_article_number', 'Handelsware'),
     'vs_hardware': ('manufacturing', 'VSHardware', 'part_number', 'VS-Hardware'),
     'development_project': ('development', 'DevelopmentProject', 'project_number', 'Entwicklungsprojekt'),
+    'production_order': ('manufacturing', 'ProductionOrder', 'order_number', 'Fertigungsauftrag'),
+    'visiview_production_order': ('visiview', 'VisiViewProductionOrder', 'order_number', 'VisiView Fertigungsauftrag'),
     'inventory_item': ('inventory', 'InventoryItem', 'inventory_number', 'Warenlager-Eintrag'),
     'model_organism': ('systems', 'ModelOrganismOption', 'name', 'Modellorganismus'),
     'research_field': ('systems', 'ResearchFieldOption', 'name', 'Forschungsgebiet'),
