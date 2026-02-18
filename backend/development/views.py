@@ -8,6 +8,7 @@ from django.db import models
 from django.utils import timezone
 from django.http import Http404, FileResponse
 from datetime import datetime, date, timedelta
+from decimal import Decimal
 
 from core.permissions import DevelopmentProjectPermission
 
@@ -260,7 +261,7 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
             raise Http404("Material-Position nicht gefunden")
         
         if 'quantity' in request.data:
-            item.quantity = request.data['quantity']
+            item.quantity = int(request.data['quantity'])
         if 'notes' in request.data:
             item.notes = request.data['notes']
         if 'position' in request.data:
@@ -294,10 +295,10 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
         calc = DevelopmentProjectCostCalculation.objects.create(
             project=project,
             name=request.data.get('name', 'Standard'),
-            labor_hours=request.data.get('labor_hours', 0),
-            labor_rate=request.data.get('labor_rate', 65),
-            development_cost_total=request.data.get('development_cost_total', 0),
-            expected_sales_volume=request.data.get('expected_sales_volume', 1),
+            labor_hours=Decimal(str(request.data.get('labor_hours', 0))),
+            labor_rate=Decimal(str(request.data.get('labor_rate', 65))),
+            development_cost_total=Decimal(str(request.data.get('development_cost_total', 0))),
+            expected_sales_volume=int(request.data.get('expected_sales_volume', 1)),
             notes=request.data.get('notes', ''),
             created_by=request.user
         )
@@ -318,10 +319,17 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
             'name', 'is_active', 'labor_hours', 'labor_rate',
             'development_cost_total', 'expected_sales_volume', 'notes'
         ]
+        decimal_fields = {'labor_hours', 'labor_rate', 'development_cost_total'}
+        int_fields = {'expected_sales_volume'}
         
         for field in updatable_fields:
             if field in request.data:
-                setattr(calc, field, request.data[field])
+                value = request.data[field]
+                if field in decimal_fields:
+                    value = Decimal(str(value))
+                elif field in int_fields:
+                    value = int(value)
+                setattr(calc, field, value)
         
         calc.save()  # Triggers recalculate()
         

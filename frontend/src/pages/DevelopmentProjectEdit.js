@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import FileUpload from '../components/FileUpload';
@@ -40,7 +40,6 @@ const DevelopmentProjectEdit = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState([]);
-  const [materialSupplies, setMaterialSupplies] = useState([]);
 
   // Project data
   const [project, setProject] = useState({
@@ -61,6 +60,11 @@ const DevelopmentProjectEdit = () => {
   const [newTodo, setNewTodo] = useState('');
   const [newComment, setNewComment] = useState('');
   const [newMaterial, setNewMaterial] = useState({ material_supply: '', quantity: 1, notes: '' });
+  const [materialSearch, setMaterialSearch] = useState('');
+  const [materialSearchResults, setMaterialSearchResults] = useState([]);
+  const [showMaterialDropdown, setShowMaterialDropdown] = useState(false);
+  const [selectedMaterialLabel, setSelectedMaterialLabel] = useState('');
+  const materialDropdownRef = useRef(null);
   const [newTimeEntry, setNewTimeEntry] = useState({
     date: new Date().toISOString().split('T')[0],
     time: new Date().toTimeString().split(' ')[0].substring(0, 5),
@@ -90,17 +94,42 @@ const DevelopmentProjectEdit = () => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [usersRes, materialsRes] = await Promise.all([
-          api.get('/users/'),
-          api.get('/suppliers/material-supplies/?page_size=1000')
-        ]);
+        const usersRes = await api.get('/users/');
         setUsers(usersRes.data.results || usersRes.data);
-        setMaterialSupplies(materialsRes.data.results || materialsRes.data);
       } catch (error) {
         console.error('Error fetching options:', error);
       }
     };
     fetchOptions();
+  }, []);
+
+  // Search materials with 3+ character minimum
+  useEffect(() => {
+    if (materialSearch.length < 3) {
+      setMaterialSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get(`/suppliers/material-supplies/?search=${encodeURIComponent(materialSearch)}&page_size=50`);
+        setMaterialSearchResults(res.data.results || res.data);
+        setShowMaterialDropdown(true);
+      } catch (e) {
+        console.error('Error searching materials:', e);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [materialSearch]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (materialDropdownRef.current && !materialDropdownRef.current.contains(e.target)) {
+        setShowMaterialDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Fetch project data when ID changes
@@ -302,6 +331,9 @@ const DevelopmentProjectEdit = () => {
       const response = await api.post(`/development/projects/${id}/add_material_item/`, newMaterial);
       setProject(prev => ({ ...prev, material_items: [...prev.material_items, response.data] }));
       setNewMaterial({ material_supply: '', quantity: 1, notes: '' });
+      setMaterialSearch('');
+      setSelectedMaterialLabel('');
+      setMaterialSearchResults([]);
     } catch (error) {
       alert('Fehler beim Hinzufügen: ' + error.message);
     } finally {
@@ -723,24 +755,51 @@ const DevelopmentProjectEdit = () => {
               
               {/* Add Material */}
               <div className="grid grid-cols-12 gap-2 mb-4">
-                <select
-                  value={newMaterial.material_supply}
-                  onChange={(e) => setNewMaterial(prev => ({ ...prev, material_supply: e.target.value }))}
-                  className="col-span-6 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
-                >
-                  <option value="">-- Material auswählen --</option>
-                  {materialSupplies.map(ms => (
-                    <option key={ms.id} value={ms.id}>
-                      {ms.visitron_part_number} - {ms.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="col-span-6 relative" ref={materialDropdownRef}>
+                  <input
+                    type="text"
+                    value={selectedMaterialLabel || materialSearch}
+                    onChange={(e) => {
+                      setMaterialSearch(e.target.value);
+                      setSelectedMaterialLabel('');
+                      setNewMaterial(prev => ({ ...prev, material_supply: '' }));
+                      if (e.target.value.length < 3) setShowMaterialDropdown(false);
+                    }}
+                    onFocus={() => { if (materialSearchResults.length > 0 && materialSearch.length >= 3) setShowMaterialDropdown(true); }}
+                    placeholder="Mind. 3 Zeichen eingeben (Nr., Name, Lief.-Artikelnr.)..."
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
+                  />
+                  {showMaterialDropdown && materialSearchResults.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {materialSearchResults.map(ms => (
+                        <div
+                          key={ms.id}
+                          onClick={() => {
+                            setNewMaterial(prev => ({ ...prev, material_supply: ms.id }));
+                            setSelectedMaterialLabel(`${ms.visitron_part_number} - ${ms.name}`);
+                            setMaterialSearch(ms.visitron_part_number);
+                            setShowMaterialDropdown(false);
+                          }}
+                          className="px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-0"
+                        >
+                          <div className="text-sm font-medium text-gray-900">{ms.visitron_part_number} — {ms.name}</div>
+                          {ms.supplier_part_number && (
+                            <div className="text-xs text-gray-500">Lief.-Artikelnr.: {ms.supplier_part_number}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {materialSearch.length > 0 && materialSearch.length < 3 && (
+                    <div className="text-xs text-gray-400 mt-1">Noch {3 - materialSearch.length} Zeichen für Suche...</div>
+                  )}
+                </div>
                 <input
                   type="number"
                   value={newMaterial.quantity}
-                  onChange={(e) => setNewMaterial(prev => ({ ...prev, quantity: e.target.value }))}
-                  min="0.0001"
-                  step="0.0001"
+                  onChange={(e) => setNewMaterial(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                  min="1"
+                  step="1"
                   className="col-span-2 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
                   placeholder="Menge"
                 />
@@ -783,9 +842,9 @@ const DevelopmentProjectEdit = () => {
                           <input
                             type="number"
                             value={item.quantity}
-                            onChange={(e) => handleUpdateMaterialQuantity(item.id, e.target.value)}
-                            min="0.0001"
-                            step="0.0001"
+                            onChange={(e) => handleUpdateMaterialQuantity(item.id, parseInt(e.target.value) || 1)}
+                            min="1"
+                            step="1"
                             className="w-20 text-right rounded border-gray-300 text-sm"
                           />
                         </td>

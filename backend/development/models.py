@@ -193,9 +193,7 @@ class DevelopmentProjectMaterialItem(models.Model):
         verbose_name='Material & Supply'
     )
     
-    quantity = models.DecimalField(
-        max_digits=10,
-        decimal_places=4,
+    quantity = models.PositiveIntegerField(
         default=1,
         verbose_name='Menge'
     )
@@ -216,7 +214,7 @@ class DevelopmentProjectMaterialItem(models.Model):
         if self.material_supply:
             # Nutze calculate_purchase_price falls vorhanden
             unit_price = getattr(self.material_supply, 'calculate_purchase_price', lambda: self.material_supply.list_price)()
-            return self.quantity * unit_price
+            return Decimal(str(self.quantity)) * Decimal(str(unit_price))
         return Decimal('0')
 
 
@@ -313,10 +311,10 @@ class DevelopmentProjectCostCalculation(models.Model):
             total_material += item.get_item_cost()
         
         self.material_cost = total_material
-        self.labor_cost = self.labor_hours * self.labor_rate
+        self.labor_cost = Decimal(str(self.labor_hours)) * Decimal(str(self.labor_rate))
         
         if self.expected_sales_volume > 0:
-            self.development_cost_per_unit = self.development_cost_total / self.expected_sales_volume
+            self.development_cost_per_unit = Decimal(str(self.development_cost_total)) / self.expected_sales_volume
         else:
             self.development_cost_per_unit = Decimal('0')
         
