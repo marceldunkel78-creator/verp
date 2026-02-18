@@ -219,6 +219,7 @@ class SystemDetailSerializer(serializers.ModelSerializer):
     customer_address = serializers.SerializerMethodField()
     visiview_license_details = serializers.SerializerMethodField()
     responsible_employee_details = serializers.SerializerMethodField()
+    contact_person_data = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     components = SystemComponentSerializer(many=True, read_only=True)
     photos = SystemPhotoSerializer(many=True, read_only=True)
@@ -246,6 +247,7 @@ class SystemDetailSerializer(serializers.ModelSerializer):
             'installation_date', 'notes',
             'visiview_license', 'visiview_license_details',
             'responsible_employee', 'responsible_employee_details',
+            'contact_person', 'contact_person_data',
             'maintenance_offer_received', 'maintenance_offer_declined',
             'components', 'photos', 'created_by', 'created_by_name',
             'created_at', 'updated_at',
@@ -376,6 +378,22 @@ class SystemDetailSerializer(serializers.ModelSerializer):
             }
         return None
 
+    def get_contact_person_data(self, obj):
+        if obj.contact_person:
+            cust = obj.contact_person
+            parts = [cust.title or '', cust.first_name or '', cust.last_name or '']
+            name = ' '.join([p for p in parts if p]).strip()
+            primary_email = cust.emails.filter(is_primary=True).first()
+            primary_phone = cust.phones.filter(is_primary=True).first()
+            return {
+                'id': cust.id,
+                'customer_number': cust.customer_number,
+                'full_name': name,
+                'email': primary_email.email if primary_email else None,
+                'phone': primary_phone.phone_number if primary_phone else None,
+            }
+        return None
+
     def get_last_contact_date(self, obj):
         """Gibt das Datum des letzten Kontakts zurück"""
         from customers.models import ContactHistory, CustomerSystem
@@ -454,6 +472,7 @@ class SystemCreateUpdateSerializer(serializers.ModelSerializer):
             'location_postal_code', 'location_city', 'location_country',
             'location_latitude', 'location_longitude',
             'installation_date', 'notes', 'visiview_license', 'responsible_employee',
+            'contact_person',
             'maintenance_offer_received', 'maintenance_offer_declined', 'components'
         ]
         read_only_fields = ['id', 'system_number']

@@ -81,6 +81,7 @@ const SystemEdit = () => {
     notes: '',
     visiview_license: urlLicenseId || '',
     responsible_employee: '',
+    contact_person: '',
     maintenance_offer_received: false,
     maintenance_offer_declined: false
   });
@@ -88,6 +89,12 @@ const SystemEdit = () => {
   const [customerSearch, setCustomerSearch] = useState('');
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  
+  // Contact Person State (Ansprechpartner beim Kunden)
+  const [contactPersons, setContactPersons] = useState([]);
+  const [contactPersonSearch, setContactPersonSearch] = useState('');
+  const [searchingContactPersons, setSearchingContactPersons] = useState(false);
+  const [selectedContactPerson, setSelectedContactPerson] = useState(null);
   
   // Responsible Employee State
   const [employees, setEmployees] = useState([]);
@@ -259,6 +266,7 @@ const SystemEdit = () => {
         notes: data.notes || '',
         visiview_license: data.visiview_license || '',
         responsible_employee: data.responsible_employee || '',
+        contact_person: data.contact_person || '',
         maintenance_offer_received: data.maintenance_offer_received || false,
         maintenance_offer_declined: data.maintenance_offer_declined || false
       });
@@ -278,6 +286,11 @@ const SystemEdit = () => {
       // Load responsible employee details if set
       if (data.responsible_employee_details) {
         setSelectedEmployee(data.responsible_employee_details);
+      }
+      
+      // Load contact person details if set
+      if (data.contact_person_data) {
+        setSelectedContactPerson(data.contact_person_data);
       }
     } catch (error) {
       console.error('Error fetching system:', error);
@@ -400,6 +413,46 @@ const SystemEdit = () => {
   const clearCustomer = () => {
     setSelectedCustomer(null);
     setFormData(prev => ({ ...prev, customer: '' }));
+    setHasChanges(true);
+  };
+
+  // Contact Person (Ansprechpartner) search functions
+  const searchContactPersons = async () => {
+    if (!contactPersonSearch.trim()) return;
+    setSearchingContactPersons(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('search', contactPersonSearch);
+      params.append('is_active', 'true');
+      params.append('page_size', '20');
+      const response = await api.get(`/customers/customers/?${params.toString()}`);
+      const data = response.data.results || response.data || [];
+      setContactPersons(data);
+    } catch (err) {
+      console.error('Error searching contact persons:', err);
+      setContactPersons([]);
+    } finally {
+      setSearchingContactPersons(false);
+    }
+  };
+
+  const selectContactPerson = (person) => {
+    setSelectedContactPerson({
+      id: person.id,
+      customer_number: person.customer_number,
+      full_name: person.full_name || `${person.first_name || ''} ${person.last_name || ''}`.trim(),
+      email: person.primary_email || null,
+      phone: person.primary_phone || null,
+    });
+    setFormData(prev => ({ ...prev, contact_person: person.id }));
+    setContactPersons([]);
+    setContactPersonSearch('');
+    setHasChanges(true);
+  };
+
+  const clearContactPerson = () => {
+    setSelectedContactPerson(null);
+    setFormData(prev => ({ ...prev, contact_person: '' }));
     setHasChanges(true);
   };
   
@@ -1250,6 +1303,83 @@ const SystemEdit = () => {
               </select>
             </div>
 
+            {/* Ansprechpartner beim Kunden */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ansprechpartner (Kunde)
+              </label>
+              {selectedContactPerson ? (
+                <div className="flex items-center gap-2 p-3 bg-gray-50 border rounded-lg">
+                  <div className="flex-1">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/sales/customers/${selectedContactPerson.id}`)}
+                      className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+                    >
+                      {selectedContactPerson.full_name}
+                    </button>
+                    <div className="text-sm text-gray-600">
+                      {selectedContactPerson.customer_number}
+                      {selectedContactPerson.email && ` • ${selectedContactPerson.email}`}
+                      {selectedContactPerson.phone && ` • ${selectedContactPerson.phone}`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearContactPerson}
+                    className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-gray-200"
+                    title="Ansprechpartner entfernen"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={contactPersonSearch}
+                      onChange={(e) => setContactPersonSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && searchContactPersons()}
+                      placeholder="Ansprechpartner suchen..."
+                      className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchContactPersons}
+                      disabled={searchingContactPersons}
+                      className="px-4 py-2 border rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {searchingContactPersons ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                      ) : (
+                        'Suchen'
+                      )}
+                    </button>
+                  </div>
+                  {contactPersons.length > 0 && (
+                    <div className="mt-2 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {contactPersons.map((c) => (
+                        <div
+                          key={c.id}
+                          onClick={() => selectContactPerson(c)}
+                          className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                        >
+                          <div className="font-medium text-gray-900">
+                            {c.full_name || `${c.first_name || ''} ${c.last_name || ''}`}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {c.customer_number}
+                            {c.primary_email && ` • ${c.primary_email}`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Status
@@ -1266,7 +1396,7 @@ const SystemEdit = () => {
               </select>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Modellorganismus
               </label>
@@ -1313,7 +1443,7 @@ const SystemEdit = () => {
                       setHasChanges(true);
                     }
                   }}
-                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Modellorganismus auswählen --</option>
                   {modelOrganismOptions
@@ -1351,7 +1481,7 @@ const SystemEdit = () => {
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Forschungsgebiet
               </label>
@@ -1398,7 +1528,7 @@ const SystemEdit = () => {
                       setHasChanges(true);
                     }
                   }}
-                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Forschungsgebiet auswählen --</option>
                   {researchFieldOptions

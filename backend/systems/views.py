@@ -208,7 +208,11 @@ class SystemViewSet(viewsets.ModelViewSet):
             Q(order_number__icontains=search) |
             Q(customer__first_name__icontains=search) |
             Q(customer__last_name__icontains=search) |
-            Q(customer__customer_number__icontains=search)
+            Q(customer__customer_number__icontains=search) |
+            Q(legacy_customer_name__icontains=search) |
+            Q(legacy_customer_company__icontains=search) |
+            Q(project_reference__icontains=search) |
+            Q(customer_order_number__icontains=search)
         ).select_related('customer').order_by('-created_at')[:20]
         
         data = []

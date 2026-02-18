@@ -221,6 +221,17 @@ class System(models.Model):
         verbose_name='Zuständiger Mitarbeiter'
     )
     
+    # Ansprechpartner beim Kunden
+    contact_person = models.ForeignKey(
+        Customer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contact_for_systems',
+        verbose_name='Ansprechpartner',
+        help_text='Ansprechpartner beim Kunden für dieses System'
+    )
+    
     # Maintenance-Status
     maintenance_offer_received = models.BooleanField(
         default=False,

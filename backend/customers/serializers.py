@@ -154,11 +154,13 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = [
+            'id', 'customer_number',
             'salutation', 'title', 'first_name', 'last_name', 'language',
             'advertising_status', 'description', 'is_reference', 'responsible_user',
             'addresses', 'phones', 'emails',
             'notes', 'is_active'
         ]
+        read_only_fields = ['id', 'customer_number']
     
     def create(self, validated_data):
         addresses_data = validated_data.pop('addresses', [])
