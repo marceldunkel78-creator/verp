@@ -751,7 +751,18 @@ const DevelopmentProjectEdit = () => {
           <div className="p-6">
             {/* Material List */}
             <div className="mb-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Materialliste</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Materialliste</h3>
+                <button
+                  onClick={() => refetchProject()}
+                  disabled={!id || id === 'new'}
+                  className="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 disabled:opacity-50 text-sm"
+                  title="Materialpreise vom Server neu laden"
+                >
+                  <ArrowPathIcon className="h-4 w-4 mr-1.5" />
+                  Preise aktualisieren
+                </button>
+              </div>
               
               {/* Add Material */}
               <div className="grid grid-cols-12 gap-2 mb-4">
@@ -825,7 +836,8 @@ const DevelopmentProjectEdit = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Artikelnr.</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bezeichnung</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lief.-Artikelnr.</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" style={{minWidth: '200px'}}>Bezeichnung</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Menge</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stückpreis</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gesamt</th>
@@ -837,7 +849,8 @@ const DevelopmentProjectEdit = () => {
                     {project.material_items?.map(item => (
                       <tr key={item.id}>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.material_supply_part_number}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{item.material_supply_name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{item.supplier_part_number || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500" style={{minWidth: '200px', maxWidth: '300px', whiteSpace: 'normal', wordWrap: 'break-word'}}>{item.material_supply_name}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right">
                           <input
                             type="number"
@@ -864,7 +877,7 @@ const DevelopmentProjectEdit = () => {
                     ))}
                     {project.material_items?.length > 0 && (
                       <tr className="bg-gray-50 font-medium">
-                        <td colSpan="4" className="px-4 py-3 text-sm text-right">Summe Materialkosten:</td>
+                        <td colSpan="5" className="px-4 py-3 text-sm text-right">Summe Materialkosten:</td>
                         <td className="px-4 py-3 text-sm text-right">{totalMaterialCost.toFixed(2)} €</td>
                         <td colSpan="2"></td>
                       </tr>

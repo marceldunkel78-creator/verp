@@ -48,6 +48,7 @@ class DevelopmentProjectMaterialItemSerializer(serializers.ModelSerializer):
     """Serializer für Material-Positionen"""
     material_supply_name = serializers.CharField(source='material_supply.name', read_only=True)
     material_supply_part_number = serializers.CharField(source='material_supply.visitron_part_number', read_only=True)
+    supplier_part_number = serializers.CharField(source='material_supply.supplier_part_number', read_only=True)
     material_supply_unit = serializers.CharField(source='material_supply.unit', read_only=True)
     item_cost = serializers.SerializerMethodField()
     unit_price = serializers.SerializerMethodField()
@@ -56,7 +57,7 @@ class DevelopmentProjectMaterialItemSerializer(serializers.ModelSerializer):
         model = DevelopmentProjectMaterialItem
         fields = [
             'id', 'project', 'material_supply',
-            'material_supply_name', 'material_supply_part_number', 'material_supply_unit',
+            'material_supply_name', 'material_supply_part_number', 'supplier_part_number', 'material_supply_unit',
             'quantity', 'position', 'notes',
             'unit_price', 'item_cost'
         ]
