@@ -24,6 +24,13 @@ const TABS = [
   { id: 'handover', name: 'Übergabe an Warenlager', icon: TruckIcon }
 ];
 
+const STATUS_OPTIONS = [
+  { value: 'created', label: 'Erstellt' },
+  { value: 'in_progress', label: 'In Bearbeitung' },
+  { value: 'completed', label: 'Abgeschlossen' },
+  { value: 'cancelled', label: 'Storniert' }
+];
+
 const ProductionOrderEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -36,6 +43,7 @@ const ProductionOrderEdit = () => {
 
   // Form data
   const [formData, setFormData] = useState({
+    status: '',
     serial_number: '',
     estimated_completion_date: '',
     notes: '',
@@ -83,6 +91,7 @@ const ProductionOrderEdit = () => {
         : (data.observers_list || []).map(o => o.id);
 
       setFormData({
+        status: data.status || '',
         serial_number: data.serial_number || '',
         estimated_completion_date: data.estimated_completion_date || '',
         notes: data.notes || '',
@@ -440,6 +449,18 @@ const ProductionOrderEdit = () => {
 
             {/* Right column - Editable fields */}
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleInputChange('status', e.target.value)}
+                  className="w-full px-3 py-2 border rounded"
+                >
+                  {STATUS_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
                 <div className="px-3 py-2 bg-gray-50 rounded border">

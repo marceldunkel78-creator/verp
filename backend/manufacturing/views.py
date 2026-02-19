@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from users.models import Notification
 
 from .models import (
     VSHardware, VSHardwarePrice, VSHardwareMaterialItem,
@@ -270,6 +271,47 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
+    def perform_update(self, serializer):
+        """Erkennt Statusänderungen beim Speichern und benachrichtigt Beobachter"""
+        instance = self.get_object()
+        old_status = instance.status
+        instance = serializer.save()
+        instance._changed_by = self.request.user
+        new_status = instance.status
+        if old_status != new_status:
+            self._notify_observers(
+                instance,
+                old_status,
+                new_status,
+                self.request.user
+            )
+    
+    def _notify_observers(self, order, old_status, new_status, changed_by=None):
+        """Benachrichtigt alle Beobachter über eine Statusänderung"""
+        status_labels = dict(ProductionOrder.STATUS_CHOICES)
+        old_label = status_labels.get(old_status, old_status)
+        new_label = status_labels.get(new_status, new_status)
+        changed_name = changed_by.get_full_name() if changed_by else 'System'
+        
+        title = f"Fertigungsauftrag {order.order_number}: Status geändert"
+        message = (
+            f"Der Fertigungsauftrag {order.order_number} "
+            f"({order.vs_hardware.part_number} - {order.vs_hardware.name}) "
+            f"wurde von '{old_label}' auf '{new_label}' geändert "
+            f"(durch {changed_name})."
+        )
+        related_url = f"/manufacturing/production-orders/{order.id}"
+        
+        for user in order.observers.all():
+            if user != changed_by:
+                Notification.objects.create(
+                    user=user,
+                    title=title,
+                    message=message,
+                    notification_type='info',
+                    related_url=related_url
+                )
+    
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
         """Startet den Fertigungsauftrag - erfordert Warenkategorie"""
@@ -305,7 +347,10 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
         
         order.status = 'in_progress'
         order.actual_start = timezone.now().date()
+        order._changed_by = request.user
         order.save()
+        
+        self._notify_observers(order, 'created', 'in_progress', request.user)
         
         return Response(ProductionOrderDetailSerializer(order, context={'request': request}).data)
     
@@ -351,7 +396,10 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
         
         order.status = 'completed'
         order.actual_end = timezone.now().date()
+        order._changed_by = request.user
         order.save()
+        
+        self._notify_observers(order, 'in_progress', 'completed', request.user)
         
         return Response(ProductionOrderSerializer(order).data)
     
@@ -366,10 +414,14 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        old_status = order.status
         order.status = 'cancelled'
         if request.data.get('reason'):
             order.notes = f"{order.notes}\n\nStornierungsgrund: {request.data['reason']}".strip()
+        order._changed_by = request.user
         order.save()
+        
+        self._notify_observers(order, old_status, 'cancelled', request.user)
         
         return Response(ProductionOrderSerializer(order).data)
     
@@ -410,7 +462,10 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
         # Setze Status auf completed und speichere Abschlussdatum
         order.status = 'completed'
         order.actual_end = timezone.now().date()
+        order._changed_by = request.user
         order.save()
+        
+        self._notify_observers(order, 'in_progress', 'completed', request.user)
         
         return Response({
             'message': 'Fertigungsauftrag erfolgreich an Warenlager übergeben',
