@@ -13,6 +13,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon
 } from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 
 const STATUS_CONFIG = {
   created: { label: 'Erstellt', color: 'bg-gray-100 text-gray-800', icon: ClipboardDocumentListIcon },
@@ -116,6 +117,17 @@ const ProductionOrders = () => {
   const formatDateTime = (dateStr) => {
     if (!dateStr) return '-';
     return new Date(dateStr).toLocaleString('de-DE');
+  };
+
+  const isOverdue = (order) => {
+    if (!order.estimated_completion_date || order.status === 'completed' || order.status === 'cancelled') {
+      return false;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const estimatedDate = new Date(order.estimated_completion_date);
+    estimatedDate.setHours(0, 0, 0, 0);
+    return estimatedDate < today;
   };
 
   const StatusBadge = ({ status }) => {
@@ -261,7 +273,15 @@ const ProductionOrders = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {orders.map(order => (
-                  <tr key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/manufacturing/production-orders/${order.id}`)}>
+                  <tr 
+                    key={order.id} 
+                    className={`cursor-pointer ${
+                      isOverdue(order) 
+                        ? 'bg-red-50 hover:bg-red-100' 
+                        : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => navigate(`/manufacturing/production-orders/${order.id}`)}
+                  >
                     <td className="px-4 py-3 font-mono text-blue-600 font-medium">
                       {order.order_number}
                     </td>
@@ -293,6 +313,12 @@ const ProductionOrders = () => {
                         <div className="text-xs text-gray-500">
                           Tatsächlich: {formatDate(order.actual_start)}
                           {order.actual_end && ` - ${formatDate(order.actual_end)}`}
+                        </div>
+                      )}
+                      {isOverdue(order) && (
+                        <div className="flex items-center gap-1 text-xs text-red-700 font-medium mt-1">
+                          <ExclamationTriangleIcon className="h-4 w-4" />
+                          Avisiert: {formatDate(order.estimated_completion_date)}
                         </div>
                       )}
                     </td>

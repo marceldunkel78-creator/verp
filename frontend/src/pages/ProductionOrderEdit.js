@@ -15,6 +15,7 @@ import {
   PlayIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 
 const TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },
@@ -40,6 +41,18 @@ const ProductionOrderEdit = () => {
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+
+  // Check if estimated completion date is overdue
+  const isOverdue = () => {
+    if (!order || !order.estimated_completion_date || order.status === 'completed' || order.status === 'cancelled') {
+      return false;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const estimatedDate = new Date(order.estimated_completion_date);
+    estimatedDate.setHours(0, 0, 0, 0);
+    return estimatedDate < today;
+  };
 
   // Form data
   const [formData, setFormData] = useState({
@@ -333,8 +346,14 @@ const ProductionOrderEdit = () => {
             <ArrowLeftIcon className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
               {order.order_number}
+              {isOverdue() && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                  <ExclamationTriangleIcon className="h-4 w-4" />
+                  Überfällig
+                </span>
+              )}
             </h1>
             <p className="text-gray-500 text-sm">
               {order.vs_hardware_part_number} - {order.vs_hardware_name}
@@ -491,6 +510,17 @@ const ProductionOrderEdit = () => {
                   onChange={(e) => handleInputChange('estimated_completion_date', e.target.value)}
                   className="w-full px-3 py-2 border rounded"
                 />
+                {isOverdue() && (
+                  <div className="mt-2 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-red-800">
+                      <p className="font-medium">Avisiertes Fertigungsende überschritten</p>
+                      <p className="text-red-700 mt-1">
+                        Der Fertigungsauftrag sollte bis zum {new Date(order.estimated_completion_date).toLocaleDateString('de-DE')} abgeschlossen sein.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notizen</label>
