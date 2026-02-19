@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
@@ -448,7 +448,7 @@ const CustomerEdit = () => {
 
   // Determine if form has unsaved changes
   const hasChanges = useMemo(() => {
-    if (!isEditing) return true; // New customer always "has changes"
+    if (!isEditing) return false; // New customer: no "original" to compare
     const orig = originalDataRef.current;
     if (!orig) return false;
     // Compare formData fields
@@ -467,15 +467,17 @@ const CustomerEdit = () => {
     return false;
   }, [formData, addresses, phones, emails, isEditing]);
 
-  // Handle tab switch with unsaved changes warning
-  const handleTabSwitch = useCallback((tabId) => {
-    if (hasChanges && isEditing) {
-      if (!window.confirm('Es gibt ungespeicherte \u00c4nderungen. M\u00f6chten Sie den Tab trotzdem wechseln?')) {
-        return;
+  // Warn on page leave (browser close/reload) when there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
       }
-    }
-    setActiveTab(tabId);
-  }, [hasChanges, isEditing]);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   const tabs = [
     { id: 'basic', label: 'Basisinfos', icon: UserIcon },
@@ -530,7 +532,7 @@ const CustomerEdit = () => {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => handleTabSwitch(tab.id)}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`
                     py-3 px-4 border-b-2 font-medium text-sm flex items-center whitespace-nowrap
                     ${activeTab === tab.id

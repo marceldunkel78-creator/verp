@@ -178,12 +178,13 @@ const DevelopmentProjectEdit = () => {
       try {
         const response = await api.get(`/development/projects/${id}/`);
         setProject(response.data);
+        const norm = (v) => (v === null || v === undefined) ? '' : String(v);
         originalProjectRef.current = {
-          name: response.data.name || '',
-          description: response.data.description || '',
-          status: response.data.status || '',
-          assigned_to: response.data.assigned_to || '',
-          planned_end: response.data.planned_end || ''
+          name: norm(response.data.name),
+          description: norm(response.data.description),
+          status: norm(response.data.status),
+          assigned_to: norm(response.data.assigned_to),
+          planned_end: norm(response.data.planned_end)
         };
         
         // Set active cost calculation if exists
@@ -256,12 +257,13 @@ const DevelopmentProjectEdit = () => {
         }
         const response = await api.patch(`/development/projects/${id}/`, payload);
         setProject(prev => ({ ...prev, ...response.data }));
+        const norm = (v) => (v === null || v === undefined) ? '' : String(v);
         originalProjectRef.current = {
-          name: response.data.name || '',
-          description: response.data.description || '',
-          status: response.data.status || '',
-          assigned_to: response.data.assigned_to || '',
-          planned_end: response.data.planned_end || ''
+          name: norm(response.data.name),
+          description: norm(response.data.description),
+          status: norm(response.data.status),
+          assigned_to: norm(response.data.assigned_to),
+          planned_end: norm(response.data.planned_end)
         };
       }
     } catch (error) {
@@ -484,12 +486,13 @@ const DevelopmentProjectEdit = () => {
     if (isNew) return true;
     const orig = originalProjectRef.current;
     if (!orig) return false;
+    const norm = (v) => (v === null || v === undefined) ? '' : String(v);
     return (
-      (project.name || '') !== (orig.name || '') ||
-      (project.description || '') !== (orig.description || '') ||
-      (project.status || '') !== (orig.status || '') ||
-      String(project.assigned_to || '') !== String(orig.assigned_to || '') ||
-      (project.planned_end || '') !== (orig.planned_end || '')
+      norm(project.name) !== norm(orig.name) ||
+      norm(project.description) !== norm(orig.description) ||
+      norm(project.status) !== norm(orig.status) ||
+      norm(project.assigned_to) !== norm(orig.assigned_to) ||
+      norm(project.planned_end) !== norm(orig.planned_end)
     );
   }, [project.name, project.description, project.status, project.assigned_to, project.planned_end, isNew]);
 
@@ -507,14 +510,16 @@ const DevelopmentProjectEdit = () => {
     );
   }, [costCalc]);
 
-  // Handle tab switch with unsaved changes warning
-  const handleTabSwitch = useCallback((tabId) => {
-    if (hasChanges && !isNew) {
-      if (!window.confirm('Es gibt ungespeicherte Änderungen. Möchten Sie den Tab trotzdem wechseln?')) {
-        return;
+  // Warn on page leave (browser close/reload) when there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges && !isNew) {
+        e.preventDefault();
+        e.returnValue = '';
       }
-    }
-    setActiveTab(tabId);
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasChanges, isNew]);
 
   if (loading) {
@@ -577,7 +582,7 @@ const DevelopmentProjectEdit = () => {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => handleTabSwitch(tab.id)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
                   ${activeTab === tab.id
                     ? 'border-purple-500 text-purple-600'

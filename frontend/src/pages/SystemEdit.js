@@ -187,7 +187,20 @@ const SystemEdit = () => {
     fetchResponsibleEmployees();
     fetchModelOrganismOptions();
     fetchResearchFieldOptions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Warn on page leave (browser close/reload) when there are unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (hasChanges && !isNew) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges, isNew]);
 
   // Load tab data when tab is selected
   useEffect(() => {
@@ -1052,15 +1065,7 @@ const SystemEdit = () => {
             return (
               <button
                 key={tab.id}
-                onClick={() => {
-                  if (isDisabled) return;
-                  if (hasChanges && !isNew) {
-                    if (!window.confirm('Es gibt ungespeicherte Änderungen. Möchten Sie den Tab trotzdem wechseln?')) {
-                      return;
-                    }
-                  }
-                  setActiveTab(tab.id);
-                }}
+                onClick={() => !isDisabled && setActiveTab(tab.id)}
                 disabled={isDisabled}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
                   activeTab === tab.id
