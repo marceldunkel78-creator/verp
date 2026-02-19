@@ -212,8 +212,8 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'article_number', 'visitron_part_number', 'inventory_number', 'serial_number']
-    ordering_fields = ['inventory_number', 'name', 'delivery_date', 'status', 'supplier__company_name', 'created_at']
-    ordering = ['-created_at']
+    ordering_fields = ['inventory_number', 'name', 'delivery_date', 'status', 'supplier__company_name', 'updated_at']
+    ordering = ['-updated_at']
     
     def get_serializer_class(self):
         if self.action == 'retrieve':

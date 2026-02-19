@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
@@ -32,6 +32,9 @@ const CustomerEdit = () => {
   const [saving, setSaving] = useState(false);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState(0);
   const [users, setUsers] = useState([]);
+  
+  // Change tracking
+  const originalDataRef = useRef(null);
 
   // Related data for existing customers
   const [customerSystems, setCustomerSystems] = useState([]);
@@ -102,6 +105,30 @@ const CustomerEdit = () => {
       })));
       setPhones(customer.phones || []);
       setEmails(customer.emails || []);
+      
+      // Store original data for change tracking
+      originalDataRef.current = {
+        formData: {
+          salutation: customer.salutation || '',
+          title: customer.title || '',
+          first_name: customer.first_name || '',
+          last_name: customer.last_name || '',
+          language: customer.language || 'DE',
+          advertising_status: customer.advertising_status || 'neu',
+          description: customer.description || '',
+          notes: customer.notes || '',
+          is_active: customer.is_active !== undefined ? customer.is_active : true,
+          is_reference: customer.is_reference || false,
+          responsible_user: customer.responsible_user || null
+        },
+        addresses: JSON.stringify((customer.addresses || []).map(a => ({
+          ...a,
+          latitude: a.latitude !== null && a.latitude !== undefined ? parseFloat(a.latitude) : null,
+          longitude: a.longitude !== null && a.longitude !== undefined ? parseFloat(a.longitude) : null
+        }))),
+        phones: JSON.stringify(customer.phones || []),
+        emails: JSON.stringify(customer.emails || [])
+      };
       
       // Load related data
       loadRelatedData(customer.id);
@@ -419,6 +446,37 @@ const CustomerEdit = () => {
 
   const selectedAddress = addresses[selectedAddressIndex];
 
+  // Determine if form has unsaved changes
+  const hasChanges = useMemo(() => {
+    if (!isEditing) return true; // New customer always "has changes"
+    const orig = originalDataRef.current;
+    if (!orig) return false;
+    // Compare formData fields
+    const origFD = orig.formData;
+    const formChanged = Object.keys(origFD).some(key => {
+      if (key === 'responsible_user') {
+        return String(formData[key] || '') !== String(origFD[key] || '');
+      }
+      return formData[key] !== origFD[key];
+    });
+    if (formChanged) return true;
+    // Compare addresses, phones, emails
+    if (JSON.stringify(addresses) !== orig.addresses) return true;
+    if (JSON.stringify(phones) !== orig.phones) return true;
+    if (JSON.stringify(emails) !== orig.emails) return true;
+    return false;
+  }, [formData, addresses, phones, emails, isEditing]);
+
+  // Handle tab switch with unsaved changes warning
+  const handleTabSwitch = useCallback((tabId) => {
+    if (hasChanges && isEditing) {
+      if (!window.confirm('Es gibt ungespeicherte \u00c4nderungen. M\u00f6chten Sie den Tab trotzdem wechseln?')) {
+        return;
+      }
+    }
+    setActiveTab(tabId);
+  }, [hasChanges, isEditing]);
+
   const tabs = [
     { id: 'basic', label: 'Basisinfos', icon: UserIcon },
     { id: 'addresses', label: 'Adressen', icon: MapPinIcon, count: addresses.length },
@@ -472,7 +530,7 @@ const CustomerEdit = () => {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabSwitch(tab.id)}
                   className={`
                     py-3 px-4 border-b-2 font-medium text-sm flex items-center whitespace-nowrap
                     ${activeTab === tab.id

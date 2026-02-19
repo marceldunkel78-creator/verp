@@ -34,7 +34,7 @@ const Inventory = () => {
     search: ''
   });
   const [hasSearched, setHasSearched] = useState(false);
-  const [sortBy, setSortBy] = useState('-created_at');
+  const [sortBy, setSortBy] = useState('-updated_at');
   
   // Pagination for inventory cards
   const [currentPage, setCurrentPage] = useState(1);

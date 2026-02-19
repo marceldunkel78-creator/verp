@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import FileUpload from '../components/FileUpload';
@@ -82,6 +82,10 @@ const DevelopmentProjectEdit = () => {
     expected_sales_volume: 1,
     notes: ''
   });
+
+  // Change tracking
+  const originalProjectRef = useRef(null);
+  const originalCostCalcRef = useRef(null);
 
   // Loading states
   const [addingTodo, setAddingTodo] = useState(false);
@@ -174,11 +178,18 @@ const DevelopmentProjectEdit = () => {
       try {
         const response = await api.get(`/development/projects/${id}/`);
         setProject(response.data);
+        originalProjectRef.current = {
+          name: response.data.name || '',
+          description: response.data.description || '',
+          status: response.data.status || '',
+          assigned_to: response.data.assigned_to || '',
+          planned_end: response.data.planned_end || ''
+        };
         
         // Set active cost calculation if exists
         const activCalc = response.data.cost_calculations?.find(c => c.is_active);
         if (activCalc) {
-          setCostCalc({
+          const calcData = {
             id: activCalc.id,
             name: activCalc.name,
             labor_hours: activCalc.labor_hours,
@@ -186,7 +197,9 @@ const DevelopmentProjectEdit = () => {
             development_cost_total: activCalc.development_cost_total,
             expected_sales_volume: activCalc.expected_sales_volume,
             notes: activCalc.notes || ''
-          });
+          };
+          setCostCalc(calcData);
+          originalCostCalcRef.current = { ...calcData };
         }
       } catch (error) {
         console.error('Error fetching project:', error);
@@ -243,6 +256,13 @@ const DevelopmentProjectEdit = () => {
         }
         const response = await api.patch(`/development/projects/${id}/`, payload);
         setProject(prev => ({ ...prev, ...response.data }));
+        originalProjectRef.current = {
+          name: response.data.name || '',
+          description: response.data.description || '',
+          status: response.data.status || '',
+          assigned_to: response.data.assigned_to || '',
+          planned_end: response.data.planned_end || ''
+        };
       }
     } catch (error) {
       console.error('Error saving project:', error);
@@ -372,9 +392,11 @@ const DevelopmentProjectEdit = () => {
       if (costCalc.id) {
         const response = await api.patch(`/development/projects/${id}/update_cost_calculation/${costCalc.id}/`, costCalc);
         setCostCalc(prev => ({ ...prev, ...response.data }));
+        originalCostCalcRef.current = { ...costCalc, ...response.data };
       } else {
         const response = await api.post(`/development/projects/${id}/add_cost_calculation/`, costCalc);
         setCostCalc(response.data);
+        originalCostCalcRef.current = { ...response.data };
       }
       refetchProject(); // Refresh to get updated calculations
     } catch (error) {
@@ -457,6 +479,44 @@ const DevelopmentProjectEdit = () => {
   const totalMaterialCost = project.material_items?.reduce((sum, item) => sum + (item.item_cost || 0), 0) || 0;
   const totalTimeSpent = project.time_entries?.reduce((sum, entry) => sum + parseFloat(entry.hours_spent || 0), 0) || 0;
 
+  // Determine if project base fields have changed
+  const hasChanges = useMemo(() => {
+    if (isNew) return true;
+    const orig = originalProjectRef.current;
+    if (!orig) return false;
+    return (
+      (project.name || '') !== (orig.name || '') ||
+      (project.description || '') !== (orig.description || '') ||
+      (project.status || '') !== (orig.status || '') ||
+      String(project.assigned_to || '') !== String(orig.assigned_to || '') ||
+      (project.planned_end || '') !== (orig.planned_end || '')
+    );
+  }, [project.name, project.description, project.status, project.assigned_to, project.planned_end, isNew]);
+
+  // Determine if cost calculation has changed
+  const hasCostCalcChanges = useMemo(() => {
+    const orig = originalCostCalcRef.current;
+    if (!orig) return false;
+    return (
+      (costCalc.name || '') !== (orig.name || '') ||
+      Number(costCalc.labor_hours || 0) !== Number(orig.labor_hours || 0) ||
+      Number(costCalc.labor_rate || 0) !== Number(orig.labor_rate || 0) ||
+      Number(costCalc.development_cost_total || 0) !== Number(orig.development_cost_total || 0) ||
+      Number(costCalc.expected_sales_volume || 1) !== Number(orig.expected_sales_volume || 1) ||
+      (costCalc.notes || '') !== (orig.notes || '')
+    );
+  }, [costCalc]);
+
+  // Handle tab switch with unsaved changes warning
+  const handleTabSwitch = useCallback((tabId) => {
+    if (hasChanges && !isNew) {
+      if (!window.confirm('Es gibt ungespeicherte Änderungen. Möchten Sie den Tab trotzdem wechseln?')) {
+        return;
+      }
+    }
+    setActiveTab(tabId);
+  }, [hasChanges, isNew]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -500,7 +560,7 @@ const DevelopmentProjectEdit = () => {
           </div>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !hasChanges}
             className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
           >
             {saving ? <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" /> : <CheckIcon className="h-5 w-5 mr-2" />}
@@ -517,7 +577,7 @@ const DevelopmentProjectEdit = () => {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabSwitch(tab.id)}
                 className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
                   ${activeTab === tab.id
                     ? 'border-purple-500 text-purple-600'
@@ -976,7 +1036,8 @@ const DevelopmentProjectEdit = () => {
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveCostCalculation}
-                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                  disabled={!hasCostCalcChanges}
+                  className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
                 >
                   <CheckIcon className="h-5 w-5 mr-2" />
                   Kalkulation speichern

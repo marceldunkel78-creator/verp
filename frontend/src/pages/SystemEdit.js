@@ -1052,7 +1052,15 @@ const SystemEdit = () => {
             return (
               <button
                 key={tab.id}
-                onClick={() => !isDisabled && setActiveTab(tab.id)}
+                onClick={() => {
+                  if (isDisabled) return;
+                  if (hasChanges && !isNew) {
+                    if (!window.confirm('Es gibt ungespeicherte Änderungen. Möchten Sie den Tab trotzdem wechseln?')) {
+                      return;
+                    }
+                  }
+                  setActiveTab(tab.id);
+                }}
                 disabled={isDisabled}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
                   activeTab === tab.id

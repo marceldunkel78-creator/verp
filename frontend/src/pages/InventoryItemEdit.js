@@ -204,6 +204,16 @@ const InventoryItemEdit = () => {
   };
 
   const handleSave = async () => {
+    // Validierung
+    if (!basicData.article_number || !basicData.article_number.trim()) {
+      setSaveMessage({ type: 'error', text: 'Bitte geben Sie eine Lieferanten-Artikelnummer ein.' });
+      return;
+    }
+    if (!basicData.name || !basicData.name.trim()) {
+      setSaveMessage({ type: 'error', text: 'Bitte geben Sie einen Produktnamen ein.' });
+      return;
+    }
+
     setSaving(true);
     try {
       // Ensure empty dates are sent as null (Django expects null or YYYY-MM-DD)
@@ -225,7 +235,14 @@ const InventoryItemEdit = () => {
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (error) {
       console.error('Error saving:', error);
-      setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
+      if (error.response?.data) {
+        const errors = Object.entries(error.response.data)
+          .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : val}`)
+          .join('\n');
+        setSaveMessage({ type: 'error', text: `Fehler beim Speichern:\n${errors}` });
+      } else {
+        setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
+      }
     } finally {
       setSaving(false);
     }
@@ -434,7 +451,7 @@ const BasicInfoTab = ({ data, onChange, suppliers, productCategories, item }) =>
         
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Lieferanten-Artikelnummer
+            Lieferanten-Artikelnummer <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
