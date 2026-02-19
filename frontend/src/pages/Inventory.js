@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
 import SupplierSearch from '../components/SupplierSearch';
+import SortableHeader from '../components/SortableHeader';
 import {
   FunnelIcon,
   ArchiveBoxIcon,
@@ -33,6 +34,7 @@ const Inventory = () => {
     search: ''
   });
   const [hasSearched, setHasSearched] = useState(false);
+  const [sortBy, setSortBy] = useState('-created_at');
   
   // Pagination for inventory cards
   const [currentPage, setCurrentPage] = useState(1);
@@ -123,9 +125,10 @@ const Inventory = () => {
       const params = new URLSearchParams();
       if (useFilters.status) params.append('status', useFilters.status);
       if (useFilters.supplier) params.append('supplier', useFilters.supplier);
-      if (useFilters.item_function) params.append('item_function', useFilters.item_function);
+ if (useFilters.item_function) params.append('item_function', useFilters.item_function);
       if (useFilters.product_category) params.append('product_category', useFilters.product_category);
       if (useFilters.search) params.append('search', useFilters.search);
+      if (sortBy) params.append('ordering', sortBy);
 
       const res = await api.get(`/inventory/inventory-items/?${params.toString()}`);
       const items = res.data.results || res.data;
@@ -137,7 +140,7 @@ const Inventory = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters, saveSearchState]);
+  }, [filters, sortBy, saveSearchState]);
 
   // Initialize from URL params or localStorage
   useEffect(() => {
@@ -580,24 +583,17 @@ const Inventory = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lager-Nr.
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Bezeichnung
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lieferant
-                    </th>
+                    <SortableHeader field="inventory_number" label="Lager-Nr." sortBy={sortBy} setSortBy={setSortBy} />
+                    <SortableHeader field="name" label="Bezeichnung" sortBy={sortBy} setSortBy={setSortBy} />
+                    <SortableHeader field="supplier__company_name" label="Lieferant" sortBy={sortBy} setSortBy={setSortBy} />
+                    <SortableHeader field="delivery_date" label="Lieferdatum" sortBy={sortBy} setSortBy={setSortBy} />
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Menge/SN
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Wert
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
+                    <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} />
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -618,6 +614,9 @@ const Inventory = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {item.supplier_name || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {item.delivery_date ? new Date(item.delivery_date).toLocaleDateString('de-DE') : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {item.serial_number ? (

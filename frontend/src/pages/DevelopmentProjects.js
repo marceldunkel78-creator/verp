@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import SortableHeader from '../components/SortableHeader';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -25,10 +26,11 @@ const DevelopmentProjects = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('open'); // 'all', 'open', 'closed'
+  const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [sortBy, setSortBy] = useState('-updated_at');
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -37,12 +39,11 @@ const DevelopmentProjects = () => {
       params.append('page', currentPage);
       params.append('page_size', '15');
       if (searchTerm) params.append('search', searchTerm);
+      if (sortBy) params.append('ordering', sortBy);
       
-      // Filter für offene/geschlossene Projekte
-      if (statusFilter === 'open') {
-        params.append('is_open', 'true');
-      } else if (statusFilter === 'closed') {
-        params.append('is_open', 'false');
+      // Filter nach Status
+      if (statusFilter && statusFilter !== 'all') {
+        params.append('status', statusFilter);
       }
       
       const response = await api.get(`/development/projects/?${params.toString()}`);
@@ -56,7 +57,7 @@ const DevelopmentProjects = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, statusFilter]);
+  }, [currentPage, searchTerm, statusFilter, sortBy]);
 
   useEffect(() => {
     fetchProjects();
@@ -135,9 +136,13 @@ const DevelopmentProjects = () => {
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
             className="block rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
           >
-            <option value="open">Offene Projekte</option>
-            <option value="closed">Abgeschlossene Projekte</option>
-            <option value="all">Alle Projekte</option>
+            <option value="all">Alle Status</option>
+            <option value="new">Neu</option>
+            <option value="in_progress">In Arbeit</option>
+            <option value="testing">Im Test</option>
+            <option value="paused">Pausiert</option>
+            <option value="completed">Abgeschlossen</option>
+            <option value="rejected">Abgelehnt</option>
           </select>
           
           <button
@@ -154,24 +159,42 @@ const DevelopmentProjects = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Projektnr.
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Zugewiesen an
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Projektbeginn
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Geplantes Ende
-              </th>
+              <SortableHeader 
+                field="project_number" 
+                label="Projektnr." 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
+              <SortableHeader 
+                field="name" 
+                label="Name" 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
+              <SortableHeader 
+                field="status" 
+                label="Status" 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
+              <SortableHeader 
+                field="assigned_to__last_name" 
+                label="Zugewiesen an" 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
+              <SortableHeader 
+                field="project_start" 
+                label="Projektbeginn" 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
+              <SortableHeader 
+                field="planned_end" 
+                label="Geplantes Ende" 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Zeitaufwand
               </th>

@@ -1,8 +1,9 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Sum, Max
 from django.db import models
 from django.utils import timezone
@@ -32,6 +33,10 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
     """
     queryset = DevelopmentProject.objects.all()
     permission_classes = [IsAuthenticated, DevelopmentProjectPermission]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['project_number', 'name', 'description']
+    ordering_fields = ['project_number', 'name', 'status', 'project_start', 'planned_end', 'assigned_to__last_name', 'created_at', 'updated_at']
+    ordering = ['-updated_at']
     
     def get_serializer_class(self):
         if self.action == 'list':

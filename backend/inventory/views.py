@@ -1,8 +1,9 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.utils import timezone
 from decimal import Decimal
@@ -209,6 +210,10 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     """
     queryset = InventoryItem.objects.all()
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'article_number', 'visitron_part_number', 'inventory_number', 'serial_number']
+    ordering_fields = ['inventory_number', 'name', 'delivery_date', 'status', 'supplier__company_name', 'created_at']
+    ordering = ['-created_at']
     
     def get_serializer_class(self):
         if self.action == 'retrieve':
