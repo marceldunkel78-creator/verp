@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import SortableHeader from '../components/SortableHeader';
 import {
   ClipboardDocumentListIcon,
   PlayIcon,
@@ -10,7 +11,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
-  PencilSquareIcon,
   PlusIcon
 } from '@heroicons/react/24/outline';
 
@@ -35,11 +35,8 @@ const ProductionOrders = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newOrderData, setNewOrderData] = useState({ vs_hardware: '', quantity: 1, notes: '' });
 
-  // Start order modal with category selection
-  const [showStartModal, setShowStartModal] = useState(false);
-  const [startingOrder, setStartingOrder] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [productCategories, setProductCategories] = useState([]);
+  // Sorting
+  const [sortBy, setSortBy] = useState('-created_at');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,24 +46,11 @@ const ProductionOrders = () => {
   useEffect(() => {
     fetchOrders();
     setCurrentPage(1);
-  }, [ordersFilter]);
+  }, [ordersFilter, sortBy]);
 
   useEffect(() => {
     fetchOrders();
   }, [currentPage]);
-
-  useEffect(() => {
-    fetchProductCategories();
-  }, []);
-
-  const fetchProductCategories = async () => {
-    try {
-      const response = await api.get('/settings/product-categories/?is_active=true');
-      setProductCategories(response.data.results || response.data);
-    } catch (error) {
-      console.error('Error fetching product categories:', error);
-    }
-  };
 
   const fetchOrders = async () => {
     setOrdersLoading(true);
@@ -74,6 +58,7 @@ const ProductionOrders = () => {
       const params = new URLSearchParams();
       params.append('page', currentPage);
       params.append('page_size', '10');
+      params.append('ordering', sortBy);
       if (ordersFilter !== 'all') params.append('status', ordersFilter);
       if (searchTerm) params.append('search', searchTerm);
       
@@ -120,57 +105,6 @@ const ProductionOrders = () => {
     } catch (error) {
       console.error('Error creating production order:', error);
       alert('Fehler beim Erstellen: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleStartOrder = async (orderId) => {
-    // Show modal to select category
-    const order = orders.find(o => o.id === orderId);
-    setStartingOrder(order);
-    setSelectedCategory(order?.product_category || '');
-    setShowStartModal(true);
-  };
-
-  const confirmStartOrder = async () => {
-    if (!selectedCategory) {
-      alert('Bitte eine Warenkategorie auswählen');
-      return;
-    }
-    
-    try {
-      await api.post(`/manufacturing/production-orders/${startingOrder.id}/start/`, {
-        product_category: selectedCategory
-      });
-      setShowStartModal(false);
-      setStartingOrder(null);
-      setSelectedCategory('');
-      fetchOrders();
-    } catch (error) {
-      console.error('Error starting order:', error);
-      alert('Fehler: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleCompleteOrder = async (orderId) => {
-    if (!window.confirm('Auftrag wirklich abschließen?')) return;
-    try {
-      await api.post(`/manufacturing/production-orders/${orderId}/complete/`);
-      fetchOrders();
-    } catch (error) {
-      console.error('Error completing order:', error);
-      alert('Fehler: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleCancelOrder = async (orderId) => {
-    const reason = prompt('Stornierungsgrund:');
-    if (reason === null) return;
-    try {
-      await api.post(`/manufacturing/production-orders/${orderId}/cancel/`, { reason });
-      fetchOrders();
-    } catch (error) {
-      console.error('Error cancelling order:', error);
-      alert('Fehler: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -317,18 +251,17 @@ const ProductionOrders = () => {
             <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">FA-Nr.</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">VS-Hardware</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Menge</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kundenauftrag</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Geplant</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aktionen</th>
+                  <SortableHeader field="order_number" label="FA-Nr." sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="vs_hardware__name" label="VS-Hardware" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="quantity" label="Menge" sortBy={sortBy} setSortBy={setSortBy} align="center" />
+                  <SortableHeader field="customer_order__order_number" label="Kundenauftrag" sortBy={sortBy} setSortBy={setSortBy} />
+                  <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} align="center" />
+                  <SortableHeader field="planned_start" label="Geplant" sortBy={sortBy} setSortBy={setSortBy} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {orders.map(order => (
-                  <tr key={order.id} className="hover:bg-gray-50">
+                  <tr key={order.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/manufacturing/production-orders/${order.id}`)}>
                     <td className="px-4 py-3 font-mono text-blue-600 font-medium">
                       {order.order_number}
                     </td>
@@ -363,95 +296,11 @@ const ProductionOrders = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {order.status === 'created' && (
-                        <button
-                          onClick={() => handleStartOrder(order.id)}
-                          className="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 mr-2"
-                        >
-                          Starten
-                        </button>
-                      )}
-                      {order.status === 'in_progress' && (
-                        <>
-                          <button
-                            onClick={() => navigate(`/manufacturing/production-orders/${order.id}`)}
-                            className="text-sm px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 mr-2"
-                            title="Bearbeiten"
-                          >
-                            <PencilSquareIcon className="h-4 w-4 inline" />
-                          </button>
-                          <button
-                            onClick={() => handleCompleteOrder(order.id)}
-                            className="text-sm px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 mr-2"
-                          >
-                            Abschließen
-                          </button>
-                        </>
-                      )}
-                      {(order.status === 'created' || order.status === 'in_progress') && (
-                        <button
-                          onClick={() => handleCancelOrder(order.id)}
-                          className="text-sm text-red-500 hover:text-red-700"
-                        >
-                          Stornieren
-                        </button>
-                      )}
-                    </td>
+
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-
-          {/* Start Order Modal */}
-          {showStartModal && startingOrder && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowStartModal(false)} />
-              <div className="bg-white rounded-lg shadow-lg z-10 w-full max-w-md p-6">
-                <h3 className="text-lg font-medium mb-4">Fertigungsauftrag starten</h3>
-                <div className="space-y-4">
-                  <div className="bg-gray-50 p-3 rounded">
-                    <div className="font-mono text-blue-600">{startingOrder.order_number}</div>
-                    <div className="text-sm">{startingOrder.vs_hardware_part_number} - {startingOrder.vs_hardware_name}</div>
-                    <div className="text-sm text-gray-500">Menge: {startingOrder.quantity}</div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Warenkategorie <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="w-full border rounded px-3 py-2"
-                    >
-                      <option value="">Auswählen...</option>
-                      {productCategories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Die Warenkategorie bestimmt die Fertigungscheckliste.
-                    </p>
-                  </div>
-                  <div className="flex justify-end gap-2 pt-4 border-t">
-                    <button
-                      onClick={() => { setShowStartModal(false); setStartingOrder(null); setSelectedCategory(''); }}
-                      className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
-                    >
-                      Abbrechen
-                    </button>
-                    <button
-                      onClick={confirmStartOrder}
-                      disabled={!selectedCategory}
-                      className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                    >
-                      Starten
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
           )}
 
           {/* Pagination */}

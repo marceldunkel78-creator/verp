@@ -259,6 +259,7 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'vs_hardware', 'customer_order', 'product_category']
     search_fields = ['order_number', 'vs_hardware__name', 'vs_hardware__part_number', 'notes', 'serial_number']
+    ordering_fields = ['order_number', 'vs_hardware__name', 'quantity', 'customer_order__order_number', 'status', 'planned_start', 'planned_end', 'created_at', 'updated_at']
     ordering = ['-created_at']
     
     def get_serializer_class(self):

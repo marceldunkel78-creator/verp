@@ -11,12 +11,15 @@ import {
   ExclamationCircleIcon,
   DocumentIcon,
   ArrowTopRightOnSquareIcon,
-  UserIcon
+  UserIcon,
+  PlayIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },
   { id: 'materials', name: 'Materialsammlung', icon: CubeIcon },
+  { id: 'documents', name: 'Fertigungspläne', icon: DocumentIcon },
   { id: 'checklist', name: 'Fertigungscheckliste', icon: ClipboardDocumentCheckIcon },
   { id: 'handover', name: 'Übergabe an Warenlager', icon: TruckIcon }
 ];
@@ -47,12 +50,27 @@ const ProductionOrderEdit = () => {
   const [showObserverDropdown, setShowObserverDropdown] = useState(false);
   const [selectedObservers, setSelectedObservers] = useState([]);
 
+  // Start modal with category selection
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [productCategories, setProductCategories] = useState([]);
+
   useEffect(() => {
     if (id) {
       fetchOrder();
       fetchUsers();
+      fetchProductCategories();
     }
   }, [id]);
+
+  const fetchProductCategories = async () => {
+    try {
+      const response = await api.get('/settings/product-categories/?is_active=true');
+      setProductCategories(response.data.results || response.data);
+    } catch (error) {
+      console.error('Error fetching product categories:', error);
+    }
+  };
 
   const fetchOrder = async () => {
     setLoading(true);
@@ -229,6 +247,55 @@ const ProductionOrderEdit = () => {
     }
   };
 
+  const handleStartOrder = () => {
+    setSelectedCategory(order?.product_category || '');
+    setShowStartModal(true);
+  };
+
+  const confirmStartOrder = async () => {
+    if (!selectedCategory) {
+      alert('Bitte eine Warenkategorie auswählen');
+      return;
+    }
+    try {
+      await api.post(`/manufacturing/production-orders/${id}/start/`, {
+        product_category: selectedCategory
+      });
+      setShowStartModal(false);
+      setSelectedCategory('');
+      setSaveMessage({ type: 'success', text: 'Fertigungsauftrag gestartet!' });
+      await fetchOrder();
+    } catch (error) {
+      console.error('Error starting order:', error);
+      alert('Fehler: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleCompleteOrder = async () => {
+    if (!window.confirm('Auftrag wirklich abschließen?')) return;
+    try {
+      await api.post(`/manufacturing/production-orders/${id}/complete/`);
+      setSaveMessage({ type: 'success', text: 'Fertigungsauftrag abgeschlossen!' });
+      await fetchOrder();
+    } catch (error) {
+      console.error('Error completing order:', error);
+      alert('Fehler: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    const reason = prompt('Stornierungsgrund:');
+    if (reason === null) return;
+    try {
+      await api.post(`/manufacturing/production-orders/${id}/cancel/`, { reason });
+      setSaveMessage({ type: 'success', text: 'Fertigungsauftrag storniert.' });
+      await fetchOrder();
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      alert('Fehler: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -270,6 +337,25 @@ const ProductionOrderEdit = () => {
             <span className={`text-sm ${saveMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
               {saveMessage.text}
             </span>
+          )}
+          {/* Status action buttons */}
+          {order.status === 'created' && (
+            <button
+              onClick={handleStartOrder}
+              className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <PlayIcon className="h-4 w-4" />
+              Starten
+            </button>
+          )}
+          {(order.status === 'created' || order.status === 'in_progress') && (
+            <button
+              onClick={handleCancelOrder}
+              className="flex items-center gap-1 px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50"
+            >
+              <XCircleIcon className="h-4 w-4" />
+              Stornieren
+            </button>
           )}
           {(hasChanges || activeTab === 'basic') && (
             <button
@@ -499,29 +585,47 @@ const ProductionOrderEdit = () => {
               Keine Materialien in der Materialliste vorhanden.
             </div>
           )}
+        </div>
+      )}
 
-          {/* Documents / Manufacturing Plans */}
-          {order.vs_hardware_documents && order.vs_hardware_documents.length > 0 && (
-            <div className="mt-8">
-              <h3 className="text-md font-medium mb-4">Fertigungspläne</h3>
-              <div className="grid grid-cols-2 gap-4">
-                {order.vs_hardware_documents.map((doc, idx) => (
-                  <a
-                    key={idx}
-                    href={doc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50"
-                  >
-                    <DocumentIcon className="h-8 w-8 text-gray-400" />
-                    <div className="flex-1">
-                      <div className="font-medium">{doc.title}</div>
-                      <div className="text-sm text-gray-500">{doc.document_type_display}</div>
-                    </div>
-                    <ArrowTopRightOnSquareIcon className="h-5 w-5 text-gray-400" />
-                  </a>
-                ))}
-              </div>
+      {/* Fertigungspläne Tab */}
+      {activeTab === 'documents' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-medium">Fertigungspläne</h2>
+            <a
+              href={`/manufacturing/vs-hardware/${order.vs_hardware}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+            >
+              VS-Hardware öffnen
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+            </a>
+          </div>
+
+          {order.vs_hardware_documents && order.vs_hardware_documents.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4">
+              {order.vs_hardware_documents.map((doc, idx) => (
+                <a
+                  key={idx}
+                  href={doc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50"
+                >
+                  <DocumentIcon className="h-8 w-8 text-gray-400" />
+                  <div className="flex-1">
+                    <div className="font-medium">{doc.title}</div>
+                    <div className="text-sm text-gray-500">{doc.document_type_display}</div>
+                  </div>
+                  <ArrowTopRightOnSquareIcon className="h-5 w-5 text-gray-400" />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Keine Fertigungspläne für diese VS-Hardware vorhanden.
             </div>
           )}
         </div>
@@ -842,6 +946,56 @@ const ProductionOrderEdit = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Start Order Modal */}
+      {showStartModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowStartModal(false)} />
+          <div className="bg-white rounded-lg shadow-lg z-10 w-full max-w-md p-6">
+            <h3 className="text-lg font-medium mb-4">Fertigungsauftrag starten</h3>
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-3 rounded">
+                <div className="font-mono text-blue-600">{order.order_number}</div>
+                <div className="text-sm">{order.vs_hardware_part_number} - {order.vs_hardware_name}</div>
+                <div className="text-sm text-gray-500">Menge: {order.quantity}</div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Warenkategorie <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value="">Auswählen...</option>
+                  {productCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Die Warenkategorie bestimmt die Fertigungscheckliste.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <button
+                  onClick={() => { setShowStartModal(false); setSelectedCategory(''); }}
+                  className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={confirmStartOrder}
+                  disabled={!selectedCategory}
+                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  Starten
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
