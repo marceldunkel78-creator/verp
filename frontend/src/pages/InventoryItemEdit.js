@@ -9,6 +9,7 @@ import {
   UserIcon,
   WrenchScrewdriverIcon,
   ClipboardDocumentCheckIcon,
+  TruckIcon,
   CheckCircleIcon,
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
@@ -16,11 +17,10 @@ import {
 // Get backend base URL from api service
 const BACKEND_BASE = process.env.REACT_APP_BACKEND_BASE || '';
 
-const TABS = [
+const BASE_TABS = [
   { id: 'basic', name: 'Basisinformationen', icon: InformationCircleIcon },
   { id: 'instance', name: 'Instanz-Details', icon: UserIcon },
-  { id: 'equipment', name: 'Ausstattung/Zubehör', icon: WrenchScrewdriverIcon },
-  { id: 'outgoing', name: 'Ausgangschecks', icon: ClipboardDocumentCheckIcon }
+  { id: 'equipment', name: 'Ausstattung/Zubehör', icon: WrenchScrewdriverIcon }
 ];
 
 const InventoryItemEdit = () => {
@@ -69,8 +69,11 @@ const InventoryItemEdit = () => {
   const [equipmentData, setEquipmentData] = useState({});
   const [equipmentTemplate, setEquipmentTemplate] = useState(null);
 
-  // Form Data für Tab 4: Ausgangschecks
-  const [outgoingChecks, setOutgoingChecks] = useState({});
+  // Checklisten-Daten (dynamisch aus Templates)
+  const [productionChecklistData, setProductionChecklistData] = useState(null);
+  const [outgoingChecklistData, setOutgoingChecklistData] = useState(null);
+  const [hasProductionTemplate, setHasProductionTemplate] = useState(false);
+  const [hasOutgoingTemplate, setHasOutgoingTemplate] = useState(false);
 
   // Dropdown-Optionen
   const [suppliers, setSuppliers] = useState([]);
@@ -137,8 +140,18 @@ const InventoryItemEdit = () => {
       
       // Tab 3 & 4: Templates und Daten laden
       setEquipmentData(data.equipment_data || {});
-      setOutgoingChecks(data.outgoing_checks || {});
       setEquipmentTemplate(data.equipment_template || null);
+
+      // Checklisten aus gespeicherten Daten laden
+      const savedProduction = data.production_checklist_data;
+      const savedOutgoing = data.outgoing_checks;
+      setProductionChecklistData(savedProduction && savedProduction.sections ? savedProduction : null);
+      setOutgoingChecklistData(savedOutgoing && savedOutgoing.sections ? savedOutgoing : null);
+
+      // Templates für diese Kategorie laden
+      if (data.product_category) {
+        fetchChecklistTemplates(data.product_category, savedProduction, savedOutgoing);
+      }
       
     } catch (error) {
       console.error('Error fetching inventory item:', error);
@@ -176,6 +189,32 @@ const InventoryItemEdit = () => {
     }
   }, []);
 
+  // Fetch checklist templates for the item's category
+  const fetchChecklistTemplates = async (categoryId, savedProduction, savedOutgoing) => {
+    try {
+      const response = await api.get(`/settings/checklist-templates/?product_category=${categoryId}&is_active=true`);
+      const templates = response.data.results || response.data;
+
+      const prodTemplate = templates.find(t => t.checklist_type === 'production');
+      const outTemplate = templates.find(t => t.checklist_type === 'outgoing');
+
+      setHasProductionTemplate(!!prodTemplate);
+      setHasOutgoingTemplate(!!outTemplate);
+
+      // If no saved data yet, initialize from template
+      if (prodTemplate && (!savedProduction || !savedProduction.sections)) {
+        const initResp = await api.get(`/settings/checklist-templates/${prodTemplate.id}/initial_data/`);
+        setProductionChecklistData(initResp.data);
+      }
+      if (outTemplate && (!savedOutgoing || !savedOutgoing.sections)) {
+        const initResp = await api.get(`/settings/checklist-templates/${outTemplate.id}/initial_data/`);
+        setOutgoingChecklistData(initResp.data);
+      }
+    } catch (error) {
+      console.error('Error fetching checklist templates:', error);
+    }
+  };
+
   useEffect(() => {
     if (id) {
       fetchItem();
@@ -198,8 +237,31 @@ const InventoryItemEdit = () => {
     setHasChanges(true);
   };
 
-  const handleOutgoingCheckChange = (fieldName, value) => {
-    setOutgoingChecks(prev => ({ ...prev, [fieldName]: value }));
+  const handleChecklistChange = (dataKey, setData, sectionIdx, itemIdx, checked) => {
+    setData(prev => {
+      if (!prev || !prev.sections) return prev;
+      const updated = JSON.parse(JSON.stringify(prev));
+      updated.sections[sectionIdx].items[itemIdx].checked = checked;
+      return updated;
+    });
+    setHasChanges(true);
+  };
+
+  const handleChecklistTableChange = (setData, tableKey, rowIdx, field, value) => {
+    setData(prev => {
+      if (!prev || !prev[tableKey]) return prev;
+      const updated = JSON.parse(JSON.stringify(prev));
+      updated[tableKey].rows[rowIdx][field] = value;
+      return updated;
+    });
+    setHasChanges(true);
+  };
+
+  const handleLeoniSnChange = (setData, value) => {
+    setData(prev => {
+      if (!prev) return prev;
+      return { ...prev, leoni_sn: value };
+    });
     setHasChanges(true);
   };
 
@@ -226,7 +288,8 @@ const InventoryItemEdit = () => {
         ...basicData,
         ...cleanedInstance,
         equipment_data: equipmentData,
-        outgoing_checks: outgoingChecks
+        production_checklist_data: productionChecklistData || {},
+        outgoing_checks: outgoingChecklistData || {}
       };
 
       await axios.patch(`${BACKEND_BASE}/api/inventory/inventory-items/${id}/`, payload, { withCredentials: true });
@@ -328,7 +391,16 @@ const InventoryItemEdit = () => {
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="tab-scroll -mb-px flex space-x-8">
-          {TABS.map((tab) => {
+          {(() => {
+            const tabs = [...BASE_TABS];
+            if (hasProductionTemplate || (productionChecklistData && productionChecklistData.sections)) {
+              tabs.push({ id: 'production_checklist', name: 'Fertigungscheckliste', icon: ClipboardDocumentCheckIcon });
+            }
+            if (hasOutgoingTemplate || (outgoingChecklistData && outgoingChecklistData.sections)) {
+              tabs.push({ id: 'outgoing_checklist', name: 'Ausgangscheckliste', icon: TruckIcon });
+            }
+            return tabs;
+          })().map((tab) => {
             const Icon = tab.icon;
             return (
               <button
@@ -383,11 +455,25 @@ const InventoryItemEdit = () => {
           />
         )}
 
-        {/* Tab 4: Ausgangschecks */}
-        {activeTab === 'outgoing' && (
-          <OutgoingChecksTab
-            data={outgoingChecks}
-            onChange={handleOutgoingCheckChange}
+        {/* Tab 4: Fertigungscheckliste */}
+        {activeTab === 'production_checklist' && (
+          <DynamicChecklistTab
+            title="Fertigungscheckliste"
+            data={productionChecklistData}
+            onCheckChange={(sIdx, iIdx, checked) => handleChecklistChange('production', setProductionChecklistData, sIdx, iIdx, checked)}
+            onTableChange={(tableKey, rowIdx, field, value) => handleChecklistTableChange(setProductionChecklistData, tableKey, rowIdx, field, value)}
+            onLeoniSnChange={(value) => handleLeoniSnChange(setProductionChecklistData, value)}
+          />
+        )}
+
+        {/* Tab 5: Ausgangscheckliste */}
+        {activeTab === 'outgoing_checklist' && (
+          <DynamicChecklistTab
+            title="Ausgangscheckliste"
+            data={outgoingChecklistData}
+            onCheckChange={(sIdx, iIdx, checked) => handleChecklistChange('outgoing', setOutgoingChecklistData, sIdx, iIdx, checked)}
+            onTableChange={(tableKey, rowIdx, field, value) => handleChecklistTableChange(setOutgoingChecklistData, tableKey, rowIdx, field, value)}
+            onLeoniSnChange={(value) => handleLeoniSnChange(setOutgoingChecklistData, value)}
           />
         )}
       </div>
@@ -1148,82 +1234,158 @@ const EquipmentTab = ({ data, template, onChange, categoryCode }) => {
   );
 };
 
-// Tab 4: Ausgangschecks
-const OutgoingChecksTab = ({ data, onChange }) => {
-  const checks = [
-    { id: 'sauber', label: 'Sauber' },
-    { id: 'funktion', label: 'Funktion' },
-    { id: 'vslabel', label: 'VSLabel' },
-    { id: 'tools', label: 'Tools' },
-    { id: 'manual', label: 'Manual' },
-    { id: 'keys', label: 'Keys' },
-    { id: 'interlock', label: 'Interlock' },
-    { id: 'datenkabel', label: 'Datenkabel' },
-    { id: 'interface', label: 'Interface' },
-    { id: 'triggerkabel', label: 'Triggerkabel' },
-    { id: 'dongle', label: 'Dongle' },
-    { id: 'stromkabel', label: 'Stromkabel' },
-    { id: 'netzteil', label: 'Netzteil' },
-    { id: 'v230', label: '230V' },
-    { id: 'v120', label: '120V' },
-    { id: 'fiber_llg', label: 'Fiber/LLG' },
-    { id: 'sn', label: 'S/N' },
-    { id: 'supportjacks', label: 'Support Jacks' },
-    { id: 'geraetverpackt', label: 'Gerät verpackt' }
-  ];
-  
-  const handleCheckToggle = (checkId) => {
-    onChange(checkId, !data[checkId]);
-  };
-  
-  const completedCount = checks.filter(c => data[c.id]).length;
-  const totalCount = checks.length;
-  
+// Dynamic Checklist Tab (used for both Fertigungs- and Ausgangschecklisten)
+const DynamicChecklistTab = ({ title, data, onCheckChange, onTableChange, onLeoniSnChange }) => {
+  if (!data || !data.sections) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        Keine Checkliste verfügbar. Bitte konfigurieren Sie eine Vorlage in den Einstellungen.
+      </div>
+    );
+  }
+
+  const totalItems = data.sections.reduce((sum, s) => sum + s.items.length, 0);
+  const checkedItems = data.sections.reduce((sum, s) => sum + s.items.filter(i => i.checked).length, 0);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center border-b pb-2">
-        <h3 className="text-lg font-medium text-gray-900">Allgemeine Ausgangschecks</h3>
+        <h3 className="text-lg font-medium text-gray-900">{title}</h3>
         <div className="flex items-center space-x-4">
           <span className="text-sm">
             <span className={`font-semibold ${
-              completedCount === totalCount ? 'text-green-600' : 'text-gray-600'
+              checkedItems === totalItems && totalItems > 0 ? 'text-green-600' : 'text-gray-600'
             }`}>
-              {completedCount}/{totalCount} geprüft
+              {checkedItems}/{totalItems} geprüft
             </span>
           </span>
-          {completedCount === totalCount && (
+          {checkedItems === totalItems && totalItems > 0 && (
             <CheckCircleIcon className="h-6 w-6 text-green-500" />
           )}
         </div>
       </div>
-      
-      <div className="bg-gray-50 rounded-lg p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {checks.map(check => (
-            <label
-              key={check.id}
-              className="flex items-center gap-3 p-3 bg-white rounded border hover:border-blue-300 cursor-pointer transition-colors"
-            >
-              <input
-                type="checkbox"
-                checked={!!data[check.id]}
-                onChange={() => handleCheckToggle(check.id)}
-                className="h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-gray-700">{check.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <InformationCircleIcon className="h-6 w-6 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
-            <p className="font-medium mb-1">Hinweis:</p>
-            <p>Diese Ausgangschecks sollten vor dem Versand oder der Übergabe an den Kunden durchgeführt werden.</p>
+
+      <div className="space-y-8">
+        {data.sections.map((section, sIdx) => (
+          <div key={sIdx}>
+            <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b">
+              {section.title}
+            </h4>
+            <div className="space-y-2">
+              {section.items.map((item, iIdx) => (
+                <label
+                  key={item.id}
+                  className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!item.checked}
+                    onChange={(e) => onCheckChange(sIdx, iIdx, e.target.checked)}
+                    className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className={item.checked ? 'text-gray-500 line-through' : ''}>
+                    {item.label}
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
+        ))}
+
+        {/* Galvo Table */}
+        {data.galvo_table && (
+          <div className="mt-8">
+            <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b">
+              Galvo-Offset Messung
+            </h4>
+            <table className="min-w-full border">
+              <thead className="bg-gray-50">
+                <tr>
+                  {data.galvo_table.headers.map((header, idx) => (
+                    <th key={idx} className="px-4 py-2 border text-left text-sm font-medium text-gray-700">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.galvo_table.rows.map((row, rowIdx) => (
+                  <tr key={rowIdx}>
+                    <td className="px-4 py-2 border bg-gray-50 font-mono">{row.offset}</td>
+                    <td className="px-4 py-2 border">
+                      <input
+                        type="text"
+                        value={row.x_voltage || ''}
+                        onChange={(e) => onTableChange('galvo_table', rowIdx, 'x_voltage', e.target.value)}
+                        className="w-full px-2 py-1 border rounded"
+                      />
+                    </td>
+                    <td className="px-4 py-2 border">
+                      <input
+                        type="text"
+                        value={row.y_voltage || ''}
+                        onChange={(e) => onTableChange('galvo_table', rowIdx, 'y_voltage', e.target.value)}
+                        className="w-full px-2 py-1 border rounded"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Laser Table */}
+        {data.laser_table && (
+          <div className="mt-8">
+            <h4 className="text-md font-medium text-gray-800 mb-3 pb-2 border-b">
+              Laser-Dokumentation
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {data.laser_table.headers.map((header, idx) => (
+                      <th key={idx} className="px-3 py-2 border text-left text-xs font-medium text-gray-700">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.laser_table.rows.map((row, rowIdx) => (
+                    <tr key={rowIdx}>
+                      {Object.keys(row).map((field, fIdx) => (
+                        <td key={fIdx} className="px-3 py-2 border">
+                          <input
+                            type="text"
+                            value={row[field] || ''}
+                            onChange={(e) => onTableChange('laser_table', rowIdx, field, e.target.value)}
+                            className="w-full px-2 py-1 border rounded text-sm"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Leoni SN */}
+            {data.leoni_sn !== undefined && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Leoni SN</label>
+                <input
+                  type="text"
+                  value={data.leoni_sn || ''}
+                  onChange={(e) => onLeoniSnChange(e.target.value)}
+                  className="w-64 px-3 py-2 border rounded"
+                  placeholder="Leoni Seriennummer"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

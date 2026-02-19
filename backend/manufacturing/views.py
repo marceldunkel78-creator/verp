@@ -309,217 +309,33 @@ class ProductionOrderViewSet(viewsets.ModelViewSet):
         return Response(ProductionOrderDetailSerializer(order, context={'request': request}).data)
     
     def _get_initial_checklist(self, category_code):
-        """Gibt die initiale Checklistenstruktur für eine Kategorie zurück"""
-        checklists = {
-            'VIRTEX': {
-                'type': 'VIRTEX',
+        """Gibt die initiale Checklistenstruktur für eine Kategorie zurück.
+        Lädt die Vorlage aus der Datenbank (ChecklistTemplate).
+        Fallback auf generische Checkliste wenn kein Template existiert.
+        """
+        from verp_settings.models import ChecklistTemplate
+
+        try:
+            template = ChecklistTemplate.objects.select_related('product_category').get(
+                product_category__code=category_code,
+                checklist_type='production',
+                is_active=True
+            )
+            return template.get_initial_data()
+        except ChecklistTemplate.DoesNotExist:
+            # Fallback für Kategorien ohne spezifische Vorlage
+            return {
+                'type': category_code,
                 'sections': [
                     {
                         'title': 'Allgemein',
                         'items': [
-                            {'id': 'fw_update', 'label': 'FW Update OK', 'checked': False},
-                            {'id': 'sn_aufkleber', 'label': 'SN Aufkleber OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'Digital Ports Test',
-                        'items': [
-                            {'id': 'ttl_out', 'label': 'TTL out OK', 'checked': False},
-                            {'id': 'cam_input', 'label': 'Cam Input OK', 'checked': False},
-                            {'id': 'ln0_trigger_sync', 'label': 'ln0 / TriggerIN / SyncIn OK', 'checked': False},
-                            {'id': 'cam_out', 'label': 'Cam out OK', 'checked': False},
-                            {'id': 'trigger_ready', 'label': 'Trigger ready OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'mit Laser Logic',
-                        'items': [
-                            {'id': 'ttl_output_laser_logic', 'label': 'TTL Output Laser Logic OK', 'checked': False},
-                            {'id': 'interlock', 'label': 'Interlock OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'mit Multiplexer',
-                        'items': [
-                            {'id': 'ttl_output_led', 'label': 'TTL Output LED Lampe OK', 'checked': False},
-                            {'id': 'ttl_output_laser_mux', 'label': 'TTL Output Laser OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'mit Orbital',
-                        'items': [
-                            {'id': 'orbital_ok', 'label': 'Orbital OK', 'checked': False},
-                            {'id': 'ttl_output_laser_orbital', 'label': 'TTL Output Laser OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'mit Break-out Box',
-                        'items': [
-                            {'id': 'qswitch', 'label': 'QSwitch OK', 'checked': False},
-                            {'id': 'ttl_a0_a3', 'label': 'TTL A0-A3 OK', 'checked': False},
-                            {'id': 'ttl_b0_b6', 'label': 'TTL B0-B6 OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'Analog Ports Test',
-                        'items': [
-                            {'id': 'number_ports_onstate', 'label': 'Number of ports on-state OK', 'checked': False},
-                            {'id': 'analog_0_10v', 'label': '0-10V OK', 'checked': False},
-                            {'id': 'analog_0_5v', 'label': '0-5V OK', 'checked': False},
-                            {'id': 'analog_3_4', 'label': 'Analog #3 #4 OK', 'checked': False},
-                            {'id': 'analog_minus5_plus5', 'label': '-5V..+5V OK', 'checked': False}
+                            {'id': 'quality_check', 'label': 'Qualitätsprüfung OK', 'checked': False},
+                            {'id': 'function_test', 'label': 'Funktionstest OK', 'checked': False}
                         ]
                     }
                 ]
-            },
-            'ORBITAL': {
-                'type': 'ORBITAL',
-                'sections': [
-                    {
-                        'title': 'Allgemein',
-                        'items': [
-                            {'id': 'beschriftung', 'label': 'Beschriftung OK', 'checked': False},
-                            {'id': 'tirf', 'label': 'TIRF OK', 'checked': False},
-                            {'id': 'frap', 'label': 'FRAP OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'TTL Outputs',
-                        'items': [
-                            {'id': 'ttl_out1', 'label': 'TTL Out1 OK', 'checked': False},
-                            {'id': 'ttl_out2', 'label': 'TTL Out2 OK', 'checked': False},
-                            {'id': 'ttl_out3', 'label': 'TTL Out3 OK', 'checked': False},
-                            {'id': 'ttl_out4', 'label': 'TTL Out4 OK', 'checked': False},
-                            {'id': 'ttl_out5', 'label': 'TTL Out5 OK', 'checked': False},
-                            {'id': 'ttl_out6', 'label': 'TTL Out6 OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'System',
-                        'items': [
-                            {'id': 'fw_update', 'label': 'FW Update OK', 'checked': False},
-                            {'id': 'sn_aufkleber', 'label': 'SN Aufkleber OK', 'checked': False}
-                        ]
-                    }
-                ],
-                'galvo_table': {
-                    'headers': ['Galvo-Offset', 'X-Galvo-Spannung V', 'Y-Galvo-Spannung V'],
-                    'rows': [
-                        {'offset': '2,49', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '2,00', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '1,50', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '1,00', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '0,50', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '-0,50', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '-1,00', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '-1,50', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '-2,00', 'x_voltage': '', 'y_voltage': ''},
-                        {'offset': '-2,49', 'x_voltage': '', 'y_voltage': ''}
-                    ]
-                }
-            },
-            'FRAP': {
-                'type': 'FRAP',
-                'sections': [
-                    {
-                        'title': 'Allgemein',
-                        'items': [
-                            {'id': 'sn_aufkleber', 'label': 'SN Aufkleber OK', 'checked': False},
-                            {'id': 'galvo_funktion', 'label': 'Galvo-Funktion OK', 'checked': False}
-                        ]
-                    }
-                ]
-            },
-            'KABEL': {
-                'type': 'KABEL',
-                'sections': [
-                    {
-                        'title': 'Allgemein',
-                        'items': [
-                            {'id': 'funktion', 'label': 'Funktion OK', 'checked': False},
-                            {'id': 'beschriftung', 'label': 'Beschriftung OK', 'checked': False}
-                        ]
-                    }
-                ]
-            },
-            'VS_LMS': {
-                'type': 'VS_LMS',
-                'sections': [
-                    {
-                        'title': 'Allgemein',
-                        'items': [
-                            {'id': 'sn_aufkleber', 'label': 'SN Aufkleber OK', 'checked': False},
-                            {'id': 'beschriftung', 'label': 'Beschriftung OK', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'Stromversorgung',
-                        'items': [
-                            {'id': 'test_laser_1_405', 'label': 'Test Laser 1 (405) OK?', 'checked': False},
-                            {'id': 'test_laser_2_445', 'label': 'Test Laser 2 (445) OK?', 'checked': False},
-                            {'id': 'test_laser_3_488', 'label': 'Test Laser 3 (488) OK?', 'checked': False},
-                            {'id': 'test_laser_4_515', 'label': 'Test Laser 4 (515) OK?', 'checked': False},
-                            {'id': 'test_laser_5_561', 'label': 'Test Laser 5 (561) OK?', 'checked': False},
-                            {'id': 'test_laser_6_640', 'label': 'Test Laser 6 (640) OK?', 'checked': False},
-                            {'id': 'test_laser_safety_12v', 'label': 'Test Laser Safety 12V OK?', 'checked': False},
-                            {'id': 'lms_power_12v', 'label': 'LMS Power 12V', 'checked': False},
-                            {'id': 'lms_power_15v', 'label': 'LMS Power 15V', 'checked': False},
-                            {'id': 'test_galvo_15v', 'label': 'Test Galvo ±15V OK?', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'Test Digital Ports',
-                        'items': [
-                            {'id': 'test_lms_ttl1', 'label': 'Test LMS TTL1 OK?', 'checked': False},
-                            {'id': 'test_ttl_input', 'label': 'Test TTL-Input OK?', 'checked': False},
-                            {'id': 'test_lms_ttl2', 'label': 'Test LMS TTL2 OK?', 'checked': False},
-                            {'id': 'test_interlock', 'label': 'Test Interlock OK?', 'checked': False},
-                            {'id': 'test_psw0', 'label': 'Test PSw0 OK?', 'checked': False},
-                            {'id': 'test_smb', 'label': 'Test SMB OK?', 'checked': False},
-                            {'id': 'test_psw1', 'label': 'Test PSw1 OK?', 'checked': False},
-                            {'id': 'test_orbital_ilas', 'label': 'Test Orbital / iLas OK?', 'checked': False}
-                        ]
-                    },
-                    {
-                        'title': 'Cable-Kit',
-                        'items': [
-                            {'id': 'laser_power_neutrik', 'label': 'Laser Power Kabel Neutrik 12p 2m', 'checked': False},
-                            {'id': 'galvo_power_safety', 'label': 'Galvo Power / Laser Safety Kabel DIN 7p 2m', 'checked': False},
-                            {'id': 'ttl_kabel_no1', 'label': 'TTL-Kabel mini Rund 8p 2m No1', 'checked': False},
-                            {'id': 'ttl_kabel_no2', 'label': 'TTL-Kabel mini Rund 8p 2m No2', 'checked': False}
-                        ]
-                    }
-                ],
-                'laser_table': {
-                    'headers': ['Laser nm', 'Modell', 'Serialnr.', 'Leistung mW', 'Output SDC mW', 'Output TIRF mW', 'Output FRAP mW'],
-                    'rows': [
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''},
-                        {'nm': '', 'modell': '', 'serial': '', 'leistung': '', 'output_sdc': '', 'output_tirf': '', 'output_frap': ''}
-                    ]
-                },
-                'leoni_sn': ''
             }
-        }
-        
-        # Fallback für andere Kategorien
-        return checklists.get(category_code, {
-            'type': category_code,
-            'sections': [
-                {
-                    'title': 'Allgemein',
-                    'items': [
-                        {'id': 'quality_check', 'label': 'Qualitätsprüfung OK', 'checked': False},
-                        {'id': 'function_test', 'label': 'Funktionstest OK', 'checked': False}
-                    ]
-                }
-            ]
-        })
     
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):

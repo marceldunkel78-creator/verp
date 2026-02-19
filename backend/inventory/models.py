@@ -456,7 +456,16 @@ class InventoryItem(models.Model):
         blank=True,
         default=dict,
         verbose_name='Ausgangschecks',
-        help_text='Allgemeine Ausgangschecks für Warenausgang'
+        help_text='Kategorie-spezifische Ausgangscheckliste (aus ChecklistTemplate)'
+    )
+
+    # Fertigungscheckliste (Kopie der Checkliste aus dem Fertigungsauftrag oder Template)
+    production_checklist_data = models.JSONField(
+        null=True,
+        blank=True,
+        default=dict,
+        verbose_name='Fertigungscheckliste',
+        help_text='Kategorie-spezifische Fertigungscheckliste (aus ChecklistTemplate)'
     )
     
     # =====================

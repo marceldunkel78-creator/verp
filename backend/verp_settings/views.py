@@ -7,14 +7,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
     CompanyManager, CompanyBankAccount, PaymentTerm,
-    DeliveryTerm, DeliveryInstruction, ProductCategory, WarrantyTerm
+    DeliveryTerm, DeliveryInstruction, ProductCategory, WarrantyTerm,
+    ChecklistTemplate
 )
 from .serializers import (
     ExchangeRateSerializer, CompanySettingsSerializer,
     CompanySettingsUpdateSerializer, CompanyAddressSerializer,
     CompanyManagerSerializer, CompanyBankAccountSerializer,
     PaymentTermSerializer, DeliveryTermSerializer, DeliveryInstructionSerializer,
-    ProductCategorySerializer, WarrantyTermSerializer
+    ProductCategorySerializer, WarrantyTermSerializer,
+    ChecklistTemplateSerializer
 )
 
 
@@ -246,3 +248,50 @@ class WarrantyTermViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(term)
             return Response(serializer.data)
         return Response({'error': 'Keine Standard-Garantiebedingung definiert'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class ChecklistTemplateViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Checklistenvorlagen (Fertigungs- und Ausgangschecklisten)
+    """
+    queryset = ChecklistTemplate.objects.select_related('product_category').all()
+    serializer_class = ChecklistTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'product_category__name']
+    filterset_fields = ['product_category', 'checklist_type', 'is_active']
+    ordering = ['product_category__sort_order', 'checklist_type']
+
+    @action(detail=False, methods=['get'])
+    def by_category(self, request):
+        """
+        Gibt alle Checklistenvorlagen für eine bestimmte Kategorie zurück.
+        ?product_category_id=X oder ?product_category_code=VIRTEX
+        """
+        cat_id = request.query_params.get('product_category_id')
+        cat_code = request.query_params.get('product_category_code')
+        checklist_type = request.query_params.get('checklist_type')
+
+        qs = self.get_queryset().filter(is_active=True)
+        if cat_id:
+            qs = qs.filter(product_category_id=cat_id)
+        elif cat_code:
+            qs = qs.filter(product_category__code=cat_code)
+        else:
+            return Response(
+                {'error': 'product_category_id oder product_category_code erforderlich'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if checklist_type:
+            qs = qs.filter(checklist_type=checklist_type)
+
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def initial_data(self, request, pk=None):
+        """
+        Gibt die initiale Checklisten-Datenstruktur zurück (alle Items unchecked).
+        """
+        template = self.get_object()
+        return Response(template.get_initial_data())

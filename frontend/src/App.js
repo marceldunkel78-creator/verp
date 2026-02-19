@@ -79,6 +79,7 @@ import NotificationSettings from './pages/NotificationSettings';
 import CustomerSync from './pages/CustomerSync';
 import OrderImport from './pages/OrderImport';
 import RedmineSync from './pages/RedmineSync';
+import ChecklistSettings from './pages/ChecklistSettings';
 import DevelopmentProjects from './pages/DevelopmentProjects';
 import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
 import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
@@ -243,6 +244,7 @@ function App() {
             <Route path="settings/customer-sync" element={<CustomerSync />} />
             <Route path="settings/order-import" element={<OrderImport />} />
             <Route path="settings/redmine-sync" element={<RedmineSync />} />
+            <Route path="settings/checklists" element={<ChecklistSettings />} />
             
             {/* Legacy redirects for backward compatibility */}
             <Route path="users" element={<Navigate to="/settings/users" replace />} />

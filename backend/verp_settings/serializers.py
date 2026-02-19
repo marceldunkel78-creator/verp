@@ -2,7 +2,8 @@ from rest_framework import serializers
 from .models import (
     ExchangeRate, CompanySettings, CompanyAddress,
     CompanyManager, CompanyBankAccount, PaymentTerm,
-    DeliveryTerm, DeliveryInstruction, ProductCategory, WarrantyTerm
+    DeliveryTerm, DeliveryInstruction, ProductCategory, WarrantyTerm,
+    ChecklistTemplate
 )
 
 
@@ -194,5 +195,22 @@ class WarrantyTermSerializer(serializers.ModelSerializer):
             'description', 'description_en',
             'is_default', 'is_active',
             'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ChecklistTemplateSerializer(serializers.ModelSerializer):
+    """Serializer für Checklistenvorlagen"""
+    product_category_name = serializers.CharField(source='product_category.name', read_only=True)
+    product_category_code = serializers.CharField(source='product_category.code', read_only=True)
+    checklist_type_display = serializers.CharField(source='get_checklist_type_display', read_only=True)
+
+    class Meta:
+        model = ChecklistTemplate
+        fields = [
+            'id', 'product_category', 'product_category_name', 'product_category_code',
+            'checklist_type', 'checklist_type_display', 'name',
+            'sections', 'special_tables',
+            'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

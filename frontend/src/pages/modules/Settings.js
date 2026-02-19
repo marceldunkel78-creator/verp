@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
   BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon,
-  ArchiveBoxIcon, TicketIcon
+  ArchiveBoxIcon, TicketIcon, ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -70,6 +70,13 @@ const Settings = () => {
       icon: TicketIcon,
       path: '/settings/redmine-sync',
       color: 'orange'
+    },
+    {
+      name: 'Checklisten-Verwaltung',
+      description: 'Fertigungs- und Ausgangschecklisten pro Warenkategorie konfigurieren',
+      icon: ClipboardDocumentCheckIcon,
+      path: '/settings/checklists',
+      color: 'emerald'
     },
     {
       name: 'Admin Löschmodul',

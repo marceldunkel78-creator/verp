@@ -652,3 +652,87 @@ class WarrantyTerm(models.Model):
         if self.is_default:
             WarrantyTerm.objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
         super().save(*args, **kwargs)
+
+
+class ChecklistTemplate(models.Model):
+    """
+    Konfigurierbare Checklistenvorlagen pro Warenkategorie.
+    Ersetzt die hartkodierten Fertigungs- und Ausgangschecklisten.
+    """
+    CHECKLIST_TYPE_CHOICES = [
+        ('production', 'Fertigungscheckliste'),
+        ('outgoing', 'Ausgangscheckliste'),
+    ]
+
+    product_category = models.ForeignKey(
+        ProductCategory,
+        on_delete=models.CASCADE,
+        related_name='checklist_templates',
+        verbose_name='Warenkategorie'
+    )
+
+    checklist_type = models.CharField(
+        max_length=20,
+        choices=CHECKLIST_TYPE_CHOICES,
+        verbose_name='Checklistentyp'
+    )
+
+    name = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Name',
+        help_text='Optionaler Name für die Checkliste'
+    )
+
+    # Sections: [{title: str, items: [{id: str, label: str}]}]
+    sections = models.JSONField(
+        default=list,
+        verbose_name='Sektionen',
+        help_text='Aufbau: [{title, items: [{id, label}]}]'
+    )
+
+    # Optional special tables (galvo_table for ORBITAL, laser_table+leoni_sn for VS_LMS)
+    special_tables = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Spezielle Tabellen',
+        help_text='z.B. galvo_table, laser_table, leoni_sn'
+    )
+
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    class Meta:
+        verbose_name = 'Checklistenvorlage'
+        verbose_name_plural = 'Checklistenvorlagen'
+        unique_together = ('product_category', 'checklist_type')
+        ordering = ['product_category__sort_order', 'checklist_type']
+
+    def __str__(self):
+        return f"{self.product_category.name} - {self.get_checklist_type_display()}"
+
+    def get_initial_data(self):
+        """
+        Returns a fresh checklist data structure with all items unchecked,
+        ready to be stored on a ProductionOrder or InventoryItem.
+        """
+        data = {
+            'type': self.product_category.code,
+            'template_id': self.pk,
+            'sections': []
+        }
+        for section in self.sections:
+            data['sections'].append({
+                'title': section.get('title', ''),
+                'items': [
+                    {'id': item['id'], 'label': item['label'], 'checked': False}
+                    for item in section.get('items', [])
+                ]
+            })
+        # Deep-copy special tables so they start fresh
+        if self.special_tables:
+            import copy
+            for key, value in self.special_tables.items():
+                data[key] = copy.deepcopy(value)
+        return data

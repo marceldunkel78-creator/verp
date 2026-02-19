@@ -112,6 +112,8 @@ class InventoryItemSerializer(serializers.ModelSerializer):
             'firmware_notes',
             'equipment_data',
             'qm_data',
+            'outgoing_checks',
+            'production_checklist_data',
             'notes',
             'management_info',
             'status',

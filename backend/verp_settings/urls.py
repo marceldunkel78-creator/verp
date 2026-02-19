@@ -4,7 +4,7 @@ from .views import (
     ExchangeRateViewSet, CompanySettingsViewSet,
     CompanyAddressViewSet, CompanyManagerViewSet, CompanyBankAccountViewSet,
     PaymentTermViewSet, DeliveryTermViewSet, DeliveryInstructionViewSet,
-    ProductCategoryViewSet, WarrantyTermViewSet
+    ProductCategoryViewSet, WarrantyTermViewSet, ChecklistTemplateViewSet
 )
 from .backup_views import DatabaseBackupView, DatabaseRestoreView, DatabaseStatsView
 from .customer_sync_views import (
@@ -31,6 +31,7 @@ router.register(r'delivery-terms', DeliveryTermViewSet, basename='delivery-term'
 router.register(r'delivery-instructions', DeliveryInstructionViewSet, basename='delivery-instruction')
 router.register(r'product-categories', ProductCategoryViewSet, basename='product-category')
 router.register(r'warranty-terms', WarrantyTermViewSet, basename='warranty-term')
+router.register(r'checklist-templates', ChecklistTemplateViewSet, basename='checklist-template')
 
 urlpatterns = [
     path('', include(router.urls)),
