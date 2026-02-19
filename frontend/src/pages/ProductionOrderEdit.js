@@ -135,6 +135,13 @@ const ProductionOrderEdit = () => {
   };
 
   const handleSave = async () => {
+    // Validation: estimated_completion_date is required
+    if (!formData.estimated_completion_date) {
+      setSaveMessage({ type: 'error', text: 'Avisiertes Fertigungsende muss eingetragen werden!' });
+      setTimeout(() => setSaveMessage(null), 5000);
+      return;
+    }
+
     setSaving(true);
     try {
       // Ensure observers are sent as array of IDs (numbers)
@@ -479,6 +486,12 @@ const ProductionOrderEdit = () => {
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fertigungsbeginn</label>
+                <div className="px-3 py-2 bg-gray-50 rounded border">
+                  {order.actual_start ? new Date(order.actual_start).toLocaleDateString('de-DE') : '-'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Warenkategorie</label>
