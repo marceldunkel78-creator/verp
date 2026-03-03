@@ -89,5 +89,15 @@ api.interceptors.response.use(
 );
 
 
+/**
+ * Reset the failed-refresh flag so that after a fresh login
+ * the interceptor will try token-refresh again on 401.
+ */
+export function resetAuthState() {
+  failedRefresh = false;
+  isRefreshing = false;
+  refreshSubscribers = [];
+}
+
 export default api;
 export { API_BASE };

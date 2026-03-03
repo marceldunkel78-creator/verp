@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from '../services/api';
+import { resetAuthState } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -39,6 +40,8 @@ export const AuthProvider = ({ children }) => {
     try {
       // Send credentials; server sets HttpOnly cookies
       await api.post('/auth/login/', { username, password });
+      // Reset interceptor state so token refresh works after re-login
+      resetAuthState();
       // Now try to load user
       await fetchUser();
       // Clear any previous logout redirect flag after successful login

@@ -181,10 +181,12 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 50,
 }
 
-# JWT Settings
+# JWT Settings – Token-Laufzeiten konfigurierbar via .env
+# ACCESS_TOKEN_HOURS: Wie lange ein Access-Token gültig ist (Standard: 8 Stunden)
+# REFRESH_TOKEN_DAYS: Wie lange man ohne erneuten Login eingeloggt bleibt (Standard: 30 Tage)
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=config('ACCESS_TOKEN_HOURS', default=8, cast=int)),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=config('REFRESH_TOKEN_DAYS', default=30, cast=int)),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
