@@ -35,7 +35,7 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, DevelopmentProjectPermission]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['project_number', 'name', 'description']
-    ordering_fields = ['project_number', 'name', 'status', 'project_start', 'planned_end', 'assigned_to__last_name', 'created_at', 'updated_at']
+    ordering_fields = ['project_number', 'name', 'status', 'priority', 'project_start', 'planned_end', 'assigned_to__last_name', 'created_at', 'updated_at']
     ordering = ['-updated_at']
     
     def get_serializer_class(self):
@@ -126,6 +126,35 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
             # Fehler bei Notification sollte nicht den Hauptvorgang stoppen
             print(f"Fehler bei Notification-Erstellung: {e}")
     
+    def _create_todo_assignment_notification(self, project, todo, assigning_user):
+        """Erstellt Benachrichtigung und Erinnerung bei ToDo-Zuweisung"""
+        try:
+            from users.models import Notification, Reminder
+            
+            assigner_name = f"{assigning_user.first_name} {assigning_user.last_name}".strip() or assigning_user.username
+            
+            # Notification erstellen
+            Notification.objects.create(
+                user=todo.assigned_to,
+                title=f"ToDo zugewiesen: {project.project_number}",
+                message=f"{assigner_name} hat Ihnen eine Aufgabe im Projekt '{project.name}' zugewiesen: {todo.text[:100]}",
+                notification_type='info',
+                related_url=f'/development/projects/{project.id}'
+            )
+            
+            # Reminder mit Fälligkeit nach einem Tag erstellen
+            Reminder.objects.create(
+                user=todo.assigned_to,
+                title=f"ToDo: {todo.text[:80]}",
+                description=f"Aufgabe im Entwicklungsprojekt {project.project_number} - '{project.name}'.",
+                due_date=timezone.now().date() + timedelta(days=1),
+                related_object_type='development_project',
+                related_object_id=project.id,
+                related_url=f"/development/projects/{project.id}"
+            )
+        except Exception as e:
+            print(f"Fehler bei ToDo-Notification-Erstellung: {e}")
+    
     # ============================================
     # TODO ACTIONS
     # ============================================
@@ -145,12 +174,19 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
         # Position ermitteln
         max_position = project.todos.aggregate(max_pos=Max('position'))['max_pos'] or 0
         
+        assigned_to_id = request.data.get('assigned_to', None)
+        
         todo = DevelopmentProjectTodo.objects.create(
             project=project,
             text=text,
             position=max_position + 1,
+            assigned_to_id=assigned_to_id if assigned_to_id else None,
             created_by=request.user
         )
+        
+        # Notification & Reminder bei Zuweisung
+        if todo.assigned_to and todo.assigned_to != request.user:
+            self._create_todo_assignment_notification(project, todo, request.user)
         
         serializer = DevelopmentProjectTodoSerializer(todo)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -164,14 +200,24 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
         except DevelopmentProjectTodo.DoesNotExist:
             raise Http404("ToDo nicht gefunden")
         
+        old_assigned_to = todo.assigned_to
+        
         if 'text' in request.data:
             todo.text = request.data['text']
         if 'is_completed' in request.data:
             todo.is_completed = request.data['is_completed']
         if 'position' in request.data:
             todo.position = request.data['position']
+        if 'assigned_to' in request.data:
+            assigned_to_val = request.data['assigned_to']
+            todo.assigned_to_id = assigned_to_val if assigned_to_val else None
         
         todo.save()
+        
+        # Notification & Reminder bei neuer Zuweisung
+        if todo.assigned_to and todo.assigned_to != old_assigned_to:
+            if todo.assigned_to != request.user:
+                self._create_todo_assignment_notification(project, todo, request.user)
         
         serializer = DevelopmentProjectTodoSerializer(todo)
         return Response(serializer.data)

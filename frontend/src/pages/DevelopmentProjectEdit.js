@@ -31,6 +31,13 @@ const STATUS_OPTIONS = [
   { value: 'rejected', label: 'Abgelehnt' }
 ];
 
+const PRIORITY_OPTIONS = [
+  { value: 'very_high', label: 'Sehr hoch' },
+  { value: 'high', label: 'Hoch' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Niedrig' }
+];
+
 const DevelopmentProjectEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -46,6 +53,7 @@ const DevelopmentProjectEdit = () => {
     name: '',
     description: '',
     status: 'new',
+    priority: 'normal',
     assigned_to: '',
     planned_end: '',
     todos: [],
@@ -58,6 +66,7 @@ const DevelopmentProjectEdit = () => {
 
   // Form states for adding new items
   const [newTodo, setNewTodo] = useState('');
+  const [newTodoAssignee, setNewTodoAssignee] = useState('');
   const [newComment, setNewComment] = useState('');
   const [newMaterial, setNewMaterial] = useState({ material_supply: '', quantity: 1, notes: '' });
   const [materialSearch, setMaterialSearch] = useState('');
@@ -152,6 +161,7 @@ const DevelopmentProjectEdit = () => {
           name: '',
           description: '',
           status: 'new',
+          priority: 'normal',
           assigned_to: '',
           planned_end: '',
           todos: [],
@@ -238,6 +248,7 @@ const DevelopmentProjectEdit = () => {
         name: project.name,
         description: project.description,
         status: project.status,
+        priority: project.priority,
         assigned_to: project.assigned_to || null,
         planned_end: project.planned_end || null
       };
@@ -262,6 +273,7 @@ const DevelopmentProjectEdit = () => {
           name: norm(response.data.name),
           description: norm(response.data.description),
           status: norm(response.data.status),
+          priority: norm(response.data.priority),
           assigned_to: norm(response.data.assigned_to),
           planned_end: norm(response.data.planned_end)
         };
@@ -280,9 +292,12 @@ const DevelopmentProjectEdit = () => {
     if (!newTodo.trim()) return;
     setAddingTodo(true);
     try {
-      const response = await api.post(`/development/projects/${id}/add_todo/`, { text: newTodo });
+      const payload = { text: newTodo };
+      if (newTodoAssignee) payload.assigned_to = newTodoAssignee;
+      const response = await api.post(`/development/projects/${id}/add_todo/`, payload);
       setProject(prev => ({ ...prev, todos: [...prev.todos, response.data] }));
       setNewTodo('');
+      setNewTodoAssignee('');
     } catch (error) {
       alert('Fehler beim Hinzufügen: ' + error.message);
     } finally {
@@ -311,6 +326,21 @@ const DevelopmentProjectEdit = () => {
       setProject(prev => ({ ...prev, todos: prev.todos.filter(t => t.id !== todoId) }));
     } catch (error) {
       alert('Fehler beim Löschen: ' + error.message);
+    }
+  };
+
+  const handleUpdateTodoAssignment = async (todoId, userId) => {
+    if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
+    try {
+      const response = await api.patch(`/development/projects/${id}/update_todo/${todoId}/`, {
+        assigned_to: userId || null
+      });
+      setProject(prev => ({
+        ...prev,
+        todos: prev.todos.map(t => t.id === todoId ? { ...t, ...response.data } : t)
+      }));
+    } catch (error) {
+      alert('Fehler beim Zuweisen: ' + error.message);
     }
   };
 
@@ -491,10 +521,11 @@ const DevelopmentProjectEdit = () => {
       norm(project.name) !== norm(orig.name) ||
       norm(project.description) !== norm(orig.description) ||
       norm(project.status) !== norm(orig.status) ||
+      norm(project.priority) !== norm(orig.priority) ||
       norm(project.assigned_to) !== norm(orig.assigned_to) ||
       norm(project.planned_end) !== norm(orig.planned_end)
     );
-  }, [project.name, project.description, project.status, project.assigned_to, project.planned_end, isNew]);
+  }, [project.name, project.description, project.status, project.priority, project.assigned_to, project.planned_end, isNew]);
 
   // Determine if cost calculation has changed
   const hasCostCalcChanges = useMemo(() => {
@@ -642,6 +673,21 @@ const DevelopmentProjectEdit = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Priorität
+                </label>
+                <select
+                  value={project.priority || 'normal'}
+                  onChange={(e) => setProject(prev => ({ ...prev, priority: e.target.value }))}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
+                >
+                  {PRIORITY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Zugewiesen an
                 </label>
                 <select
@@ -713,6 +759,18 @@ const DevelopmentProjectEdit = () => {
                 className="flex-1 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
                 placeholder="Neue Aufgabe hinzufügen..."
               />
+              <select
+                value={newTodoAssignee}
+                onChange={(e) => setNewTodoAssignee(e.target.value)}
+                className="w-48 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
+              >
+                <option value="">-- Zuweisen --</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>
+                    {user.first_name} {user.last_name}
+                  </option>
+                ))}
+              </select>
               <button
                 onClick={handleAddTodo}
                 disabled={addingTodo || !newTodo.trim()}
@@ -747,6 +805,19 @@ const DevelopmentProjectEdit = () => {
                     <span className={`flex-1 ${todo.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                       {todo.text}
                     </span>
+                    <select
+                      value={todo.assigned_to || ''}
+                      onChange={(e) => handleUpdateTodoAssignment(todo.id, e.target.value)}
+                      className="w-40 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-xs"
+                      title={todo.assigned_to_name ? `Zugewiesen an: ${todo.assigned_to_name}` : 'Nicht zugewiesen'}
+                    >
+                      <option value="">-- Zuweisen --</option>
+                      {users.map(user => (
+                        <option key={user.id} value={user.id}>
+                          {user.first_name} {user.last_name}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       onClick={() => handleDeleteTodo(todo.id)}
                       className="text-red-400 hover:text-red-600"

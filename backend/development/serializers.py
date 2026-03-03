@@ -12,11 +12,13 @@ User = get_user_model()
 class DevelopmentProjectTodoSerializer(serializers.ModelSerializer):
     """Serializer für ToDo-Einträge"""
     created_by_name = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
     
     class Meta:
         model = DevelopmentProjectTodo
         fields = [
             'id', 'project', 'text', 'is_completed', 'position',
+            'assigned_to', 'assigned_to_name',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by']
@@ -24,6 +26,11 @@ class DevelopmentProjectTodoSerializer(serializers.ModelSerializer):
     def get_created_by_name(self, obj):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
         return None
 
 
@@ -152,6 +159,7 @@ class DevelopmentProjectTimeEntrySerializer(serializers.ModelSerializer):
 class DevelopmentProjectListSerializer(serializers.ModelSerializer):
     """Serializer für die Listenansicht"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
     is_open = serializers.BooleanField(read_only=True)
     total_hours_spent = serializers.SerializerMethodField()
@@ -160,6 +168,7 @@ class DevelopmentProjectListSerializer(serializers.ModelSerializer):
         model = DevelopmentProject
         fields = [
             'id', 'project_number', 'name', 'status', 'status_display',
+            'priority', 'priority_display',
             'assigned_to', 'assigned_to_name', 'project_start', 'planned_end',
             'is_open', 'total_hours_spent', 'created_at', 'updated_at'
         ]
@@ -178,6 +187,7 @@ class DevelopmentProjectListSerializer(serializers.ModelSerializer):
 class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
     """Serializer für die Detailansicht"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     is_open = serializers.BooleanField(read_only=True)
@@ -198,7 +208,8 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
         model = DevelopmentProject
         fields = [
             'id', 'project_number', 'name', 'description',
-            'status', 'status_display', 'assigned_to', 'assigned_to_name',
+            'status', 'status_display', 'priority', 'priority_display',
+            'assigned_to', 'assigned_to_name',
             'project_start', 'planned_end', 'is_open',
             'todos', 'comments', 'material_items', 'cost_calculations',
             'attachments', 'time_entries',
@@ -238,6 +249,6 @@ class DevelopmentProjectCreateUpdateSerializer(serializers.ModelSerializer):
         model = DevelopmentProject
         fields = [
             'id', 'project_number', 'name', 'description',
-            'status', 'assigned_to', 'planned_end'
+            'status', 'priority', 'assigned_to', 'planned_end'
         ]
         read_only_fields = ['id', 'project_number']

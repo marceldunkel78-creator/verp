@@ -21,6 +21,13 @@ const STATUS_LABELS = {
   'rejected': { label: 'Abgelehnt', color: 'bg-red-100 text-red-800' }
 };
 
+const PRIORITY_LABELS = {
+  'very_high': { label: 'Sehr hoch', color: 'bg-red-100 text-red-800' },
+  'high': { label: 'Hoch', color: 'bg-orange-100 text-orange-800' },
+  'normal': { label: 'Normal', color: 'bg-gray-100 text-gray-800' },
+  'low': { label: 'Niedrig', color: 'bg-blue-100 text-blue-800' }
+};
+
 const DevelopmentProjects = () => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
@@ -87,6 +94,15 @@ const DevelopmentProjects = () => {
     return (
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
         {statusInfo.label}
+      </span>
+    );
+  };
+
+  const getPriorityBadge = (priority) => {
+    const info = PRIORITY_LABELS[priority] || { label: priority || '-', color: 'bg-gray-100 text-gray-800' };
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${info.color}`}>
+        {info.label}
       </span>
     );
   };
@@ -178,6 +194,12 @@ const DevelopmentProjects = () => {
                 setSortBy={setSortBy}
               />
               <SortableHeader 
+                field="priority" 
+                label="Prio" 
+                sortBy={sortBy} 
+                setSortBy={setSortBy}
+              />
+              <SortableHeader 
                 field="assigned_to__last_name" 
                 label="Zugewiesen an" 
                 sortBy={sortBy} 
@@ -203,14 +225,14 @@ const DevelopmentProjects = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan="7" className="px-6 py-12 text-center">
+                <td colSpan="8" className="px-6 py-12 text-center">
                   <ArrowPathIcon className="h-8 w-8 mx-auto text-gray-400 animate-spin" />
                   <p className="mt-2 text-sm text-gray-500">Lade Projekte...</p>
                 </td>
               </tr>
             ) : projects.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="8" className="px-6 py-12 text-center text-gray-500">
                   Keine Projekte gefunden
                 </td>
               </tr>
@@ -229,6 +251,9 @@ const DevelopmentProjects = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {getStatusBadge(project.status)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {getPriorityBadge(project.priority)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {project.assigned_to_name || '-'}

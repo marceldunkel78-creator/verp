@@ -20,6 +20,13 @@ class DevelopmentProject(models.Model):
         ('rejected', 'Abgelehnt'),
     ]
     
+    PRIORITY_CHOICES = [
+        ('very_high', 'Sehr hoch'),
+        ('high', 'Hoch'),
+        ('normal', 'Normal'),
+        ('low', 'Niedrig'),
+    ]
+    
     project_number = models.CharField(
         max_length=15,
         unique=True,
@@ -38,6 +45,13 @@ class DevelopmentProject(models.Model):
         choices=STATUS_CHOICES,
         default='new',
         verbose_name='Status'
+    )
+    
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='normal',
+        verbose_name='Priorität'
     )
     
     assigned_to = models.ForeignKey(
@@ -126,6 +140,14 @@ class DevelopmentProjectTodo(models.Model):
     text = models.TextField(verbose_name='Aufgabe')
     is_completed = models.BooleanField(default=False, verbose_name='Erledigt')
     position = models.PositiveIntegerField(default=0, verbose_name='Position')
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_dev_todos',
+        verbose_name='Zugewiesen an'
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
