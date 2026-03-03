@@ -228,6 +228,15 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
   };
 
   const renderFileItem = (attachment) => {
+    const isPDF = attachment.content_type === 'application/pdf' || 
+                  attachment.filename.toLowerCase().endsWith('.pdf');
+    
+    const handleView = () => {
+      if (isPDF && attachment.file_url) {
+        window.open(attachment.file_url, '_blank');
+      }
+    };
+    
     return (
       <div className="flex items-center justify-between p-3 bg-gray-50 rounded border">
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -242,6 +251,16 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isPDF && (
+            <button
+              type="button"
+              onClick={handleView}
+              className="p-2 text-green-600 hover:bg-green-50 rounded"
+              title="Im Browser ansehen"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => handleDownload(attachment.id, attachment.filename)}

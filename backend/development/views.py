@@ -16,14 +16,14 @@ from core.permissions import DevelopmentProjectPermission
 from .models import (
     DevelopmentProject, DevelopmentProjectTodo, DevelopmentProjectComment,
     DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
-    DevelopmentProjectAttachment, DevelopmentProjectTimeEntry
+    DevelopmentProjectAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
 )
 from .serializers import (
     DevelopmentProjectListSerializer, DevelopmentProjectDetailSerializer,
     DevelopmentProjectCreateUpdateSerializer, DevelopmentProjectTodoSerializer,
     DevelopmentProjectCommentSerializer, DevelopmentProjectMaterialItemSerializer,
     DevelopmentProjectCostCalculationSerializer, DevelopmentProjectAttachmentSerializer,
-    DevelopmentProjectTimeEntrySerializer
+    DevelopmentProjectTimeEntrySerializer, DevelopmentProjectSourceSerializer
 )
 
 
@@ -569,6 +569,72 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except DevelopmentProjectTimeEntry.DoesNotExist:
             raise Http404("Zeiteintrag nicht gefunden")
+
+    # ============================================
+    # SOURCE ACTIONS
+    # ============================================
+    
+    @action(detail=True, methods=['post'])
+    def add_source(self, request, pk=None):
+        """Fügt eine Quelle/Link hinzu"""
+        project = self.get_object()
+        title = request.data.get('title', '').strip()
+        url = request.data.get('url', '').strip()
+        
+        if not title or not url:
+            return Response(
+                {'error': 'Titel und URL sind erforderlich'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Position ermitteln
+        max_position = project.sources.aggregate(max_pos=Max('position'))['max_pos'] or 0
+        
+        source = DevelopmentProjectSource.objects.create(
+            project=project,
+            title=title,
+            url=url,
+            description=request.data.get('description', ''),
+            position=max_position + 1,
+            created_by=request.user
+        )
+        
+        serializer = DevelopmentProjectSourceSerializer(source)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['patch'], url_path='update_source/(?P<source_id>[^/.]+)')
+    def update_source(self, request, pk=None, source_id=None):
+        """Aktualisiert eine Quelle"""
+        project = self.get_object()
+        try:
+            source = DevelopmentProjectSource.objects.get(id=source_id, project=project)
+        except DevelopmentProjectSource.DoesNotExist:
+            raise Http404("Quelle nicht gefunden")
+        
+        if 'title' in request.data:
+            source.title = request.data['title']
+        if 'url' in request.data:
+            source.url = request.data['url']
+        if 'description' in request.data:
+            source.description = request.data['description']
+        if 'position' in request.data:
+            source.position = request.data['position']
+        
+        source.save()
+        
+        serializer = DevelopmentProjectSourceSerializer(source)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_source/(?P<source_id>[^/.]+)')
+    def delete_source(self, request, pk=None, source_id=None):
+        """Löscht eine Quelle"""
+        project = self.get_object()
+        try:
+            source = DevelopmentProjectSource.objects.get(id=source_id, project=project)
+            source.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except DevelopmentProjectSource.DoesNotExist:
+            raise Http404("Quelle nicht gefunden")
 
 
 class DevelopmentProjectMaterialItemViewSet(viewsets.ModelViewSet):

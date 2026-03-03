@@ -19,6 +19,7 @@ const TABS = [
   { id: 'comments', label: 'Kommentare' },
   { id: 'materials', label: 'Material & Kalkulation' },
   { id: 'files', label: 'Dokumente' },
+  { id: 'sources', label: 'Quellen' },
   { id: 'time', label: 'Zeiterfassung' }
 ];
 
@@ -61,6 +62,7 @@ const DevelopmentProjectEdit = () => {
     material_items: [],
     cost_calculations: [],
     attachments: [],
+    sources: [],
     time_entries: []
   });
 
@@ -81,6 +83,7 @@ const DevelopmentProjectEdit = () => {
     hours_spent: '',
     description: ''
   });
+  const [newSource, setNewSource] = useState({ title: '', url: '', description: '' });
 
   // Cost calculation
   const [costCalc, setCostCalc] = useState({
@@ -169,6 +172,7 @@ const DevelopmentProjectEdit = () => {
           material_items: [],
           cost_calculations: [],
           attachments: [],
+          sources: [],
           time_entries: []
         });
         setCostCalc({
@@ -502,6 +506,36 @@ const DevelopmentProjectEdit = () => {
     try {
       await api.delete(`/development/projects/${id}/delete_time_entry/${entryId}/`);
       setProject(prev => ({ ...prev, time_entries: prev.time_entries.filter(e => e.id !== entryId) }));
+    } catch (error) {
+      alert('Fehler beim Löschen: ' + error.message);
+    }
+  };
+
+  // Source Actions
+  const handleAddSource = async () => {
+    if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
+    if (!newSource.title.trim() || !newSource.url.trim()) {
+      alert('Bitte Titel und URL eingeben');
+      return;
+    }
+    setAddingMaterial(true); // Reuse loading state
+    try {
+      const response = await api.post(`/development/projects/${id}/add_source/`, newSource);
+      setProject(prev => ({ ...prev, sources: [...prev.sources, response.data] }));
+      setNewSource({ title: '', url: '', description: '' });
+    } catch (error) {
+      alert('Fehler beim Hinzufügen: ' + error.message);
+    } finally {
+      setAddingMaterial(false);
+    }
+  };
+
+  const handleDeleteSource = async (sourceId) => {
+    if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
+    if (!window.confirm('Quelle wirklich löschen?')) return;
+    try {
+      await api.delete(`/development/projects/${id}/delete_source/${sourceId}/`);
+      setProject(prev => ({ ...prev, sources: prev.sources.filter(s => s.id !== sourceId) }));
     } catch (error) {
       alert('Fehler beim Löschen: ' + error.message);
     }
@@ -1151,6 +1185,86 @@ const DevelopmentProjectEdit = () => {
                 }));
               }}
             />
+          </div>
+        )}
+
+        {/* Sources Tab */}
+        {activeTab === 'sources' && !isNew && (
+          <div className="p-6">
+            {/* Add Source */}
+            <div className="mb-6 border rounded-lg p-4 bg-gray-50">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Neue Quelle hinzufügen</h4>
+              <div className="grid grid-cols-1 gap-3">
+                <input
+                  type="text"
+                  value={newSource.title}
+                  onChange={(e) => setNewSource(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Titel der Quelle"
+                  className="rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+                <input
+                  type="url"
+                  value={newSource.url}
+                  onChange={(e) => setNewSource(prev => ({ ...prev, url: e.target.value }))}
+                  placeholder="URL (https://...)"
+                  className="rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+                <textarea
+                  value={newSource.description}
+                  onChange={(e) => setNewSource(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Optionale Beschreibung oder Notizen"
+                  rows={2}
+                  className="rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
+                />
+                <button
+                  onClick={handleAddSource}
+                  disabled={addingMaterial || !newSource.title.trim() || !newSource.url.trim()}
+                  className="inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {addingMaterial ? <ArrowPathIcon className="h-5 w-5 mr-2 animate-spin" /> : <PlusIcon className="h-5 w-5 mr-2" />}
+                  Quelle hinzufügen
+                </button>
+              </div>
+            </div>
+
+            {/* Sources List */}
+            <div className="space-y-3">
+              {project.sources?.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Keine Quellen vorhanden</p>
+              ) : (
+                project.sources?.map(source => (
+                  <div key={source.id} className="p-4 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h5 className="text-sm font-medium text-gray-900 mb-1">{source.title}</h5>
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:text-blue-800 break-all"
+                        >
+                          {source.url}
+                        </a>
+                        {source.description && (
+                          <p className="text-sm text-gray-600 mt-2">{source.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-2">
+                          Hinzugefügt: {new Date(source.created_at).toLocaleDateString('de-DE')}
+                          {source.created_by_name && ` von ${source.created_by_name}`}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteSource(source.id)}
+                        className="text-red-400 hover:text-red-600 flex-shrink-0"
+                        title="Löschen"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
 

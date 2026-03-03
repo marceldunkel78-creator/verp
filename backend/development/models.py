@@ -459,3 +459,48 @@ class DevelopmentProjectTimeEntry(models.Model):
     
     def __str__(self):
         return f"{self.date} {self.time} - {self.hours_spent}h ({self.project.project_number})"
+
+
+class DevelopmentProjectSource(models.Model):
+    """
+    Quellen/Links für Entwicklungsprojekte (z.B. Internetlinks, Dokumentation)
+    """
+    project = models.ForeignKey(
+        DevelopmentProject,
+        on_delete=models.CASCADE,
+        related_name='sources',
+        verbose_name='Projekt'
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name='Titel',
+        help_text='Beschreibender Titel der Quelle'
+    )
+    url = models.URLField(
+        max_length=500,
+        verbose_name='URL',
+        help_text='Link zur Quelle'
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name='Beschreibung',
+        help_text='Optionale Beschreibung oder Notizen zur Quelle'
+    )
+    position = models.PositiveIntegerField(default=0, verbose_name='Position')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_dev_sources',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    
+    class Meta:
+        verbose_name = 'Quelle'
+        verbose_name_plural = 'Quellen'
+        ordering = ['position', 'created_at']
+    
+    def __str__(self):
+        return f"{self.title} ({self.project.project_number})"

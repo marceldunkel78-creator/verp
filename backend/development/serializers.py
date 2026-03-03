@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     DevelopmentProject, DevelopmentProjectTodo, DevelopmentProjectComment,
     DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
-    DevelopmentProjectAttachment, DevelopmentProjectTimeEntry
+    DevelopmentProjectAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
 )
 
 User = get_user_model()
@@ -152,6 +152,24 @@ class DevelopmentProjectTimeEntrySerializer(serializers.ModelSerializer):
         return None
 
 
+class DevelopmentProjectSourceSerializer(serializers.ModelSerializer):
+    """Serializer für Quellen/Links"""
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DevelopmentProjectSource
+        fields = [
+            'id', 'project', 'title', 'url', 'description', 'position',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
 # ============================================
 # LIST/DETAIL SERIALIZERS
 # ============================================
@@ -199,6 +217,7 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
     cost_calculations = DevelopmentProjectCostCalculationSerializer(many=True, read_only=True)
     attachments = DevelopmentProjectAttachmentSerializer(many=True, read_only=True)
     time_entries = DevelopmentProjectTimeEntrySerializer(many=True, read_only=True)
+    sources = DevelopmentProjectSourceSerializer(many=True, read_only=True)
     
     # Computed fields
     total_hours_spent = serializers.SerializerMethodField()
@@ -212,14 +231,14 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
             'assigned_to', 'assigned_to_name',
             'project_start', 'planned_end', 'is_open',
             'todos', 'comments', 'material_items', 'cost_calculations',
-            'attachments', 'time_entries',
+            'attachments', 'time_entries', 'sources',
             'total_hours_spent', 'total_material_cost',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'project_number', 'project_start', 'created_at', 'updated_at',
             'todos', 'comments', 'material_items', 'cost_calculations',
-            'attachments', 'time_entries'
+            'attachments', 'time_entries', 'sources'
         ]
     
     def get_assigned_to_name(self, obj):
