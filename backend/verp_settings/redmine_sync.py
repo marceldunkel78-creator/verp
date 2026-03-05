@@ -1010,6 +1010,56 @@ def sync_troubleshooting_tickets(redmine, since=None, limit=200, dry_run=False):
 # Maintenance Zeitguthaben + Zeitaufwendungen synchronisieren
 # ============================================================================
 
+def _normalize_comment(text):
+    """Normalisiert einen Kommentar für den Vergleich (Whitespace trimmen)."""
+    if not text:
+        return ''
+    import re
+    # Whitespace am Ende/Anfang entfernen, mehrfache Leerzeichen reduzieren
+    return re.sub(r'\s+', ' ', text.strip())
+
+
+def _find_matching_expenditure(license_obj, spent_on, hours_spent, comment):
+    """
+    Sucht nach einem bestehenden Eintrag mit passendem Inhalt.
+    Vergleicht Kommentare normalisiert (Whitespace-tolerant), da Legacy-
+    und Redmine-Einträge oft minimale Unterschiede haben (z.B. trailing space).
+    """
+    from visiview.models import MaintenanceTimeExpenditure
+
+    candidates = MaintenanceTimeExpenditure.objects.filter(
+        license=license_obj,
+        date=spent_on,
+        hours_spent=hours_spent,
+    )
+
+    if not candidates.exists():
+        return None
+
+    normalized = _normalize_comment(comment)
+
+    # Exakte Übereinstimmung zuerst
+    exact = candidates.filter(comment=comment).first()
+    if exact:
+        return exact
+
+    # Normalisierter Vergleich
+    for candidate in candidates:
+        if _normalize_comment(candidate.comment) == normalized:
+            return candidate
+
+    # Prefix-Match: Legacy-Kommentare sind oft abgeschnitten
+    if normalized and len(normalized) > 20:
+        for candidate in candidates:
+            cand_norm = _normalize_comment(candidate.comment)
+            if not cand_norm:
+                continue
+            if cand_norm.startswith(normalized[:20]) or normalized.startswith(cand_norm[:20]):
+                return candidate
+
+    return None
+
+
 def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
     """
     Synchronisiert Maintenance-Daten aus Redmine.
@@ -1030,6 +1080,9 @@ def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
     preview_items = []
 
     # --- 1. Zeitguthaben (Issues) synchronisieren ---
+    # Hinweis: In Redmine sind die Zeiterfassungs-Issues individuelle
+    # Support-Sitzungen. Nur Issues mit estimated_hours > 0 sind echte
+    # gekaufte Zeitgutschriften. Issues mit 0 Stunden werden übersprungen.
     issues = fetch_updated_issues(redmine, 'maintenance', since=since, limit=limit)
     stats['credits_fetched'] = len(issues)
 
@@ -1054,9 +1107,52 @@ def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
                 })
                 continue
 
-            credit_hours = safe_decimal(issue, 'estimated_hours', Decimal('0'))
+            # Custom Fields auslesen – die gekauften Stunden und das Ende-Datum
+            # stehen in Redmine als Custom Fields, nicht in den Standard-Feldern.
+            # Gültigkeitszeitraum: "Beginn" (Issue start_date) bis "Ende Datum" (CF)
+            # Das Custom Field "Start Datum" wird ignoriert.
+            cf_gekauft_h = None
+            cf_guthaben_h = None
+            cf_ende_datum = None
+            try:
+                for cf in issue.custom_fields:
+                    cf_name = cf.get('name', '') if isinstance(cf, dict) else safe_str(cf, 'name', '')
+                    cf_value = cf.get('value', '') if isinstance(cf, dict) else safe_str(cf, 'value', '')
+                    if cf_name == 'Gekauft (h)' and cf_value:
+                        try:
+                            cf_gekauft_h = Decimal(str(cf_value))
+                        except Exception:
+                            pass
+                    elif cf_name == 'Guthaben (h)' and cf_value:
+                        try:
+                            cf_guthaben_h = Decimal(str(cf_value))
+                        except Exception:
+                            pass
+                    elif cf_name == 'Ende Datum' and cf_value:
+                        try:
+                            cf_ende_datum = datetime.strptime(str(cf_value), '%Y-%m-%d').date()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Gekaufte Stunden: Custom Field "Gekauft (h)" hat Vorrang,
+            # Fallback auf estimated_hours
+            credit_hours = cf_gekauft_h if cf_gekauft_h is not None else safe_decimal(issue, 'estimated_hours', Decimal('0'))
+
+            # Überspringe Issues ohne Stunden – diese sind Support-Sitzungen,
+            # keine gekauften Zeitgutschriften
+            if credit_hours <= 0 and not existing:
+                stats['credits_skipped'] += 1
+                logger.debug(
+                    f"Überspringe Zeiterfassungs-Issue #{redmine_id} "
+                    f"(keine gekauften Stunden, vermutlich Support-Sitzung)"
+                )
+                continue
+
+            # Gültigkeitszeitraum: Beginn = Issue "start_date", Ende = CF "Ende Datum"
             start_date = safe_date(issue, 'start_date') or safe_date(issue, 'created_on')
-            due_date = safe_date(issue, 'due_date')
+            due_date = cf_ende_datum or safe_date(issue, 'due_date')
 
             if not due_date:
                 # Standard: 1 Jahr Gültigkeit
@@ -1071,6 +1167,24 @@ def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
 
             assigned_user, _ = resolve_redmine_user(safe_attr(issue, 'assigned_to', None))
             author_user, _ = resolve_redmine_user(safe_attr(issue, 'author', None))
+
+            # Prüfe ob bereits ein Legacy-Credit für diese Lizenz mit
+            # passendem Zeitraum existiert (kein redmine_id gesetzt)
+            if not existing:
+                existing = MaintenanceTimeCredit.objects.filter(
+                    license=license_obj,
+                    redmine_id__isnull=True,
+                    start_date=start_date,
+                    end_date=due_date,
+                ).first()
+                # Fallback: Suche nur nach Lizenz + Stunden + Start
+                if not existing:
+                    existing = MaintenanceTimeCredit.objects.filter(
+                        license=license_obj,
+                        redmine_id__isnull=True,
+                        credit_hours=credit_hours,
+                        start_date=start_date,
+                    ).first()
 
             action = 'update' if existing else 'create'
             preview_items.append({
@@ -1087,18 +1201,26 @@ def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
                     existing.license = license_obj
                     existing.start_date = start_date
                     existing.end_date = due_date
-                    existing.credit_hours = credit_hours
+                    # Nur aktualisieren wenn tatsächlich Stunden vorhanden
+                    if credit_hours > 0:
+                        existing.credit_hours = credit_hours
+                    # Guthaben aus Custom Field aktualisieren falls vorhanden
+                    if cf_guthaben_h is not None:
+                        existing.remaining_hours = cf_guthaben_h
+                    existing.redmine_id = redmine_id
                     existing.redmine_updated_on = redmine_updated
                     existing.user = assigned_user or existing.user
                     existing.save()
                     stats['credits_updated'] += 1
                 else:
+                    # remaining_hours: Custom Field "Guthaben (h)" oder credit_hours
+                    remaining = cf_guthaben_h if cf_guthaben_h is not None else credit_hours
                     MaintenanceTimeCredit.objects.create(
                         license=license_obj,
                         start_date=start_date,
                         end_date=due_date,
                         credit_hours=credit_hours,
-                        remaining_hours=credit_hours,
+                        remaining_hours=remaining,
                         user=assigned_user,
                         created_by=author_user,
                         redmine_id=redmine_id,
@@ -1163,7 +1285,38 @@ def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
             user_obj, _ = resolve_redmine_user(safe_attr(entry, 'user', None))
             activity_name = safe_str(entry, 'activity', '')
             hours_spent = safe_decimal(entry, 'hours', Decimal('0'))
-            comment = safe_str(entry, 'comments', '')
+            comment = safe_str(entry, 'comments', '').strip()
+            spent_on = safe_date(entry, 'spent_on') or date.today()
+
+            # Prüfe ob bereits ein Eintrag mit identischem Inhalt existiert
+            # (gleiche Lizenz, Datum, Stunden, ähnlicher Kommentar).
+            # Verschiedene Redmine-Issues für dieselbe Lizenz können
+            # identische Time Entries haben → nur einmal importieren.
+            # Kommentare werden normalisiert verglichen (Whitespace-Toleranz).
+            content_match = _find_matching_expenditure(
+                license_obj, spent_on, hours_spent, comment
+            )
+
+            if content_match:
+                # Falls der bestehende Eintrag noch keine redmine_time_entry_id
+                # hat (Legacy), verknüpfen wir ihn
+                if content_match.redmine_time_entry_id is None:
+                    preview_items.append({
+                        'redmine_id': entry_id,
+                        'title': f'[Link] {comment[:55]}' if comment else '[Link]',
+                        'type': 'expenditure',
+                        'license': license_obj.license_number if license_obj else '?',
+                        'hours': str(hours_spent),
+                        'action': 'link',
+                    })
+                    if not dry_run:
+                        content_match.redmine_time_entry_id = entry_id
+                        content_match.save(update_fields=['redmine_time_entry_id'])
+                        stats['entries_updated'] += 1
+                else:
+                    # Bereits ein Redmine-Eintrag mit gleichem Inhalt vorhanden
+                    stats['entries_skipped'] += 1
+                continue
 
             action = 'create'
             preview_items.append({
@@ -1178,7 +1331,7 @@ def sync_maintenance(redmine, since=None, limit=200, dry_run=False):
             if not dry_run:
                 MaintenanceTimeExpenditure.objects.create(
                     license=license_obj,
-                    date=safe_date(entry, 'spent_on') or date.today(),
+                    date=spent_on,
                     user=user_obj,
                     activity=ACTIVITY_MAP.get(activity_name, 'remote_support'),
                     task_type=TASK_TYPE_MAP.get(activity_name, 'other'),
