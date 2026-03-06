@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import SortableHeader from '../components/SortableHeader';
 import { 
   PlusIcon, 
   PencilIcon, 
   TrashIcon, 
   MapPinIcon,
   CalendarIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  DocumentArrowDownIcon
 } from '@heroicons/react/24/outline';
 
 const TravelReportList = () => {
@@ -15,16 +17,38 @@ const TravelReportList = () => {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all'); // all, travel, service
+  const [filterUser, setFilterUser] = useState(''); // created_by user id
+  const [users, setUsers] = useState([]);
+  const [sortBy, setSortBy] = useState('-date');
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   useEffect(() => {
     fetchReports();
-  }, [filterType]);
+  }, [filterType, filterUser, sortBy]);
+
+  const fetchUsers = async () => {
+    try {
+      const response = await api.get('/users/?is_active=true');
+      setUsers(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Benutzer:', error);
+    }
+  };
 
   const fetchReports = async () => {
     try {
       const params = new URLSearchParams();
       if (filterType !== 'all') {
         params.append('report_type', filterType);
+      }
+      if (filterUser) {
+        params.append('created_by', filterUser);
+      }
+      if (sortBy) {
+        params.append('ordering', sortBy);
       }
       const response = await api.get(`/service/travel-reports/?${params.toString()}`);
       setReports(response.data.results || response.data || []);
@@ -45,6 +69,19 @@ const TravelReportList = () => {
         console.error('Fehler beim Löschen:', error);
         alert('Fehler beim Löschen des Reiseberichts');
       }
+    }
+  };
+
+  const viewPdf = async (reportId) => {
+    try {
+      const response = await api.get(`/service/travel-reports/${reportId}/serve_pdf/`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Fehler beim Laden des PDFs:', error);
+      alert('Fehler beim Laden des PDFs');
     }
   };
 
@@ -74,7 +111,7 @@ const TravelReportList = () => {
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
           <button
-            onClick={() => navigate('/travel-reports/new')}
+            onClick={() => navigate('/sales/travel-reports/new')}
             className="inline-flex items-center justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 sm:w-auto"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
@@ -84,7 +121,7 @@ const TravelReportList = () => {
       </div>
 
       {/* Filter */}
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex gap-2 flex-wrap items-center">
         <button
           onClick={() => setFilterType('all')}
           className={`px-4 py-2 rounded-lg text-sm font-medium ${
@@ -115,6 +152,20 @@ const TravelReportList = () => {
         >
           Serviceberichte
         </button>
+        <div className="ml-4">
+          <select
+            value={filterUser}
+            onChange={(e) => setFilterUser(e.target.value)}
+            className="rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="">Alle Benutzer</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.first_name} {user.last_name || user.username}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -125,23 +176,17 @@ const TravelReportList = () => {
               <table className="min-w-full divide-y divide-gray-300">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
-                      Typ
-                    </th>
-                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Datum
-                    </th>
-                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Ort
-                    </th>
-                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      Kunde
-                    </th>
-                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                      System
-                    </th>
+                    <SortableHeader field="report_type" label="Typ" sortBy={sortBy} setSortBy={setSortBy} className="py-3.5 pl-4 pr-3 sm:pl-6" />
+                    <SortableHeader field="date" label="Datum" sortBy={sortBy} setSortBy={setSortBy} className="px-3 py-3.5" />
+                    <SortableHeader field="location" label="Ort" sortBy={sortBy} setSortBy={setSortBy} className="px-3 py-3.5" />
+                    <SortableHeader field="customer__company_name" label="Kunde" sortBy={sortBy} setSortBy={setSortBy} className="px-3 py-3.5" />
+                    <SortableHeader field="linked_system__system_name" label="System" sortBy={sortBy} setSortBy={setSortBy} className="px-3 py-3.5" />
+                    <SortableHeader field="created_by__first_name" label="Erstellt von" sortBy={sortBy} setSortBy={setSortBy} className="px-3 py-3.5" />
                     <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                       Fotos
+                    </th>
+                    <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                      PDF
                     </th>
                     <th className="relative py-3.5 pl-3 pr-4 sm:pr-6">
                       <span className="sr-only">Aktionen</span>
@@ -151,7 +196,7 @@ const TravelReportList = () => {
                 <tbody className="divide-y divide-gray-200 bg-white">
                   {reports.length === 0 ? (
                     <tr>
-                      <td colSpan="7" className="px-3 py-8 text-center text-sm text-gray-500">
+                      <td colSpan="9" className="px-3 py-8 text-center text-sm text-gray-500">
                         Keine Berichte gefunden
                       </td>
                     </tr>
@@ -159,7 +204,7 @@ const TravelReportList = () => {
                     reports.map((report) => (
                       <tr 
                         key={report.id}
-                        onClick={() => navigate(`/travel-reports/${report.id}`)}
+                        onClick={() => navigate(`/sales/travel-reports/${report.id}`)}
                         className="cursor-pointer hover:bg-gray-50 transition-colors"
                       >
                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
@@ -190,6 +235,9 @@ const TravelReportList = () => {
                           {report.system_name || '-'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {report.created_by_name || '-'}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                           {report.photo_count > 0 ? (
                             <span className="flex items-center text-blue-600">
                               <DocumentTextIcon className="h-4 w-4 mr-1" />
@@ -199,11 +247,27 @@ const TravelReportList = () => {
                             '-'
                           )}
                         </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                          {report.has_pdf ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                viewPdf(report.id);
+                              }}
+                              className="text-green-600 hover:text-green-800"
+                              title="PDF anzeigen"
+                            >
+                              <DocumentArrowDownIcon className="h-5 w-5" />
+                            </button>
+                          ) : (
+                            '-'
+                          )}
+                        </td>
                         <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/travel-reports/${report.id}`);
+                              navigate(`/sales/travel-reports/${report.id}`);
                             }}
                             className="text-blue-600 hover:text-blue-900 mr-4"
                           >

@@ -57,6 +57,7 @@ const MODULE_HIERARCHY = [
       { key: 'sales_order_processing', label: 'Auftragsbearbeitung' },
       { key: 'sales_marketing', label: 'Marketing' },
       { key: 'sales_tickets', label: 'Tickets' },
+      { key: 'sales_travel_reports', label: 'Reise-/Serviceberichte' },
     ]
   },
   {

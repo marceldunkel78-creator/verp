@@ -68,7 +68,8 @@ const Layout = () => {
       'can_read_sales_order_processing',
       'can_read_sales_tickets',
       'can_read_sales_marketing',
-      'can_read_sales_systems'
+      'can_read_sales_systems',
+      'can_read_sales_travel_reports'
     ],
     can_read_inventory: [
       'can_read_inventory_stock',

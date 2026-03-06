@@ -134,7 +134,7 @@ const TravelReportEdit = () => {
 
   const fetchOrderById = async (orderId) => {
     try {
-      const response = await api.get(`/customer-orders/orders/${orderId}/`);
+      const response = await api.get(`/customer-orders/customer-orders/${orderId}/`);
       setSelectedOrder(response.data);
     } catch (error) {
       console.error('Fehler beim Laden des Auftrags:', error);
@@ -150,7 +150,7 @@ const TravelReportEdit = () => {
         alert('Bericht aktualisiert');
       } else {
         const response = await api.post('/service/travel-reports/', formData);
-        navigate(`/travel-reports/${response.data.id}`);
+        navigate(`/sales/travel-reports/${response.data.id}`);
       }
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
@@ -198,6 +198,19 @@ const TravelReportEdit = () => {
     }
   };
 
+  // Load all systems for a specific customer
+  const loadCustomerSystems = async (customerId) => {
+    setSearchingSystems(true);
+    try {
+      const response = await api.get(`/systems/systems/?customer=${customerId}`);
+      setSystems(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Kundensysteme:', error);
+    } finally {
+      setSearchingSystems(false);
+    }
+  };
+
   // Order search
   const searchOrders = async (query) => {
     if (!query.trim()) {
@@ -206,7 +219,7 @@ const TravelReportEdit = () => {
     }
     setSearchingOrders(true);
     try {
-      const response = await api.get(`/customer-orders/orders/?search=${query}`);
+      const response = await api.get(`/customer-orders/customer-orders/?search=${query}`);
       setOrders(response.data.results || response.data || []);
     } catch (error) {
       console.error('Fehler bei Auftragssuche:', error);
@@ -222,8 +235,8 @@ const TravelReportEdit = () => {
     setSelectedSystem(null);
     setShowCustomerDropdown(false);
     setCustomerSearch('');
-    // Load systems for this customer
-    searchSystems('');
+    // Load systems for this customer (pass customer ID directly since state isn't updated yet)
+    loadCustomerSystems(customer.id);
   };
 
   const selectSystem = (system) => {
@@ -384,26 +397,42 @@ const TravelReportEdit = () => {
   };
 
   // PDF generation
-  const generatePDF = async () => {
+  const generatePDF = async (language = 'de') => {
     if (formData.report_type !== 'service') {
       alert('PDF-Generierung ist nur für Serviceberichte verfügbar.');
       return;
     }
     try {
-      const response = await api.get(`/service/travel-reports/${id}/generate_pdf/`, {
+      const response = await api.get(`/service/travel-reports/${id}/generate_pdf/?language=${language}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       const orderNum = selectedOrder?.order_number || id;
-      link.setAttribute('download', `Servicebericht_${orderNum}.pdf`);
+      const langSuffix = language === 'en' ? '_EN' : '';
+      link.setAttribute('download', `Servicebericht_${orderNum}${langSuffix}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      // Refresh report to update has_pdf status
+      fetchReport();
     } catch (error) {
       console.error('Fehler bei PDF-Generierung:', error);
       alert('Fehler bei der PDF-Generierung');
+    }
+  };
+
+  const viewPDF = async () => {
+    try {
+      const response = await api.get(`/service/travel-reports/${id}/serve_pdf/`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Fehler beim Laden des PDFs:', error);
+      alert('Fehler beim Laden des PDFs');
     }
   };
 
@@ -431,13 +460,31 @@ const TravelReportEdit = () => {
             {id === 'new' ? 'Neuer Bericht' : 'Bericht bearbeiten'}
           </h1>
           {id !== 'new' && formData.report_type === 'service' && (
-            <button
-              onClick={generatePDF}
-              className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
-              PDF erstellen
-            </button>
+            <div className="mt-4 sm:mt-0 flex gap-2">
+              {report?.has_pdf && (
+                <button
+                  onClick={viewPDF}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
+                  PDF anzeigen
+                </button>
+              )}
+              <button
+                onClick={() => generatePDF('de')}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
+                PDF Deutsch
+              </button>
+              <button
+                onClick={() => generatePDF('en')}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5 mr-2" />
+                PDF English
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -494,7 +541,7 @@ const TravelReportEdit = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Kunde</label>
               {selectedCustomer ? (
                 <div className="flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded-md">
-                  <span className="text-sm text-blue-800">{selectedCustomer.company_name || selectedCustomer.name}</span>
+                  <span className="text-sm text-blue-800">{selectedCustomer.full_name || selectedCustomer.company_name || selectedCustomer.name || `${selectedCustomer.first_name || ''} ${selectedCustomer.last_name || ''}`.trim()}</span>
                   <button type="button" onClick={clearCustomer} className="text-blue-600 hover:text-blue-800">
                     <XMarkIcon className="h-4 w-4" />
                   </button>
@@ -523,9 +570,10 @@ const TravelReportEdit = () => {
                       key={customer.id}
                       type="button"
                       onClick={() => selectCustomer(customer)}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-900 hover:bg-gray-100"
                     >
-                      {customer.company_name || customer.name}
+                      <div className="font-medium">{customer.full_name || customer.company_name || customer.name || `${customer.first_name || ''} ${customer.last_name || ''}`.trim()}</div>
+                      {customer.customer_number && <div className="text-xs text-gray-500">{customer.customer_number}</div>}
                     </button>
                   ))}
                 </div>
@@ -549,17 +597,28 @@ const TravelReportEdit = () => {
                     value={systemSearch}
                     onChange={(e) => {
                       setSystemSearch(e.target.value);
-                      searchSystems(e.target.value);
                       setShowSystemDropdown(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        searchSystems(systemSearch);
+                      }
                     }}
                     onFocus={() => {
                       setShowSystemDropdown(true);
-                      if (formData.customer) searchSystems('');
+                      if (formData.customer) searchSystems(systemSearch);
                     }}
-                    placeholder={formData.customer ? "System suchen..." : "Erst Kunde wählen..."}
+                    placeholder={formData.customer ? "System suchen (Enter drücken)..." : "Erst Kunde wählen..."}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
                   />
-                  <MagnifyingGlassIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <button
+                    type="button"
+                    onClick={() => searchSystems(systemSearch)}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <MagnifyingGlassIcon className="h-5 w-5" />
+                  </button>
                 </div>
               )}
               {showSystemDropdown && systems.length > 0 && (

@@ -57,6 +57,14 @@ class TravelReport(models.Model):
     # Inhalt
     notes = models.TextField(blank=True, verbose_name='Notizen')
     
+    # PDF
+    pdf_file = models.FileField(
+        upload_to='Reiseberichte-Serviceberichte/',
+        null=True,
+        blank=True,
+        verbose_name='PDF-Datei'
+    )
+    
     # Metadaten
     created_by = models.ForeignKey(
         User,

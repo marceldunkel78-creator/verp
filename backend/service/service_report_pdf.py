@@ -25,16 +25,40 @@ from django.conf import settings
 import os
 
 
-def generate_service_report_pdf(report):
+TRANSLATIONS = {
+    'de': {
+        'subject_prefix': 'Betreff',
+        'service_report_order': 'Servicebericht zu Auftrag',
+        'service_report': 'Servicebericht',
+        'system': 'System',
+        'description_heading': 'Beschreibung / Durchgeführte Arbeiten:',
+        'measurements_heading': 'Messwerte:',
+        'photos_heading': 'Fotos:',
+    },
+    'en': {
+        'subject_prefix': 'Subject',
+        'service_report_order': 'Service Report for Order',
+        'service_report': 'Service Report',
+        'system': 'System',
+        'description_heading': 'Description / Work Performed:',
+        'measurements_heading': 'Measurements:',
+        'photos_heading': 'Photos:',
+    },
+}
+
+
+def generate_service_report_pdf(report, language='de'):
     """
     Generates a PDF for a service report.
     
     Args:
         report: TravelReport instance (with report_type='service')
+        language: 'de' for German (default) or 'en' for English
         
     Returns:
         BytesIO object containing the PDF
     """
+    t = TRANSLATIONS.get(language, TRANSLATIONS['de'])
     buffer = BytesIO()
     
     # Get company info
@@ -157,11 +181,9 @@ def generate_service_report_pdf(report):
                     address_lines.append(address.country)
         
         if not address_lines:
-            # Fallback to company name
-            if customer.company_name:
-                address_lines.append(customer.company_name)
-            elif customer.last_name:
-                name = f"{customer.first_name or ''} {customer.last_name}".strip()
+            # Fallback to customer name
+            name = f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+            if name:
                 address_lines.append(name)
         
         for line in address_lines:
@@ -187,19 +209,19 @@ def generate_service_report_pdf(report):
     if report.linked_order:
         order_number = report.linked_order.order_number
     
-    subject = f"Servicebericht zu Auftrag {order_number}" if order_number else "Servicebericht"
-    elements.append(Paragraph(f"<b>Betreff: {subject}</b>", title_style))
+    subject = f"{t['service_report_order']} {order_number}" if order_number else t['service_report']
+    elements.append(Paragraph(f"<b>{t['subject_prefix']}: {subject}</b>", title_style))
     elements.append(Spacer(1, 0.5*cm))
     
     # === SYSTEM INFO ===
     if report.linked_system:
-        system_info = f"System: {report.linked_system.system_name}"
+        system_info = f"{t['system']}: {report.linked_system.system_name}"
         elements.append(Paragraph(system_info, normal_style))
         elements.append(Spacer(1, 0.3*cm))
     
     # === NOTES / DESCRIPTION ===
     if report.notes:
-        elements.append(Paragraph("<b>Beschreibung / Durchgeführte Arbeiten:</b>", heading_style))
+        elements.append(Paragraph(f"<b>{t['description_heading']}</b>", heading_style))
         # Replace newlines with <br/> for proper rendering
         notes_text = report.notes.replace('\n', '<br/>')
         elements.append(Paragraph(notes_text, normal_style))
@@ -208,7 +230,7 @@ def generate_service_report_pdf(report):
     # === MEASUREMENT TABLES ===
     measurements = report.measurements.all()
     if measurements.exists():
-        elements.append(Paragraph("<b>Messwerte:</b>", heading_style))
+        elements.append(Paragraph(f"<b>{t['measurements_heading']}</b>", heading_style))
         
         for measurement in measurements:
             if measurement.title:
@@ -249,7 +271,7 @@ def generate_service_report_pdf(report):
     photos = report.photos.all()
     if photos.exists():
         elements.append(PageBreak())
-        elements.append(Paragraph("<b>Fotos:</b>", heading_style))
+        elements.append(Paragraph(f"<b>{t['photos_heading']}</b>", heading_style))
         elements.append(Spacer(1, 0.3*cm))
         
         # Create a 2-column layout for photos

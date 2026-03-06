@@ -103,6 +103,15 @@ const SalesOrderManagement = () => {
       color: 'cyan',
       disabled: false,
       permission: 'can_read_sales_systems',
+    },
+    {
+      name: 'Reise-/Serviceberichte',
+      description: 'Reise- und Serviceberichte',
+      icon: DocumentTextIcon,
+      path: '/sales/travel-reports',
+      color: 'emerald',
+      disabled: false,
+      permission: 'can_read_sales_travel_reports',
     }
   ];
 
@@ -120,6 +129,7 @@ const SalesOrderManagement = () => {
     teal: { bg: 'bg-teal-100', text: 'text-teal-600' },
     pink: { bg: 'bg-pink-100', text: 'text-pink-600' },
     cyan: { bg: 'bg-cyan-100', text: 'text-cyan-600' },
+    emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
   };
 
   return (

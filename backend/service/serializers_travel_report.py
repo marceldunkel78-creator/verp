@@ -37,6 +37,7 @@ class TravelReportListSerializer(serializers.ModelSerializer):
     order_number = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     photo_count = serializers.SerializerMethodField()
+    has_pdf = serializers.SerializerMethodField()
     
     class Meta:
         model = TravelReport
@@ -44,13 +45,13 @@ class TravelReportListSerializer(serializers.ModelSerializer):
             'id', 'report_type', 'report_type_display', 'date', 'location',
             'customer', 'customer_name', 'linked_system', 'system_name',
             'linked_order', 'order_number', 'created_by', 'created_by_name',
-            'photo_count', 'created_at', 'updated_at'
+            'photo_count', 'has_pdf', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_customer_name(self, obj):
         if obj.customer:
-            return obj.customer.company_name or f"{obj.customer.first_name} {obj.customer.last_name}"
+            return f"{obj.customer.first_name} {obj.customer.last_name}".strip() or obj.customer.last_name
         return None
     
     def get_system_name(self, obj):
@@ -70,6 +71,9 @@ class TravelReportListSerializer(serializers.ModelSerializer):
     
     def get_photo_count(self, obj):
         return obj.photos.count()
+    
+    def get_has_pdf(self, obj):
+        return bool(obj.pdf_file)
 
 
 class TravelReportDetailSerializer(serializers.ModelSerializer):
@@ -81,6 +85,7 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     photos = TravelReportPhotoSerializer(many=True, read_only=True)
     measurements = TravelReportMeasurementSerializer(many=True, read_only=True)
+    has_pdf = serializers.SerializerMethodField()
     
     class Meta:
         model = TravelReport
@@ -89,7 +94,7 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
             'customer', 'customer_details', 'linked_system', 'system_details',
             'linked_order', 'order_details', 'notes',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
-            'photos', 'measurements'
+            'photos', 'measurements', 'has_pdf'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
@@ -97,7 +102,7 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
         if obj.customer:
             return {
                 'id': obj.customer.id,
-                'name': obj.customer.company_name or f"{obj.customer.first_name} {obj.customer.last_name}",
+                'name': f"{obj.customer.first_name} {obj.customer.last_name}".strip() or obj.customer.last_name,
                 'customer_number': obj.customer.customer_number
             }
         return None
@@ -123,6 +128,9 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+    
+    def get_has_pdf(self, obj):
+        return bool(obj.pdf_file)
 
 
 class TravelReportCreateUpdateSerializer(serializers.ModelSerializer):

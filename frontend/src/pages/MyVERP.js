@@ -2470,6 +2470,7 @@ const PersonalDashboardTab = () => {
     { id: 'orders', name: 'Aufträge', route: '/sales/order-processing', icon: '📑', category: 'Sales / Orders', permission: 'can_read_sales_order_processing' },
     { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders', permission: 'can_read_sales_marketing' },
     { id: 'sales-tickets', name: 'Vertriebs-Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders', permission: 'can_read_sales_tickets' },
+    { id: 'travel-reports', name: 'Reise-/Serviceberichte', route: '/sales/travel-reports', icon: '📝', category: 'Sales / Orders', permission: 'can_read_sales_travel_reports' },
     
     // HR
     { id: 'hr', name: 'HR', route: '/hr', icon: '👥', category: 'HR', permission: 'can_read_hr' },

@@ -7,7 +7,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
+from django.core.files.base import ContentFile
 
 from .models_travel_report import TravelReport, TravelReportMeasurement, TravelReportPhoto
 from .serializers_travel_report import (
@@ -29,7 +30,7 @@ class TravelReportViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['report_type', 'customer', 'linked_system', 'linked_order', 'created_by']
     search_fields = ['location', 'notes']
-    ordering_fields = ['date', 'created_at', 'location']
+    ordering_fields = ['date', 'created_at', 'location', 'report_type', 'customer__company_name', 'linked_system__system_name', 'created_by__first_name']
     ordering = ['-date', '-created_at']
     
     def get_serializer_class(self):
@@ -165,7 +166,7 @@ class TravelReportViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def generate_pdf(self, request, pk=None):
-        """PDF für Servicebericht generieren"""
+        """PDF für Servicebericht generieren und im Medienordner speichern"""
         travel_report = self.get_object()
         
         # Only for service reports
@@ -175,14 +176,30 @@ class TravelReportViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+        
         try:
-            pdf_buffer = generate_service_report_pdf(travel_report)
+            pdf_buffer = generate_service_report_pdf(travel_report, language=language)
             
             # Create filename
             order_number = ''
             if travel_report.linked_order:
                 order_number = travel_report.linked_order.order_number
-            filename = f"Servicebericht_{order_number or travel_report.id}.pdf"
+            lang_suffix = '_EN' if language == 'en' else ''
+            filename = f"Servicebericht_{order_number or travel_report.id}{lang_suffix}.pdf"
+            
+            # Delete old PDF file from storage before saving new one
+            if travel_report.pdf_file:
+                old_file = travel_report.pdf_file
+                travel_report.pdf_file = None
+                travel_report.save(update_fields=['pdf_file'])
+                old_file.delete(save=False)
+            
+            # Save new PDF to model / media folder
+            travel_report.pdf_file.save(filename, ContentFile(pdf_buffer.read()), save=True)
+            pdf_buffer.seek(0)
             
             response = HttpResponse(pdf_buffer, content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -191,4 +208,27 @@ class TravelReportViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': f'Fehler bei der PDF-Generierung: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['get'])
+    def serve_pdf(self, request, pk=None):
+        """Gespeichertes PDF ausliefern"""
+        travel_report = self.get_object()
+        
+        if not travel_report.pdf_file:
+            return Response(
+                {'error': 'Kein PDF vorhanden'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            return FileResponse(
+                travel_report.pdf_file.open('rb'),
+                content_type='application/pdf',
+                filename=travel_report.pdf_file.name.split('/')[-1]
+            )
+        except FileNotFoundError:
+            return Response(
+                {'error': 'PDF-Datei nicht gefunden'},
+                status=status.HTTP_404_NOT_FOUND
             )

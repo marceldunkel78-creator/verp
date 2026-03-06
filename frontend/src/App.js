@@ -232,6 +232,9 @@ function App() {
             <Route path="sales/tickets" element={<SalesTickets />} />
             <Route path="sales/tickets/new" element={<SalesTicketEdit />} />
             <Route path="sales/tickets/:id" element={<SalesTicketEdit />} />
+            <Route path="sales/travel-reports" element={<TravelReportList />} />
+            <Route path="sales/travel-reports/new" element={<TravelReportEdit />} />
+            <Route path="sales/travel-reports/:id" element={<TravelReportEdit />} />
             
             {/* Settings Submodules */}
             <Route path="settings/users" element={<Users />} />
@@ -253,10 +256,10 @@ function App() {
             <Route path="trading" element={<Navigate to="/procurement/trading-goods" replace />} />
             <Route path="settings/exchange-rates" element={<Navigate to="/settings/currency-exchange-rates" replace />} />
             
-            {/* Travel Reports */}
-            <Route path="travel-reports" element={<TravelReportList />} />
-            <Route path="travel-reports/new" element={<TravelReportEdit />} />
-            <Route path="travel-reports/:id" element={<TravelReportEdit />} />
+            {/* Travel Reports - Legacy redirects */}
+            <Route path="travel-reports" element={<Navigate to="/sales/travel-reports" replace />} />
+            <Route path="travel-reports/new" element={<Navigate to="/sales/travel-reports/new" replace />} />
+            <Route path="travel-reports/:id" element={<Navigate to="/sales/travel-reports/:id" replace />} />
           </Route>
         </Routes>
       </Router>

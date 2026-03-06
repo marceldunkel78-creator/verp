@@ -5,7 +5,7 @@
 
 /* Fix für Leaflet Marker Icons */
 .leaflet-default-icon-path {
-  background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+  background-image: url('~leaflet/dist/images/marker-icon.png');
 }
 
 /* Responsive Map */

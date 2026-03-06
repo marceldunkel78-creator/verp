@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import api from '../services/api';
 import storage from '../utils/sessionStore';
 import { useAuth } from '../context/AuthContext';
@@ -98,20 +100,11 @@ const SystemsMap = ({ systems, onSystemClick }) => {
     }
     
     // Check if Leaflet is available
-    if (typeof window !== 'undefined' && !window.L) {
-      // Load Leaflet CSS and JS dynamically
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => initMap();
-      script.onerror = () => setMapError(true);
-      document.head.appendChild(script);
-    } else if (window.L && systemsWithCoords.length > 0) {
-      initMap();
+    if (typeof window !== 'undefined') {
+      window.L = L;
+      if (systemsWithCoords.length > 0) {
+        initMap();
+      }
     }
   }, [systemsWithCoords]);
 
