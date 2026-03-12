@@ -241,6 +241,7 @@ const OrderProcessing = () => {
               type="text"
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="Suche nach Nummer oder Kunde..."
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />

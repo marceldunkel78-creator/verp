@@ -210,8 +210,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
     """
     queryset = InventoryItem.objects.all()
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'article_number', 'visitron_part_number', 'inventory_number', 'serial_number']
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     ordering_fields = ['inventory_number', 'name', 'delivery_date', 'status', 'supplier__company_name', 'updated_at']
     ordering = ['-updated_at']
     
