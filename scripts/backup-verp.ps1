@@ -4,7 +4,7 @@
 
 param(
     [string]$VerpRoot = "C:\VERP",
-    [string]$BackupDir = "\\server\VSDB_Backups\VERP-Backup",
+    [string]$BackupDir = "\\server\VERP_Backups",
     [string]$MediaDir = "C:\VERP-Media",
     [int]$RetentionDays = 30
 )
