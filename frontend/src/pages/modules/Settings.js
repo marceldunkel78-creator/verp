@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
   BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon,
-  ArchiveBoxIcon, TicketIcon, ClipboardDocumentCheckIcon
+  ArchiveBoxIcon, TicketIcon, ClipboardDocumentCheckIcon, ArrowUpTrayIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -77,6 +77,13 @@ const Settings = () => {
       icon: ClipboardDocumentCheckIcon,
       path: '/settings/checklists',
       color: 'emerald'
+    },
+    {
+      name: 'VisiView Lizenz-Import',
+      description: 'VisiView-Lizenzen aus CSV-Datei importieren',
+      icon: ArrowUpTrayIcon,
+      path: '/settings/visiview-license-import',
+      color: 'cyan'
     },
     {
       name: 'Admin Löschmodul',

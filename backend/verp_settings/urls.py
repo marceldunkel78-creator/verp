@@ -19,6 +19,9 @@ from .redmine_sync_views import (
     RedmineSyncStatusView, RedmineSyncTestConnectionView,
     RedmineSyncPreviewView, RedmineSyncExecuteView
 )
+from .visiview_license_import_views import (
+    VisiViewLicenseImportPreviewView, VisiViewLicenseImportExecuteView
+)
 
 router = DefaultRouter()
 router.register(r'exchange-rates', ExchangeRateViewSet, basename='exchange-rate')
@@ -54,4 +57,7 @@ urlpatterns = [
     path('redmine-sync/test-connection/', RedmineSyncTestConnectionView.as_view(), name='redmine-sync-test'),
     path('redmine-sync/preview/', RedmineSyncPreviewView.as_view(), name='redmine-sync-preview'),
     path('redmine-sync/execute/', RedmineSyncExecuteView.as_view(), name='redmine-sync-execute'),
+    # VisiView License Import
+    path('visiview-license-import/preview/', VisiViewLicenseImportPreviewView.as_view(), name='visiview-license-import-preview'),
+    path('visiview-license-import/execute/', VisiViewLicenseImportExecuteView.as_view(), name='visiview-license-import-execute'),
 ]

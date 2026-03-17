@@ -80,6 +80,7 @@ import CustomerSync from './pages/CustomerSync';
 import OrderImport from './pages/OrderImport';
 import RedmineSync from './pages/RedmineSync';
 import ChecklistSettings from './pages/ChecklistSettings';
+import VisiViewLicenseImport from './pages/VisiViewLicenseImport';
 import DevelopmentProjects from './pages/DevelopmentProjects';
 import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
 import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
@@ -248,6 +249,7 @@ function App() {
             <Route path="settings/order-import" element={<OrderImport />} />
             <Route path="settings/redmine-sync" element={<RedmineSync />} />
             <Route path="settings/checklists" element={<ChecklistSettings />} />
+            <Route path="settings/visiview-license-import" element={<VisiViewLicenseImport />} />
             
             {/* Legacy redirects for backward compatibility */}
             <Route path="users" element={<Navigate to="/settings/users" replace />} />
