@@ -24,6 +24,12 @@ from .serializers import (
 )
 import traceback
 import json
+import io
+import logging
+from PIL import Image
+from django.core.files.base import ContentFile
+
+logger = logging.getLogger(__name__)
 
 
 class QuotationViewSet(viewsets.ModelViewSet):
@@ -386,9 +392,56 @@ class MarketingItemViewSet(viewsets.ModelViewSet):
             uploaded_by=request.user
         )
         
+        # Generate thumbnail from saved file on disk
+        self._generate_thumbnail(attachment)
+        
         from .serializers import MarketingItemFileSerializer
         serializer = MarketingItemFileSerializer(attachment, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    def _generate_thumbnail(self, attachment, max_size=(300, 300)):
+        """Erzeugt ein Vorschaubild für Bilder und PDFs"""
+        try:
+            content_type = (attachment.content_type or '').lower()
+            filename_lower = attachment.filename.lower()
+            
+            # Read bytes from the saved file on disk
+            with attachment.file.open('rb') as f:
+                file_bytes = f.read()
+            
+            thumb_image = None
+            
+            if content_type.startswith('image/') or filename_lower.endswith(
+                ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')
+            ):
+                img = Image.open(io.BytesIO(file_bytes))
+                img.load()
+                img.thumbnail(max_size, Image.LANCZOS)
+                if img.mode in ('RGBA', 'P'):
+                    img = img.convert('RGB')
+                thumb_image = img
+                
+            elif content_type == 'application/pdf' or filename_lower.endswith('.pdf'):
+                import fitz  # PyMuPDF
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                if doc.page_count > 0:
+                    page = doc[0]
+                    mat = fitz.Matrix(2.0, 2.0)
+                    pix = page.get_pixmap(matrix=mat, alpha=False)
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    img.thumbnail(max_size, Image.LANCZOS)
+                    thumb_image = img
+                doc.close()
+            
+            if thumb_image:
+                buffer = io.BytesIO()
+                thumb_image.save(buffer, format='JPEG', quality=85)
+                buffer.seek(0)
+                thumb_name = f"thumb_{attachment.id}.jpg"
+                attachment.thumbnail.save(thumb_name, ContentFile(buffer.read()), save=True)
+                
+        except Exception as e:
+            logger.error(f"Thumbnail-Generierung fehlgeschlagen für {attachment.filename}: {e}", exc_info=True)
     
     @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
     def delete_attachment(self, request, pk=None, attachment_id=None):
@@ -396,6 +449,8 @@ class MarketingItemViewSet(viewsets.ModelViewSet):
         marketing_item = self.get_object()
         try:
             attachment = MarketingItemFile.objects.get(id=attachment_id, marketing_item=marketing_item)
+            if attachment.thumbnail:
+                attachment.thumbnail.delete(save=False)
             attachment.file.delete()  # Löscht die Datei vom Speicher
             attachment.delete()  # Löscht den Datenbankeintrag
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -413,6 +468,59 @@ class MarketingItemViewSet(viewsets.ModelViewSet):
                               filename=attachment.filename)
         except MarketingItemFile.DoesNotExist:
             raise Http404("Anhang nicht gefunden")
+
+    @action(detail=False, methods=['post'], url_path='merge_brochure_pdfs')
+    def merge_brochure_pdfs(self, request):
+        """Erstellt eine Gesamtbroschüre aus mehreren Marketing-Items (PDFs zusammenführen)"""
+        item_ids = request.data.get('item_ids', [])
+        if not item_ids or not isinstance(item_ids, list):
+            return Response({'error': 'Keine Items ausgewählt'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate: only integers, limit count
+        try:
+            item_ids = [int(i) for i in item_ids]
+        except (ValueError, TypeError):
+            return Response({'error': 'Ungültige Item-IDs'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(item_ids) > 100:
+            return Response({'error': 'Maximal 100 Items'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from PyPDF2 import PdfMerger
+        merger = PdfMerger()
+        pdf_count = 0
+
+        # Preserve the order from the request
+        items_by_id = {
+            item.id: item
+            for item in MarketingItem.objects.prefetch_related('files').filter(
+                id__in=item_ids, category='brochure'
+            )
+        }
+
+        for item_id in item_ids:
+            item = items_by_id.get(item_id)
+            if not item:
+                continue
+            for f in item.files.all():
+                if f.filename.lower().endswith('.pdf') or (f.content_type or '').lower() == 'application/pdf':
+                    try:
+                        merger.append(f.file.open('rb'))
+                        pdf_count += 1
+                    except Exception as e:
+                        logger.warning(f"PDF konnte nicht hinzugefügt werden: {f.filename}: {e}")
+
+        if pdf_count == 0:
+            merger.close()
+            return Response({'error': 'Keine PDFs in den ausgewählten Broschüren gefunden'}, status=status.HTTP_400_BAD_REQUEST)
+
+        buffer = io.BytesIO()
+        merger.write(buffer)
+        merger.close()
+        buffer.seek(0)
+
+        response = FileResponse(buffer, as_attachment=True, filename='Gesamtbroschuere.pdf')
+        response['Content-Type'] = 'application/pdf'
+        return response
 
 
 class MarketingItemFileViewSet(viewsets.ModelViewSet):

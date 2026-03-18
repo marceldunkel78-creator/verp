@@ -700,6 +700,12 @@ class MarketingItemFile(models.Model):
         auto_now_add=True,
         verbose_name='Hochgeladen am'
     )
+    thumbnail = models.ImageField(
+        upload_to='Sales/Marketing/thumbnails/',
+        null=True,
+        blank=True,
+        verbose_name='Vorschaubild'
+    )
     
     class Meta:
         verbose_name = 'Marketing-Datei'

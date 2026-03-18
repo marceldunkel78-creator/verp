@@ -409,15 +409,16 @@ class MarketingItemFileSerializer(serializers.ModelSerializer):
     """Serializer für Marketing-Dateien"""
     file_url = serializers.SerializerMethodField()
     uploaded_by_name = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
     
     class Meta:
         model = MarketingItemFile
         fields = [
             'id', 'marketing_item', 'file', 'file_url', 'filename', 
             'file_size', 'content_type', 'uploaded_by', 'uploaded_by_name',
-            'uploaded_at', 'is_image'
+            'uploaded_at', 'is_image', 'thumbnail_url'
         ]
-        read_only_fields = ['uploaded_at', 'is_image']
+        read_only_fields = ['uploaded_at', 'is_image', 'thumbnail_url']
     
     def get_file_url(self, obj):
         """Gibt die vollständige URL zur Datei zurück"""
@@ -429,6 +430,12 @@ class MarketingItemFileSerializer(serializers.ModelSerializer):
         """Gibt den Namen des Uploaders zurück"""
         if obj.uploaded_by:
             return obj.uploaded_by.get_full_name() or obj.uploaded_by.username
+        return None
+    
+    def get_thumbnail_url(self, obj):
+        """Gibt die URL des Vorschaubilds zurück"""
+        if obj.thumbnail:
+            return obj.thumbnail.url
         return None
 
 
@@ -476,9 +483,10 @@ class MarketingItemCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketingItem
         fields = [
-            'category', 'title', 'description', 'responsible_employees',
+            'id', 'category', 'title', 'description', 'responsible_employees',
             'event_date', 'event_location', 'created_by'
         ]
+        read_only_fields = ['id']
     
     def validate(self, data):
         """Validierung: Event-Felder nur für Shows/Workshops"""

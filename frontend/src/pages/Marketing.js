@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { 
@@ -8,14 +8,28 @@ import {
   BookOpenIcon,
   PresentationChartBarIcon,
   AcademicCapIcon,
-  CalendarIcon
+  CalendarIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+  ArrowDownTrayIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 
 const Marketing = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('newsletter');
+  const [activeTab, setActiveTab] = useState(() => {
+    return sessionStorage.getItem('marketingActiveTab') || 'newsletter';
+  });
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeOrder, setMergeOrder] = useState([]);
+  const [merging, setMerging] = useState(false);
 
   const tabs = [
     { id: 'newsletter', name: 'Newsletter', icon: EnvelopeIcon },
@@ -26,14 +40,28 @@ const Marketing = () => {
     { id: 'workshop', name: 'Workshops', icon: AcademicCapIcon }
   ];
 
+  // Persist active tab
   useEffect(() => {
-    fetchItems();
+    sessionStorage.setItem('marketingActiveTab', activeTab);
+    setSelectedIds(new Set());
   }, [activeTab]);
 
-  const fetchItems = async () => {
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get(`/sales/marketing-items/?category=${activeTab}`);
+      let url = `/sales/marketing-items/?category=${activeTab}`;
+      if (debouncedSearch.trim()) {
+        url += `&search=${encodeURIComponent(debouncedSearch.trim())}`;
+      }
+      const response = await api.get(url);
       setItems(response.data.results || response.data || []);
     } catch (error) {
       console.error('Fehler beim Laden der Marketing-Items:', error);
@@ -41,7 +69,11 @@ const Marketing = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab, debouncedSearch]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
   const handleCreateNew = () => {
     navigate(`/sales/marketing/new?category=${activeTab}`);
@@ -57,10 +89,70 @@ const Marketing = () => {
     
     try {
       await api.delete(`/sales/marketing-items/${id}/`);
+      setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
       fetchItems();
     } catch (error) {
       console.error('Fehler beim Löschen:', error);
       alert('Fehler beim Löschen: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const isBrochureTab = activeTab === 'brochure';
+
+  const toggleSelection = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === items.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map(i => i.id)));
+    }
+  };
+
+  const openMergeModal = () => {
+    const ordered = items.filter(i => selectedIds.has(i.id));
+    setMergeOrder(ordered);
+    setShowMergeModal(true);
+  };
+
+  const moveMergeItem = (index, direction) => {
+    const newOrder = [...mergeOrder];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
+    setMergeOrder(newOrder);
+  };
+
+  const handleMergeDownload = async () => {
+    setMerging(true);
+    try {
+      const response = await api.post(
+        '/sales/marketing-items/merge_brochure_pdfs/',
+        { item_ids: mergeOrder.map(i => i.id) },
+        { responseType: 'blob' }
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Gesamtbroschuere.pdf');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowMergeModal(false);
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error('Fehler beim Erstellen der Gesamtbroschüre:', error);
+      alert('Fehler beim Erstellen der Gesamtbroschüre: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -104,17 +196,63 @@ const Marketing = () => {
       {/* Content */}
       <div className="bg-white shadow rounded-lg">
         {/* Action Bar */}
-        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-lg font-medium text-gray-900">
-            {tabs.find(t => t.id === activeTab)?.name}
-          </h2>
-          <button
-            onClick={handleCreateNew}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
-            Neu hinzufügen
-          </button>
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-medium text-gray-900">
+              {tabs.find(t => t.id === activeTab)?.name}
+            </h2>
+            <button
+              onClick={handleCreateNew}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+            >
+              <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
+              Neu hinzufügen
+            </button>
+          </div>
+          {/* Search */}
+          <div className="mt-3 relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Nach Titel oder Beschreibung suchen..."
+              className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+              >
+                <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+              </button>
+            )}
+          </div>
+          {/* Brochure selection bar */}
+          {isBrochureTab && items.length > 0 && (
+            <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-md px-3 py-2">
+              <label className="inline-flex items-center text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={items.length > 0 && selectedIds.size === items.length}
+                  onChange={toggleSelectAll}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2"
+                />
+                Alle auswählen ({selectedIds.size}/{items.length})
+              </label>
+              {selectedIds.size >= 2 && (
+                <button
+                  onClick={openMergeModal}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                >
+                  <DocumentDuplicateIcon className="-ml-0.5 mr-1.5 h-4 w-4" />
+                  Gesamtbroschüre erstellen ({selectedIds.size})
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Items List */}
@@ -140,13 +278,39 @@ const Marketing = () => {
             </div>
           ) : (
             <ul className="divide-y divide-gray-200">
-              {items.map(item => (
+              {items.map(item => {
+                // Find thumbnail from first file
+                const thumbnailFile = item.files?.find(f => f.thumbnail_url);
+                const thumbnailUrl = thumbnailFile?.thumbnail_url;
+                return (
                 <li
                   key={item.id}
                   onClick={() => handleItemClick(item.id)}
-                  className="py-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                  className={`py-4 hover:bg-gray-50 cursor-pointer transition-colors ${isBrochureTab && selectedIds.has(item.id) ? 'bg-blue-50' : ''}`}
                 >
                   <div className="flex items-start justify-between">
+                    {/* Checkbox for brochures */}
+                    {isBrochureTab && (
+                      <div className="flex-shrink-0 mr-3 pt-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={(e) => toggleSelection(item.id, e)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                        />
+                      </div>
+                    )}
+                    {/* Thumbnail */}
+                    {thumbnailUrl && (
+                      <div className="flex-shrink-0 mr-4">
+                        <img
+                          src={thumbnailUrl}
+                          alt={item.title}
+                          className="w-24 h-24 rounded-lg object-cover border border-gray-200 shadow-sm"
+                        />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-3">
                         <h3 className="text-lg font-medium text-gray-900 truncate">
@@ -207,11 +371,84 @@ const Marketing = () => {
                     </button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>
       </div>
+
+      {/* Merge / Reorder Modal */}
+      {showMergeModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowMergeModal(false)} />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6 z-10">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Gesamtbroschüre erstellen
+                </h3>
+                <button onClick={() => setShowMergeModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Reihenfolge der Broschüren anpassen. Die PDFs werden in dieser Reihenfolge zusammengefügt.
+              </p>
+              <ul className="space-y-2 mb-6 max-h-96 overflow-y-auto">
+                {mergeOrder.map((item, index) => {
+                  const pdfCount = item.files?.filter(f => f.filename?.toLowerCase().endsWith('.pdf')).length || 0;
+                  return (
+                    <li key={item.id} className="flex items-center justify-between bg-gray-50 rounded-md px-3 py-2">
+                      <div className="flex items-center min-w-0 flex-1">
+                        <span className="text-sm font-medium text-gray-500 w-6">{index + 1}.</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                          <p className="text-xs text-gray-500">{pdfCount} PDF{pdfCount !== 1 ? 's' : ''}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1 ml-2">
+                        <button
+                          type="button"
+                          onClick={() => moveMergeItem(index, -1)}
+                          disabled={index === 0}
+                          className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronUpIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveMergeItem(index, 1)}
+                          disabled={index === mergeOrder.length - 1}
+                          className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronDownIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowMergeModal(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleMergeDownload}
+                  disabled={merging}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                >
+                  <ArrowDownTrayIcon className="-ml-1 mr-2 h-4 w-4" />
+                  {merging ? 'Wird erstellt...' : 'PDF herunterladen'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
