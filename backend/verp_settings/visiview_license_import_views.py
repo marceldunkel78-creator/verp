@@ -90,14 +90,25 @@ def parse_options_bitmask(options_str):
 def parse_upper_options_bitmask(options_upper_str):
     """
     Parse the OptionsUpper32bit column from the CSV.
-    Bit 0 (value 1) = Option ID 32 (SerialIO), bit 1 = Option ID 33, etc.
+    CSV bit 0 (value 1) = SerialIO = global bit_position 31
+    CSV bit 1 (value 2) = Basler   = global bit_position 32
+    etc.
+
+    Returns (bit31_flag, upper_32) where:
+    - bit31_flag is (1 << 31) or 0  → OR into options_bitmask
+    - upper_32 is the value for options_upper_32bit (global bits 32+)
     """
     if not options_upper_str or options_upper_str.strip() == '':
-        return 0
+        return 0, 0
     try:
-        return int(options_upper_str.strip()) & 0xFFFFFFFF
+        raw = int(options_upper_str.strip())
+        # CSV bit 0 → SerialIO → global bit 31 → belongs in options_bitmask
+        bit31_flag = (1 << 31) if (raw & 1) else 0
+        # CSV bits 1+ → global bits 32+ → shift right by 1 for options_upper_32bit
+        upper_32 = (raw >> 1) & 0xFFFFFFFF
+        return bit31_flag, upper_32
     except ValueError:
-        return 0
+        return 0, 0
 
 
 def find_customer(customer_name, customer_address):
@@ -198,7 +209,8 @@ def _process_row(row, row_num, dry_run=True, relink=False):
     expire_date = parse_date(expire_date_str)
     maintenance_date = parse_date(maintenance_str)
     lower_32 = parse_options_bitmask(options_str)
-    upper_32 = parse_upper_options_bitmask(options_upper_str)
+    bit31_flag, upper_32 = parse_upper_options_bitmask(options_upper_str)
+    lower_32 |= bit31_flag  # SerialIO (global bit 31) goes into lower mask
 
     existing_license = VisiViewLicense.objects.select_related('customer').filter(
         serial_number=serial_number
