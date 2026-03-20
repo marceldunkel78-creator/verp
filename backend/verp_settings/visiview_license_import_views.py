@@ -78,26 +78,26 @@ def parse_date(date_str):
 
 
 def parse_options_bitmask(options_str):
+    """Parse lower 32-bit options string (bits 0-30) and return its integer value."""
     if not options_str or options_str.strip() == '':
-        return 0, 0
+        return 0
     try:
-        options_value = int(options_str.strip())
-        lower_32 = options_value & 0xFFFFFFFF
-        upper_32 = (options_value >> 32) & 0xFFFFFFFF
-        return lower_32, upper_32
+        return int(options_str.strip()) & 0xFFFFFFFF
     except ValueError:
-        try:
-            bits = [int(b.strip()) for b in options_str.split(',') if b.strip()]
-            lower_32 = 0
-            upper_32 = 0
-            for bit in bits:
-                if bit < 32:
-                    lower_32 |= (1 << bit)
-                else:
-                    upper_32 |= (1 << (bit - 32))
-            return lower_32, upper_32
-        except Exception:
-            return 0, 0
+        return 0
+
+
+def parse_upper_options_bitmask(options_upper_str):
+    """
+    Parse the OptionsUpper32bit column from the CSV.
+    Bit 0 (value 1) = Option ID 32 (SerialIO), bit 1 = Option ID 33, etc.
+    """
+    if not options_upper_str or options_upper_str.strip() == '':
+        return 0
+    try:
+        return int(options_upper_str.strip()) & 0xFFFFFFFF
+    except ValueError:
+        return 0
 
 
 def find_customer(customer_name, customer_address):
@@ -184,6 +184,7 @@ def _process_row(row, row_num, dry_run=True, relink=False):
     customer_name = row.get('CustomerName', row.get('customer_name', '')).strip()
     customer_address = row.get('CustomerAddress', row.get('customer_address', '')).strip()
     options_str = row.get('Options', row.get('options', ''))
+    options_upper_str = row.get('OptionsUpper32bit', row.get('optionsupper32bit', row.get('Options_Upper32bit', '')))
     hardware = row.get('Hardware', row.get('hardware', '')).strip()
     version = row.get('Version', row.get('version', '')).strip() or None
     delivery_date_str = row.get('DeliveryDate', row.get('delivery_date', ''))
@@ -196,7 +197,8 @@ def _process_row(row, row_num, dry_run=True, relink=False):
     delivery_date = parse_date(delivery_date_str)
     expire_date = parse_date(expire_date_str)
     maintenance_date = parse_date(maintenance_str)
-    lower_32, upper_32 = parse_options_bitmask(options_str)
+    lower_32 = parse_options_bitmask(options_str)
+    upper_32 = parse_upper_options_bitmask(options_upper_str)
 
     existing_license = VisiViewLicense.objects.select_related('customer').filter(
         serial_number=serial_number

@@ -441,8 +441,11 @@ const VisiViewLicenseImport = () => {
           Die CSV-Datei sollte folgende Spalten enthalten (Trennzeichen: Semikolon oder Komma):
         </p>
         <code className="text-xs text-gray-600 bg-white px-2 py-1 rounded border">
-          ID;Serialnum;InternalSN;CustomerName;CustomerAddress;Options;Hardware;Version;DeliveryDate;ExpireDate;Maintenance
+          ID;Serialnum;InternalSN;CustomerName;CustomerAddress;Options;OptionsUpper32bit;Hardware;Version;DeliveryDate;ExpireDate;Maintenance
         </code>
+        <p className="text-xs text-gray-500 mt-2">
+          <strong>Options</strong> enthält die unteren 32 Bit (Bit 0–30). <strong>OptionsUpper32bit</strong> enthält die oberen 32 Bit (ab Bit 32, z.B. SerialIO).
+        </p>
         <p className="text-xs text-gray-500 mt-3">
           Die Datei wird unter <strong>VERP-Media/Settings/Licenses.csv</strong> gespeichert. 
           Kodierung (UTF-8, Latin-1, CP1252) und Trennzeichen werden automatisch erkannt.

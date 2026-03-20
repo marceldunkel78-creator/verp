@@ -48,32 +48,28 @@ def parse_date(date_str):
 
 def parse_options_bitmask(options_str):
     """
-    Parse options string and return lower 32 bits and upper 32 bits.
-    Options string can be a comma-separated list of bit positions or a single number.
+    Parse lower 32-bit options string (bits 0-30) and return its integer value.
     """
     if not options_str or options_str.strip() == '':
-        return 0, 0
-    
+        return 0
     try:
-        # If it's a single number, treat it as the full options mask
-        options_value = int(options_str.strip())
-        lower_32 = options_value & 0xFFFFFFFF
-        upper_32 = (options_value >> 32) & 0xFFFFFFFF
-        return lower_32, upper_32
+        return int(options_str.strip()) & 0xFFFFFFFF
     except ValueError:
-        # Try parsing as comma-separated bit positions
-        try:
-            bits = [int(b.strip()) for b in options_str.split(',') if b.strip()]
-            lower_32 = 0
-            upper_32 = 0
-            for bit in bits:
-                if bit < 32:
-                    lower_32 |= (1 << bit)
-                else:
-                    upper_32 |= (1 << (bit - 32))
-            return lower_32, upper_32
-        except:
-            return 0, 0
+        return 0
+
+
+def parse_upper_options_bitmask(options_upper_str):
+    """
+    Parse the OptionsUpper32bit column from the CSV.
+    Bit 0 (value 1) = Option ID 32 (SerialIO), bit 1 = Option ID 33, etc.
+    Returns the 32-bit integer to store in options_upper_32bit.
+    """
+    if not options_upper_str or options_upper_str.strip() == '':
+        return 0
+    try:
+        return int(options_upper_str.strip()) & 0xFFFFFFFF
+    except ValueError:
+        return 0
 
 
 LEGAL_SUFFIXES = {
@@ -229,6 +225,7 @@ def import_licenses(csv_path, dry_run=True, relink=False, verbose=False):
                 customer_name = row.get('CustomerName', row.get('customer_name', '')).strip()
                 customer_address = row.get('CustomerAddress', row.get('customer_address', '')).strip()
                 options_str = row.get('Options', row.get('options', ''))
+                options_upper_str = row.get('OptionsUpper32bit', row.get('optionsupper32bit', row.get('Options_Upper32bit', '')))
                 hardware = row.get('Hardware', row.get('hardware', '')).strip()
                 version = row.get('Version', row.get('version', '')).strip() or None
                 delivery_date_str = row.get('DeliveryDate', row.get('delivery_date', ''))
@@ -244,8 +241,9 @@ def import_licenses(csv_path, dry_run=True, relink=False, verbose=False):
                 expire_date = parse_date(expire_date_str)
                 maintenance_date = parse_date(maintenance_str)
                 
-                # Parse options bitmask
-                lower_32, upper_32 = parse_options_bitmask(options_str)
+                # Parse options bitmasks
+                lower_32 = parse_options_bitmask(options_str)
+                upper_32 = parse_upper_options_bitmask(options_upper_str)
                 
                 # Determine if it's hardware (not a software license to show)
                 is_hardware = hardware.lower() in ['true', '1', 'yes', 'ja', 'x'] if hardware else False
@@ -289,7 +287,9 @@ def import_licenses(csv_path, dry_run=True, relink=False, verbose=False):
 
                     print(
                         f"Row {row_num}: SN={serial_number}, Customer='{customer_name}', "
-                        f"Options={options_str} | {existing_info} | {match_info} | {action_info}"
+                        f"Options={options_str} (lower={lower_32:#010x}), "
+                        f"OptionsUpper32bit={options_upper_str} (upper={upper_32:#010x}) | "
+                        f"{existing_info} | {match_info} | {action_info}"
                     )
                 else:
                     customer_to_use = customer
