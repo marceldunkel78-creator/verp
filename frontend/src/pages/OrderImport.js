@@ -138,6 +138,12 @@ const OrderImport = () => {
             Existiert
           </span>
         );
+      case 'duplicate':
+        return (
+          <span className="inline-flex items-center gap-1 text-purple-700 font-medium text-xs bg-purple-100 px-2 py-0.5 rounded-full">
+            <ExclamationTriangleIcon className="h-3 w-3" /> Duplikat
+          </span>
+        );
       case 'no_items':
         return (
           <span className="inline-flex items-center gap-1 text-red-700 font-medium text-xs bg-red-100 px-2 py-0.5 rounded-full">
@@ -337,7 +343,7 @@ const OrderImport = () => {
           Import-Vorschau (Dry-Run)
         </h2>
         <p className="text-sm text-gray-600 mb-4">
-          Zeigt eine Vorschau der zu importierenden Aufträge. Noch keine Daten werden geschrieben.
+          Zeigt die <strong>letzten N Aufträge</strong> (neueste) aus der SQL-Datenbank. Die Statistiken beziehen sich auf alle Aufträge. Noch keine Daten werden geschrieben.
         </p>
 
         <div className="flex items-end gap-4 mb-4">
@@ -378,7 +384,7 @@ const OrderImport = () => {
           ) : (
             <div>
               {/* Zusammenfassung */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-gray-700">{previewResult.stats?.total_in_sql || 0}</div>
                   <div className="text-xs text-gray-500">In SQL-DB</div>
@@ -394,6 +400,10 @@ const OrderImport = () => {
                 <div className="bg-amber-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-amber-700">{previewResult.stats?.would_import_no_customer || 0}</div>
                   <div className="text-xs text-amber-600">Ohne VERP-Kunde</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-purple-700">{previewResult.stats?.would_skip_duplicate || 0}</div>
+                  <div className="text-xs text-purple-600">Duplikate</div>
                 </div>
                 <div className="bg-teal-50 rounded-lg p-3 text-center">
                   <div className="text-xl font-bold text-teal-700">{previewResult.stats?.total_items || 0}</div>
@@ -425,6 +435,7 @@ const OrderImport = () => {
                             item.action === 'import' ? 'bg-green-50' :
                             item.action === 'import_no_customer' ? 'bg-amber-50' :
                             item.action === 'exists' ? 'bg-gray-50' :
+                            item.action === 'duplicate' ? 'bg-purple-50' :
                             'bg-red-50'
                           }
                         >

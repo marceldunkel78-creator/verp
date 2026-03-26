@@ -105,12 +105,12 @@ def fetch_auftraege(connection, limit=None):
     """Liest alle Auftraege aus der SQL-Datenbank."""
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM [Aufträge] ORDER BY [Auftragsdatum]"
+        query = "SELECT * FROM [Aufträge] ORDER BY [Datum], [AuftragsID]"
         if limit:
             # SQL Server OFFSET/FETCH
             query = (
                 "SELECT * FROM [Aufträge] "
-                "ORDER BY [Auftragsdatum] "
+                "ORDER BY [Datum], [AuftragsID] "
                 f"OFFSET 0 ROWS FETCH NEXT {int(limit)} ROWS ONLY"
             )
         cursor.execute(query)
@@ -290,27 +290,32 @@ def generate_legacy_order_numbers(auftraege):
 
     Format: O-XXX-MM/YY
     - XXX: Fortlaufend pro Kalenderjahr, startet bei 101
-    - MM: Monat des Auftragsdatums
-    - YY: Jahr des Auftragsdatums (2-stellig)
+    - MM: Monat des Bestaetigungsdatums
+    - YY: Jahr des Bestaetigungsdatums (2-stellig)
 
-    Die Nummerierung ist sortiert nach Auftragsdatum innerhalb eines Jahres.
+    Die Nummerierung ist sortiert nach Bestaetigungsdatum (Spalte 'Datum')
+    innerhalb eines Jahres. Das Bestaetigungsdatum bestimmt wann der Auftrag
+    offiziell bestaetigt wurde und ist massgeblich fuer die Auftragsnummer.
     """
-    # Sortiere nach Auftragsdatum
-    def get_order_date(row):
-        d = _parse_date(row.get('Auftragsdatum'))
-        if d:
-            return d
-        # Fallback: Datum-Feld
+    # Sortiere nach Bestaetigungsdatum, bei Gleichheit nach AuftragsID (stabile Sortierung)
+    def get_sort_key(row):
+        # Primaer: Bestaetigungsdatum (Spalte 'Datum')
         d = _parse_date(row.get('Datum'))
-        if d:
-            return d
-        # Fallback aus Jahr-Feld
-        jahr = _safe_int(row.get('Jahr'))
-        if jahr:
-            return datetime(jahr, 1, 1).date()
-        return datetime(1990, 1, 1).date()
+        if not d:
+            # Fallback: Auftragsdatum
+            d = _parse_date(row.get('Auftragsdatum'))
+        if not d:
+            # Fallback aus Jahr-Feld
+            jahr = _safe_int(row.get('Jahr'))
+            if jahr:
+                d = datetime(jahr, 1, 1).date()
+        if not d:
+            d = datetime(1990, 1, 1).date()
+        # AuftragsID als stabiler Tiebreaker bei gleichem Datum
+        auftrags_id = _safe_int(row.get('AuftragsID'), 0)
+        return (d, auftrags_id)
 
-    sorted_orders = sorted(auftraege, key=get_order_date)
+    sorted_orders = sorted(auftraege, key=get_sort_key)
 
     # Zaehler pro Kalenderjahr
     year_counters = defaultdict(int)
@@ -318,9 +323,9 @@ def generate_legacy_order_numbers(auftraege):
 
     for row in sorted_orders:
         auftrags_id = row.get('AuftragsID')
-        order_date = get_order_date(row)
-        year = order_date.year
-        month = order_date.month
+        confirmation_date = get_sort_key(row)[0]  # Bestaetigungsdatum
+        year = confirmation_date.year
+        month = confirmation_date.month
 
         # Zaehler hochzaehlen
         year_counters[year] += 1
@@ -335,7 +340,7 @@ def generate_legacy_order_numbers(auftraege):
 
         order_numbers[auftrags_id] = {
             'order_number': order_number,
-            'order_date': order_date,
+            'order_date': confirmation_date,
             'sequence': year_counters[year],
         }
 
@@ -449,12 +454,16 @@ def get_order_import_status():
 def preview_order_import(server, database='VSDB', use_dsn=False, dsn_name=None, limit=50):
     """
     Erstellt eine Vorschau des Auftragsimports (Dry-Run).
+
+    Laedt ALLE Auftraege aus SQL, generiert Nummern, und zeigt dann die
+    letzten `limit` Auftraege (neueste zuerst) in der Vorschau an.
+    So sind Duplikate und Nummernluecken sofort sichtbar.
     """
     conn = get_mssql_connection(server, database, use_dsn, dsn_name)
 
     try:
-        # Daten laden
-        auftraege = fetch_auftraege(conn, limit=limit if limit else None)
+        # ALLE Auftraege laden (fuer korrekte Nummernberechnung)
+        auftraege = fetch_auftraege(conn, limit=None)
         positionen = fetch_auftragspositionen(conn)
         adressen = fetch_adressen(conn)
 
@@ -479,6 +488,7 @@ def preview_order_import(server, database='VSDB', use_dsn=False, dsn_name=None, 
             'would_import': 0,
             'would_import_no_customer': 0,
             'would_skip_exists': 0,
+            'would_skip_duplicate': 0,
             'would_skip_no_items': 0,
             'total_items': 0,
         }
@@ -488,9 +498,28 @@ def preview_order_import(server, database='VSDB', use_dsn=False, dsn_name=None, 
             nr_info = order_numbers.get(auftrags_id, {})
             order_number = nr_info.get('order_number', '?')
             order_date = nr_info.get('order_date')
+            confirmation_date = _parse_date(row.get('Datum'))
 
             # Bereits importiert?
             already_exists = order_number in existing_orders
+
+            # Duplikat-Erkennung (inhaltlich)
+            is_duplicate = False
+            if not already_exists:
+                adressen_id_check = _safe_int(row.get('AdressenID'))
+                customer_check = find_customer_for_address(adressen_id_check) if adressen_id_check else None
+                item_count_check = len(positions_by_auftrags_id.get(auftrags_id, []))
+                if customer_check and order_date:
+                    dup_qs = CustomerOrder.objects.filter(
+                        customer=customer_check,
+                        order_date=order_date,
+                        order_number__startswith='O-',
+                    )
+                    if confirmation_date:
+                        dup_qs = dup_qs.filter(confirmation_date=confirmation_date)
+                    existing_dup = dup_qs.first()
+                    if existing_dup and existing_dup.items.count() == item_count_check:
+                        is_duplicate = True
 
             # Kunde finden
             adressen_id = _safe_int(row.get('AdressenID'))
@@ -506,6 +535,9 @@ def preview_order_import(server, database='VSDB', use_dsn=False, dsn_name=None, 
             if already_exists:
                 action = 'exists'
                 stats['would_skip_exists'] += 1
+            elif is_duplicate:
+                action = 'duplicate'
+                stats['would_skip_duplicate'] += 1
             elif item_count == 0:
                 action = 'no_items'
                 stats['would_skip_no_items'] += 1
@@ -525,6 +557,7 @@ def preview_order_import(server, database='VSDB', use_dsn=False, dsn_name=None, 
                 'auftrags_id': auftrags_id,
                 'order_number': order_number,
                 'order_date': str(order_date) if order_date else '',
+                'confirmation_date': str(_parse_date(row.get('Datum')) or ''),
                 'angebot_nummer': row.get('AngebotNummer', ''),
                 'jahr': row.get('Jahr', ''),
                 'customer_name': str(customer) if customer else f'{firma} / {name}'.strip(' /'),
@@ -536,6 +569,15 @@ def preview_order_import(server, database='VSDB', use_dsn=False, dsn_name=None, 
                 'action': action,
                 'kurzbeschreibung': str(row.get('Kurzbeschreibung', '') or ''),
             })
+
+        # Sortiere Preview-Items chronologisch (nach Datum, dann Auftragsnummer)
+        # So werden die neuesten Auftraege am Ende angezeigt
+        preview_items.sort(key=lambda x: (x['order_date'] or '', x['order_number']))
+
+        # Nur die letzten N Auftraege in der Vorschau anzeigen (neueste zuletzt)
+        # Die Statistiken beziehen sich auf ALLE Auftraege
+        if limit and len(preview_items) > limit:
+            preview_items = preview_items[-limit:]
 
         return {
             'stats': stats,
@@ -669,6 +711,7 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
             'imported': 0,
             'imported_no_customer': 0,
             'skipped_exists': 0,
+            'skipped_duplicate': 0,
             'skipped_no_items': 0,
             'errors': 0,
             'items_created': 0,
@@ -685,24 +728,44 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
                 errors.append(f"Keine Auftragsnummer fuer AuftragsID {auftrags_id}")
                 continue
 
-            # Bereits importiert?
+            # Bereits importiert (exakte Nummer)?
             if order_number in existing_orders:
                 stats['skipped_exists'] += 1
                 continue
 
-            # Kunde finden
+            # Duplikat-Erkennung: Pruefen ob ein Auftrag mit gleichem Kunden,
+            # gleichem Datum und gleicher Positionsanzahl bereits existiert.
+            # Verhindert doppelten Import wenn sich Nummern verschieben.
             adressen_id = _safe_int(row.get('AdressenID'))
             customer = find_customer_for_address(adressen_id) if adressen_id else None
-
-            # Positionen
             order_positions = positions_by_auftrags_id.get(auftrags_id, [])
+
+            order_date = _parse_date(row.get('Auftragsdatum'))
+            confirmation_date = _parse_date(row.get('Datum'))
+
+            if customer and order_date:
+                # Pruefe ob ein Auftrag mit gleichem Kunden und Auftragsdatum existiert
+                duplicate_qs = CustomerOrder.objects.filter(
+                    customer=customer,
+                    order_date=order_date,
+                    order_number__startswith='O-',
+                )
+                if confirmation_date:
+                    duplicate_qs = duplicate_qs.filter(confirmation_date=confirmation_date)
+                if duplicate_qs.exists():
+                    existing_dup = duplicate_qs.first()
+                    # Zusaetzlich Positionsanzahl pruefen
+                    if existing_dup.items.count() == len(order_positions):
+                        stats['skipped_duplicate'] += 1
+                        logger.info(
+                            f"Duplikat erkannt: {order_number} entspricht bestehendem "
+                            f"{existing_dup.order_number} (Kunde: {customer}, Datum: {order_date})"
+                        )
+                        continue
+
             if not order_positions:
                 stats['skipped_no_items'] += 1
                 continue
-
-            # Auftragsdaten parsen
-            order_date = _parse_date(row.get('Auftragsdatum'))
-            confirmation_date = _parse_date(row.get('Datum'))
 
             # Mitarbeiter-Zuordnung
             verkaeufer_id = _safe_int(row.get('VerkäuferID'))
