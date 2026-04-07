@@ -1,8 +1,17 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { InboxArrowDownIcon, ArchiveBoxIcon, ClipboardDocumentListIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { useAuth } from '../../context/AuthContext';
+import { InboxArrowDownIcon, ArchiveBoxIcon, ClipboardDocumentListIcon, ArrowPathIcon, GiftIcon } from '@heroicons/react/24/outline';
+
+const hasPermission = (user, permission) => {
+  if (!permission) return true;
+  if (user?.is_superuser) return true;
+  return user?.[permission] === true;
+};
 
 const InventoryManagement = () => {
+  const { user } = useAuth();
+
   const modules = [
     {
       name: 'Wareneingang',
@@ -17,6 +26,13 @@ const InventoryManagement = () => {
       icon: ArchiveBoxIcon,
       path: '/inventory/warehouse',
       color: 'violet'
+    },
+    {
+      name: 'Verleihungen',
+      description: 'Leihwaren an Kunden verwalten',
+      icon: GiftIcon,
+      path: '/inventory/customer-loans',
+      color: 'orange',
     },
     {
       name: 'Bestandsübersicht',
@@ -36,6 +52,11 @@ const InventoryManagement = () => {
     }
   ];
 
+  const filteredModules = modules.filter(m => {
+    if (m.disabled) return true; // Show disabled as coming soon
+    return hasPermission(user, m.permission);
+  });
+
   const colorMap = {
     orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
     purple: { bg: 'bg-purple-100', text: 'text-purple-600' },
@@ -52,7 +73,7 @@ const InventoryManagement = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modules.map((module) => {
+        {filteredModules.map((module) => {
           const Icon = module.icon;
           const col = colorMap[module.color] || colorMap.blue;
           return module.disabled ? (
