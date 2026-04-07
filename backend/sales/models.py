@@ -723,6 +723,87 @@ class MarketingItemFile(models.Model):
         return self.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
 
 
+# ==================== Event Report Models ====================
+
+class EventReport(models.Model):
+    """
+    Bericht zu einer Veranstaltung (Show/Workshop)
+    Jedes MarketingItem (show/workshop) kann genau einen Bericht haben.
+    """
+    marketing_item = models.OneToOneField(
+        MarketingItem,
+        on_delete=models.CASCADE,
+        related_name='report',
+        verbose_name='Veranstaltung',
+        limit_choices_to={'category__in': ['show', 'workshop']}
+    )
+    comment = models.TextField(
+        blank=True,
+        verbose_name='Allgemeiner Kommentar',
+        help_text='Allgemeine Anmerkungen zur Veranstaltung'
+    )
+    conclusion = models.TextField(
+        blank=True,
+        verbose_name='Fazit',
+        help_text='Fazit / Zusammenfassung der Veranstaltung'
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_event_reports',
+        verbose_name='Erstellt von'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    class Meta:
+        verbose_name = 'Veranstaltungsbericht'
+        verbose_name_plural = 'Veranstaltungsberichte'
+
+    def __str__(self):
+        return f"Bericht: {self.marketing_item.title}"
+
+
+class EventReportLead(models.Model):
+    """
+    Teilnehmer/Lead zu einem Veranstaltungsbericht.
+    Kann optional mit einem Kunden verknüpft werden.
+    """
+    report = models.ForeignKey(
+        EventReport,
+        on_delete=models.CASCADE,
+        related_name='leads',
+        verbose_name='Bericht'
+    )
+    customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='event_leads',
+        verbose_name='Kunde (optional)'
+    )
+    name = models.CharField(max_length=200, verbose_name='Name')
+    location = models.CharField(max_length=300, blank=True, verbose_name='Ort')
+    email = models.EmailField(blank=True, verbose_name='E-Mail')
+    phone = models.CharField(max_length=50, blank=True, verbose_name='Telefon')
+    comment = models.TextField(blank=True, verbose_name='Kommentar')
+    has_purchase_interest = models.BooleanField(
+        default=False,
+        verbose_name='Konkretes Kaufinteresse'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        verbose_name = 'Teilnehmer/Lead'
+        verbose_name_plural = 'Teilnehmer/Leads'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.report.marketing_item.title})"
+
+
 # ==================== Sales Ticket Models ====================
 
 class SalesTicket(models.Model):

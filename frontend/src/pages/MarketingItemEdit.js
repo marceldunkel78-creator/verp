@@ -6,7 +6,9 @@ import {
   ArrowLeftIcon,
   CalendarIcon,
   MapPinIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  DocumentTextIcon,
+  PlusIcon
 } from '@heroicons/react/24/outline';
 
 const MarketingItemEdit = () => {
@@ -20,6 +22,16 @@ const MarketingItemEdit = () => {
   const [saving, setSaving] = useState(false);
   const [item, setItem] = useState(null);
   const [employees, setEmployees] = useState([]);
+  const [eventReport, setEventReport] = useState(null);
+  const [reportSaving, setReportSaving] = useState(false);
+  const [reportData, setReportData] = useState({
+    comment: '',
+    conclusion: '',
+    leads: []
+  });
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerResults, setCustomerResults] = useState([]);
+  const [activeLeadIndex, setActiveLeadIndex] = useState(null);
   const [formData, setFormData] = useState({
     category: categoryFromUrl,
     title: '',
@@ -44,6 +56,30 @@ const MarketingItemEdit = () => {
       fetchItem();
     }
   }, [id]);
+
+  // Fetch event report when item is loaded and is a show/workshop
+  useEffect(() => {
+    if (item && ['show', 'workshop'].includes(item.category)) {
+      fetchEventReport();
+    }
+  }, [item]);
+
+  // Customer search for leads
+  useEffect(() => {
+    if (customerSearch.length < 2) {
+      setCustomerResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const response = await api.get(`/customers/customers/?search=${encodeURIComponent(customerSearch)}&page_size=10`);
+        setCustomerResults(response.data.results || response.data || []);
+      } catch (error) {
+        console.error('Fehler bei Kundensuche:', error);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerSearch]);
 
   const fetchEmployees = async () => {
     try {
@@ -72,6 +108,116 @@ const MarketingItemEdit = () => {
       navigate('/sales/marketing');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEventReport = async () => {
+    try {
+      const response = await api.get(`/sales/event-reports/by_marketing_item/?marketing_item=${id}`);
+      if (response.data) {
+        setEventReport(response.data);
+        setReportData({
+          comment: response.data.comment || '',
+          conclusion: response.data.conclusion || '',
+          leads: (response.data.leads || []).map(lead => ({
+            id: lead.id,
+            name: lead.name || '',
+            location: lead.location || '',
+            email: lead.email || '',
+            phone: lead.phone || '',
+            comment: lead.comment || '',
+            has_purchase_interest: lead.has_purchase_interest || false,
+            customer: lead.customer || null,
+            customer_name: lead.customer_name || ''
+          }))
+        });
+      }
+    } catch (error) {
+      if (error.response?.status !== 404) {
+        console.error('Fehler beim Laden des Berichts:', error);
+      }
+    }
+  };
+
+  const handleAddLead = () => {
+    setReportData({
+      ...reportData,
+      leads: [...reportData.leads, {
+        name: '',
+        location: '',
+        email: '',
+        phone: '',
+        comment: '',
+        has_purchase_interest: false,
+        customer: null,
+        customer_name: ''
+      }]
+    });
+  };
+
+  const handleRemoveLead = (index) => {
+    setReportData({
+      ...reportData,
+      leads: reportData.leads.filter((_, i) => i !== index)
+    });
+  };
+
+  const handleLeadChange = (index, field, value) => {
+    const updatedLeads = [...reportData.leads];
+    updatedLeads[index] = { ...updatedLeads[index], [field]: value };
+    setReportData({ ...reportData, leads: updatedLeads });
+  };
+
+  const handleSelectCustomerForLead = (index, customer) => {
+    const updatedLeads = [...reportData.leads];
+    const fullName = [customer.title, customer.first_name, customer.last_name].filter(Boolean).join(' ');
+    updatedLeads[index] = {
+      ...updatedLeads[index],
+      customer: customer.id,
+      customer_name: customer.full_name || fullName,
+      name: customer.full_name || fullName,
+      location: customer.primary_address_city || updatedLeads[index].location,
+      email: customer.email || updatedLeads[index].email,
+      phone: customer.phone || updatedLeads[index].phone
+    };
+    setReportData({ ...reportData, leads: updatedLeads });
+    setCustomerSearch('');
+    setCustomerResults([]);
+    setActiveLeadIndex(null);
+  };
+
+  const handleSaveReport = async () => {
+    setReportSaving(true);
+    try {
+      const submitData = {
+        marketing_item: parseInt(id),
+        comment: reportData.comment,
+        conclusion: reportData.conclusion,
+        leads: reportData.leads.map(lead => ({
+          ...(lead.id ? { id: lead.id } : {}),
+          name: lead.name,
+          location: lead.location,
+          email: lead.email,
+          phone: lead.phone,
+          comment: lead.comment,
+          has_purchase_interest: lead.has_purchase_interest,
+          customer: lead.customer || null
+        }))
+      };
+
+      if (eventReport) {
+        await api.put(`/sales/event-reports/${eventReport.id}/`, submitData);
+      } else {
+        const response = await api.post('/sales/event-reports/', submitData);
+        setEventReport(response.data);
+      }
+      await fetchEventReport();
+      alert('Bericht erfolgreich gespeichert');
+    } catch (error) {
+      console.error('Fehler beim Speichern des Berichts:', error);
+      alert('Fehler beim Speichern: ' + (error.response?.data?.detail || JSON.stringify(error.response?.data) || error.message));
+    } finally {
+      setReportSaving(false);
     }
   };
 
@@ -300,6 +446,179 @@ const MarketingItemEdit = () => {
                 onUploadSuccess={fetchItem}
                 onDeleteSuccess={fetchItem}
               />
+            </div>
+          )}
+
+          {/* Bericht (nur für gespeicherte Shows/Workshops) */}
+          {!isNew && item && ['show', 'workshop'].includes(item.category) && (
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <DocumentTextIcon className="h-5 w-5 mr-2" />
+                Bericht
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Allgemeiner Kommentar</label>
+                  <textarea
+                    value={reportData.comment}
+                    onChange={(e) => setReportData({...reportData, comment: e.target.value})}
+                    rows={4}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Allgemeine Anmerkungen zur Veranstaltung..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Fazit</label>
+                  <textarea
+                    value={reportData.conclusion}
+                    onChange={(e) => setReportData({...reportData, conclusion: e.target.value})}
+                    rows={3}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Zusammenfassung und Fazit der Veranstaltung..."
+                  />
+                </div>
+
+                {/* Leads / Teilnehmer */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-md font-medium text-gray-800">Teilnehmer / Leads</h4>
+                    <button
+                      type="button"
+                      onClick={handleAddLead}
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
+                    >
+                      <PlusIcon className="h-4 w-4 mr-1" />
+                      Lead hinzufügen
+                    </button>
+                  </div>
+
+                  {reportData.leads.length === 0 && (
+                    <p className="text-sm text-gray-500 italic">Noch keine Leads erfasst. Klicken Sie auf "Lead hinzufügen" um einen neuen Teilnehmer anzulegen.</p>
+                  )}
+
+                  <div className="space-y-4">
+                    {reportData.leads.map((lead, index) => (
+                      <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="text-sm font-medium text-gray-600">Lead #{index + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLead(index)}
+                            className="text-red-500 hover:text-red-700 text-sm"
+                          >
+                            Entfernen
+                          </button>
+                        </div>
+
+                        {/* Kundensuche */}
+                        <div className="mb-3 relative">
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Aus Kundendatenbank übernehmen</label>
+                          <input
+                            type="text"
+                            placeholder="Kunde suchen..."
+                            value={activeLeadIndex === index ? customerSearch : ''}
+                            onFocus={() => setActiveLeadIndex(index)}
+                            onChange={(e) => {
+                              setActiveLeadIndex(index);
+                              setCustomerSearch(e.target.value);
+                            }}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                          />
+                          {activeLeadIndex === index && customerResults.length > 0 && (
+                            <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-auto">
+                              {customerResults.map(c => (
+                                <li
+                                  key={c.id}
+                                  className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
+                                  onClick={() => handleSelectCustomerForLead(index, c)}
+                                >
+                                  <span className="font-medium">{c.full_name || `${c.first_name} ${c.last_name}`}</span>
+                                  {c.customer_number && <span className="text-gray-500 ml-2">({c.customer_number})</span>}
+                                  {c.primary_address_city && <span className="text-gray-400 ml-2">{c.primary_address_city}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500">Name *</label>
+                            <input
+                              type="text"
+                              required
+                              value={lead.name}
+                              onChange={(e) => handleLeadChange(index, 'name', e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500">Ort</label>
+                            <input
+                              type="text"
+                              value={lead.location}
+                              onChange={(e) => handleLeadChange(index, 'location', e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500">E-Mail</label>
+                            <input
+                              type="email"
+                              value={lead.email}
+                              onChange={(e) => handleLeadChange(index, 'email', e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500">Telefon</label>
+                            <input
+                              type="text"
+                              value={lead.phone}
+                              onChange={(e) => handleLeadChange(index, 'phone', e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-gray-500">Kommentar</label>
+                            <input
+                              type="text"
+                              value={lead.comment}
+                              onChange={(e) => handleLeadChange(index, 'comment', e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={lead.has_purchase_interest}
+                                onChange={(e) => handleLeadChange(index, 'has_purchase_interest', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-gray-700">Kaufinteresse vorhanden</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bericht speichern */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveReport}
+                    disabled={reportSaving}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {reportSaving ? 'Speichert...' : 'Bericht speichern'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

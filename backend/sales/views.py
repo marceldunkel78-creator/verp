@@ -8,7 +8,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.http import FileResponse, HttpResponse, Http404
 from .models import (
     Quotation, QuotationItem, MarketingItem, MarketingItemFile,
-    SalesTicket, SalesTicketAttachment, SalesTicketComment
+    SalesTicket, SalesTicketAttachment, SalesTicketComment,
+    EventReport
 )
 from .serializers import (
     QuotationListSerializer,
@@ -548,6 +549,60 @@ class MarketingItemFileViewSet(viewsets.ModelViewSet):
             )
         else:
             serializer.save(uploaded_by=self.request.user)
+
+
+# ==================== Event Report ViewSet ====================
+
+class EventReportViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet für Veranstaltungsberichte (Shows/Workshops)
+    """
+    queryset = EventReport.objects.select_related(
+        'marketing_item', 'created_by'
+    ).prefetch_related('leads', 'leads__customer').all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['marketing_item']
+
+    def get_serializer_class(self):
+        from .serializers import EventReportSerializer, EventReportCreateUpdateSerializer
+        if self.action in ['create', 'update', 'partial_update']:
+            return EventReportCreateUpdateSerializer
+        return EventReportSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        from .serializers import EventReportSerializer
+        detail = EventReportSerializer(serializer.instance, context={'request': request})
+        return Response(detail.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        from .serializers import EventReportSerializer
+        detail = EventReportSerializer(instance, context={'request': request})
+        return Response(detail.data)
+
+    @action(detail=False, methods=['get'])
+    def by_marketing_item(self, request):
+        """Get report by marketing_item ID"""
+        item_id = request.query_params.get('marketing_item')
+        if not item_id:
+            return Response({'error': 'marketing_item parameter required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            report = EventReport.objects.get(marketing_item_id=item_id)
+            from .serializers import EventReportSerializer
+            return Response(EventReportSerializer(report, context={'request': request}).data)
+        except EventReport.DoesNotExist:
+            return Response(None, status=status.HTTP_204_NO_CONTENT)
 
 
 # ==================== Sales Ticket ViewSet ====================

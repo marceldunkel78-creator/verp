@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     Quotation, QuotationItem, MarketingItem, MarketingItemFile,
-    SalesTicket, SalesTicketAttachment, SalesTicketComment
+    SalesTicket, SalesTicketAttachment, SalesTicketComment,
+    EventReport, EventReportLead
 )
 
 
@@ -83,6 +84,25 @@ class MarketingItemFileAdmin(admin.ModelAdmin):
     list_filter = ['uploaded_at', 'content_type']
     search_fields = ['filename', 'marketing_item__title']
     readonly_fields = ['uploaded_at']
+
+
+# ==================== Event Report Admin ====================
+
+class EventReportLeadInline(admin.TabularInline):
+    model = EventReportLead
+    extra = 1
+    fields = ['name', 'location', 'email', 'phone', 'has_purchase_interest', 'comment', 'customer']
+
+
+@admin.register(EventReport)
+class EventReportAdmin(admin.ModelAdmin):
+    list_display = ['marketing_item', 'created_by', 'created_at', 'lead_count']
+    readonly_fields = ['created_at', 'updated_at']
+    inlines = [EventReportLeadInline]
+
+    def lead_count(self, obj):
+        return obj.leads.count()
+    lead_count.short_description = 'Teilnehmer/Leads'
 
 
 # ==================== Sales Ticket Admin ====================

@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     Quotation, QuotationItem, MarketingItem, MarketingItemFile,
-    SalesTicket, SalesTicketAttachment, SalesTicketComment, SalesTicketChangeLog
+    SalesTicket, SalesTicketAttachment, SalesTicketComment, SalesTicketChangeLog,
+    EventReport, EventReportLead
 )
 from customers.models import Customer
 from suppliers.models import TradingProduct
@@ -496,6 +497,88 @@ class MarketingItemCreateUpdateSerializer(serializers.ModelSerializer):
             data.pop('event_date', None)
             data.pop('event_location', None)
         return data
+
+
+# ==================== Event Report Serializers ====================
+
+class EventReportLeadSerializer(serializers.ModelSerializer):
+    """Serializer für Teilnehmer/Leads"""
+    id = serializers.IntegerField(required=False, allow_null=True)
+    customer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventReportLead
+        fields = [
+            'id', 'customer', 'customer_name', 'name', 'location',
+            'email', 'phone', 'comment', 'has_purchase_interest', 'created_at'
+        ]
+        read_only_fields = ['created_at']
+
+    def get_customer_name(self, obj):
+        if obj.customer:
+            c = obj.customer
+            return f"{c.title} {c.first_name} {c.last_name}".strip()
+        return None
+
+
+class EventReportSerializer(serializers.ModelSerializer):
+    """Read serializer für Veranstaltungsberichte"""
+    leads = EventReportLeadSerializer(many=True, read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventReport
+        fields = [
+            'id', 'marketing_item', 'comment', 'conclusion',
+            'leads', 'created_by', 'created_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.username
+        return None
+
+
+class EventReportCreateUpdateSerializer(serializers.ModelSerializer):
+    """Write serializer für Veranstaltungsberichte mit verschachtelten Leads"""
+    leads = EventReportLeadSerializer(many=True, required=False)
+
+    class Meta:
+        model = EventReport
+        fields = ['marketing_item', 'comment', 'conclusion', 'leads']
+
+    def create(self, validated_data):
+        leads_data = validated_data.pop('leads', [])
+        report = EventReport.objects.create(**validated_data)
+        for lead_data in leads_data:
+            lead_data.pop('id', None)
+            EventReportLead.objects.create(report=report, **lead_data)
+        return report
+
+    def update(self, instance, validated_data):
+        leads_data = validated_data.pop('leads', None)
+        instance.comment = validated_data.get('comment', instance.comment)
+        instance.conclusion = validated_data.get('conclusion', instance.conclusion)
+        instance.save()
+
+        if leads_data is not None:
+            existing_ids = set(instance.leads.values_list('id', flat=True))
+            updated_ids = set()
+
+            for lead_data in leads_data:
+                lead_id = lead_data.pop('id', None)
+                if lead_id and lead_id in existing_ids:
+                    EventReportLead.objects.filter(id=lead_id).update(**lead_data)
+                    updated_ids.add(lead_id)
+                else:
+                    EventReportLead.objects.create(report=instance, **lead_data)
+
+            to_delete = existing_ids - updated_ids
+            instance.leads.filter(id__in=to_delete).delete()
+
+        return instance
 
 
 # ==================== Sales Ticket Serializers ====================

@@ -89,6 +89,7 @@ class User(AbstractUser):
     can_read_service_troubleshooting = models.BooleanField(default=False, verbose_name='Troubleshooting - Lesen')
     can_read_hr_employees = models.BooleanField(default=False, verbose_name='Mitarbeiter - Lesen')
     can_read_inventory_warehouse = models.BooleanField(default=False, verbose_name='Lager - Lesen')
+    can_read_inventory_customer_loans = models.BooleanField(default=False, verbose_name='Verleihungen - Lesen')
     # Development Modul
     can_read_development = models.BooleanField(default=False, verbose_name='Entwicklung - Lesen')
     can_read_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Lesen')
@@ -148,6 +149,7 @@ class User(AbstractUser):
     can_write_service_troubleshooting = models.BooleanField(default=False, verbose_name='Troubleshooting - Schreiben')
     can_write_hr_employees = models.BooleanField(default=False, verbose_name='Mitarbeiter - Schreiben')
     can_write_inventory_warehouse = models.BooleanField(default=False, verbose_name='Lager - Schreiben')
+    can_write_inventory_customer_loans = models.BooleanField(default=False, verbose_name='Verleihungen - Schreiben')
     # Development Modul
     can_write_development = models.BooleanField(default=False, verbose_name='Entwicklung - Schreiben')
     can_write_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Schreiben')

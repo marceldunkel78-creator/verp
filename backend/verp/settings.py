@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'bi',
     'meetings',
     'company_calendar',
+    'customer_loans',
 ]
 
 MIDDLEWARE = [
@@ -74,6 +75,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'verp.middleware.NoCacheAPIMiddleware',
 ]
+
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 ROOT_URLCONF = 'verp.urls'
 

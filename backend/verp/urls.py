@@ -45,6 +45,7 @@ urlpatterns = [
     path('api/bi/', include('bi.urls')),
     path('api/meetings/', include('meetings.urls')),
     path('api/calendar/', include('company_calendar.urls')),
+    path('api/customer-loans/', include('customer_loans.urls')),
 ]
 
 if settings.DEBUG:

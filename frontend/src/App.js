@@ -32,6 +32,8 @@ import MyVERP from './pages/MyVERP';
 import Layout from './components/Layout';
 import Inventory from './pages/Inventory';
 import GoodsReceipt from './pages/GoodsReceipt';
+import CustomerLoans from './pages/CustomerLoans';
+import CustomerLoanEdit from './pages/CustomerLoanEdit';
 import Projects from './pages/Projects';
 import ProjectEdit from './pages/ProjectEdit';
 import Systems from './pages/Systems';
@@ -126,6 +128,9 @@ function App() {
             <Route path="inventory/warehouse" element={<Inventory />} />
             <Route path="inventory/warehouse/:id" element={<InventoryItemEdit />} />
             <Route path="inventory/goods-receipt" element={<GoodsReceipt />} />
+            <Route path="inventory/customer-loans" element={<CustomerLoans />} />
+            <Route path="inventory/customer-loans/new" element={<CustomerLoanEdit />} />
+            <Route path="inventory/customer-loans/:id" element={<CustomerLoanEdit />} />
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<PermissionRoute permission="can_read_hr"><HumanResources /></PermissionRoute>} />
             <Route path="hr/employees" element={<PermissionRoute permission="can_read_hr"><EmployeeList /></PermissionRoute>} />
