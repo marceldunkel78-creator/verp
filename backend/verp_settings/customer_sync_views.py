@@ -8,7 +8,8 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 
 from .customer_sync import (
-    test_connection, preview_sync, sync_customers, get_sync_status
+    test_connection, preview_sync, sync_customers, get_sync_status,
+    preview_obsolete_sync, sync_obsolete_customers
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,70 @@ class CustomerSyncExecuteView(APIView):
             return Response(result)
         except Exception as e:
             logger.error(f"Sync fehlgeschlagen: {e}")
+            return Response(
+                {'error': f'Synchronisation fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ObsoleteSyncPreviewView(APIView):
+    """
+    POST: Erstellt eine Vorschau der veralteten Adressen-Synchronisation (Dry-Run).
+    Body (optional): { "server": "...", "database": "...", "limit": 100 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        server = request.data.get('server', DEFAULT_SERVER)
+        database = request.data.get('database', DEFAULT_DATABASE)
+        use_dsn = request.data.get('use_dsn', False)
+        dsn_name = request.data.get('dsn_name', DEFAULT_DSN)
+        limit = request.data.get('limit', 100)
+
+        try:
+            result = preview_obsolete_sync(
+                server=server,
+                database=database,
+                use_dsn=use_dsn,
+                dsn_name=dsn_name,
+                limit=limit,
+            )
+            return Response(result)
+        except Exception as e:
+            logger.error(f"Vorschau veraltete Adressen fehlgeschlagen: {e}")
+            return Response(
+                {'error': f'Fehler bei der Vorschau: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ObsoleteSyncExecuteView(APIView):
+    """
+    POST: Fuehrt die Synchronisation veralteter Adressen durch.
+    Nur fuer Staff/Admin-User.
+    Body (optional): { "server": "...", "database": "...", "dry_run": false }
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        server = request.data.get('server', DEFAULT_SERVER)
+        database = request.data.get('database', DEFAULT_DATABASE)
+        use_dsn = request.data.get('use_dsn', False)
+        dsn_name = request.data.get('dsn_name', DEFAULT_DSN)
+        dry_run = request.data.get('dry_run', False)
+
+        try:
+            result = sync_obsolete_customers(
+                server=server,
+                database=database,
+                use_dsn=use_dsn,
+                dsn_name=dsn_name,
+                created_by_user=request.user,
+                dry_run=dry_run,
+            )
+            return Response(result)
+        except Exception as e:
+            logger.error(f"Sync veraltete Adressen fehlgeschlagen: {e}")
             return Response(
                 {'error': f'Synchronisation fehlgeschlagen: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

@@ -15,6 +15,11 @@ from .order_import import (
     get_order_import_status,
     preview_order_import,
     import_orders_from_sql,
+    reassign_legacy_orders,
+    backfill_legacy_adressen_ids,
+    backfill_legacy_auftrags_ids,
+    renumber_legacy_orders,
+    cleanup_duplicate_legacy_orders,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,5 +137,127 @@ class OrderImportExecuteView(APIView):
             logger.error(f"Import fehlgeschlagen: {e}")
             return Response(
                 {'error': f'Import fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OrderReassignView(APIView):
+    """
+    POST: Ordnet Legacy-Auftraege anhand des CustomerLegacyMapping neu zu.
+    Korrigiert falsche Zuordnungen die durch fehlende veraltete Adressen
+    beim initialen Import entstanden sind.
+    Body: { "dry_run": true, "server": "...", "database": "..." }
+    Optional: "backfill": true fuehrt vorher das Nachfuellen der legacy_adressen_id durch.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        dry_run = request.data.get('dry_run', True)
+        do_backfill = request.data.get('backfill', False)
+
+        try:
+            backfill_stats = None
+            if do_backfill:
+                server = request.data.get('server', DEFAULT_SERVER)
+                database = request.data.get('database', DEFAULT_DATABASE)
+                use_dsn = request.data.get('use_dsn', False)
+                dsn_name = request.data.get('dsn_name', DEFAULT_DSN)
+                backfill_stats = backfill_legacy_adressen_ids(
+                    server=server,
+                    database=database,
+                    use_dsn=use_dsn,
+                    dsn_name=dsn_name,
+                    dry_run=dry_run,
+                )
+
+            result = reassign_legacy_orders(dry_run=dry_run)
+            if backfill_stats:
+                result['backfill_stats'] = backfill_stats
+            return Response(result)
+        except Exception as e:
+            logger.error(f"Auftrags-Neuzuordnung fehlgeschlagen: {e}")
+            return Response(
+                {'error': f'Neuzuordnung fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OrderRenumberView(APIView):
+    """
+    POST: Korrigiert doppelte/falsche Legacy-Auftragsnummern.
+    Fuehrt automatisch vorher ein Backfill der legacy_auftrags_id durch.
+    Body: { "dry_run": true, "server": "...", "database": "..." }
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        dry_run = request.data.get('dry_run', True)
+        server = request.data.get('server', DEFAULT_SERVER)
+        database = request.data.get('database', DEFAULT_DATABASE)
+        use_dsn = request.data.get('use_dsn', False)
+        dsn_name = request.data.get('dsn_name', DEFAULT_DSN)
+
+        try:
+            # Phase 1: Backfill legacy_auftrags_id (immer ausfuehren, auch bei dry_run,
+            # damit Phase 2 die IDs zur Verfuegung hat)
+            backfill_stats = backfill_legacy_auftrags_ids(
+                server=server,
+                database=database,
+                use_dsn=use_dsn,
+                dsn_name=dsn_name,
+                dry_run=False,
+            )
+
+            # Phase 2: Renumber (respektiert dry_run)
+            result = renumber_legacy_orders(
+                server=server,
+                database=database,
+                use_dsn=use_dsn,
+                dsn_name=dsn_name,
+                dry_run=dry_run,
+            )
+            result['backfill_auftrags_id_stats'] = backfill_stats
+            return Response(result)
+        except Exception as e:
+            logger.error(f"Auftragsnummer-Korrektur fehlgeschlagen: {e}")
+            return Response(
+                {'error': f'Nummernkorrektur fehlgeschlagen: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OrderCleanupDuplicatesView(APIView):
+    """
+    POST: Loescht doppelte Legacy-Auftraege (ohne legacy_auftrags_id nach Backfill).
+    Fuehrt automatisch vorher Backfill durch, damit erkannt wird welche echt sind.
+    Body: { "dry_run": true, "server": "...", "database": "..." }
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        dry_run = request.data.get('dry_run', True)
+        server = request.data.get('server', DEFAULT_SERVER)
+        database = request.data.get('database', DEFAULT_DATABASE)
+        use_dsn = request.data.get('use_dsn', False)
+        dsn_name = request.data.get('dsn_name', DEFAULT_DSN)
+
+        try:
+            # Phase 1: Backfill damit alle echten Auftraege ihre ID haben
+            backfill_stats = backfill_legacy_auftrags_ids(
+                server=server,
+                database=database,
+                use_dsn=use_dsn,
+                dsn_name=dsn_name,
+                dry_run=False,
+            )
+
+            # Phase 2: Duplikate identifizieren/loeschen
+            result = cleanup_duplicate_legacy_orders(dry_run=dry_run)
+            result['backfill_stats'] = backfill_stats
+            return Response(result)
+        except Exception as e:
+            logger.error(f"Duplikat-Bereinigung fehlgeschlagen: {e}")
+            return Response(
+                {'error': f'Duplikat-Bereinigung fehlgeschlagen: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

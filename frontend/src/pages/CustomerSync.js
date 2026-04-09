@@ -44,6 +44,13 @@ const CustomerSync = () => {
   // Confirmation
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
+  // Veraltete Adressen
+  const [obsoletePreviewResult, setObsoletePreviewResult] = useState(null);
+  const [obsoleteSyncResult, setObsoleteSyncResult] = useState(null);
+  const [loadingObsoletePreview, setLoadingObsoletePreview] = useState(false);
+  const [syncingObsolete, setSyncingObsolete] = useState(false);
+  const [showObsoleteConfirmDialog, setShowObsoleteConfirmDialog] = useState(false);
+
   const loadSyncStatus = useCallback(async () => {
     try {
       setLoadingStatus(true);
@@ -98,6 +105,44 @@ const CustomerSync = () => {
       });
     } finally {
       setLoadingPreview(false);
+    }
+  };
+
+  const handleObsoletePreview = async () => {
+    try {
+      setLoadingObsoletePreview(true);
+      setObsoletePreviewResult(null);
+      const response = await api.post('/settings/customer-sync/obsolete/preview/', {
+        ...getConnectionParams(),
+        limit: previewLimit,
+      });
+      setObsoletePreviewResult(response.data);
+    } catch (error) {
+      setObsoletePreviewResult({
+        error: error.response?.data?.error || error.message || 'Vorschau fehlgeschlagen',
+      });
+    } finally {
+      setLoadingObsoletePreview(false);
+    }
+  };
+
+  const handleObsoleteSync = async () => {
+    try {
+      setSyncingObsolete(true);
+      setObsoleteSyncResult(null);
+      setShowObsoleteConfirmDialog(false);
+      const response = await api.post('/settings/customer-sync/obsolete/execute/', {
+        ...getConnectionParams(),
+        dry_run: false,
+      }, { timeout: 600000 });
+      setObsoleteSyncResult(response.data);
+      loadSyncStatus();
+    } catch (error) {
+      setObsoleteSyncResult({
+        error: error.response?.data?.error || error.message || 'Synchronisation fehlgeschlagen',
+      });
+    } finally {
+      setSyncingObsolete(false);
     }
   };
 
@@ -550,6 +595,175 @@ const CustomerSync = () => {
                       </ul>
                     </details>
                   )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Veraltete Adressen */}
+      <div className="bg-white rounded-lg shadow mb-6 p-6 border-l-4 border-orange-400">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-2">
+          <ExclamationTriangleIcon className="h-5 w-5 text-orange-500" />
+          Veraltete Adressen importieren
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Importiert Kunden mit als "veraltet" markierten Adressen aus der SQL-Datenbank.
+          Diese werden als <strong>inaktive</strong> Kunden/Adressen angelegt und per Legacy-Mapping verknüpft.
+          Dadurch können Legacy-Aufträge diesen Kunden korrekt zugeordnet werden.
+        </p>
+
+        <div className="flex gap-3 mb-4">
+          <button
+            onClick={handleObsoletePreview}
+            disabled={loadingObsoletePreview}
+            className="inline-flex items-center px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 disabled:opacity-50"
+          >
+            {loadingObsoletePreview ? (
+              <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <EyeIcon className="h-4 w-4 mr-2" />
+            )}
+            Vorschau laden
+          </button>
+          <button
+            onClick={() => setShowObsoleteConfirmDialog(true)}
+            disabled={syncingObsolete}
+            className="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-md hover:bg-orange-700 disabled:opacity-50"
+          >
+            {syncingObsolete ? (
+              <ArrowPathIcon className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <PlayIcon className="h-4 w-4 mr-2" />
+            )}
+            {syncingObsolete ? 'Import läuft...' : 'Import starten'}
+          </button>
+        </div>
+
+        {/* Bestätigungsdialog */}
+        {showObsoleteConfirmDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <ExclamationTriangleIcon className="h-8 w-8 text-orange-500" />
+                <h3 className="text-lg font-semibold text-gray-900">Import bestätigen</h3>
+              </div>
+              <p className="text-sm text-gray-600 mb-6">
+                Sollen die veralteten Adressen als inaktive Kunden/Adressen importiert werden?
+                Bestehende Kunden mit gleichem Namen erhalten eine zusätzliche inaktive Adresse.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowObsoleteConfirmDialog(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleObsoleteSync}
+                  className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700"
+                >
+                  Ja, importieren
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Vorschau-Ergebnis */}
+        {obsoletePreviewResult && (
+          obsoletePreviewResult.error ? (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800">{obsoletePreviewResult.error}</p>
+            </div>
+          ) : (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-gray-700">{obsoletePreviewResult.total_fetched}</div>
+                  <div className="text-xs text-gray-500">Veraltete Adressen</div>
+                </div>
+                <div className="bg-yellow-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-yellow-700">{obsoletePreviewResult.would_skip_mapped}</div>
+                  <div className="text-xs text-yellow-600">Bereits gemappt</div>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-blue-700">{obsoletePreviewResult.would_add_address}</div>
+                  <div className="text-xs text-blue-600">Adresse hinzufügen</div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 text-center">
+                  <div className="text-xl font-bold text-orange-700">{obsoletePreviewResult.would_create_customer}</div>
+                  <div className="text-xs text-orange-600">Neuer Kunde (inaktiv)</div>
+                </div>
+              </div>
+
+              {obsoletePreviewResult.preview_items && obsoletePreviewResult.preview_items.length > 0 && (
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Aktion</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">SQL-ID</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">VERP-Nr.</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Vorname</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Nachname</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Firma/Uni</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">PLZ</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-500">Ort</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {obsoletePreviewResult.preview_items.map((item, idx) => (
+                        <tr key={idx} className={
+                          item.action === 'skip_mapped' ? 'bg-yellow-50' :
+                          item.action === 'add_address' ? 'bg-blue-50' : 'bg-orange-50'
+                        }>
+                          <td className="px-3 py-2">
+                            {item.action === 'skip_mapped' ? (
+                              <span className="text-yellow-700 text-xs font-medium">Übersprungen</span>
+                            ) : item.action === 'add_address' ? (
+                              <span className="text-blue-700 text-xs font-medium">+ Adresse</span>
+                            ) : (
+                              <span className="text-orange-700 text-xs font-medium">Neuer Kunde</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-gray-500">{item.adressen_id}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{item.verp_customer_number}</td>
+                          <td className="px-3 py-2">{item.vorname}</td>
+                          <td className="px-3 py-2 font-medium">{item.nachname}</td>
+                          <td className="px-3 py-2 text-gray-600 max-w-[200px] truncate">{item.firma}</td>
+                          <td className="px-3 py-2">{item.plz}</td>
+                          <td className="px-3 py-2">{item.ort}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        )}
+
+        {/* Sync-Ergebnis */}
+        {obsoleteSyncResult && (
+          <div className={`mt-4 p-4 rounded-lg ${obsoleteSyncResult.error ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+            {obsoleteSyncResult.error ? (
+              <div className="flex items-start gap-2">
+                <XCircleIcon className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-800">{obsoleteSyncResult.error}</p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <CheckCircleIcon className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">Import abgeschlossen!</p>
+                  <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-green-700">
+                    <div>Gelesen: <strong>{obsoleteSyncResult.total_fetched}</strong></div>
+                    <div>Bereits gemappt: <strong>{obsoleteSyncResult.skipped_already_mapped}</strong></div>
+                    <div>Adressen hinzugefügt: <strong>{obsoleteSyncResult.address_added}</strong></div>
+                    <div>Kunden erstellt: <strong>{obsoleteSyncResult.customer_created}</strong></div>
+                  </div>
                 </div>
               </div>
             )}

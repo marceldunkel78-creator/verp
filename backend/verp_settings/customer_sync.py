@@ -510,6 +510,314 @@ def fetch_addresses_from_sql(connection, limit=None):
         cursor.close()
 
 
+def fetch_obsolete_addresses_from_sql(connection, limit=None):
+    """
+    Liest veraltete Adressen aus der SQL-Datenbank (veraltet=1).
+    Filtert weiterhin: ohne Nachname, Lieferant=1.
+    """
+    col_map, raw_columns = _get_column_info(connection)
+
+    veraltet_col = _resolve_col(col_map, 'veraltet')
+    lieferant_col = _resolve_col(col_map, 'lieferant')
+
+    if not veraltet_col:
+        logger.warning("Spalte 'veraltet' nicht vorhanden - keine veralteten Adressen lesbar")
+        return []
+
+    # Gleiche Spalten wie fetch_addresses_from_sql
+    wanted_columns = [
+        ('AdressenID', ['adressenid']),
+        ('Vorname', ['vorname']),
+        ('Nachname', ['name', 'nachname']),
+        ('FirmaUni', ['firma/uni', 'firma1']),
+        ('Institut', ['institut', 'firma2']),
+        ('Lehrstuhl', ['lehrstuhl', 'firma3']),
+        ('Strasse', ['stra\u00dfe', 'strasse']),
+        ('PLZ', ['plz']),
+        ('Ort', ['ort']),
+        ('Anfahrt', ['anfahrt', 'zusatz']),
+        ('Ortsnetz', ['ortsnetz', 'vorwahl']),
+        ('Anschluss1', ['anschlu\u00df1', 'anschluss1', 'telefon1']),
+        ('Anschluss2', ['anschlu\u00df2', 'anschluss2', 'telefon2']),
+        ('Anschluss3', ['anschlu\u00df3', 'anschluss3', 'telefon3']),
+        ('Fax', ['fax']),
+        ('Email', ['email']),
+        ('Kunde', ['kunde']),
+        ('Interessent', ['interessent']),
+        ('Lieferant', ['lieferant']),
+        ('AnredeID', ['anredeid']),
+        ('LandID', ['landid']),
+        ('TitelID', ['titelid']),
+        ('Englischsprachig', ['englischsprachig']),
+        ('veraltet', ['veraltet']),
+        ('Newsletter', ['newsletter']),
+    ]
+
+    select_parts = []
+    for alias, candidates in wanted_columns:
+        for cand in candidates:
+            real_name = _resolve_col(col_map, cand)
+            if real_name:
+                select_parts.append((alias, real_name))
+                break
+
+    if not select_parts:
+        raise RuntimeError("Keine passenden Spalten in der Adressen-Tabelle gefunden")
+
+    select_sql = ', '.join([f'a.[{real}]' for _, real in select_parts])
+
+    name_real = None
+    for alias, real in select_parts:
+        if alias == 'Nachname':
+            name_real = real
+            break
+
+    if not name_real:
+        raise RuntimeError("Spalte 'Name' oder 'Nachname' nicht in der Tabelle gefunden")
+
+    # WHERE: veraltet=1, nicht Lieferant, mit Nachname
+    where_parts = [
+        f"a.[{name_real}] IS NOT NULL",
+        f"a.[{name_real}] <> ''",
+        f"a.[{veraltet_col}] = 1",
+    ]
+
+    if lieferant_col:
+        where_parts.append(f"(a.[{lieferant_col}] = 0 OR a.[{lieferant_col}] IS NULL)")
+
+    query = f"SELECT {select_sql} FROM Adressen a WHERE {' AND '.join(where_parts)}"
+
+    if limit:
+        query += f" ORDER BY a.[{select_parts[0][1]}] OFFSET 0 ROWS FETCH NEXT {int(limit)} ROWS ONLY"
+
+    logger.info(f"SQL-Query (veraltet): {query[:300]}...")
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute(query)
+        result_columns = [desc[0] for desc in cursor.description]
+
+        alias_map = {}
+        for i, res_col in enumerate(result_columns):
+            for alias, real in select_parts:
+                if real == res_col:
+                    alias_map[i] = alias
+                    break
+            else:
+                alias_map[i] = res_col
+
+        rows = []
+        for row in cursor.fetchall():
+            row_dict = {}
+            for i, val in enumerate(row):
+                row_dict[alias_map.get(i, f'col_{i}')] = val
+            rows.append(row_dict)
+
+        logger.info(f"SQL-Abfrage: {len(rows)} veraltete Adressen gelesen")
+        return rows
+    except pyodbc.Error as e:
+        logger.error(f"SQL Abfrage Fehler (veraltet): {e}")
+        raise
+    finally:
+        cursor.close()
+
+
+def fetch_supplier_addresses_with_orders(connection, limit=None):
+    """
+    Liest Lieferanten-Adressen, die Auftraege in der Auftraege-Tabelle haben,
+    aber weder Kunde noch Interessent sind. Diese wurden beim normalen
+    und beim veralteten Import uebersprungen, haben aber Kundenauftraege.
+    """
+    col_map, raw_columns = _get_column_info(connection)
+
+    lieferant_col = _resolve_col(col_map, 'lieferant')
+    kunde_col = _resolve_col(col_map, 'kunde')
+    interessent_col = _resolve_col(col_map, 'interessent')
+
+    if not lieferant_col:
+        logger.warning("Spalte 'Lieferant' nicht vorhanden")
+        return []
+
+    # Gleiche Spalten wie die anderen Fetch-Funktionen
+    wanted_columns = [
+        ('AdressenID', ['adressenid']),
+        ('Vorname', ['vorname']),
+        ('Nachname', ['name', 'nachname']),
+        ('FirmaUni', ['firma/uni', 'firma1']),
+        ('Institut', ['institut', 'firma2']),
+        ('Lehrstuhl', ['lehrstuhl', 'firma3']),
+        ('Strasse', ['stra\u00dfe', 'strasse']),
+        ('PLZ', ['plz']),
+        ('Ort', ['ort']),
+        ('Anfahrt', ['anfahrt', 'zusatz']),
+        ('Ortsnetz', ['ortsnetz', 'vorwahl']),
+        ('Anschluss1', ['anschlu\u00df1', 'anschluss1', 'telefon1']),
+        ('Anschluss2', ['anschlu\u00df2', 'anschluss2', 'telefon2']),
+        ('Anschluss3', ['anschlu\u00df3', 'anschluss3', 'telefon3']),
+        ('Fax', ['fax']),
+        ('Email', ['email']),
+        ('Kunde', ['kunde']),
+        ('Interessent', ['interessent']),
+        ('Lieferant', ['lieferant']),
+        ('AnredeID', ['anredeid']),
+        ('LandID', ['landid']),
+        ('TitelID', ['titelid']),
+        ('Englischsprachig', ['englischsprachig']),
+        ('veraltet', ['veraltet']),
+        ('Newsletter', ['newsletter']),
+    ]
+
+    select_parts = []
+    for alias, candidates in wanted_columns:
+        for cand in candidates:
+            real_name = _resolve_col(col_map, cand)
+            if real_name:
+                select_parts.append((alias, real_name))
+                break
+
+    if not select_parts:
+        raise RuntimeError("Keine passenden Spalten in der Adressen-Tabelle gefunden")
+
+    select_sql = ', '.join([f'a.[{real}]' for _, real in select_parts])
+
+    # Nur Lieferanten die NICHT Kunde/Interessent sind UND Auftraege haben
+    where_parts = [
+        f"a.[{lieferant_col}] = 1",
+    ]
+    if kunde_col:
+        where_parts.append(f"(a.[{kunde_col}] = 0 OR a.[{kunde_col}] IS NULL)")
+    if interessent_col:
+        where_parts.append(f"(a.[{interessent_col}] = 0 OR a.[{interessent_col}] IS NULL)")
+
+    # Nur Adressen die von Auftraegen referenziert werden
+    query = (
+        f"SELECT DISTINCT {select_sql} FROM Adressen a "
+        f"INNER JOIN [Auftr\u00e4ge] auf ON a.AdressenID = auf.AdressenID "
+        f"WHERE {' AND '.join(where_parts)}"
+    )
+
+    if limit:
+        query += f" ORDER BY a.AdressenID OFFSET 0 ROWS FETCH NEXT {int(limit)} ROWS ONLY"
+
+    logger.info(f"SQL-Query (Lieferanten mit Auftraegen): {query[:300]}...")
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute(query)
+        result_columns = [desc[0] for desc in cursor.description]
+
+        alias_map = {}
+        for i, rc in enumerate(result_columns):
+            for alias, real in select_parts:
+                if rc.lower() == real.lower():
+                    alias_map[i] = alias
+                    break
+
+        rows = []
+        for row in cursor.fetchall():
+            row_dict = {}
+            for i, val in enumerate(row):
+                row_dict[alias_map.get(i, f'col_{i}')] = val
+            rows.append(row_dict)
+
+        logger.info(f"SQL-Abfrage: {len(rows)} Lieferanten-Adressen mit Auftraegen gelesen")
+        return rows
+    except pyodbc.Error as e:
+        logger.error(f"SQL Abfrage Fehler (Lieferanten): {e}")
+        raise
+    finally:
+        cursor.close()
+
+
+def fetch_all_order_addresses(connection, limit=None):
+    """
+    Liest ALLE Adressen, die Auftraege in der Auftraege-Tabelle haben,
+    unabhaengig von Flags (Kunde, Interessent, Lieferant, veraltet).
+    Dies ist der Catch-All fuer bisher uebersprungene Adressen
+    (z.B. nur Firma/Uni ohne Nachname, nur Interessent, ohne Flags).
+    """
+    col_map, raw_columns = _get_column_info(connection)
+
+    wanted_columns = [
+        ('AdressenID', ['adressenid']),
+        ('Vorname', ['vorname']),
+        ('Nachname', ['name', 'nachname']),
+        ('FirmaUni', ['firma/uni', 'firma1']),
+        ('Institut', ['institut', 'firma2']),
+        ('Lehrstuhl', ['lehrstuhl', 'firma3']),
+        ('Strasse', ['stra\u00dfe', 'strasse']),
+        ('PLZ', ['plz']),
+        ('Ort', ['ort']),
+        ('Anfahrt', ['anfahrt', 'zusatz']),
+        ('Ortsnetz', ['ortsnetz', 'vorwahl']),
+        ('Anschluss1', ['anschlu\u00df1', 'anschluss1', 'telefon1']),
+        ('Anschluss2', ['anschlu\u00df2', 'anschluss2', 'telefon2']),
+        ('Anschluss3', ['anschlu\u00df3', 'anschluss3', 'telefon3']),
+        ('Fax', ['fax']),
+        ('Email', ['email']),
+        ('Kunde', ['kunde']),
+        ('Interessent', ['interessent']),
+        ('Lieferant', ['lieferant']),
+        ('AnredeID', ['anredeid']),
+        ('LandID', ['landid']),
+        ('TitelID', ['titelid']),
+        ('Englischsprachig', ['englischsprachig']),
+        ('veraltet', ['veraltet']),
+        ('Newsletter', ['newsletter']),
+    ]
+
+    select_parts = []
+    for alias, candidates in wanted_columns:
+        for cand in candidates:
+            real_name = _resolve_col(col_map, cand)
+            if real_name:
+                select_parts.append((alias, real_name))
+                break
+
+    if not select_parts:
+        raise RuntimeError("Keine passenden Spalten in der Adressen-Tabelle gefunden")
+
+    select_sql = ', '.join([f'a.[{real}]' for _, real in select_parts])
+
+    # Alle Adressen mit mindestens einem Auftrag, keine Flag-Filter
+    query = (
+        f"SELECT DISTINCT {select_sql} FROM Adressen a "
+        f"INNER JOIN [Auftr\u00e4ge] auf ON a.AdressenID = auf.AdressenID"
+    )
+
+    if limit:
+        query += f" ORDER BY a.AdressenID OFFSET 0 ROWS FETCH NEXT {int(limit)} ROWS ONLY"
+
+    logger.info(f"SQL-Query (alle Adressen mit Auftraegen): {query[:300]}...")
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute(query)
+        result_columns = [desc[0] for desc in cursor.description]
+
+        alias_map = {}
+        for i, rc in enumerate(result_columns):
+            for alias, real in select_parts:
+                if rc.lower() == real.lower():
+                    alias_map[i] = alias
+                    break
+
+        rows = []
+        for row in cursor.fetchall():
+            row_dict = {}
+            for i, val in enumerate(row):
+                row_dict[alias_map.get(i, f'col_{i}')] = val
+            rows.append(row_dict)
+
+        logger.info(f"SQL-Abfrage: {len(rows)} Adressen mit Auftraegen gelesen")
+        return rows
+    except pyodbc.Error as e:
+        logger.error(f"SQL Abfrage Fehler (alle Auftrags-Adressen): {e}")
+        raise
+    finally:
+        cursor.close()
+
+
 # --- Verbindungstest ---
 
 def test_connection(server, database='VSDB', use_dsn=False, dsn_name=None):
@@ -706,6 +1014,310 @@ def sync_customers(server, database='VSDB', use_dsn=False, dsn_name=None,
             stats['errors'].append(error_msg)
 
     return stats
+
+
+def sync_obsolete_customers(server, database='VSDB', use_dsn=False, dsn_name=None,
+                            created_by_user=None, dry_run=False):
+    """
+    Importiert Kunden mit veralteten Adressen (veraltet=1) und
+    Lieferanten-Adressen mit Auftraegen aus der SQL-Datenbank.
+
+    Strategie:
+    1. Wenn AdressenID bereits in CustomerLegacyMapping -> ueberspringe
+    2. Wenn Kunde (Name+Vorname) mit <= 1 Adresse existiert ->
+       lege inaktive Adresse an, erstelle Legacy-Mapping
+    3. Wenn Kunde (Name+Vorname) mit >= 2 Adressen existiert ODER Name doppelt ->
+       lege neuen inaktiven Kunden an mit Legacy-Mapping
+    4. Wenn Kunde nicht existiert -> lege inaktiven Kunden an mit Legacy-Mapping
+    """
+    if not dry_run:
+        reset_customer_sequences()
+
+    conn = get_mssql_connection(server, database, use_dsn, dsn_name)
+    rows = fetch_obsolete_addresses_from_sql(conn)
+    supplier_rows = fetch_supplier_addresses_with_orders(conn)
+    all_order_rows = fetch_all_order_addresses(conn)
+    conn.close()
+
+    # Kombinieren, Duplikate (gleiche AdressenID) vermeiden
+    seen_ids = {row.get('AdressenID') for row in rows if row.get('AdressenID')}
+    for sr in supplier_rows:
+        aid = sr.get('AdressenID')
+        if aid and aid not in seen_ids:
+            rows.append(sr)
+            seen_ids.add(aid)
+    for ar in all_order_rows:
+        aid = ar.get('AdressenID')
+        if aid and aid not in seen_ids:
+            rows.append(ar)
+            seen_ids.add(aid)
+
+    # Vorab alle bereits gemappten SQL-IDs laden (vermeidet N+1 Queries)
+    existing_mapped_ids = set(
+        CustomerLegacyMapping.objects.values_list('sql_id', flat=True)
+    )
+
+    stats = {
+        'total_fetched': len(rows),
+        'skipped_already_mapped': 0,
+        'address_added': 0,
+        'customer_created': 0,
+        'errors': [],
+    }
+
+    for row in rows:
+        try:
+            result = _sync_single_obsolete_customer(row, created_by_user, dry_run, existing_mapped_ids)
+            stats[result] += 1
+        except Exception as e:
+            adressen_id = row.get('AdressenID', '?')
+            nachname = clean_string(row.get('Nachname', ''))
+            firma = clean_string(row.get('FirmaUni', ''))
+            error_msg = f"AdressenID {adressen_id} ({nachname or firma}): {str(e)}"
+            logger.error(error_msg)
+            stats['errors'].append(error_msg)
+
+    return stats
+
+
+def preview_obsolete_sync(server, database='VSDB', use_dsn=False, dsn_name=None, limit=100):
+    """Erstellt eine Vorschau der veralteten Adressen- und Lieferanten-Synchronisation (Dry-Run)."""
+    conn = get_mssql_connection(server, database, use_dsn, dsn_name)
+    rows = fetch_obsolete_addresses_from_sql(conn, limit=limit)
+    supplier_rows = fetch_supplier_addresses_with_orders(conn, limit=limit)
+    all_order_rows = fetch_all_order_addresses(conn, limit=limit)
+    conn.close()
+
+    # Kombinieren, Duplikate vermeiden
+    seen_ids = {row.get('AdressenID') for row in rows if row.get('AdressenID')}
+    for sr in supplier_rows:
+        aid = sr.get('AdressenID')
+        if aid and aid not in seen_ids:
+            rows.append(sr)
+            seen_ids.add(aid)
+    for ar in all_order_rows:
+        aid = ar.get('AdressenID')
+        if aid and aid not in seen_ids:
+            rows.append(ar)
+            seen_ids.add(aid)
+
+    results = {
+        'total_fetched': len(rows),
+        'would_skip_mapped': 0,
+        'would_add_address': 0,
+        'would_create_customer': 0,
+        'would_skip': 0,
+        'preview_items': [],
+    }
+
+    for row in rows:
+        adressen_id = row.get('AdressenID')
+        nachname = clean_string(row.get('Nachname', ''))
+        vorname = clean_string(row.get('Vorname', ''))
+        firma_uni = clean_string(row.get('FirmaUni', ''))
+        plz = clean_string(row.get('PLZ', ''))
+        ort = clean_string(row.get('Ort', ''))
+
+        if not nachname and not firma_uni:
+            results['would_skip'] += 1
+            continue
+
+        # Fuer Eintraege ohne Nachname: Firma/Uni als Ersatz-Name
+        effective_name = nachname or firma_uni
+
+        # Bereits gemappt?
+        if adressen_id and CustomerLegacyMapping.objects.filter(sql_id=adressen_id).exists():
+            results['would_skip_mapped'] += 1
+            mapping = CustomerLegacyMapping.objects.get(sql_id=adressen_id)
+            results['preview_items'].append({
+                'adressen_id': adressen_id,
+                'action': 'skip_mapped',
+                'vorname': vorname,
+                'nachname': effective_name,
+                'firma': firma_uni,
+                'plz': plz,
+                'ort': ort,
+                'verp_customer_number': mapping.customer.customer_number,
+            })
+            continue
+
+        # Existierende Kunden mit gleichem Namen suchen
+        name_matches = Customer.objects.filter(
+            last_name__iexact=effective_name,
+        )
+        if vorname:
+            name_matches = name_matches.filter(first_name__iexact=vorname)
+
+        if name_matches.count() == 1:
+            existing = name_matches.first()
+            addr_count = existing.addresses.count()
+            if addr_count <= 1:
+                action = 'add_address'
+                results['would_add_address'] += 1
+            else:
+                action = 'create_customer'
+                results['would_create_customer'] += 1
+        elif name_matches.count() > 1:
+            action = 'create_customer'
+            results['would_create_customer'] += 1
+            existing = None
+        else:
+            action = 'create_customer'
+            results['would_create_customer'] += 1
+            existing = None
+
+        results['preview_items'].append({
+            'adressen_id': adressen_id,
+            'action': action,
+            'vorname': vorname,
+            'nachname': effective_name,
+            'firma': firma_uni,
+            'plz': plz,
+            'ort': ort,
+            'verp_customer_number': existing.customer_number if existing else '(neu)',
+        })
+
+    return results
+
+
+def _sync_single_obsolete_customer(row, created_by_user=None, dry_run=False, existing_mapped_ids=None):
+    """
+    Synchronisiert einen einzelnen Kunden mit veralteter Adresse.
+
+    Returns: 'skipped_already_mapped', 'address_added', oder 'customer_created'
+    """
+    adressen_id = row.get('AdressenID')
+    nachname = clean_string(row.get('Nachname', ''))
+    vorname = clean_string(row.get('Vorname', ''))
+    firma_uni = clean_string(row.get('FirmaUni', ''))
+
+    # Wenn weder Nachname noch Firma/Uni vorhanden, ueberspringe
+    if not nachname and not firma_uni:
+        return 'skipped_already_mapped'
+
+    # Fuer Eintraege ohne Nachname: Firma/Uni als Ersatz-Name verwenden
+    effective_name = nachname or firma_uni
+
+    # Bereits gemappt -> ueberspringe (nutze vorab geladenes Set falls vorhanden)
+    if adressen_id:
+        if existing_mapped_ids is not None:
+            if adressen_id in existing_mapped_ids:
+                return 'skipped_already_mapped'
+        elif CustomerLegacyMapping.objects.filter(sql_id=adressen_id).exists():
+            return 'skipped_already_mapped'
+
+    # Felder auslesen
+    anrede_id = _safe_int(row.get('AnredeID'), 1)
+    titel_id = _safe_int(row.get('TitelID'), 1)
+    land_id = _safe_int(row.get('LandID'), 8)
+    englisch = _parse_bool(row.get('Englischsprachig'))
+
+    anrede_info = ANREDE_MAP.get(anrede_id, ('', ''))
+    salutation = anrede_info[0]
+    title = build_titel_string(anrede_id, titel_id)
+    country_iso = LAND_MAP.get(land_id, 'DE') or 'DE'
+    language = get_language(englisch, country_iso)
+
+    firma_uni = clean_string(row.get('FirmaUni', ''))
+    institut = clean_string(row.get('Institut', ''))
+    lehrstuhl = clean_string(row.get('Lehrstuhl', ''))
+    strasse_raw = clean_string(row.get('Strasse', ''))
+    plz = clean_string(row.get('PLZ', ''))
+    ort = clean_string(row.get('Ort', ''))
+    anfahrt = clean_string(row.get('Anfahrt', ''))
+    street, house_number = extract_street_and_number(strasse_raw)
+
+    # PLZ bereinigen
+    plz_clean = plz
+    if plz and '-' in plz:
+        parts = plz.split('-', 1)
+        if len(parts[0]) <= 3:
+            plz_clean = parts[1]
+
+    if dry_run:
+        # Simuliere Entscheidung
+        name_matches = Customer.objects.filter(last_name__iexact=effective_name)
+        if vorname:
+            name_matches = name_matches.filter(first_name__iexact=vorname)
+
+        if name_matches.count() == 1:
+            existing = name_matches.first()
+            if existing.addresses.count() <= 1:
+                return 'address_added'
+        return 'customer_created'
+
+    with transaction.atomic():
+        # Suche existierende Kunden mit gleichem Namen
+        name_matches = Customer.objects.filter(last_name__iexact=effective_name)
+        if vorname:
+            name_matches = name_matches.filter(first_name__iexact=vorname)
+
+        if name_matches.count() == 1:
+            existing = name_matches.first()
+            if existing.addresses.count() <= 1:
+                # Inaktive Adresse zum bestehenden Kunden hinzufuegen
+                CustomerAddress.objects.create(
+                    customer=existing,
+                    address_type='Office',
+                    is_active=False,
+                    university=firma_uni[:200] if firma_uni else '',
+                    institute=institut[:200] if institut else '',
+                    department=lehrstuhl[:200] if lehrstuhl else '',
+                    street=street[:200] if street else '',
+                    house_number=house_number[:20] if house_number else '',
+                    postal_code=plz_clean[:20] if plz_clean else '',
+                    city=ort[:100] if ort else '',
+                    country=country_iso or 'DE',
+                    directions=anfahrt[:500] if anfahrt else '',
+                )
+                _ensure_legacy_mapping(existing, adressen_id, 'obsolete_address')
+                if existing_mapped_ids is not None:
+                    existing_mapped_ids.add(adressen_id)
+                logger.info(
+                    f"Inaktive Adresse hinzugefuegt: {existing.customer_number} "
+                    f"({nachname}) AdressenID {adressen_id}"
+                )
+                return 'address_added'
+
+        # Neuen inaktiven Kunden anlegen
+        customer = Customer(
+            salutation=salutation,
+            title=title,
+            first_name=vorname[:100] if vorname else '',
+            last_name=effective_name[:100],
+            language=language,
+            is_active=False,
+            legacy_sql_id=adressen_id,
+            created_by=created_by_user,
+        )
+        customer.save()
+
+        _ensure_legacy_mapping(customer, adressen_id, 'obsolete_new')
+        if existing_mapped_ids is not None:
+            existing_mapped_ids.add(adressen_id)
+
+        # Adresse anlegen (ebenfalls inaktiv)
+        if street or plz_clean or ort:
+            CustomerAddress.objects.create(
+                customer=customer,
+                address_type='Office',
+                is_active=False,
+                university=firma_uni[:200] if firma_uni else '',
+                institute=institut[:200] if institut else '',
+                department=lehrstuhl[:200] if lehrstuhl else '',
+                street=street[:200] if street else '',
+                house_number=house_number[:20] if house_number else '',
+                postal_code=plz_clean[:20] if plz_clean else '',
+                city=ort[:100] if ort else '',
+                country=country_iso or 'DE',
+                directions=anfahrt[:500] if anfahrt else '',
+            )
+
+        logger.info(
+            f"Inaktiver Kunde erstellt: {customer.customer_number} "
+            f"({vorname} {effective_name}) AdressenID {adressen_id}"
+        )
+        return 'customer_created'
 
 
 def _safe_int(value, default=0):

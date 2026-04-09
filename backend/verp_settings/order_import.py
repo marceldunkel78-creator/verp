@@ -105,12 +105,12 @@ def fetch_auftraege(connection, limit=None):
     """Liest alle Auftraege aus der SQL-Datenbank."""
     cursor = connection.cursor()
     try:
-        query = "SELECT * FROM [Aufträge] ORDER BY [Datum], [AuftragsID]"
+        query = "SELECT * FROM [Aufträge] ORDER BY [AuftragsID]"
         if limit:
             # SQL Server OFFSET/FETCH
             query = (
                 "SELECT * FROM [Aufträge] "
-                "ORDER BY [Datum], [AuftragsID] "
+                "ORDER BY [AuftragsID] "
                 f"OFFSET 0 ROWS FETCH NEXT {int(limit)} ROWS ONLY"
             )
         cursor.execute(query)
@@ -290,32 +290,27 @@ def generate_legacy_order_numbers(auftraege):
 
     Format: O-XXX-MM/YY
     - XXX: Fortlaufend pro Kalenderjahr, startet bei 101
-    - MM: Monat des Bestaetigungsdatums
-    - YY: Jahr des Bestaetigungsdatums (2-stellig)
+    - MM/YY: Monat/Jahr aus der Datum-Spalte (Bestaetigungsdatum)
 
-    Die Nummerierung ist sortiert nach Bestaetigungsdatum (Spalte 'Datum')
-    innerhalb eines Jahres. Das Bestaetigungsdatum bestimmt wann der Auftrag
-    offiziell bestaetigt wurde und ist massgeblich fuer die Auftragsnummer.
+    Die Nummerierung ist primaer nach AuftragsID sortiert.
+    Der Monat/Jahr-Teil der Nummer ergibt sich aus der Datum-Spalte.
+    Das Jahr fuer den Zaehler wird ebenfalls aus der Datum-Spalte abgeleitet.
     """
-    # Sortiere nach Bestaetigungsdatum, bei Gleichheit nach AuftragsID (stabile Sortierung)
-    def get_sort_key(row):
-        # Primaer: Bestaetigungsdatum (Spalte 'Datum')
+    def get_date_for_row(row):
+        """Bestaetigungsdatum aus Datum-Spalte fuer MM/YY-Teil."""
         d = _parse_date(row.get('Datum'))
         if not d:
-            # Fallback: Auftragsdatum
             d = _parse_date(row.get('Auftragsdatum'))
         if not d:
-            # Fallback aus Jahr-Feld
             jahr = _safe_int(row.get('Jahr'))
             if jahr:
                 d = datetime(jahr, 1, 1).date()
         if not d:
             d = datetime(1990, 1, 1).date()
-        # AuftragsID als stabiler Tiebreaker bei gleichem Datum
-        auftrags_id = _safe_int(row.get('AuftragsID'), 0)
-        return (d, auftrags_id)
+        return d
 
-    sorted_orders = sorted(auftraege, key=get_sort_key)
+    # Primaer nach AuftragsID sortieren
+    sorted_orders = sorted(auftraege, key=lambda row: _safe_int(row.get('AuftragsID'), 0))
 
     # Zaehler pro Kalenderjahr
     year_counters = defaultdict(int)
@@ -323,7 +318,7 @@ def generate_legacy_order_numbers(auftraege):
 
     for row in sorted_orders:
         auftrags_id = row.get('AuftragsID')
-        confirmation_date = get_sort_key(row)[0]  # Bestaetigungsdatum
+        confirmation_date = get_date_for_row(row)
         year = confirmation_date.year
         month = confirmation_date.month
 
@@ -341,6 +336,56 @@ def generate_legacy_order_numbers(auftraege):
         order_numbers[auftrags_id] = {
             'order_number': order_number,
             'order_date': confirmation_date,
+            'sequence': year_counters[year],
+        }
+
+    return order_numbers
+
+
+def _generate_legacy_order_numbers_old_logic(auftraege):
+    """
+    Generiert Auftragsnummern nach der ALTEN Logik (vor der Korrektur):
+    Sortierung und Monat/Jahr basierend auf 'Auftragsdatum' statt 'Datum'.
+
+    Wird nur fuer den Backfill benoetigt, um alte Auftraege zuzuordnen die
+    mit der falschen Logik importiert wurden.
+    """
+    def get_sort_key(row):
+        # Alte Logik: Primaer Auftragsdatum
+        d = _parse_date(row.get('Auftragsdatum'))
+        if not d:
+            d = _parse_date(row.get('Datum'))
+        if not d:
+            jahr = _safe_int(row.get('Jahr'))
+            if jahr:
+                d = datetime(jahr, 1, 1).date()
+        if not d:
+            d = datetime(1990, 1, 1).date()
+        auftrags_id = _safe_int(row.get('AuftragsID'), 0)
+        return (d, auftrags_id)
+
+    sorted_orders = sorted(auftraege, key=get_sort_key)
+
+    year_counters = defaultdict(int)
+    order_numbers = {}
+
+    for row in sorted_orders:
+        auftrags_id = row.get('AuftragsID')
+        order_date = get_sort_key(row)[0]
+        year = order_date.year
+        month = order_date.month
+
+        year_counters[year] += 1
+        counter = 100 + year_counters[year]
+
+        yy = str(year)[-2:]
+        mm = f'{month:02d}'
+
+        order_number = f'O-{counter:03d}-{mm}/{yy}'
+
+        order_numbers[auftrags_id] = {
+            'order_number': order_number,
+            'order_date': order_date,
             'sequence': year_counters[year],
         }
 
@@ -857,7 +902,8 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
                             legacy_customer_name=legacy_name if not customer else '',
                             legacy_customer_company=legacy_company if not customer else '',
                             legacy_customer_address=legacy_address if not customer else '',
-                            legacy_adressen_id=adressen_id if not customer else None,
+                            legacy_adressen_id=adressen_id,
+                            legacy_auftrags_id=auftrags_id,
                             quotation=None,
                             customer_order_number=customer_order_number,
                             customer_contact_name=customer_contact,
@@ -972,3 +1018,683 @@ def import_orders_from_sql(server, database='VSDB', use_dsn=False, dsn_name=None
 
     finally:
         conn.close()
+
+
+# ============================================================================
+# Auftrags-Neuzuordnung (Reassignment)
+# ============================================================================
+
+def backfill_legacy_adressen_ids(server, database='VSDB', use_dsn=False, dsn_name=None, dry_run=True):
+    """
+    Traegt die legacy_adressen_id fuer alle bestehenden Legacy-Auftraege nach,
+    bei denen sie fehlt. Liest dazu die Auftraege aus der SQL-Datenbank und
+    ordnet sie ueber die generierte Auftragsnummer zu.
+
+    Returns:
+        dict mit Statistiken
+    """
+    conn = get_mssql_connection(server, database, use_dsn, dsn_name)
+    try:
+        auftraege = fetch_auftraege(conn, limit=None)
+    finally:
+        conn.close()
+
+    order_numbers = generate_legacy_order_numbers(auftraege)
+
+    # Mapping: order_number -> adressen_id
+    number_to_adressen_id = {}
+    for auftrags_id, nr_info in order_numbers.items():
+        order_number = nr_info.get('order_number')
+        if not order_number:
+            continue
+        # Original-Row finden
+        row = next((r for r in auftraege if r.get('AuftragsID') == auftrags_id), None)
+        if row:
+            aid = _safe_int(row.get('AdressenID'))
+            if aid:
+                number_to_adressen_id[order_number] = aid
+
+    # Alle Legacy-Auftraege ohne legacy_adressen_id
+    orders_missing = CustomerOrder.objects.filter(
+        order_number__startswith='O-',
+        order_number__contains='/',
+        legacy_adressen_id__isnull=True,
+    )
+
+    stats = {
+        'total_missing': orders_missing.count(),
+        'filled': 0,
+        'not_in_sql': 0,
+    }
+
+    for order in orders_missing:
+        aid = number_to_adressen_id.get(order.order_number)
+        if aid:
+            if not dry_run:
+                order.legacy_adressen_id = aid
+                order.save(update_fields=['legacy_adressen_id'])
+            stats['filled'] += 1
+        else:
+            stats['not_in_sql'] += 1
+
+    return stats
+
+
+def backfill_legacy_auftrags_ids(server, database='VSDB', use_dsn=False, dsn_name=None, dry_run=True):
+    """
+    Traegt die legacy_auftrags_id fuer alle bestehenden Legacy-Auftraege nach.
+
+    Matching-Strategie (mehrstufig):
+    1a. Exakter Treffer ueber korrekte order_number (Datum-basiert)
+    1b. Exakter Treffer ueber alte order_number (Auftragsdatum-basiert, fuer
+        Auftraege die vor der Korrektur importiert wurden)
+    2.  Feld-basiertes Matching ueber legacy_adressen_id + Daten
+    3.  Customer + system_reference + confirmation_date Matching
+
+    Nur eindeutige Zuordnungen (genau 1 Match) werden uebernommen.
+
+    Returns:
+        dict mit Statistiken
+    """
+    conn = get_mssql_connection(server, database, use_dsn, dsn_name)
+    try:
+        auftraege = fetch_auftraege(conn, limit=None)
+    finally:
+        conn.close()
+
+    order_numbers = generate_legacy_order_numbers(auftraege)
+    old_order_numbers = _generate_legacy_order_numbers_old_logic(auftraege)
+
+    # SQL-Daten als dict: AuftragsID -> row
+    sql_by_id = {r.get('AuftragsID'): r for r in auftraege}
+
+    # Mapping: order_number -> AuftragsID (korrekte Logik)
+    number_to_auftrags_id = {}
+    for auftrags_id, nr_info in order_numbers.items():
+        order_number = nr_info.get('order_number')
+        if order_number:
+            number_to_auftrags_id[order_number] = auftrags_id
+
+    # Mapping: order_number -> AuftragsID (alte Logik, Auftragsdatum-basiert)
+    old_number_to_auftrags_id = {}
+    for auftrags_id, nr_info in old_order_numbers.items():
+        order_number = nr_info.get('order_number')
+        if order_number:
+            old_number_to_auftrags_id[order_number] = auftrags_id
+
+    # Alle Legacy-Auftraege
+    legacy_orders = list(CustomerOrder.objects.filter(
+        order_number__startswith='O-',
+        order_number__contains='/',
+    ))
+
+    stats = {
+        'total_legacy': len(legacy_orders),
+        'auftrags_id_filled': 0,
+        'adressen_id_filled': 0,
+        'already_has_auftrags_id': 0,
+        'matched_by_number': 0,
+        'matched_by_old_number': 0,
+        'matched_by_fields': 0,
+        'not_matched': 0,
+        'not_matched_numbers': [],
+    }
+
+    # Bereits vergebene AuftragsIDs sammeln
+    assigned_ids = set()
+    for o in legacy_orders:
+        if o.legacy_auftrags_id:
+            assigned_ids.add(o.legacy_auftrags_id)
+
+    def _assign_id(order, sql_id, stat_key):
+        """Hilfsfunktion: Weist einem Auftrag die legacy_auftrags_id zu."""
+        order.legacy_auftrags_id = sql_id
+        assigned_ids.add(sql_id)
+        stats['auftrags_id_filled'] += 1
+        stats[stat_key] += 1
+
+        update_fields = ['legacy_auftrags_id']
+        if not order.legacy_adressen_id:
+            row = sql_by_id.get(sql_id)
+            if row:
+                aid = _safe_int(row.get('AdressenID'))
+                if aid:
+                    order.legacy_adressen_id = aid
+                    update_fields.append('legacy_adressen_id')
+                    stats['adressen_id_filled'] += 1
+
+        if not dry_run:
+            order.save(update_fields=update_fields)
+
+    # --- Phase 1a: Korrekte Nummern ---
+    unmatched_orders = []
+    for order in legacy_orders:
+        if order.legacy_auftrags_id:
+            stats['already_has_auftrags_id'] += 1
+            continue
+
+        sql_id = number_to_auftrags_id.get(order.order_number)
+        if sql_id and sql_id not in assigned_ids:
+            _assign_id(order, sql_id, 'matched_by_number')
+            continue
+
+        unmatched_orders.append(order)
+
+    # --- Phase 1b: Alte Nummern (Auftragsdatum-basiert) ---
+    still_unmatched = []
+    for order in unmatched_orders:
+        sql_id = old_number_to_auftrags_id.get(order.order_number)
+        if sql_id and sql_id not in assigned_ids:
+            _assign_id(order, sql_id, 'matched_by_old_number')
+            continue
+
+        still_unmatched.append(order)
+
+    # --- Phase 2: Feld-basiertes Matching ---
+    unassigned_sql = {
+        aid: row for aid, row in sql_by_id.items()
+        if aid not in assigned_ids
+    }
+
+    final_unmatched = []
+    for order in still_unmatched:
+        best_match = None
+
+        # 2a: legacy_adressen_id + confirmation_date + order_date
+        if order.legacy_adressen_id and order.confirmation_date:
+            candidates = [
+                (aid, row) for aid, row in unassigned_sql.items()
+                if _safe_int(row.get('AdressenID')) == order.legacy_adressen_id
+                and _parse_date(row.get('Datum')) == order.confirmation_date
+                and _parse_date(row.get('Auftragsdatum')) == order.order_date
+            ]
+            if len(candidates) == 1:
+                best_match = candidates[0][0]
+            elif len(candidates) > 1:
+                kurz_candidates = [
+                    (aid, row) for aid, row in candidates
+                    if str(row.get('Kurzbeschreibung', '') or '').strip() == (order.system_reference or '').strip()
+                ]
+                if len(kurz_candidates) == 1:
+                    best_match = kurz_candidates[0][0]
+
+            # 2b: nur legacy_adressen_id + confirmation_date
+            if not best_match:
+                candidates = [
+                    (aid, row) for aid, row in unassigned_sql.items()
+                    if _safe_int(row.get('AdressenID')) == order.legacy_adressen_id
+                    and _parse_date(row.get('Datum')) == order.confirmation_date
+                ]
+                if len(candidates) == 1:
+                    best_match = candidates[0][0]
+
+        # 2c: customer + system_reference + confirmation_date (fuer Auftraege ohne adressen_id)
+        if not best_match and order.customer and order.system_reference and order.confirmation_date:
+            # Finde AdressenIDs des Kunden
+            from customers.models import CustomerLegacyMapping
+            mappings = CustomerLegacyMapping.objects.filter(customer=order.customer)
+            customer_adr_ids = set(mappings.values_list('sql_id', flat=True))
+            if order.customer.legacy_sql_id:
+                customer_adr_ids.add(order.customer.legacy_sql_id)
+
+            if customer_adr_ids:
+                candidates = [
+                    (aid, row) for aid, row in unassigned_sql.items()
+                    if _safe_int(row.get('AdressenID')) in customer_adr_ids
+                    and _parse_date(row.get('Datum')) == order.confirmation_date
+                    and str(row.get('Kurzbeschreibung', '') or '').strip() == (order.system_reference or '').strip()
+                ]
+                if len(candidates) == 1:
+                    best_match = candidates[0][0]
+
+        if best_match:
+            _assign_id(order, best_match, 'matched_by_fields')
+            if best_match in unassigned_sql:
+                del unassigned_sql[best_match]
+        else:
+            final_unmatched.append(order)
+
+    for order in final_unmatched:
+        stats['not_matched'] += 1
+        stats['not_matched_numbers'].append(order.order_number)
+
+    stats['not_matched_numbers'] = stats['not_matched_numbers'][:50]
+    return stats
+
+
+def cleanup_duplicate_legacy_orders(dry_run=True):
+    """
+    Loescht alle Legacy-Auftraege ohne legacy_auftrags_id.
+
+    Nach dem Backfill haben alle echten Auftraege eine legacy_auftrags_id.
+    Auftraege OHNE ID sind fehlerhafte Import-Artefakte (falsche Kunden-Zuordnung,
+    doppelte Imports, etc.) und haben kein SQL-Pendant.
+
+    Es gibt 7823 Auftraege in der SQL-Datenbank, aber mehr Legacy-Auftraege in VERP.
+    Die Differenz sind die fehlerhaften Imports.
+
+    Returns:
+        dict mit Cleanup-Statistiken
+    """
+    # Alle Legacy-Auftraege ohne legacy_auftrags_id = Import-Artefakte
+    orphans = list(CustomerOrder.objects.filter(
+        order_number__startswith='O-',
+        order_number__contains='/',
+        legacy_auftrags_id__isnull=True,
+    ).select_related('customer').order_by('order_number'))
+
+    # Auftraege MIT legacy_auftrags_id = echte Auftraege
+    matched_count = CustomerOrder.objects.filter(
+        order_number__startswith='O-',
+        order_number__contains='/',
+        legacy_auftrags_id__isnull=False,
+    ).count()
+
+    stats = {
+        'total_orphans': len(orphans),
+        'matched_orders': matched_count,
+        'to_delete': len(orphans),
+        'deleted': 0,
+        'details': [],
+    }
+
+    for order in orphans:
+        pos_count = order.items.count()
+        stats['details'].append({
+            'order_number': order.order_number,
+            'customer': str(order.customer or order.legacy_customer_name or '?'),
+            'date': str(order.confirmation_date or ''),
+            'system_reference': (order.system_reference or '')[:40],
+            'positions': pos_count,
+            'reason': 'Keine SQL-AuftragsID nach Backfill',
+        })
+
+    # Loeschen
+    if not dry_run and orphans:
+        pks = [o.pk for o in orphans]
+        deleted_count = CustomerOrder.objects.filter(pk__in=pks).delete()[0]
+        stats['deleted'] = deleted_count
+
+    stats['details'] = stats['details'][:500]
+    return stats
+
+
+def renumber_legacy_orders(server, database='VSDB', use_dsn=False, dsn_name=None, dry_run=True):
+    """
+    Korrigiert alle Legacy-Auftragsnummern, -Daten, -AdressenIDs und -Kunden
+    basierend auf der SQL-AuftragsID.
+
+    Strategie:
+    1. Lade ALLE Auftraege aus SQL
+    2. Generiere die korrekten Nummern (deterministisch: Datum + AuftragsID)
+    3. Fuer jeden VERP-Auftrag mit legacy_auftrags_id:
+       - Korrigiere confirmation_date (aus SQL 'Datum') und order_date (aus SQL 'Auftragsdatum')
+       - Korrigiere legacy_adressen_id (aus SQL 'AdressenID')
+       - Korrigiere Kunden-Zuordnung (aus CustomerLegacyMapping fuer die korrekte AdressenID)
+       - Berechne korrekte Nummer und benenne ggf. um
+
+    Voraussetzung: legacy_auftrags_id muss gesetzt sein (vorher backfill_legacy_auftrags_ids).
+
+    Returns:
+        dict mit Renumber-Statistiken
+    """
+    conn = get_mssql_connection(server, database, use_dsn, dsn_name)
+    try:
+        auftraege = fetch_auftraege(conn, limit=None)
+    finally:
+        conn.close()
+
+    order_numbers = generate_legacy_order_numbers(auftraege)
+
+    # AuftragsID -> SQL-Rohdaten
+    sql_by_id = {row.get('AuftragsID'): row for row in auftraege}
+
+    # AuftragsID -> korrekte order_number
+    correct_numbers = {}
+    for auftrags_id, nr_info in order_numbers.items():
+        order_number = nr_info.get('order_number')
+        if order_number:
+            correct_numbers[auftrags_id] = order_number
+
+    # CustomerLegacyMapping: sql_id -> customer_id
+    all_mappings = {
+        m.sql_id: m.customer_id
+        for m in CustomerLegacyMapping.objects.all()
+    }
+    # Fallback: legacy_sql_id -> customer_id
+    legacy_sql_lookup = {}
+    for c in Customer.objects.filter(legacy_sql_id__isnull=False).exclude(legacy_sql_id=0):
+        if c.legacy_sql_id not in legacy_sql_lookup:
+            legacy_sql_lookup[c.legacy_sql_id] = c.pk
+
+    # Alle VERP-Auftraege mit legacy_auftrags_id
+    legacy_orders = CustomerOrder.objects.filter(
+        legacy_auftrags_id__isnull=False,
+    ).select_related('customer').order_by('order_number')
+
+    stats = {
+        'total_checked': legacy_orders.count(),
+        'already_correct': 0,
+        'renamed': 0,
+        'dates_corrected': 0,
+        'customers_corrected': 0,
+        'no_sql_match': 0,
+        'errors': [],
+        'details': [],
+    }
+
+    # Sammle alle noetigen Aenderungen
+    renames = []  # [(order_pk, old_number, new_number)]
+    date_fixes = []  # [(order_pk, new_confirmation_date, new_order_date)]
+    customer_fixes = []  # [(order_pk, new_adressen_id, new_customer_id, old_customer_str, new_customer_str)]
+
+    for order in legacy_orders:
+        sql_row = sql_by_id.get(order.legacy_auftrags_id)
+        correct_number = correct_numbers.get(order.legacy_auftrags_id)
+
+        if not correct_number or not sql_row:
+            stats['no_sql_match'] += 1
+            continue
+
+        # Datumskorrektur pruefen
+        correct_confirmation_date = _parse_date(sql_row.get('Datum'))
+        correct_order_date = _parse_date(sql_row.get('Auftragsdatum'))
+
+        needs_date_fix = False
+        if correct_confirmation_date and order.confirmation_date != correct_confirmation_date:
+            needs_date_fix = True
+        if correct_order_date and order.order_date != correct_order_date:
+            needs_date_fix = True
+
+        if needs_date_fix:
+            date_fixes.append((order.pk, correct_confirmation_date, correct_order_date))
+
+        # AdressenID und Kunden-Korrektur pruefen
+        correct_adressen_id = _safe_int(sql_row.get('AdressenID'))
+        if correct_adressen_id and correct_adressen_id != order.legacy_adressen_id:
+            correct_customer_id = all_mappings.get(correct_adressen_id) or legacy_sql_lookup.get(correct_adressen_id)
+            if correct_customer_id and correct_customer_id != order.customer_id:
+                try:
+                    new_cust = Customer.objects.get(pk=correct_customer_id)
+                    customer_fixes.append((
+                        order.pk,
+                        correct_adressen_id,
+                        correct_customer_id,
+                        str(order.customer) if order.customer else '(keiner)',
+                        str(new_cust),
+                    ))
+                except Customer.DoesNotExist:
+                    pass
+            elif correct_adressen_id != order.legacy_adressen_id:
+                # Nur AdressenID korrigieren, Kunde bleibt
+                customer_fixes.append((
+                    order.pk,
+                    correct_adressen_id,
+                    None,  # customer_id bleibt
+                    str(order.customer) if order.customer else '(keiner)',
+                    str(order.customer) if order.customer else '(keiner)',
+                ))
+
+        if order.order_number == correct_number:
+            stats['already_correct'] += 1
+            continue
+
+        renames.append((order.pk, order.order_number, correct_number))
+
+    if not renames and not date_fixes and not customer_fixes:
+        stats['renamed'] = 0
+        return {
+            'success': True,
+            'dry_run': dry_run,
+            'stats': stats,
+            'details': [],
+        }
+
+    # Duplikat-Check
+    target_numbers = {new for _, _, new in renames}
+    source_pks = {pk for pk, _, _ in renames}
+
+    blocked_numbers = set(
+        CustomerOrder.objects.filter(
+            order_number__in=target_numbers,
+        ).exclude(
+            pk__in=source_pks,
+        ).values_list('order_number', flat=True)
+    )
+
+    details = []
+
+    if not dry_run:
+        with transaction.atomic():
+            # Datumskorrektur
+            for pk, conf_date, ord_date in date_fixes:
+                update_fields = {}
+                if conf_date:
+                    update_fields['confirmation_date'] = conf_date
+                if ord_date:
+                    update_fields['order_date'] = ord_date
+                if update_fields:
+                    CustomerOrder.objects.filter(pk=pk).update(**update_fields)
+                    stats['dates_corrected'] += 1
+
+            # Kunden-/AdressenID-Korrektur
+            for pk, new_adr_id, new_cust_id, old_cust, new_cust in customer_fixes:
+                update_fields = {'legacy_adressen_id': new_adr_id}
+                if new_cust_id:
+                    update_fields['customer_id'] = new_cust_id
+                    update_fields['legacy_customer_name'] = ''
+                    update_fields['legacy_customer_company'] = ''
+                    update_fields['legacy_customer_address'] = ''
+                CustomerOrder.objects.filter(pk=pk).update(**update_fields)
+                stats['customers_corrected'] += 1
+
+            # Phase 1: Temporaere Nummern
+            for pk, old_number, new_number in renames:
+                if new_number in blocked_numbers:
+                    stats['errors'].append(
+                        f"{old_number} -> {new_number}: Zielnummer bereits vergeben"
+                    )
+                    continue
+
+                temp_number = f"_RENAME_{pk}"
+                CustomerOrder.objects.filter(pk=pk).update(order_number=temp_number)
+
+            # Phase 2: Korrekte Nummern
+            for pk, old_number, new_number in renames:
+                if new_number in blocked_numbers:
+                    continue
+
+                temp_number = f"_RENAME_{pk}"
+                try:
+                    CustomerOrder.objects.filter(pk=pk, order_number=temp_number).update(
+                        order_number=new_number
+                    )
+                    stats['renamed'] += 1
+                    details.append({
+                        'old_number': old_number,
+                        'new_number': new_number,
+                    })
+                except Exception as e:
+                    stats['errors'].append(f"{old_number} -> {new_number}: {str(e)}")
+                    CustomerOrder.objects.filter(pk=pk, order_number=temp_number).update(
+                        order_number=old_number
+                    )
+    else:
+        # Dry-run
+        stats['dates_corrected'] = len(date_fixes)
+        stats['customers_corrected'] = len(customer_fixes)
+
+        for pk, old_number, new_number in renames:
+            if new_number in blocked_numbers:
+                stats['errors'].append(
+                    f"{old_number} -> {new_number}: Zielnummer bereits vergeben"
+                )
+                continue
+
+            stats['renamed'] += 1
+            details.append({
+                'old_number': old_number,
+                'new_number': new_number,
+            })
+
+    # Kunden-Korrekturen als eigene Detail-Liste
+    customer_details = []
+    for pk, new_adr_id, new_cust_id, old_cust, new_cust in customer_fixes:
+        if new_cust_id:
+            customer_details.append({
+                'order_pk': pk,
+                'old_customer': old_cust,
+                'new_customer': new_cust,
+                'adressen_id': new_adr_id,
+            })
+
+    return {
+        'success': True,
+        'dry_run': dry_run,
+        'stats': stats,
+        'details': details[:200],
+        'customer_details': customer_details[:100],
+        'total_renames': len(renames),
+        'total_date_fixes': len(date_fixes),
+        'total_customer_fixes': len(customer_fixes),
+        'blocked': len(blocked_numbers),
+    }
+
+
+def reassign_legacy_orders(dry_run=True):
+    """
+    Ordnet Legacy-Auftraege, die keinem oder einem falschen Kunden zugeordnet sind,
+    anhand des CustomerLegacyMapping neu zu.
+
+    Voraussetzung: legacy_adressen_id muss gesetzt sein (ggf. vorher backfill ausfuehren).
+
+    Returns:
+        dict mit Reassignment-Statistiken
+    """
+    stats = {
+        'total_checked': 0,
+        'reassigned': 0,
+        'newly_assigned': 0,
+        'already_correct': 0,
+        'no_mapping': 0,
+        'no_adressen_id': 0,
+        'errors': [],
+        'details': [],
+    }
+
+    # Alle Legacy-Auftraege
+    legacy_orders = CustomerOrder.objects.filter(
+        order_number__startswith='O-',
+        order_number__contains='/',
+    ).select_related('customer')
+
+    # Vorab alle LegacyMappings laden (N+1 vermeiden)
+    all_mappings = {
+        m.sql_id: m.customer_id
+        for m in CustomerLegacyMapping.objects.select_related('customer').all()
+    }
+    # Vorab fallback: legacy_sql_id -> customer
+    legacy_sql_lookup = {}
+    for c in Customer.objects.filter(legacy_sql_id__isnull=False).exclude(legacy_sql_id=0):
+        if c.legacy_sql_id not in legacy_sql_lookup:
+            legacy_sql_lookup[c.legacy_sql_id] = c.pk
+
+    # Customer-Cache
+    customer_cache = {}
+
+    def _find_customer_cached(adressen_id):
+        if adressen_id in customer_cache:
+            return customer_cache[adressen_id]
+        # LegacyMapping zuerst
+        cust_id = all_mappings.get(adressen_id)
+        if not cust_id:
+            cust_id = legacy_sql_lookup.get(adressen_id)
+        if cust_id:
+            try:
+                cust = Customer.objects.get(pk=cust_id)
+            except Customer.DoesNotExist:
+                cust = None
+        else:
+            cust = None
+        customer_cache[adressen_id] = cust
+        return cust
+
+    for order in legacy_orders:
+        stats['total_checked'] += 1
+
+        adressen_id = order.legacy_adressen_id
+        if not adressen_id:
+            stats['no_adressen_id'] += 1
+            continue
+
+        correct_customer = _find_customer_cached(adressen_id)
+        if not correct_customer:
+            stats['no_mapping'] += 1
+            old_customer = order.customer
+            stats['details'].append({
+                'order_number': order.order_number,
+                'adressen_id': adressen_id,
+                'action': 'no_mapping',
+                'old_customer': str(old_customer) if old_customer else '(keiner)',
+                'old_customer_number': old_customer.customer_number if old_customer else '',
+                'new_customer': '',
+                'new_customer_number': '',
+                'legacy_name': order.legacy_customer_name,
+                'legacy_company': order.legacy_customer_company,
+            })
+            continue
+
+        if order.customer_id == correct_customer.pk:
+            stats['already_correct'] += 1
+            continue
+
+        old_customer = order.customer
+        detail = {
+            'order_number': order.order_number,
+            'adressen_id': adressen_id,
+            'old_customer': str(old_customer) if old_customer else '(keiner)',
+            'old_customer_number': old_customer.customer_number if old_customer else '',
+            'new_customer': str(correct_customer),
+            'new_customer_number': correct_customer.customer_number,
+            'legacy_name': order.legacy_customer_name,
+            'legacy_company': order.legacy_customer_company,
+        }
+
+        if not dry_run:
+            try:
+                with transaction.atomic():
+                    order.customer = correct_customer
+                    # Legacy-Felder bereinigen da jetzt korrekt zugeordnet
+                    order.legacy_customer_name = ''
+                    order.legacy_customer_company = ''
+                    order.legacy_customer_address = ''
+                    order.save()
+            except Exception as e:
+                stats['errors'].append(f"{order.order_number}: {str(e)}")
+                continue
+
+        if old_customer:
+            stats['reassigned'] += 1
+            detail['action'] = 'reassigned'
+            logger.info(
+                f"Auftrag {order.order_number}: "
+                f"{old_customer} -> {correct_customer}"
+            )
+        else:
+            stats['newly_assigned'] += 1
+            detail['action'] = 'newly_assigned'
+            logger.info(
+                f"Auftrag {order.order_number}: "
+                f"(keiner) -> {correct_customer}"
+            )
+
+        stats['details'].append(detail)
+
+    all_details = stats.pop('details')
+    return {
+        'success': True,
+        'dry_run': dry_run,
+        'stats': stats,
+        'details': [d for d in all_details if d['action'] != 'no_mapping'][:100],
+        'no_mapping_details': [d for d in all_details if d['action'] == 'no_mapping'],
+    }

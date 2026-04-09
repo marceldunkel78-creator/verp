@@ -94,6 +94,11 @@ class CustomerOrder(models.Model):
         verbose_name='Legacy AdressenID',
         help_text='Originale AdressenID aus der SQL-Datenbank'
     )
+    legacy_auftrags_id = models.IntegerField(
+        null=True, blank=True, db_index=True,
+        verbose_name='Legacy AuftragsID',
+        help_text='Originale AuftragsID aus der SQL-Datenbank'
+    )
 
     # Referenzen
     project_reference = models.CharField(max_length=200, blank=True, verbose_name='Projekt-Referenz')

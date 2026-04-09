@@ -9,11 +9,13 @@ from .views import (
 from .backup_views import DatabaseBackupView, DatabaseRestoreView, DatabaseStatsView
 from .customer_sync_views import (
     CustomerSyncStatusView, CustomerSyncTestConnectionView,
-    CustomerSyncPreviewView, CustomerSyncExecuteView
+    CustomerSyncPreviewView, CustomerSyncExecuteView,
+    ObsoleteSyncPreviewView, ObsoleteSyncExecuteView
 )
 from .order_import_views import (
     OrderImportStatusView, OrderImportTestConnectionView,
-    OrderImportPreviewView, OrderImportExecuteView
+    OrderImportPreviewView, OrderImportExecuteView,
+    OrderReassignView, OrderRenumberView, OrderCleanupDuplicatesView
 )
 from .redmine_sync_views import (
     RedmineSyncStatusView, RedmineSyncTestConnectionView,
@@ -47,11 +49,17 @@ urlpatterns = [
     path('customer-sync/test-connection/', CustomerSyncTestConnectionView.as_view(), name='customer-sync-test'),
     path('customer-sync/preview/', CustomerSyncPreviewView.as_view(), name='customer-sync-preview'),
     path('customer-sync/execute/', CustomerSyncExecuteView.as_view(), name='customer-sync-execute'),
+    # Veraltete Adressen importieren
+    path('customer-sync/obsolete/preview/', ObsoleteSyncPreviewView.as_view(), name='customer-sync-obsolete-preview'),
+    path('customer-sync/obsolete/execute/', ObsoleteSyncExecuteView.as_view(), name='customer-sync-obsolete-execute'),
     # Legacy Order Import aus SQL Server
     path('order-import/status/', OrderImportStatusView.as_view(), name='order-import-status'),
     path('order-import/test-connection/', OrderImportTestConnectionView.as_view(), name='order-import-test'),
     path('order-import/preview/', OrderImportPreviewView.as_view(), name='order-import-preview'),
     path('order-import/execute/', OrderImportExecuteView.as_view(), name='order-import-execute'),
+    path('order-import/reassign/', OrderReassignView.as_view(), name='order-import-reassign'),
+    path('order-import/renumber/', OrderRenumberView.as_view(), name='order-import-renumber'),
+    path('order-import/cleanup-duplicates/', OrderCleanupDuplicatesView.as_view(), name='order-import-cleanup-duplicates'),
     # Redmine Ticket-Sync
     path('redmine-sync/status/', RedmineSyncStatusView.as_view(), name='redmine-sync-status'),
     path('redmine-sync/test-connection/', RedmineSyncTestConnectionView.as_view(), name='redmine-sync-test'),
