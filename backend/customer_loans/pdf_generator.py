@@ -243,7 +243,7 @@ def generate_loan_delivery_note_pdf(customer_loan, language='de'):
 
         table_data.append([
             str(item.position),
-            item.article_number or '—',
+            Paragraph(item.article_number or '—', style_small),
             Paragraph(desc, style_small),
             f"{item.quantity:g}",
             item.unit

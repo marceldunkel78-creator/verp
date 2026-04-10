@@ -186,6 +186,7 @@ class DevelopmentProjectComment(models.Model):
         verbose_name='Erstellt von'
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
     
     class Meta:
         verbose_name = 'Projekt Kommentar'

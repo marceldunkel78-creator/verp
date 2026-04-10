@@ -258,6 +258,28 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
         serializer = DevelopmentProjectCommentSerializer(comment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
+    @action(detail=True, methods=['patch'], url_path='update_comment/(?P<comment_id>[^/.]+)')
+    def update_comment(self, request, pk=None, comment_id=None):
+        """Aktualisiert einen Kommentar"""
+        project = self.get_object()
+        try:
+            comment = DevelopmentProjectComment.objects.get(id=comment_id, project=project)
+        except DevelopmentProjectComment.DoesNotExist:
+            raise Http404("Kommentar nicht gefunden")
+        
+        comment_text = request.data.get('comment', '').strip()
+        if not comment_text:
+            return Response(
+                {'error': 'Kommentar darf nicht leer sein'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        comment.comment = comment_text
+        comment.save()
+        
+        serializer = DevelopmentProjectCommentSerializer(comment)
+        return Response(serializer.data)
+    
     @action(detail=True, methods=['delete'], url_path='delete_comment/(?P<comment_id>[^/.]+)')
     def delete_comment(self, request, pk=None, comment_id=None):
         """Löscht einen Kommentar"""

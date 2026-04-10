@@ -10,7 +10,8 @@ import {
   ArrowPathIcon,
   BeakerIcon,
   ClockIcon,
-  CpuChipIcon
+  CpuChipIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
@@ -70,6 +71,8 @@ const DevelopmentProjectEdit = () => {
   const [newTodo, setNewTodo] = useState('');
   const [newTodoAssignee, setNewTodoAssignee] = useState('');
   const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
   const [newMaterial, setNewMaterial] = useState({ material_supply: '', quantity: 1, notes: '' });
   const [materialSearch, setMaterialSearch] = useState('');
   const [materialSearchResults, setMaterialSearchResults] = useState([]);
@@ -372,6 +375,31 @@ const DevelopmentProjectEdit = () => {
       setProject(prev => ({ ...prev, comments: prev.comments.filter(c => c.id !== commentId) }));
     } catch (error) {
       alert('Fehler beim Löschen: ' + error.message);
+    }
+  };
+
+  const handleEditComment = (comment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.comment);
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
+
+  const handleSaveComment = async (commentId) => {
+    if (!editingCommentText.trim()) return;
+    try {
+      const response = await api.patch(`/development/projects/${id}/update_comment/${commentId}/`, { comment: editingCommentText });
+      setProject(prev => ({
+        ...prev,
+        comments: prev.comments.map(c => c.id === commentId ? response.data : c)
+      }));
+      setEditingCommentId(null);
+      setEditingCommentText('');
+    } catch (error) {
+      alert('Fehler beim Speichern: ' + error.message);
     }
   };
 
@@ -900,15 +928,56 @@ const DevelopmentProjectEdit = () => {
                         <span className="text-gray-500 ml-2">
                           {new Date(comment.created_at).toLocaleString('de-DE')}
                         </span>
+                        {comment.updated_at && comment.updated_at !== comment.created_at && (
+                          <span className="text-gray-400 ml-2 text-xs">(bearbeitet)</span>
+                        )}
                       </div>
-                      <button
-                        onClick={() => handleDeleteComment(comment.id)}
-                        className="text-red-400 hover:text-red-600"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        {editingCommentId !== comment.id && (
+                          <button
+                            onClick={() => handleEditComment(comment)}
+                            className="text-gray-400 hover:text-purple-600"
+                            title="Kommentar bearbeiten"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteComment(comment.id)}
+                          className="text-red-400 hover:text-red-600"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-gray-700 whitespace-pre-wrap">{comment.comment}</p>
+                    {editingCommentId === comment.id ? (
+                      <div>
+                        <textarea
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          rows={3}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 mb-2"
+                        />
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleSaveComment(comment.id)}
+                            disabled={!editingCommentText.trim()}
+                            className="inline-flex items-center px-3 py-1.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 text-sm"
+                          >
+                            <CheckIcon className="h-4 w-4 mr-1" />
+                            Speichern
+                          </button>
+                          <button
+                            onClick={handleCancelEditComment}
+                            className="inline-flex items-center px-3 py-1.5 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-700 whitespace-pre-wrap">{comment.comment}</p>
+                    )}
                   </div>
                 ))
               )}

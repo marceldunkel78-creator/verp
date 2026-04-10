@@ -215,11 +215,11 @@ def generate_return_note_pdf(loan_return):
         
         table_data.append([
             str(idx),
-            loan_item.supplier_article_number or '—',
+            Paragraph(loan_item.supplier_article_number or '—', style_small),
             Paragraph(desc, style_small),
             f"{item.quantity_returned:g}",
             loan_item.unit,
-            condition
+            Paragraph(condition, style_small)
         ])
     
     table = Table(table_data, colWidths=[1.2*cm, 2.5*cm, 6*cm, 1.5*cm, 1.5*cm, 4*cm])

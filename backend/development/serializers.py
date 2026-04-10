@@ -41,9 +41,9 @@ class DevelopmentProjectCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DevelopmentProjectComment
         fields = [
-            'id', 'project', 'comment', 'created_by', 'created_by_name', 'created_at'
+            'id', 'project', 'comment', 'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'created_by']
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
     
     def get_created_by_name(self, obj):
         if obj.created_by:
