@@ -288,55 +288,43 @@ def generate_legacy_order_numbers(auftraege):
     """
     Generiert die Auftragsnummern fuer Legacy-Auftraege.
 
-    Format: O-XXX-MM/YY
-    - XXX: Fortlaufend pro Kalenderjahr, startet bei 101
-    - MM/YY: Monat/Jahr aus der Datum-Spalte (Bestaetigungsdatum)
+    Reproduziert die Access-Formel:
+        ="O-" & Format([AngebotNummer];"000") & Format([Datum];"-mm/jj")
 
-    Die Nummerierung ist primaer nach AuftragsID sortiert.
-    Der Monat/Jahr-Teil der Nummer ergibt sich aus der Datum-Spalte.
-    Das Jahr fuer den Zaehler wird ebenfalls aus der Datum-Spalte abgeleitet.
+    - XXX: AngebotNummer aus der SQL-Auftraege-Tabelle (kein eigener Zaehler)
+    - MM/YY: Monat/Jahr aus der Datum-Spalte (Bestaetigungsdatum)
     """
-    def get_date_for_row(row):
-        """Bestaetigungsdatum aus Datum-Spalte fuer MM/YY-Teil."""
-        d = _parse_date(row.get('Datum'))
-        if not d:
-            d = _parse_date(row.get('Auftragsdatum'))
-        if not d:
+    order_numbers = {}
+
+    for row in auftraege:
+        auftrags_id = row.get('AuftragsID')
+        if not auftrags_id:
+            continue
+
+        angebot_nr = _safe_int(row.get('AngebotNummer'))
+        if not angebot_nr:
+            continue
+
+        # Datum-Spalte fuer MM/YY-Teil
+        confirmation_date = _parse_date(row.get('Datum'))
+        if not confirmation_date:
+            confirmation_date = _parse_date(row.get('Auftragsdatum'))
+        if not confirmation_date:
             jahr = _safe_int(row.get('Jahr'))
             if jahr:
-                d = datetime(jahr, 1, 1).date()
-        if not d:
-            d = datetime(1990, 1, 1).date()
-        return d
+                confirmation_date = datetime(jahr, 1, 1).date()
+        if not confirmation_date:
+            confirmation_date = datetime(1990, 1, 1).date()
 
-    # Primaer nach AuftragsID sortieren
-    sorted_orders = sorted(auftraege, key=lambda row: _safe_int(row.get('AuftragsID'), 0))
+        yy = str(confirmation_date.year)[-2:]
+        mm = f'{confirmation_date.month:02d}'
 
-    # Zaehler pro Kalenderjahr
-    year_counters = defaultdict(int)
-    order_numbers = {}  # AuftragsID -> order_number
-
-    for row in sorted_orders:
-        auftrags_id = row.get('AuftragsID')
-        confirmation_date = get_date_for_row(row)
-        year = confirmation_date.year
-        month = confirmation_date.month
-
-        # Zaehler hochzaehlen
-        year_counters[year] += 1
-        counter = 100 + year_counters[year]  # Startet bei 101
-
-        # 2-stelliges Jahr
-        yy = str(year)[-2:]
-        mm = f'{month:02d}'
-
-        # Legacy-Format mit Schraegstrich
-        order_number = f'O-{counter:03d}-{mm}/{yy}'
+        order_number = f'O-{angebot_nr:03d}-{mm}/{yy}'
 
         order_numbers[auftrags_id] = {
             'order_number': order_number,
             'order_date': confirmation_date,
-            'sequence': year_counters[year],
+            'sequence': angebot_nr,
         }
 
     return order_numbers
@@ -344,49 +332,43 @@ def generate_legacy_order_numbers(auftraege):
 
 def _generate_legacy_order_numbers_old_logic(auftraege):
     """
-    Generiert Auftragsnummern nach der ALTEN Logik (vor der Korrektur):
-    Sortierung und Monat/Jahr basierend auf 'Auftragsdatum' statt 'Datum'.
+    Generiert Auftragsnummern nach der ALTEN Import-Logik:
+    AngebotNummer (direkt) + Auftragsdatum fuer MM/YY.
 
-    Wird nur fuer den Backfill benoetigt, um alte Auftraege zuzuordnen die
-    mit der falschen Logik importiert wurden.
+    Wird nur fuer den Backfill benoetigt, um Auftraege zuzuordnen die
+    mit der alten (Auftragsdatum-basierten) Logik importiert wurden.
     """
-    def get_sort_key(row):
-        # Alte Logik: Primaer Auftragsdatum
-        d = _parse_date(row.get('Auftragsdatum'))
-        if not d:
-            d = _parse_date(row.get('Datum'))
-        if not d:
-            jahr = _safe_int(row.get('Jahr'))
-            if jahr:
-                d = datetime(jahr, 1, 1).date()
-        if not d:
-            d = datetime(1990, 1, 1).date()
-        auftrags_id = _safe_int(row.get('AuftragsID'), 0)
-        return (d, auftrags_id)
-
-    sorted_orders = sorted(auftraege, key=get_sort_key)
-
-    year_counters = defaultdict(int)
     order_numbers = {}
 
-    for row in sorted_orders:
+    for row in auftraege:
         auftrags_id = row.get('AuftragsID')
-        order_date = get_sort_key(row)[0]
-        year = order_date.year
-        month = order_date.month
+        if not auftrags_id:
+            continue
 
-        year_counters[year] += 1
-        counter = 100 + year_counters[year]
+        angebot_nr = _safe_int(row.get('AngebotNummer'))
+        if not angebot_nr:
+            continue
 
-        yy = str(year)[-2:]
-        mm = f'{month:02d}'
+        # Alte Logik: Auftragsdatum statt Datum fuer MM/YY
+        order_date = _parse_date(row.get('Auftragsdatum'))
+        if not order_date:
+            order_date = _parse_date(row.get('Datum'))
+        if not order_date:
+            jahr = _safe_int(row.get('Jahr'))
+            if jahr:
+                order_date = datetime(jahr, 1, 1).date()
+        if not order_date:
+            order_date = datetime(1990, 1, 1).date()
 
-        order_number = f'O-{counter:03d}-{mm}/{yy}'
+        yy = str(order_date.year)[-2:]
+        mm = f'{order_date.month:02d}'
+
+        order_number = f'O-{angebot_nr:03d}-{mm}/{yy}'
 
         order_numbers[auftrags_id] = {
             'order_number': order_number,
             'order_date': order_date,
-            'sequence': year_counters[year],
+            'sequence': angebot_nr,
         }
 
     return order_numbers
