@@ -41,26 +41,12 @@ const OrderImport = () => {
   // Confirmation
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
-  // Neuzuordnung
-  const [reassignPreviewResult, setReassignPreviewResult] = useState(null);
-  const [reassignResult, setReassignResult] = useState(null);
-  const [loadingReassignPreview, setLoadingReassignPreview] = useState(false);
-  const [reassigning, setReassigning] = useState(false);
-  const [showReassignConfirmDialog, setShowReassignConfirmDialog] = useState(false);
-
   // Nummernkorrektur
   const [renumberPreviewResult, setRenumberPreviewResult] = useState(null);
   const [renumberResult, setRenumberResult] = useState(null);
   const [loadingRenumberPreview, setLoadingRenumberPreview] = useState(false);
   const [renumbering, setRenumbering] = useState(false);
   const [showRenumberConfirmDialog, setShowRenumberConfirmDialog] = useState(false);
-
-  // Duplikat-Bereinigung
-  const [cleanupPreviewResult, setCleanupPreviewResult] = useState(null);
-  const [cleanupResult, setCleanupResult] = useState(null);
-  const [loadingCleanupPreview, setLoadingCleanupPreview] = useState(false);
-  const [cleaningUp, setCleaningUp] = useState(false);
-  const [showCleanupConfirmDialog, setShowCleanupConfirmDialog] = useState(false);
 
   const loadImportStatus = useCallback(async () => {
     try {
@@ -139,45 +125,6 @@ const OrderImport = () => {
     }
   };
 
-  const handleReassignPreview = async () => {
-    try {
-      setLoadingReassignPreview(true);
-      setReassignPreviewResult(null);
-      const response = await api.post('/settings/order-import/reassign/', {
-        ...getConnectionParams(),
-        backfill: true,
-        dry_run: true,
-      }, { timeout: 300000 });
-      setReassignPreviewResult(response.data);
-    } catch (error) {
-      setReassignPreviewResult({
-        error: error.response?.data?.error || error.message || 'Vorschau fehlgeschlagen',
-      });
-    } finally {
-      setLoadingReassignPreview(false);
-    }
-  };
-
-  const handleReassign = async () => {
-    try {
-      setReassigning(true);
-      setReassignResult(null);
-      setShowReassignConfirmDialog(false);
-      const response = await api.post('/settings/order-import/reassign/', {
-        ...getConnectionParams(),
-        backfill: true,
-        dry_run: false,
-      }, { timeout: 300000 });
-      setReassignResult(response.data);
-    } catch (error) {
-      setReassignResult({
-        error: error.response?.data?.error || error.message || 'Neuzuordnung fehlgeschlagen',
-      });
-    } finally {
-      setReassigning(false);
-    }
-  };
-
   const handleRenumberPreview = async () => {
     try {
       setLoadingRenumberPreview(true);
@@ -212,45 +159,6 @@ const OrderImport = () => {
       });
     } finally {
       setRenumbering(false);
-    }
-  };
-
-  const handleCleanupPreview = async () => {
-    try {
-      setLoadingCleanupPreview(true);
-      setCleanupPreviewResult(null);
-      const response = await api.post('/settings/order-import/cleanup-duplicates/', {
-        ...getConnectionParams(),
-        dry_run: true,
-      }, { timeout: 300000 });
-      setCleanupPreviewResult(response.data);
-    } catch (error) {
-      setCleanupPreviewResult({
-        error: error.response?.data?.error || error.message || 'Vorschau fehlgeschlagen',
-      });
-    } finally {
-      setLoadingCleanupPreview(false);
-    }
-  };
-
-  const handleCleanup = async () => {
-    try {
-      setCleaningUp(true);
-      setCleanupResult(null);
-      setShowCleanupConfirmDialog(false);
-      const response = await api.post('/settings/order-import/cleanup-duplicates/', {
-        ...getConnectionParams(),
-        dry_run: false,
-      }, { timeout: 300000 });
-      setCleanupResult(response.data);
-      // Status aktualisieren
-      loadImportStatus();
-    } catch (error) {
-      setCleanupResult({
-        error: error.response?.data?.error || error.message || 'Bereinigung fehlgeschlagen',
-      });
-    } finally {
-      setCleaningUp(false);
     }
   };
 
@@ -718,151 +626,6 @@ const OrderImport = () => {
         )}
       </div>
 
-      {/* Neuzuordnung */}
-      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-orange-800 mb-2 flex items-center gap-2">
-          <ArrowPathIcon className="h-5 w-5" />
-          Legacy-Aufträge neu zuordnen
-        </h3>
-        <p className="text-sm text-orange-700 mb-4">
-          Füllt zuerst die fehlenden AdressenIDs aus der SQL-Datenbank nach,
-          dann prüft es alle Legacy-Aufträge und ordnet sie anhand der CustomerLegacyMapping-Einträge
-          dem korrekten Kunden zu. Nützlich nachdem veraltete Adressen importiert wurden.
-        </p>
-
-        <div className="flex gap-3 mb-4">
-          <button
-            onClick={handleReassignPreview}
-            disabled={loadingReassignPreview}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-800 rounded-lg hover:bg-orange-200 disabled:opacity-50 text-sm font-medium"
-          >
-            <EyeIcon className="h-4 w-4" />
-            {loadingReassignPreview ? 'Prüfe...' : 'Vorschau (Dry-Run)'}
-          </button>
-          <button
-            onClick={() => setShowReassignConfirmDialog(true)}
-            disabled={reassigning || !reassignPreviewResult || reassignPreviewResult.error}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 text-sm font-medium"
-          >
-            <PlayIcon className="h-4 w-4" />
-            {reassigning ? 'Ordne zu...' : 'Neuzuordnung ausführen'}
-          </button>
-        </div>
-
-        {/* Bestätigungsdialog */}
-        {showReassignConfirmDialog && (
-          <div className="mb-4 bg-orange-100 border border-orange-300 rounded-lg p-4">
-            <p className="text-sm font-medium text-orange-900 mb-3">
-              Sollen die Legacy-Aufträge wirklich neu zugeordnet werden?
-              {reassignPreviewResult?.stats && (
-                <span className="block mt-1">
-                  {reassignPreviewResult.stats.reassigned || 0} Aufträge werden neu zugeordnet,{' '}
-                  {reassignPreviewResult.stats.newly_assigned || 0} erhalten erstmals einen Kunden.
-                </span>
-              )}
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={handleReassign}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium"
-              >
-                Ja, zuordnen
-              </button>
-              <button
-                onClick={() => setShowReassignConfirmDialog(false)}
-                className="px-4 py-2 bg-white text-orange-800 border border-orange-300 rounded-lg hover:bg-orange-50 text-sm font-medium"
-              >
-                Abbrechen
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Vorschau-Ergebnis */}
-        {reassignPreviewResult && !reassignPreviewResult.error && (
-          <div className="mb-4">
-            {reassignPreviewResult.backfill_stats && (
-              <div className="mb-2 text-sm text-orange-600">
-                Backfill: <strong>{reassignPreviewResult.backfill_stats.filled || 0}</strong> AdressenIDs nachgetragen
-                (von {reassignPreviewResult.backfill_stats.total_missing || 0} fehlenden)
-              </div>
-            )}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm text-orange-700 mb-3">
-              <div>Geprüft: <strong>{reassignPreviewResult.stats?.total_checked || 0}</strong></div>
-              <div>Korrekt: <strong>{reassignPreviewResult.stats?.already_correct || 0}</strong></div>
-              <div>Neu zuordnen: <strong>{reassignPreviewResult.stats?.reassigned || 0}</strong></div>
-              <div>Erstmals zuordnen: <strong>{reassignPreviewResult.stats?.newly_assigned || 0}</strong></div>
-              <div>Kein Mapping: <strong>{reassignPreviewResult.stats?.no_mapping || 0}</strong></div>
-            </div>
-            {reassignPreviewResult.details && reassignPreviewResult.details.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs border border-orange-200">
-                  <thead className="bg-orange-100">
-                    <tr>
-                      <th className="px-2 py-1 text-left">Auftrag</th>
-                      <th className="px-2 py-1 text-left">Aktion</th>
-                      <th className="px-2 py-1 text-left">Alter Kunde</th>
-                      <th className="px-2 py-1 text-left">Neuer Kunde</th>
-                      <th className="px-2 py-1 text-left">Legacy-Name</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reassignPreviewResult.details.map((d, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-orange-50'}>
-                        <td className="px-2 py-1 font-mono">{d.order_number}</td>
-                        <td className="px-2 py-1">
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                            d.action === 'reassign' ? 'bg-orange-200 text-orange-800' : 'bg-green-200 text-green-800'
-                          }`}>
-                            {d.action === 'reassign' ? 'Neu zuordnen' : 'Erstmals zuordnen'}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1">{d.old_customer || '—'}</td>
-                        <td className="px-2 py-1">{d.new_customer}</td>
-                        <td className="px-2 py-1">{d.legacy_name}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {reassignPreviewResult?.error && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-sm text-red-700">{reassignPreviewResult.error}</p>
-          </div>
-        )}
-
-        {/* Ergebnis */}
-        {reassignResult && !reassignResult.error && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-green-800 font-medium text-sm">
-              <CheckCircleIcon className="h-5 w-5" />
-              Neuzuordnung abgeschlossen
-            </div>
-            {reassignResult.backfill_stats && (
-              <div className="mt-2 text-sm text-green-600">
-                Backfill: <strong>{reassignResult.backfill_stats.filled || 0}</strong> AdressenIDs nachgetragen
-              </div>
-            )}
-            <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm text-green-700">
-              <div>Geprüft: <strong>{reassignResult.stats?.total_checked || 0}</strong></div>
-              <div>Korrekt: <strong>{reassignResult.stats?.already_correct || 0}</strong></div>
-              <div>Neu zugeordnet: <strong>{reassignResult.stats?.reassigned || 0}</strong></div>
-              <div>Erstmals zugeordnet: <strong>{reassignResult.stats?.newly_assigned || 0}</strong></div>
-            </div>
-          </div>
-        )}
-
-        {reassignResult?.error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-sm text-red-700">{reassignResult.error}</p>
-          </div>
-        )}
-      </div>
-
       {/* Nummernkorrektur */}
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h3 className="text-lg font-semibold text-purple-800 mb-2 flex items-center gap-2">
@@ -870,10 +633,10 @@ const OrderImport = () => {
           Auftragsnummern korrigieren
         </h3>
         <p className="text-sm text-purple-700 mb-4">
-          Überprüft alle Legacy-Auftragsnummern auf Duplikate und korrigiert sie.
-          Die korrekte Nummer wird deterministisch aus der SQL-Datenbank generiert
-          (Sortierung nach Bestätigungsdatum + AuftragsID, fortlaufend ab 101 pro Jahr).
-          Setzt automatisch die legacy_auftrags_id für die eindeutige Zuordnung.
+          Korrigiert alle Legacy-Auftragsnummern, Bestätigungsdaten und Kundenzuordnungen.
+          Die Nummer wird direkt aus der SQL-Spalte <strong>AngebotNummer</strong> + Datum gelesen
+          (Access-Formel: O-[AngebotNummer]-MM/YY). Führt vorher automatisch den Backfill
+          der legacy_auftrags_id durch.
         </p>
 
         <div className="flex gap-3 mb-4">
@@ -1049,127 +812,6 @@ const OrderImport = () => {
         )}
       </div>
 
-      {/* Duplikat-Bereinigung */}
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-red-800 mb-2 flex items-center gap-2">
-          <XCircleIcon className="h-5 w-5" />
-          Fehlerhafte Import-Aufträge bereinigen
-        </h3>
-        <p className="text-sm text-red-700 mb-4">
-          Löscht alle Legacy-Aufträge ohne SQL-AuftragsID. Nach dem Backfill haben alle
-          echten Aufträge eine AuftragsID. Aufträge ohne ID sind fehlerhafte Import-Artefakte
-          (falsche Kunden-Zuordnung, doppelte Imports etc.) und haben kein SQL-Pendant.
-          Positionen werden mit gelöscht.
-        </p>
-
-        <div className="flex gap-3 mb-4">
-          <button
-            onClick={handleCleanupPreview}
-            disabled={loadingCleanupPreview}
-            className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 disabled:opacity-50 text-sm font-medium"
-          >
-            <EyeIcon className="h-4 w-4" />
-            {loadingCleanupPreview ? 'Prüfe...' : 'Vorschau (Dry-Run)'}
-          </button>
-          <button
-            onClick={() => setShowCleanupConfirmDialog(true)}
-            disabled={cleaningUp || !cleanupPreviewResult || cleanupPreviewResult.error || (cleanupPreviewResult.to_delete || 0) === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm font-medium"
-          >
-            <XCircleIcon className="h-4 w-4" />
-            {cleaningUp ? 'Lösche...' : 'Fehlerhafte Aufträge löschen'}
-          </button>
-        </div>
-
-        {/* Bestätigungsdialog */}
-        {showCleanupConfirmDialog && (
-          <div className="mb-4 bg-red-100 border border-red-300 rounded-lg p-4">
-            <p className="text-sm font-medium text-red-900 mb-3">
-              Sollen wirklich <strong>{cleanupPreviewResult?.to_delete || 0}</strong> fehlerhafte
-              Aufträge unwiderruflich gelöscht werden? Positionen werden ebenfalls gelöscht.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={handleCleanup}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-              >
-                Ja, löschen
-              </button>
-              <button
-                onClick={() => setShowCleanupConfirmDialog(false)}
-                className="px-4 py-2 bg-white text-red-800 border border-red-300 rounded-lg hover:bg-red-50 text-sm font-medium"
-              >
-                Abbrechen
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Vorschau */}
-        {cleanupPreviewResult && !cleanupPreviewResult.error && (
-          <div className="mb-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-red-700 mb-3">
-              <div>Echte Aufträge (mit AuftragsID): <strong>{cleanupPreviewResult.matched_orders || 0}</strong></div>
-              <div>Ohne AuftragsID: <strong>{cleanupPreviewResult.total_orphans || 0}</strong></div>
-              <div className="text-red-900 font-semibold">Zu löschen: <strong>{cleanupPreviewResult.to_delete || 0}</strong></div>
-            </div>
-            {cleanupPreviewResult.details && cleanupPreviewResult.details.length > 0 && (
-              <details>
-                <summary className="text-sm text-red-700 cursor-pointer font-medium mb-2">
-                  {cleanupPreviewResult.details.length} zu löschende Aufträge anzeigen
-                </summary>
-                <div className="overflow-x-auto max-h-96 overflow-y-auto">
-                  <table className="min-w-full text-xs border border-red-200">
-                    <thead className="bg-red-100 sticky top-0">
-                      <tr>
-                        <th className="px-2 py-1 text-left">Auftragsnr.</th>
-                        <th className="px-2 py-1 text-left">Kunde</th>
-                        <th className="px-2 py-1 text-left">Datum</th>
-                        <th className="px-2 py-1 text-left">System</th>
-                        <th className="px-2 py-1 text-left">Pos.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cleanupPreviewResult.details.map((d, idx) => (
-                        <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-red-50'}>
-                          <td className="px-2 py-1 font-mono">{d.order_number}</td>
-                          <td className="px-2 py-1">{d.customer}</td>
-                          <td className="px-2 py-1">{d.date}</td>
-                          <td className="px-2 py-1">{d.system_reference}</td>
-                          <td className="px-2 py-1 text-center">{d.positions}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-            )}
-          </div>
-        )}
-
-        {cleanupPreviewResult?.error && (
-          <div className="mb-4 bg-red-100 border border-red-300 rounded-lg p-3">
-            <p className="text-sm text-red-800">{cleanupPreviewResult.error}</p>
-          </div>
-        )}
-
-        {/* Ergebnis */}
-        {cleanupResult && !cleanupResult.error && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-green-800 font-medium text-sm">
-              <CheckCircleIcon className="h-5 w-5" />
-              {cleanupResult.deleted || 0} fehlerhafte Aufträge gelöscht
-            </div>
-          </div>
-        )}
-
-        {cleanupResult?.error && (
-          <div className="bg-red-100 border border-red-300 rounded-lg p-3">
-            <p className="text-sm text-red-800">{cleanupResult.error}</p>
-          </div>
-        )}
-      </div>
-
       {/* Info-Box */}
       <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
         <div className="flex items-start gap-2">
@@ -1178,7 +820,7 @@ const OrderImport = () => {
             <p className="font-medium mb-2">Wie funktioniert der Import?</p>
             <ul className="space-y-1 text-teal-700">
               <li>• Aufträge werden aus den SQL-Tabellen "Aufträge", "AuftragsPositionen", "Angebote" und "Adressen" gelesen</li>
-              <li>• Die Auftragsnummer wird generiert: <strong>O-XXX-MM/YY</strong> (fortlaufend pro Kalenderjahr, Start bei 101)</li>
+              <li>• Die Auftragsnummer wird aus der SQL-Spalte <strong>AngebotNummer</strong> + Datum gebildet: <strong>O-[AngebotNummer]-MM/YY</strong> (entspricht der Access-Formel)</li>
               <li>• Kunden werden über die Legacy-ID (AdressenID) aus der Kundensynchronisation verknüpft</li>
               <li>• <strong>Voraussetzung:</strong> Kundendaten-Synchronisation sollte vorher durchgeführt worden sein</li>
               <li>• Angebote mit mehreren Versionen: Nur die zum Auftrag gehörende Version wird berücksichtigt</li>

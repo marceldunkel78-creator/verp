@@ -15,7 +15,7 @@ from .customer_sync_views import (
 from .order_import_views import (
     OrderImportStatusView, OrderImportTestConnectionView,
     OrderImportPreviewView, OrderImportExecuteView,
-    OrderReassignView, OrderRenumberView, OrderCleanupDuplicatesView
+    OrderRenumberView
 )
 from .redmine_sync_views import (
     RedmineSyncStatusView, RedmineSyncTestConnectionView,
@@ -57,9 +57,7 @@ urlpatterns = [
     path('order-import/test-connection/', OrderImportTestConnectionView.as_view(), name='order-import-test'),
     path('order-import/preview/', OrderImportPreviewView.as_view(), name='order-import-preview'),
     path('order-import/execute/', OrderImportExecuteView.as_view(), name='order-import-execute'),
-    path('order-import/reassign/', OrderReassignView.as_view(), name='order-import-reassign'),
     path('order-import/renumber/', OrderRenumberView.as_view(), name='order-import-renumber'),
-    path('order-import/cleanup-duplicates/', OrderCleanupDuplicatesView.as_view(), name='order-import-cleanup-duplicates'),
     # Redmine Ticket-Sync
     path('redmine-sync/status/', RedmineSyncStatusView.as_view(), name='redmine-sync-status'),
     path('redmine-sync/test-connection/', RedmineSyncTestConnectionView.as_view(), name='redmine-sync-test'),
