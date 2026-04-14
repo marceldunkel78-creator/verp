@@ -9,7 +9,8 @@ import {
   MegaphoneIcon,
   ComputerDesktopIcon,
   BuildingStorefrontIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  CircleStackIcon
 } from '@heroicons/react/24/outline';
 
 // Helper für Berechtigungsprüfung
@@ -112,6 +113,15 @@ const SalesOrderManagement = () => {
       color: 'emerald',
       disabled: false,
       permission: 'can_read_sales_travel_reports',
+    },
+    {
+      name: 'SQL-Angebote',
+      description: 'Legacy-Angebote aus SQL Server (read-only)',
+      icon: CircleStackIcon,
+      path: '/sales/sql-angebote',
+      color: 'orange',
+      disabled: false,
+      permission: 'can_read_sales',
     }
   ];
 

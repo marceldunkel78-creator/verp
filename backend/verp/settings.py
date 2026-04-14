@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'meetings',
     'company_calendar',
     'customer_loans',
+    'sql_angebote',
 ]
 
 MIDDLEWARE = [
