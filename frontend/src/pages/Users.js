@@ -146,6 +146,7 @@ const getInitialFormData = () => {
     position: '',
     department: '',
     employee: '',
+    sql_verkaeufer_id: '',
     is_active: true,
     myverp_visible_tabs: [], // Leer = alle Tabs sichtbar
   };
@@ -318,6 +319,7 @@ const Users = () => {
       phone: user.phone || '',
       position: user.position || '',
       department: user.department || '',
+      sql_verkaeufer_id: user.sql_verkaeufer_id || '',
       is_active: user.is_active,
       myverp_visible_tabs: user.myverp_visible_tabs || [],
     };
@@ -570,6 +572,18 @@ const Users = () => {
                         onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">SQL Verkäufer-ID</label>
+                      <input
+                        type="number"
+                        value={formData.sql_verkaeufer_id}
+                        onChange={(e) => setFormData({ ...formData, sql_verkaeufer_id: e.target.value ? parseInt(e.target.value, 10) : '' })}
+                        placeholder="z.B. 1, 2, 3..."
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">VerkäuferID aus der Legacy SQL Server Datenbank</p>
                     </div>
 
                     <div className="flex items-center">

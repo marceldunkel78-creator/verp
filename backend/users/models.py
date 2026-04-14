@@ -44,6 +44,10 @@ class User(AbstractUser):
     # Optionaler Verweis auf einen Mitarbeiter-Eintrag (HR)
     employee = models.ForeignKey('Employee', null=True, blank=True, on_delete=models.SET_NULL, related_name='users', verbose_name='Mitarbeiter')
     
+    # SQL Server Verkäufer-ID für Legacy-Angebote-Mapping
+    sql_verkaeufer_id = models.IntegerField(null=True, blank=True, verbose_name='SQL Verkäufer-ID',
+        help_text='VerkäuferID aus der Legacy SQL Server Datenbank (Mitarbeiter-Tabelle)')
+    
     # Berechtigungen für Module - Lesen
     can_read_accounting = models.BooleanField(default=False, verbose_name='Buchhaltung - Lesen')
     can_read_hr = models.BooleanField(default=False, verbose_name='HR - Lesen')

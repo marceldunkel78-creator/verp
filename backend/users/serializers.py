@@ -19,6 +19,7 @@ class UserSerializer(serializers.ModelSerializer):
             'employee_id',
             'id', 'username', 'email', 'first_name', 'last_name',
             'phone', 'position', 'department',
+            'sql_verkaeufer_id',
             # Hauptmodule - Lesen
             'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
             'can_read_customers', 'can_read_manufacturing', 'can_read_service',
@@ -78,6 +79,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'employee',
             'username', 'email', 'password', 'password_confirm',
             'first_name', 'last_name', 'phone', 'position', 'department',
+            'sql_verkaeufer_id',
             # Hauptmodule - Lesen
             'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
             'can_read_customers', 'can_read_manufacturing', 'can_read_service',
@@ -137,6 +139,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'employee',
             'email', 'first_name', 'last_name', 'phone', 'position', 'department',
+            'sql_verkaeufer_id',
             # Hauptmodule - Lesen
             'can_read_accounting', 'can_read_hr', 'can_read_suppliers',
             'can_read_customers', 'can_read_manufacturing', 'can_read_service',
