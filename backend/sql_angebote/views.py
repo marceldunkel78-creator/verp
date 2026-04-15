@@ -14,6 +14,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 
 from verp_settings.customer_sync import get_mssql_connection
+from customers.models import CustomerLegacyMapping
+from customer_orders.models import CustomerOrder
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,182 @@ def _fetch_dict(cursor):
     """Wandelt cursor.fetchall() in eine Liste von Dicts um."""
     columns = [desc[0] for desc in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def _get_verp_customer_map(adressen_ids):
+    """
+    Gibt ein Dict {sql_adressen_id: {'customer_id': ..., 'customer_number': ...}} zurück
+    für alle bekannten Legacy-Mappings.
+    """
+    if not adressen_ids:
+        return {}
+    mappings = CustomerLegacyMapping.objects.filter(
+        sql_id__in=adressen_ids
+    ).select_related('customer').values_list('sql_id', 'customer__id', 'customer__customer_number')
+    return {
+        sql_id: {'customer_id': cid, 'customer_number': cnum}
+        for sql_id, cid, cnum in mappings
+    }
+
+
+def _get_verp_order_for_angebot(conn, angebot_id):
+    """
+    Sucht in der SQL-Aufträge-Tabelle nach einem Auftrag mit ReferenzID = angebot_id.
+    Generiert daraus die Legacy-Auftragsnummer und sucht den VERP CustomerOrder.
+    Gibt {'order_id': ..., 'order_number': ...} oder None zurück.
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT [AuftragsID], [AngebotNummer], [Jahr], [Datum] "
+            "FROM [Aufträge] WHERE [ReferenzID] = ?",
+            (int(angebot_id),)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        auftrags_id = row[0]
+        angebot_nr = _parse_int(row[1])
+        jahr = _parse_int(row[2])
+        datum = row[3]
+
+        if not angebot_nr:
+            return None
+
+        # Erst direkt über legacy_auftrags_id suchen
+        co = CustomerOrder.objects.filter(legacy_auftrags_id=auftrags_id).values('id', 'order_number').first()
+        if co:
+            return {'order_id': co['id'], 'order_number': co['order_number']}
+
+        # Fallback: Auftragsnummer rekonstruieren (O-XXX-MM/YY)
+        if datum:
+            try:
+                from datetime import datetime as dt
+                if isinstance(datum, str):
+                    for fmt in ('%d.%m.%Y', '%Y-%m-%d'):
+                        try:
+                            datum = dt.strptime(datum.strip(), fmt)
+                            break
+                        except ValueError:
+                            continue
+                if hasattr(datum, 'month'):
+                    mm = f'{datum.month:02d}'
+                    yy = str(datum.year)[-2:]
+                else:
+                    mm = '01'
+                    yy = str(jahr)[-2:] if jahr else '00'
+            except Exception:
+                mm = '01'
+                yy = str(jahr)[-2:] if jahr else '00'
+        elif jahr:
+            mm = '01'
+            yy = str(jahr)[-2:]
+        else:
+            return None
+
+        order_number = f'O-{angebot_nr:03d}-{mm}/{yy}'
+        co = CustomerOrder.objects.filter(order_number=order_number).values('id', 'order_number').first()
+        if co:
+            return {'order_id': co['id'], 'order_number': co['order_number']}
+
+        return None
+    except Exception as e:
+        logger.warning(f"Fehler bei VERP-Auftragssuche für Angebot {angebot_id}: {e}")
+        return None
+
+
+def _get_verp_orders_for_angebote(conn, angebot_ids):
+    """
+    Batch-Version: Sucht für mehrere Angebot-IDs die zugehörigen VERP-Aufträge.
+    Gibt Dict {angebot_id: {'order_id': ..., 'order_number': ...}} zurück.
+    """
+    if not angebot_ids:
+        return {}
+
+    result = {}
+    try:
+        cursor = conn.cursor()
+        # Batch-Query: alle Aufträge deren ReferenzID in angebot_ids liegt
+        placeholders = ','.join(['?'] * len(angebot_ids))
+        cursor.execute(
+            f"SELECT [AuftragsID], [ReferenzID], [AngebotNummer], [Jahr], [Datum] "
+            f"FROM [Aufträge] WHERE [ReferenzID] IN ({placeholders})",
+            list(angebot_ids)
+        )
+        rows = cursor.fetchall()
+
+        if not rows:
+            return {}
+
+        # Sammle alle AuftragsIDs für Batch-Lookup
+        auftrags_id_to_ref = {}
+        row_data = {}
+        for row in rows:
+            auftrags_id = row[0]
+            ref_id = row[1]
+            auftrags_id_to_ref[auftrags_id] = ref_id
+            row_data[ref_id] = {
+                'auftrags_id': auftrags_id,
+                'angebot_nr': _parse_int(row[2]),
+                'jahr': _parse_int(row[3]),
+                'datum': row[4],
+            }
+
+        # Batch-Lookup über legacy_auftrags_id
+        existing = CustomerOrder.objects.filter(
+            legacy_auftrags_id__in=list(auftrags_id_to_ref.keys())
+        ).values('id', 'order_number', 'legacy_auftrags_id')
+
+        found_auftrags_ids = set()
+        for co in existing:
+            aid = co['legacy_auftrags_id']
+            ref_id = auftrags_id_to_ref.get(aid)
+            if ref_id is not None:
+                result[ref_id] = {'order_id': co['id'], 'order_number': co['order_number']}
+                found_auftrags_ids.add(aid)
+
+        # Fallback für nicht gefundene: Auftragsnummer rekonstruieren
+        for ref_id, data in row_data.items():
+            if ref_id in result:
+                continue
+            angebot_nr = data['angebot_nr']
+            if not angebot_nr:
+                continue
+            datum = data['datum']
+            jahr = data['jahr']
+
+            mm, yy = '01', '00'
+            if datum:
+                try:
+                    from datetime import datetime as dt
+                    if isinstance(datum, str):
+                        for fmt in ('%d.%m.%Y', '%Y-%m-%d'):
+                            try:
+                                datum = dt.strptime(datum.strip(), fmt)
+                                break
+                            except ValueError:
+                                continue
+                    if hasattr(datum, 'month'):
+                        mm = f'{datum.month:02d}'
+                        yy = str(datum.year)[-2:]
+                    elif jahr:
+                        yy = str(jahr)[-2:]
+                except Exception:
+                    if jahr:
+                        yy = str(jahr)[-2:]
+            elif jahr:
+                yy = str(jahr)[-2:]
+
+            order_number = f'O-{angebot_nr:03d}-{mm}/{yy}'
+            co = CustomerOrder.objects.filter(order_number=order_number).values('id', 'order_number').first()
+            if co:
+                result[ref_id] = {'order_id': co['id'], 'order_number': co['order_number']}
+
+    except Exception as e:
+        logger.warning(f"Fehler bei Batch-VERP-Auftragssuche: {e}")
+
+    return result
 
 
 class AngeboteListView(APIView):
@@ -256,11 +434,31 @@ class AngeboteListView(APIView):
 
             mitarbeiter_map = _get_mitarbeiter_map(conn)
 
+            # VERP-Kunden-Mapping für alle Adressen-IDs in dieser Seite
+            adressen_ids = [_parse_int(row.get('AdressenID')) for row in rows if row.get('AdressenID')]
+            verp_customer_map = _get_verp_customer_map(adressen_ids)
+
+            # VERP-Auftrags-Mapping für Angebote mit Status "Angenommen" (5) oder "Auftrag" (6)
+            angebot_ids_for_orders = [
+                row.get('AngebotID') for row in rows
+                if _parse_int(row.get('ZustandID')) in (5, 6) and row.get('AngebotID')
+            ]
+            verp_order_map = _get_verp_orders_for_angebote(conn, angebot_ids_for_orders)
+
             results = []
             for row in rows:
                 verkaeufer_id = _parse_int(row.get('VerkäuferID'))
+                adressen_id = _parse_int(row.get('AdressenID'))
+                angebot_id = row.get('AngebotID')
+                zustand_id = _parse_int(row.get('ZustandID'))
+
+                # VERP-Kunde
+                verp_customer = verp_customer_map.get(adressen_id)
+                # VERP-Auftrag (nur bei Angenommen/Auftrag)
+                verp_order = verp_order_map.get(angebot_id) if zustand_id in (5, 6) else None
+
                 results.append({
-                    'angebot_id': row.get('AngebotID'),
+                    'angebot_id': angebot_id,
                     'angebot_nummer': row.get('AngebotNummer'),
                     'versions_nummer': row.get('VersionsNummer'),
                     'jahr': row.get('Jahr'),
@@ -282,6 +480,11 @@ class AngeboteListView(APIView):
                     'firma': row.get('Firma') or '',
                     'institut': row.get('Institut') or '',
                     'ort': row.get('Ort') or '',
+                    # VERP-Verknüpfungen
+                    'verp_customer_id': verp_customer['customer_id'] if verp_customer else None,
+                    'verp_customer_number': verp_customer['customer_number'] if verp_customer else None,
+                    'verp_order_id': verp_order['order_id'] if verp_order else None,
+                    'verp_order_number': verp_order['order_number'] if verp_order else None,
                 })
 
             return Response({
@@ -352,6 +555,16 @@ class AngebotDetailView(APIView):
             systempreis = _parse_decimal(ang.get('Systempreis'))
             mitarbeiter_map = _get_mitarbeiter_map(conn)
 
+            # VERP-Verknüpfungen
+            adressen_id = _parse_int(ang.get('AdressenID'))
+            verp_customer_map = _get_verp_customer_map([adressen_id] if adressen_id else [])
+            verp_customer = verp_customer_map.get(adressen_id)
+
+            zustand_id = _parse_int(ang.get('ZustandID'))
+            verp_order = None
+            if zustand_id in (5, 6):
+                verp_order = _get_verp_order_for_angebot(conn, angebot_id)
+
             angebot_data = {
                 'angebot_id': ang.get('AngebotID'),
                 'angebot_nummer': ang.get('AngebotNummer'),
@@ -402,6 +615,11 @@ class AngebotDetailView(APIView):
                 'plz': ang.get('PLZ') or '',
                 'ort': ang.get('Ort') or '',
                 'email': ang.get('Email') or '',
+                # VERP-Verknüpfungen
+                'verp_customer_id': verp_customer['customer_id'] if verp_customer else None,
+                'verp_customer_number': verp_customer['customer_number'] if verp_customer else None,
+                'verp_order_id': verp_order['order_id'] if verp_order else None,
+                'verp_order_number': verp_order['order_number'] if verp_order else None,
             }
 
             # Fetch Positionen

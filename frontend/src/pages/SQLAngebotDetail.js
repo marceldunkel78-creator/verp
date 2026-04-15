@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 
@@ -163,6 +163,19 @@ const SQLAngebotDetail = () => {
               <dt className="w-32 text-sm text-gray-500">AdressenID</dt>
               <dd className="text-sm text-gray-500 font-mono">{angebot.adressen_id}</dd>
             </div>
+            {angebot.verp_customer_id && (
+              <div className="flex">
+                <dt className="w-32 text-sm text-gray-500">VERP-Kunde</dt>
+                <dd className="text-sm">
+                  <Link
+                    to={`/sales/customers/${angebot.verp_customer_id}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                  >
+                    {angebot.verp_customer_number || `Kunde #${angebot.verp_customer_id}`}
+                  </Link>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
 
@@ -178,6 +191,19 @@ const SQLAngebotDetail = () => {
               <dt className="w-40 text-sm text-gray-500">Kurzbeschreibung</dt>
               <dd className="text-sm text-gray-900">{angebot.kurzbeschreibung || '-'}</dd>
             </div>
+            {angebot.verp_order_id && (
+              <div className="flex">
+                <dt className="w-40 text-sm text-gray-500">VERP-Auftrag</dt>
+                <dd className="text-sm">
+                  <Link
+                    to={`/sales/order-processing/${angebot.verp_order_id}?tab=basisinfos`}
+                    className="text-purple-600 hover:text-purple-800 hover:underline font-medium"
+                  >
+                    {angebot.verp_order_number}
+                  </Link>
+                </dd>
+              </div>
+            )}
             <div className="flex">
               <dt className="w-40 text-sm text-gray-500">Sprache</dt>
               <dd className="text-sm text-gray-900">{angebot.englisch ? 'Englisch' : 'Deutsch'}</dd>

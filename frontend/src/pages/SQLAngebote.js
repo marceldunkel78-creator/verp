@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { MagnifyingGlassIcon, FunnelIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import SortableHeader from '../components/SortableHeader';
@@ -308,9 +308,29 @@ const SQLAngebote = () => {
                         {a.firma && a.kunde_name && <div className="text-xs text-gray-500">{a.kunde_vorname ? `${a.kunde_vorname} ${a.kunde_name}` : a.kunde_name}</div>}
                         {a.institut && <div className="text-xs text-gray-400">{a.institut}</div>}
                         {a.ort && <div className="text-xs text-gray-400">{a.ort}</div>}
+                        {a.verp_customer_id && (
+                          <Link
+                            to={`/sales/customers/${a.verp_customer_id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            → {a.verp_customer_number}
+                          </Link>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500 max-w-[250px] truncate">
                         {a.kurzbeschreibung}
+                        {a.verp_order_id && (
+                          <div>
+                            <Link
+                              to={`/sales/order-processing/${a.verp_order_id}?tab=basisinfos`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-purple-600 hover:text-purple-800 hover:underline"
+                            >
+                              → {a.verp_order_number}
+                            </Link>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{a.verkaeufer_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-mono">
