@@ -19,7 +19,7 @@ from customer_orders.models import CustomerOrder
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SERVER = r'localhost\SQLEXPRESS,1433'
+DEFAULT_SERVER = r'localhost\SQLEXPRESS'
 DEFAULT_DATABASE = 'VSDB'
 
 # Cache fuer Mitarbeiter-Daten aus SQL Server

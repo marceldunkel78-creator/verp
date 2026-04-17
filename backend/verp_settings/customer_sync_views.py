@@ -15,7 +15,7 @@ from .customer_sync import (
 logger = logging.getLogger(__name__)
 
 # Standard-Verbindungsparameter
-DEFAULT_SERVER = r'localhost\SQLEXPRESS,1433'
+DEFAULT_SERVER = r'localhost\SQLEXPRESS'
 DEFAULT_DATABASE = 'VSDB'
 DEFAULT_DSN = 'VSDB'
 

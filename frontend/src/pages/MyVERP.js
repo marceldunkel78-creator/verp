@@ -2471,6 +2471,8 @@ const PersonalDashboardTab = () => {
     { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Sales / Orders', permission: 'can_read_sales_marketing' },
     { id: 'sales-tickets', name: 'Vertriebs-Tickets', route: '/sales/tickets', icon: '🎫', category: 'Sales / Orders', permission: 'can_read_sales_tickets' },
     { id: 'travel-reports', name: 'Reise-/Serviceberichte', route: '/sales/travel-reports', icon: '📝', category: 'Sales / Orders', permission: 'can_read_sales_travel_reports' },
+    { id: 'sql-projekte', name: 'SQL-Projekte', route: '/sales/sql-projekte', icon: '🗂️', category: 'Sales / Orders', permission: 'can_read_sales_sql_projekte' },
+    { id: 'sql-angebote', name: 'SQL-Angebote', route: '/sales/sql-angebote', icon: '📊', category: 'Sales / Orders', permission: 'can_read_sales' },
     
     // HR
     { id: 'hr', name: 'HR', route: '/hr', icon: '👥', category: 'HR', permission: 'can_read_hr' },

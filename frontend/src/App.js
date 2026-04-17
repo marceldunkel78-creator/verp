@@ -96,6 +96,8 @@ import TravelReportList from './pages/TravelReportList';
 import TravelReportEdit from './pages/TravelReportEdit';
 import SQLAngebote from './pages/SQLAngebote';
 import SQLAngebotDetail from './pages/SQLAngebotDetail';
+import SQLProjekte from './pages/SQLProjekte';
+import SQLProjektDetail from './pages/SQLProjektDetail';
 
 // Import Main Modules
 import Finance from './pages/modules/Finance';
@@ -245,6 +247,8 @@ function App() {
             <Route path="sales/travel-reports/:id" element={<TravelReportEdit />} />
             <Route path="sales/sql-angebote" element={<SQLAngebote />} />
             <Route path="sales/sql-angebote/:id" element={<SQLAngebotDetail />} />
+            <Route path="sales/sql-projekte" element={<SQLProjekte />} />
+            <Route path="sales/sql-projekte/:id" element={<SQLProjektDetail />} />
             
             {/* Settings Submodules */}
             <Route path="settings/users" element={<Users />} />

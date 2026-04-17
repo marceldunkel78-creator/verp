@@ -115,13 +115,22 @@ const SalesOrderManagement = () => {
       permission: 'can_read_sales_travel_reports',
     },
     {
+      name: 'SQL-Projekte',
+      description: 'Interessen/Projekte aus SQL Server',
+      icon: CircleStackIcon,
+      path: '/sales/sql-projekte',
+      color: 'rose',
+      disabled: false,
+      permission: 'can_read_sales_sql_projekte',
+    },
+    {
       name: 'SQL-Angebote',
       description: 'Legacy-Angebote aus SQL Server (read-only)',
       icon: CircleStackIcon,
       path: '/sales/sql-angebote',
       color: 'orange',
       disabled: false,
-      permission: 'can_read_sales',
+      permission: 'can_read_sales_sql_angebote',
     }
   ];
 
@@ -140,6 +149,7 @@ const SalesOrderManagement = () => {
     pink: { bg: 'bg-pink-100', text: 'text-pink-600' },
     cyan: { bg: 'bg-cyan-100', text: 'text-cyan-600' },
     emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600' },
+    rose: { bg: 'bg-rose-100', text: 'text-rose-600' },
   };
 
   return (

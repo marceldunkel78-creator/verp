@@ -59,6 +59,8 @@ const MODULE_HIERARCHY = [
       { key: 'sales_marketing', label: 'Marketing' },
       { key: 'sales_tickets', label: 'Tickets' },
       { key: 'sales_travel_reports', label: 'Reise-/Serviceberichte' },
+      { key: 'sales_sql_projekte', label: 'SQL-Projekte' },
+      { key: 'sales_sql_angebote', label: 'SQL-Angebote' },
     ]
   },
   {
@@ -210,6 +212,10 @@ const Users = () => {
     try {
       if (editingUser) {
         const { password, password_confirm, ...updateData } = formData;
+        // sql_verkaeufer_id: leeren String als null senden
+        if (updateData.sql_verkaeufer_id === '' || updateData.sql_verkaeufer_id === undefined) {
+          updateData.sql_verkaeufer_id = null;
+        }
         if (password || password_confirm) {
           if (password !== password_confirm) {
             alert('Passwörter stimmen nicht überein');
@@ -224,7 +230,11 @@ const Users = () => {
           alert('Passwörter stimmen nicht überein');
           return;
         }
-        await api.post('/users/', formData);
+        const createData = { ...formData };
+        if (createData.sql_verkaeufer_id === '' || createData.sql_verkaeufer_id === undefined) {
+          createData.sql_verkaeufer_id = null;
+        }
+        await api.post('/users/', createData);
       }
       setShowModal(false);
       resetForm();

@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/calendar/', include('company_calendar.urls')),
     path('api/customer-loans/', include('customer_loans.urls')),
     path('api/sql-angebote/', include('sql_angebote.urls')),
+    path('api/sql-projekte/', include('sql_projekte.urls')),
 ]
 
 if settings.DEBUG:

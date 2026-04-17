@@ -22,7 +22,7 @@ from .order_import import (
 logger = logging.getLogger(__name__)
 
 # Standard-Verbindungsparameter (gleich wie customer_sync)
-DEFAULT_SERVER = r'localhost\SQLEXPRESS,1433'
+DEFAULT_SERVER = r'localhost\SQLEXPRESS'
 DEFAULT_DATABASE = 'VSDB'
 DEFAULT_DSN = 'VSDB'
 

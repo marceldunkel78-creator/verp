@@ -29,6 +29,19 @@ const BusinessIntelligence = () => {
   // Tab 3: Payments State
   const [paymentsData, setPaymentsData] = useState(null);
 
+  // Tab 4: SQL-Forecast State
+  const [sqlForecastData, setSqlForecastData] = useState(null);
+  const [sqlForecastLookups, setSqlForecastLookups] = useState(null);
+  const [sqlForecastFilters, setSqlForecastFilters] = useState({
+    datum_von: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0],
+    datum_bis: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+    min_wahrscheinlichkeit: 0,
+    verkaeufer: '',
+    prioritaet: [],
+    include_angebote: false,
+    angebote_zustand: [],
+  });
+
   // Filter Options State
   const [availableSuppliers, setAvailableSuppliers] = useState([]);
   const [availableProductCategories, setAvailableProductCategories] = useState([]);
@@ -74,6 +87,7 @@ const BusinessIntelligence = () => {
   const tabs = [
     { id: 'statistics', label: '📊 Statistiken', icon: '📊' },
     { id: 'forecast', label: '📈 Forecast', icon: '📈' },
+    { id: 'sql-forecast', label: '🗄️ SQL-Forecast', icon: '🗄️' },
     { id: 'payments', label: '💰 Zahlungseingänge', icon: '💰' }
   ];
 
@@ -100,6 +114,8 @@ const BusinessIntelligence = () => {
       fetchStatisticsData();
     } else if (activeTab === 'forecast') {
       fetchForecastData();
+    } else if (activeTab === 'sql-forecast') {
+      fetchSqlForecastData();
     } else if (activeTab === 'payments') {
       fetchPaymentsData();
     }
@@ -179,6 +195,42 @@ const BusinessIntelligence = () => {
     } catch (err) {
       console.error('Error fetching payments:', err);
       setError('Fehler beim Laden der Zahlungseingänge');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSqlForecastLookups = async () => {
+    if (sqlForecastLookups) return;
+    try {
+      const res = await api.get('/sql-projekte/lookups/');
+      setSqlForecastLookups(res.data);
+    } catch (err) {
+      console.error('Error fetching SQL lookups:', err);
+    }
+  };
+
+  const fetchSqlForecastData = async () => {
+    setLoading(true);
+    setError(null);
+    fetchSqlForecastLookups();
+    try {
+      const params = new URLSearchParams({
+        datum_von: sqlForecastFilters.datum_von,
+        datum_bis: sqlForecastFilters.datum_bis,
+        min_wahrscheinlichkeit: sqlForecastFilters.min_wahrscheinlichkeit,
+      });
+      if (sqlForecastFilters.verkaeufer) params.set('verkaeufer', sqlForecastFilters.verkaeufer);
+      if (sqlForecastFilters.prioritaet.length > 0) params.set('prioritaet', sqlForecastFilters.prioritaet.join(','));
+      if (sqlForecastFilters.include_angebote) {
+        params.set('include_angebote', '1');
+        if (sqlForecastFilters.angebote_zustand.length > 0) params.set('angebote_zustand', sqlForecastFilters.angebote_zustand.join(','));
+      }
+      const res = await api.get(`/sql-projekte/forecast/?${params}`);
+      setSqlForecastData(res.data);
+    } catch (err) {
+      console.error('Error fetching SQL forecast:', err);
+      setError('Fehler beim Laden des SQL-Forecasts');
     } finally {
       setLoading(false);
     }
@@ -818,6 +870,411 @@ const BusinessIntelligence = () => {
     </div>
   );
 
+  // SQL-Forecast Tab Content
+  const SQL_FORECAST_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#14B8A6'];
+
+  const einstufungOptions = [
+    { id: 1, label: 'VS-Kauf' },
+    { id: 2, label: 'Konkurrenzkauf' },
+    { id: 3, label: 'kein Interesse' },
+    { id: 4, label: 'neu/unbekannt' },
+    { id: 5, label: 'Prospektsammler' },
+    { id: 6, label: 'geringes Interesse' },
+    { id: 7, label: 'mittleres Interesse' },
+    { id: 8, label: 'starkes Interesse' },
+    { id: 9, label: 'Geld beantragt' },
+    { id: 10, label: 'will in Kürze kaufen' },
+    { id: 11, label: 'Probleme offen' },
+  ];
+
+  const zustandOptions = [
+    { id: 1, label: 'Entwurf' },
+    { id: 2, label: 'Erstellt' },
+    { id: 3, label: 'Versendet' },
+    { id: 4, label: 'Abgelehnt' },
+    { id: 5, label: 'Angenommen' },
+    { id: 6, label: 'Auftrag' },
+  ];
+
+  const toggleSqlFilter = (field, value) => {
+    setSqlForecastFilters(prev => {
+      const arr = prev[field];
+      const next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+      return { ...prev, [field]: next };
+    });
+  };
+
+  const renderSqlForecastTab = () => (
+    <div className="space-y-6">
+      {/* Filter */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Datum von</label>
+            <input
+              type="date"
+              value={sqlForecastFilters.datum_von}
+              onChange={(e) => setSqlForecastFilters(prev => ({ ...prev, datum_von: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-md"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Datum bis</label>
+            <input
+              type="date"
+              value={sqlForecastFilters.datum_bis}
+              onChange={(e) => setSqlForecastFilters(prev => ({ ...prev, datum_bis: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-md"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Min. Wahrscheinlichkeit</label>
+            <select
+              value={sqlForecastFilters.min_wahrscheinlichkeit}
+              onChange={(e) => setSqlForecastFilters(prev => ({ ...prev, min_wahrscheinlichkeit: parseInt(e.target.value) }))}
+              className="w-full px-3 py-2 border rounded-md"
+            >
+              <option value={0}>Alle</option>
+              <option value={10}>≥ 10%</option>
+              <option value={25}>≥ 25%</option>
+              <option value={50}>≥ 50%</option>
+              <option value={75}>≥ 75%</option>
+              <option value={90}>≥ 90%</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Verkäufer</label>
+            <select
+              value={sqlForecastFilters.verkaeufer}
+              onChange={(e) => setSqlForecastFilters(prev => ({ ...prev, verkaeufer: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-md"
+            >
+              <option value="">Alle</option>
+              {(sqlForecastLookups?.verkaeufer || []).map(v => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Einstufung Multi-Select */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Einstufung (Mehrfachauswahl)</label>
+          <div className="flex flex-wrap gap-2">
+            {einstufungOptions.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => toggleSqlFilter('prioritaet', opt.id)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                  sqlForecastFilters.prioritaet.includes(opt.id)
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            {sqlForecastFilters.prioritaet.length > 0 && (
+              <button
+                onClick={() => setSqlForecastFilters(prev => ({ ...prev, prioritaet: [] }))}
+                className="px-3 py-1.5 rounded-full text-sm text-red-600 border border-red-300 hover:bg-red-50"
+              >
+                ✕ Alle zurücksetzen
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Angebote Toggle */}
+        <div className="border-t pt-4 mt-2">
+          <div className="flex items-center gap-3 mb-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sqlForecastFilters.include_angebote}
+                onChange={(e) => setSqlForecastFilters(prev => ({ ...prev, include_angebote: e.target.checked }))}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm font-medium text-gray-700">SQL-Angebote in Grafik einbeziehen</span>
+            </label>
+          </div>
+          {sqlForecastFilters.include_angebote && (
+            <div className="ml-6">
+              <label className="block text-sm text-gray-600 mb-2">Angebots-Status filtern:</label>
+              <div className="flex flex-wrap gap-2">
+                {zustandOptions.map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => toggleSqlFilter('angebote_zustand', opt.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      sqlForecastFilters.angebote_zustand.includes(opt.id)
+                        ? 'bg-orange-500 text-white border-orange-500'
+                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={fetchSqlForecastData}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+          >
+            Aktualisieren
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      {sqlForecastData && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
+              <div className="text-sm text-gray-500">Projekte</div>
+              <div className="text-2xl font-bold text-blue-600">{sqlForecastData.summary?.total_projekte || 0}</div>
+              <div className="text-xs text-gray-400">im Zeitraum</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+              <div className="text-sm text-gray-500">Gesamtsumme</div>
+              <div className="text-2xl font-bold text-green-600">{formatCurrency(sqlForecastData.summary?.total_summe || 0)}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-purple-500">
+              <div className="text-sm text-gray-500">Gewichteter Forecast</div>
+              <div className="text-2xl font-bold text-purple-600">{formatCurrency(sqlForecastData.summary?.total_gewichtet || 0)}</div>
+              <div className="text-xs text-gray-400">Summe × Wahrscheinlichkeit</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-amber-500">
+              <div className="text-sm text-gray-500">Ø Wahrscheinlichkeit</div>
+              <div className="text-2xl font-bold text-amber-600">{sqlForecastData.summary?.avg_wahrscheinlichkeit || 0}%</div>
+            </div>
+          </div>
+
+          {/* Status-Aufschlüsselung */}
+          {sqlForecastData.summary?.by_status && Object.keys(sqlForecastData.summary.by_status).length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-3">Aufschlüsselung nach Einstufung</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {(sqlForecastData.statuses || []).map((st, idx) => {
+                  const d = sqlForecastData.summary.by_status[st];
+                  if (!d) return null;
+                  return (
+                    <div key={st} className="p-3 rounded-lg border" style={{ borderLeftColor: SQL_FORECAST_COLORS[idx % SQL_FORECAST_COLORS.length], borderLeftWidth: '4px' }}>
+                      <div className="text-xs text-gray-500 truncate">{st}</div>
+                      <div className="text-lg font-bold">{d.count}×</div>
+                      <div className="text-sm text-gray-700">{formatCurrency(d.summe)}</div>
+                      <div className="text-xs text-gray-500">gew. {formatCurrency(d.gewichtet)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Angebote Summary */}
+          {sqlForecastData.angebote && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                <div className="text-sm text-gray-500">SQL-Angebote</div>
+                <div className="text-2xl font-bold text-orange-600">{sqlForecastData.angebote.summary?.total_angebote || 0}</div>
+                <div className="text-xs text-gray-400">nur letzte Version je Angebot</div>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-400">
+                <div className="text-sm text-gray-500">Angebotssumme</div>
+                <div className="text-2xl font-bold text-orange-500">{formatCurrency(sqlForecastData.angebote.summary?.total_summe || 0)}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Chart: Stacked Bars per Status + Line for weighted total */}
+          {sqlForecastData.chart_data?.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-4">Forecast nach Monat & Status (gewichtet)</h3>
+              <div className="h-96">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={(() => {
+                    // Merge Angebote data into chart_data if present
+                    if (!sqlForecastData.angebote?.chart_data) return sqlForecastData.chart_data;
+                    const angMap = {};
+                    sqlForecastData.angebote.chart_data.forEach(d => { angMap[d.period] = d.angebote_summe; });
+                    return sqlForecastData.chart_data.map(d => ({
+                      ...d,
+                      angebote_summe: angMap[d.period] || 0,
+                    }));
+                  })()}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" tickFormatter={formatMonth} />
+                    <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k€`} />
+                    <Tooltip
+                      formatter={(value, name) => [formatCurrency(value), name]}
+                      labelFormatter={formatMonth}
+                    />
+                    <Legend />
+                    {(sqlForecastData.status_keys || []).map((key, idx) => (
+                      <Bar
+                        key={key}
+                        dataKey={`${key}_gewichtet`}
+                        stackId="projekte"
+                        fill={SQL_FORECAST_COLORS[idx % SQL_FORECAST_COLORS.length]}
+                        name={(sqlForecastData.statuses || [])[idx] || key}
+                      />
+                    ))}
+                    {sqlForecastData.angebote && (
+                      <Bar dataKey="angebote_summe" fill="#F97316" name="SQL-Angebote" opacity={0.6} />
+                    )}
+                    <Line
+                      type="monotone"
+                      dataKey="total_gewichtet"
+                      stroke="#111827"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Gesamt (gewichtet)"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Chart: Ungewichtet (absolute Summen) */}
+          {sqlForecastData.chart_data?.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-4">Auftragssummen nach Monat (ungewichtet)</h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={sqlForecastData.chart_data}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" tickFormatter={formatMonth} />
+                    <YAxis tickFormatter={(v) => `${(v/1000).toFixed(0)}k€`} />
+                    <Tooltip
+                      formatter={(value, name) => [formatCurrency(value), name]}
+                      labelFormatter={formatMonth}
+                    />
+                    <Legend />
+                    {(sqlForecastData.status_keys || []).map((key, idx) => (
+                      <Bar
+                        key={key}
+                        dataKey={`${key}_summe`}
+                        stackId="summe"
+                        fill={SQL_FORECAST_COLORS[idx % SQL_FORECAST_COLORS.length]}
+                        name={(sqlForecastData.statuses || [])[idx] || key}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Projekt-Details Table */}
+          {sqlForecastData.projekte?.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-4">Projekte ({sqlForecastData.projekte.length})</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kunde</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Systemgruppe</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Einstufung</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verkäufer</th>
+                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Auftragsdatum</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Summe</th>
+                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Wahrsch.</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gewichtet</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {sqlForecastData.projekte.map((p) => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <a href={`/sales/sql-projekte/${p.id}`} className="text-blue-600 hover:underline">{p.id}</a>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <div className="font-medium">{p.kunde?.firma || '-'}</div>
+                          {p.kunde?.name && <div className="text-xs text-gray-600">{p.kunde.name}</div>}
+                          {p.kunde?.ort && <div className="text-xs text-gray-500">{p.kunde.ort}</div>}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{p.system_gruppe}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{p.einstufung || p.aktions_status}</span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{p.verkaeufer}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">{p.auftragsdatum}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-right font-medium">{formatCurrency(parseFloat(p.auftragssumme || 0))}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-center">
+                          <span className={`px-2 py-1 rounded ${
+                            p.auftragswahrscheinlichkeit >= 70 ? 'bg-green-100 text-green-800' :
+                            p.auftragswahrscheinlichkeit >= 40 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {p.auftragswahrscheinlichkeit}%
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-right font-medium text-purple-700">
+                          {formatCurrency(parseFloat(p.gewichtete_summe || 0))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Angebote Table */}
+          {sqlForecastData.angebote?.angebote?.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-4">SQL-Angebote ({sqlForecastData.angebote.angebote.length})</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nr.</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kunde</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beschreibung</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zustand</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verkäufer</th>
+                      <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Datum</th>
+                      <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gesamtpreis</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {sqlForecastData.angebote.angebote.map((a) => (
+                      <tr key={a.angebot_id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <a href={`/sales/sql-angebote/${a.angebot_id}`} className="text-blue-600 hover:underline">
+                            {a.angebot_nummer}/{a.versions_nummer}
+                          </a>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm">
+                          <div className="font-medium">{a.firma || a.kunde_name || '-'}</div>
+                          {a.ort && <div className="text-xs text-gray-500">{a.ort}</div>}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">{a.kurzbeschreibung}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800">{a.zustand}</span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700">{a.verkaeufer}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-center text-gray-500">{a.datum}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-right font-medium">{formatCurrency(parseFloat(a.gesamtpreis || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   // Payments Tab Content
   const renderPaymentsTab = () => (
     <div className="space-y-6">
@@ -980,6 +1437,7 @@ const BusinessIntelligence = () => {
         <>
           {activeTab === 'statistics' && renderStatisticsTab()}
           {activeTab === 'forecast' && renderForecastTab()}
+          {activeTab === 'sql-forecast' && renderSqlForecastTab()}
           {activeTab === 'payments' && renderPaymentsTab()}
         </>
       )}

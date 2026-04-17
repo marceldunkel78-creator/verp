@@ -464,3 +464,127 @@ class CustomerSystem(models.Model):
         next_number = max(numeric_numbers) + 1
         return f'S-{next_number:05d}'
 
+
+def sql_projekt_document_path(instance, filename):
+    return f"sql-projekte/{instance.sql_projekt_id}/{filename}"
+
+
+class SQLProjektExtra(models.Model):
+    """
+    Zusätzliche VERP-Informationen zu einem SQL-Projekt (Interessen-Datensatz).
+    Verlinkt über sql_projekt_id mit der InteressenID in der SQL-Datenbank.
+    """
+    sql_projekt_id = models.IntegerField(
+        unique=True,
+        verbose_name='SQL InteressenID',
+        help_text='InteressenID aus der SQL-Datenbank'
+    )
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sql_projekte',
+        verbose_name='VERP-Kunde'
+    )
+    projekt_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='Projektname'
+    )
+    verp_order = models.ForeignKey(
+        'orders.Order',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sql_projekte',
+        verbose_name='VERP-Auftrag'
+    )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Notizen'
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Aktiv'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_sql_projekte',
+        verbose_name='Erstellt von'
+    )
+
+    class Meta:
+        verbose_name = 'SQL-Projekt Zusatzinfo'
+        verbose_name_plural = 'SQL-Projekt Zusatzinfos'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"SQL-Projekt #{self.sql_projekt_id} ({self.projekt_name or 'ohne Name'})"
+
+
+class SQLProjektDocument(models.Model):
+    """Dokumente zu einem SQL-Projekt."""
+    sql_projekt_extra = models.ForeignKey(
+        SQLProjektExtra,
+        on_delete=models.CASCADE,
+        related_name='documents',
+        verbose_name='SQL-Projekt'
+    )
+    file = models.FileField(
+        upload_to=sql_projekt_document_path,
+        verbose_name='Datei'
+    )
+    name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='Bezeichnung'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Hochgeladen am')
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Hochgeladen von'
+    )
+
+    class Meta:
+        verbose_name = 'SQL-Projekt Dokument'
+        verbose_name_plural = 'SQL-Projekt Dokumente'
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return self.name or self.file.name
+
+
+class SQLProjektAngebotLink(models.Model):
+    """Verknüpfung zwischen SQL-Projekt und SQL-Angebot."""
+    sql_projekt_extra = models.ForeignKey(
+        SQLProjektExtra,
+        on_delete=models.CASCADE,
+        related_name='angebot_links',
+        verbose_name='SQL-Projekt'
+    )
+    sql_angebot_nummer = models.IntegerField(
+        verbose_name='SQL Angebotsnummer',
+        help_text='AngebotNummer aus der SQL-Datenbank'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'SQL-Angebot-Verknüpfung'
+        verbose_name_plural = 'SQL-Angebot-Verknüpfungen'
+        unique_together = ['sql_projekt_extra', 'sql_angebot_nummer']
+
+    def __str__(self):
+        return f"Projekt #{self.sql_projekt_extra.sql_projekt_id} ↔ Angebot #{self.sql_angebot_nummer}"
+

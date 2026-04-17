@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'company_calendar',
     'customer_loans',
     'sql_angebote',
+    'sql_projekte',
 ]
 
 MIDDLEWARE = [

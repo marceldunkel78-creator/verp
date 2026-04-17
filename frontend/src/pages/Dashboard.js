@@ -31,6 +31,8 @@ const allModules = [
   { id: 'projects', name: 'Projekte', route: '/sales/projects', icon: '📁', category: 'Vertrieb', permission: 'can_read_sales_projects' },
   { id: 'marketing', name: 'Marketing', route: '/sales/marketing', icon: '📣', category: 'Vertrieb', permission: 'can_read_sales_marketing' },
   { id: 'travel-reports', name: 'Reise-/Serviceberichte', route: '/sales/travel-reports', icon: '📝', category: 'Vertrieb', permission: 'can_read_sales_travel_reports' },
+  { id: 'sql-projekte', name: 'SQL-Projekte', route: '/sales/sql-projekte', icon: '🗂️', category: 'Vertrieb', permission: 'can_read_sales_sql_projekte' },
+  { id: 'sql-angebote', name: 'SQL-Angebote', route: '/sales/sql-angebote', icon: '📊', category: 'Vertrieb', permission: 'can_read_sales' },
   // Procurement
   { id: 'procurement', name: 'Beschaffung', route: '/procurement', icon: '📦', category: 'Beschaffung', permission: 'can_read_procurement' },
   { id: 'suppliers', name: 'Lieferanten', route: '/procurement/suppliers', icon: '🏢', category: 'Beschaffung', permission: 'can_read_suppliers' },

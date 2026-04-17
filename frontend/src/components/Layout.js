@@ -69,7 +69,9 @@ const Layout = () => {
       'can_read_sales_tickets',
       'can_read_sales_marketing',
       'can_read_sales_systems',
-      'can_read_sales_travel_reports'
+      'can_read_sales_travel_reports',
+      'can_read_sales_sql_projekte',
+      'can_read_sales_sql_angebote'
     ],
     can_read_inventory: [
       'can_read_inventory_stock',
