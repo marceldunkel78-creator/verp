@@ -774,13 +774,17 @@ const SystemEdit = () => {
     setSaving(true);
     try {
       // Sanitize payload: remove empty-string fields so DRF treats them as null/omitted
+      // FK fields that can be cleared must be sent as null (not omitted)
+      const nullableFKFields = ['contact_person', 'responsible_employee', 'visiview_license', 'customer'];
       const payload = { ...formData };
       Object.keys(payload).forEach((k) => {
         if (payload[k] === '') {
-          delete payload[k];
+          if (nullableFKFields.includes(k)) {
+            payload[k] = null;
+          } else {
+            delete payload[k];
+          }
         }
-        // normalize date fields: ensure empty -> removed, already handled above
-        // normalize numeric/string IDs: if NaN or not present, remove
       });
 
       if (isNew) {
@@ -1333,7 +1337,7 @@ const SystemEdit = () => {
                     </button>
                     <div className="text-sm text-gray-600">
                       {selectedContactPerson.customer_number}
-                      {selectedContactPerson.email && ` • ${selectedContactPerson.email}`}
+                      {selectedContactPerson.email && <> • <a href={`mailto:${selectedContactPerson.email}`} className="text-blue-600 hover:underline">{selectedContactPerson.email}</a></>}
                       {selectedContactPerson.phone && ` • ${selectedContactPerson.phone}`}
                     </div>
                   </div>
