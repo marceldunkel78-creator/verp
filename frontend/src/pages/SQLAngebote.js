@@ -25,10 +25,11 @@ const SQLAngebote = () => {
   // Filter state from URL params
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [verkaeufer, setVerkaeufer] = useState(defaultVerkaeufer);
+  const [zustand, setZustand] = useState(searchParams.get('zustand') || '');
   const [zeitraum, setZeitraum] = useState(searchParams.get('zeitraum') || '');
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '1', 10));
   const [showFilters, setShowFilters] = useState(
-    !!(defaultVerkaeufer || searchParams.get('zeitraum'))
+    !!(defaultVerkaeufer || searchParams.get('zeitraum') || searchParams.get('zustand'))
   );
 
   // Load Mitarbeiter list
@@ -45,6 +46,7 @@ const SQLAngebote = () => {
       const params = { page, page_size: 50, ordering: sortBy };
       if (search) params.search = search;
       if (verkaeufer) params.verkaeufer = verkaeufer;
+      if (zustand) params.zustand = zustand;
       if (zeitraum) {
         const now = new Date();
         const months = parseInt(zeitraum, 10);
@@ -61,7 +63,7 @@ const SQLAngebote = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, verkaeufer, zeitraum, page, sortBy]);
+  }, [search, verkaeufer, zustand, zeitraum, page, sortBy]);
 
   // Re-fetch when page or sorting changes (but only if user has searched)
   useEffect(() => {
@@ -70,7 +72,7 @@ const SQLAngebote = () => {
 
   // Auto-search if URL already has search params on mount
   useEffect(() => {
-    if (searchParams.get('search') || searchParams.get('verkaeufer') || searchParams.get('zeitraum')) {
+    if (searchParams.get('search') || searchParams.get('verkaeufer') || searchParams.get('zustand') || searchParams.get('zeitraum')) {
       setHasSearched(true);
       fetchAngebote();
     }
@@ -81,11 +83,12 @@ const SQLAngebote = () => {
     const params = {};
     if (search) params.search = search;
     if (verkaeufer) params.verkaeufer = verkaeufer;
+    if (zustand) params.zustand = zustand;
     if (zeitraum) params.zeitraum = zeitraum;
     if (page > 1) params.page = page.toString();
     if (sortBy && sortBy !== '-datum') params.ordering = sortBy;
     setSearchParams(params, { replace: true });
-  }, [search, verkaeufer, zeitraum, page, sortBy, setSearchParams]);
+  }, [search, verkaeufer, zustand, zeitraum, page, sortBy, setSearchParams]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -97,6 +100,7 @@ const SQLAngebote = () => {
   const clearFilters = () => {
     setSearch('');
     setVerkaeufer('');
+    setZustand('');
     setZeitraum('');
     setPage(1);
     setHasSearched(false);
@@ -105,7 +109,17 @@ const SQLAngebote = () => {
     setTotalPages(0);
   };
 
-  const hasActiveFilters = search || verkaeufer || zeitraum;
+  const hasActiveFilters = search || verkaeufer || zustand || zeitraum;
+
+  const zustandOptions = [
+    { value: '', label: 'Alle Status' },
+    { value: '1', label: 'Entwurf' },
+    { value: '2', label: 'Erstellt' },
+    { value: '3', label: 'Versendet' },
+    { value: '4', label: 'Geändert' },
+    { value: '5', label: 'Angenommen' },
+    { value: '6', label: 'Auftrag' },
+  ];
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -131,7 +145,7 @@ const SQLAngebote = () => {
     1: { label: 'Entwurf', color: 'bg-gray-100 text-gray-700' },
     2: { label: 'Erstellt', color: 'bg-blue-100 text-blue-700' },
     3: { label: 'Versendet', color: 'bg-green-100 text-green-700' },
-    4: { label: 'Abgelehnt', color: 'bg-red-100 text-red-700' },
+    4: { label: 'Geändert', color: 'bg-red-100 text-red-700' },
     5: { label: 'Angenommen', color: 'bg-emerald-100 text-emerald-700' },
     6: { label: 'Auftrag', color: 'bg-purple-100 text-purple-700' },
   };
@@ -191,17 +205,29 @@ const SQLAngebote = () => {
         </form>
 
         {showFilters && (
-          <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Verkäufer</label>
               <select
                 value={verkaeufer}
                 onChange={(e) => setVerkaeufer(e.target.value)}
-                className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                className="block w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               >
                 <option value="">Alle</option>
                 {mitarbeiter.map(m => (
                   <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Angebotsstatus</label>
+              <select
+                value={zustand}
+                onChange={(e) => setZustand(e.target.value)}
+                className="block w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              >
+                {zustandOptions.map((opt) => (
+                  <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
             </div>

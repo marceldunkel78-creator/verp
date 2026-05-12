@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth import get_user_model
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +19,7 @@ from verp_settings.customer_sync import get_mssql_connection
 from customers.models import CustomerLegacyMapping, SQLProjektExtra, SQLProjektDocument, SQLProjektAngebotLink, ContactHistory
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
 DEFAULT_SERVER = r'localhost\SQLEXPRESS'
 DEFAULT_DATABASE = 'VSDB'
@@ -107,6 +110,44 @@ def _get_mitarbeiter_map(conn):
     except Exception as e:
         logger.warning(f"Mitarbeiter-Tabelle nicht lesbar: {e}")
         return {}
+
+
+def _get_active_verkaeufer_options():
+    """Liefert aktive Verkäufer aus dem VERP-User/Employee-Modell."""
+    try:
+        result = []
+        seen_ids = set()
+        users = User.objects.select_related('employee').filter(
+            is_active=True,
+            sql_verkaeufer_id__isnull=False,
+            sql_verkaeufer_id__gt=0,
+        ).order_by('employee__last_name', 'employee__first_name', 'username')
+
+        for user in users:
+            employee = getattr(user, 'employee', None)
+            if employee and employee.employment_status != 'aktiv':
+                continue
+
+            verkaeufer_id = user.sql_verkaeufer_id
+            if verkaeufer_id in seen_ids:
+                continue
+
+            name = employee.get_full_name() if employee else (user.get_full_name() or user.username)
+            if not name:
+                continue
+
+            seen_ids.add(verkaeufer_id)
+            result.append({
+                'id': verkaeufer_id,
+                'name': name,
+                'text': name,
+                'kuerzel': employee.employee_id if employee else (user.username or ''),
+            })
+
+        return result
+    except Exception as e:
+        logger.warning(f'Aktive Verkäufer konnten nicht geladen werden: {e}')
+        return []
 
 
 def _get_verp_customer_map(adressen_ids):
@@ -928,19 +969,7 @@ class LookupTablesView(APIView):
             lookups = _get_all_lookups(conn)
 
             # Mitarbeiter als Verkaeufer-Dropdown
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT [MitarbeiterID], [Name], [Kürzel] FROM [Mitarbeiter] "
-                "WHERE [MitarbeiterID] > 0 ORDER BY [MitarbeiterID]"
-            )
-            verkaeufer = []
-            for r in cursor.fetchall():
-                verkaeufer.append({
-                    'id': _parse_int(r[0]),
-                    'text': (r[1] or '').strip(),
-                    'kuerzel': (r[2] or '').strip(),
-                })
-            lookups['verkaeufer'] = verkaeufer
+            lookups['verkaeufer'] = _get_active_verkaeufer_options()
 
             conn.close()
             return Response(lookups)
@@ -1232,7 +1261,7 @@ class SQLForecastView(APIView):
 
         zustand_labels = {
             1: 'Entwurf', 2: 'Erstellt', 3: 'Versendet',
-            4: 'Abgelehnt', 5: 'Angenommen', 6: 'Auftrag',
+            4: 'Geändert', 5: 'Angenommen', 6: 'Auftrag',
         }
 
         monthly_data = defaultdict(lambda: {'summe': Decimal('0'), 'count': 0})

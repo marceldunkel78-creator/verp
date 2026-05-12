@@ -307,7 +307,7 @@ const SQLProjekte = () => {
                 <select
                   value={verkaeufer}
                   onChange={(e) => setVerkaeufer(e.target.value)}
-                  className="block w-full rounded-md border border-gray-300 py-2 px-3 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="block w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
                   <option value="">Alle</option>
                   {(lookups.verkaeufer || []).map(v => (
@@ -637,7 +637,7 @@ const SQLProjekte = () => {
                   <select
                     value={newProjekt.verkaeufer_id}
                     onChange={(e) => setNewProjekt(p => ({ ...p, verkaeufer_id: e.target.value }))}
-                    className="block w-full rounded-md border border-gray-300 py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="block w-full rounded-md border border-gray-300 bg-white py-2 px-3 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   >
                     <option value="">- keiner -</option>
                     {(lookups.verkaeufer || []).map(v => (

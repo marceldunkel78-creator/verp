@@ -8,6 +8,8 @@ import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth import get_user_model
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -18,6 +20,7 @@ from customers.models import CustomerLegacyMapping
 from customer_orders.models import CustomerOrder
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
 DEFAULT_SERVER = r'localhost\SQLEXPRESS'
 DEFAULT_DATABASE = 'VSDB'
@@ -60,6 +63,44 @@ def _get_mitarbeiter_map(conn=None):
                 conn.close()
             except Exception:
                 pass
+
+
+def _get_active_verkaeufer_options():
+    """Liefert aktive Verkäufer aus dem VERP-User/Employee-Modell."""
+    try:
+        result = []
+        seen_ids = set()
+        users = User.objects.select_related('employee').filter(
+            is_active=True,
+            sql_verkaeufer_id__isnull=False,
+            sql_verkaeufer_id__gt=0,
+        ).order_by('employee__last_name', 'employee__first_name', 'username')
+
+        for user in users:
+            employee = getattr(user, 'employee', None)
+            if employee and employee.employment_status != 'aktiv':
+                continue
+
+            verkaeufer_id = user.sql_verkaeufer_id
+            if verkaeufer_id in seen_ids:
+                continue
+
+            name = employee.get_full_name() if employee else (user.get_full_name() or user.username)
+            if not name:
+                continue
+
+            seen_ids.add(verkaeufer_id)
+            result.append({
+                'id': verkaeufer_id,
+                'name': name,
+                'text': name,
+                'kuerzel': employee.employee_id if employee else (user.username or ''),
+            })
+
+        return result
+    except Exception as e:
+        logger.warning(f'Aktive Verkäufer konnten nicht geladen werden: {e}')
+        return []
 
 
 def _parse_decimal(val):
@@ -305,6 +346,7 @@ class AngeboteListView(APIView):
     Query-Parameter:
       - search: Suche nach Kundenname oder Kundennummer (AdressenID)
       - verkaeufer: Filter nach VerkäuferID
+            - zustand: Filter nach Angebotsstatus-ID
       - datum_von: Filter Datum ab (YYYY-MM-DD)
       - datum_bis: Filter Datum bis (YYYY-MM-DD)
       - page: Seitennummer (default 1)
@@ -327,6 +369,7 @@ class AngeboteListView(APIView):
     def get(self, request):
         search = request.query_params.get('search', '').strip()
         verkaeufer = request.query_params.get('verkaeufer', '')
+        zustand = request.query_params.get('zustand', '').strip()
         datum_von = request.query_params.get('datum_von', '')
         datum_bis = request.query_params.get('datum_bis', '')
         ordering = request.query_params.get('ordering', '-datum').strip()
@@ -366,6 +409,13 @@ class AngeboteListView(APIView):
                 try:
                     conditions.append("a.[VerkäuferID] = ?")
                     params.append(int(verkaeufer))
+                except ValueError:
+                    pass
+
+            if zustand:
+                try:
+                    conditions.append("a.[ZustandID] = ?")
+                    params.append(int(zustand))
                 except ValueError:
                     pass
 
@@ -810,17 +860,12 @@ class AngebotDetailView(APIView):
 
 class MitarbeiterListView(APIView):
     """
-    GET: Gibt die Liste der Mitarbeiter (Verkäufer) aus SQL Server zurueck.
+    GET: Gibt die Liste der aktiven Mitarbeiter (Verkäufer) zurueck.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        mitarbeiter_map = _get_mitarbeiter_map()
-        result = [
-            {'id': k, 'name': v}
-            for k, v in sorted(mitarbeiter_map.items())
-        ]
-        return Response(result)
+        return Response(_get_active_verkaeufer_options())
 
 
 class AngeboteTestConnectionView(APIView):

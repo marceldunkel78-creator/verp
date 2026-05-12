@@ -891,7 +891,7 @@ const BusinessIntelligence = () => {
     { id: 1, label: 'Entwurf' },
     { id: 2, label: 'Erstellt' },
     { id: 3, label: 'Versendet' },
-    { id: 4, label: 'Abgelehnt' },
+    { id: 4, label: 'Geändert' },
     { id: 5, label: 'Angenommen' },
     { id: 6, label: 'Auftrag' },
   ];
@@ -947,7 +947,7 @@ const BusinessIntelligence = () => {
             <select
               value={sqlForecastFilters.verkaeufer}
               onChange={(e) => setSqlForecastFilters(prev => ({ ...prev, verkaeufer: e.target.value }))}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full rounded-md border px-3 py-2 bg-white text-gray-900"
             >
               <option value="">Alle</option>
               {(sqlForecastLookups?.verkaeufer || []).map(v => (
