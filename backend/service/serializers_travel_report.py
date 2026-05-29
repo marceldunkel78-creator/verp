@@ -43,6 +43,7 @@ class TravelReportListSerializer(serializers.ModelSerializer):
         model = TravelReport
         fields = [
             'id', 'report_type', 'report_type_display', 'date', 'location',
+            'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time',
             'customer', 'customer_name', 'linked_system', 'system_name',
             'linked_order', 'order_number', 'created_by', 'created_by_name',
             'photo_count', 'has_pdf', 'created_at', 'updated_at'
@@ -91,6 +92,7 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
         model = TravelReport
         fields = [
             'id', 'report_type', 'report_type_display', 'date', 'location',
+            'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time',
             'customer', 'customer_details', 'linked_system', 'system_details',
             'linked_order', 'order_details', 'notes',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
@@ -140,6 +142,7 @@ class TravelReportCreateUpdateSerializer(serializers.ModelSerializer):
         model = TravelReport
         fields = [
             'id', 'report_type', 'date', 'location',
-            'customer', 'linked_system', 'linked_order', 'notes'
+            'customer', 'linked_system', 'linked_order', 'notes',
+            'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time'
         ]
         read_only_fields = ['id']

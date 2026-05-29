@@ -56,6 +56,32 @@ class TravelReport(models.Model):
     
     # Inhalt
     notes = models.TextField(blank=True, verbose_name='Notizen')
+
+    # Zeitaufwand (vor allem für Serviceberichte)
+    work_effort_hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Arbeitszeitaufwand (Stunden)'
+    )
+    travel_effort_hours = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Zeitaufwand An-/Abfahrt (Stunden)'
+    )
+    work_start_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Beginn der Arbeiten'
+    )
+    work_end_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Ende der Arbeiten'
+    )
     
     # PDF
     pdf_file = models.FileField(

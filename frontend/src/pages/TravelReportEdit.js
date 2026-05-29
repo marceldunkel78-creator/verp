@@ -23,6 +23,10 @@ const TravelReportEdit = () => {
     report_type: 'travel',
     date: new Date().toISOString().split('T')[0],
     location: '',
+    work_effort_hours: '',
+    travel_effort_hours: '',
+    work_start_time: '',
+    work_end_time: '',
     customer: '',
     linked_system: '',
     linked_order: '',
@@ -94,6 +98,10 @@ const TravelReportEdit = () => {
         report_type: response.data.report_type || 'travel',
         date: response.data.date || '',
         location: response.data.location || '',
+        work_effort_hours: response.data.work_effort_hours ?? '',
+        travel_effort_hours: response.data.travel_effort_hours ?? '',
+        work_start_time: response.data.work_start_time || '',
+        work_end_time: response.data.work_end_time || '',
         customer: response.data.customer || '',
         linked_system: response.data.linked_system || '',
         linked_order: response.data.linked_order || '',
@@ -144,12 +152,19 @@ const TravelReportEdit = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
+    const payload = {
+      ...formData,
+      work_effort_hours: formData.work_effort_hours === '' ? null : formData.work_effort_hours,
+      travel_effort_hours: formData.travel_effort_hours === '' ? null : formData.travel_effort_hours,
+      work_start_time: formData.work_start_time === '' ? null : formData.work_start_time,
+      work_end_time: formData.work_end_time === '' ? null : formData.work_end_time,
+    };
     try {
       if (id && id !== 'new') {
-        await api.put(`/service/travel-reports/${id}/`, formData);
+        await api.put(`/service/travel-reports/${id}/`, payload);
         alert('Bericht aktualisiert');
       } else {
-        const response = await api.post('/service/travel-reports/', formData);
+        const response = await api.post('/service/travel-reports/', payload);
         navigate(`/sales/travel-reports/${response.data.id}`);
       }
     } catch (error) {
@@ -528,6 +543,56 @@ const TravelReportEdit = () => {
                 required
               />
             </div>
+
+            {formData.report_type === 'service' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Arbeitszeitaufwand (Std.)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={formData.work_effort_hours}
+                    onChange={(e) => setFormData({...formData, work_effort_hours: e.target.value})}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="z. B. 2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Zeitaufwand An-/Abfahrt (Std.)</label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0"
+                    value={formData.travel_effort_hours}
+                    onChange={(e) => setFormData({...formData, travel_effort_hours: e.target.value})}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="z. B. 1.0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Beginn der Arbeiten</label>
+                  <input
+                    type="time"
+                    value={formData.work_start_time}
+                    onChange={(e) => setFormData({...formData, work_start_time: e.target.value})}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Ende der Arbeiten</label>
+                  <input
+                    type="time"
+                    value={formData.work_end_time}
+                    onChange={(e) => setFormData({...formData, work_end_time: e.target.value})}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
 

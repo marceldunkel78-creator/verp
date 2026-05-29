@@ -34,6 +34,12 @@ TRANSLATIONS = {
         'description_heading': 'Beschreibung / Durchgeführte Arbeiten:',
         'measurements_heading': 'Messwerte:',
         'photos_heading': 'Fotos:',
+        'effort_heading': 'Zeitaufwand:',
+        'work_effort_hours': 'Arbeitszeitaufwand',
+        'travel_effort_hours': 'Zeitaufwand An-/Abfahrt',
+        'work_start_time': 'Beginn der Arbeiten',
+        'work_end_time': 'Ende der Arbeiten',
+        'hours_short': 'Std.',
     },
     'en': {
         'subject_prefix': 'Subject',
@@ -43,6 +49,12 @@ TRANSLATIONS = {
         'description_heading': 'Description / Work Performed:',
         'measurements_heading': 'Measurements:',
         'photos_heading': 'Photos:',
+        'effort_heading': 'Effort:',
+        'work_effort_hours': 'Work effort',
+        'travel_effort_hours': 'Travel effort (to/from site)',
+        'work_start_time': 'Work start',
+        'work_end_time': 'Work end',
+        'hours_short': 'h',
     },
 }
 
@@ -226,6 +238,40 @@ def generate_service_report_pdf(report, language='de'):
         notes_text = report.notes.replace('\n', '<br/>')
         elements.append(Paragraph(notes_text, normal_style))
         elements.append(Spacer(1, 0.5*cm))
+
+    # === EFFORT / TIME DETAILS ===
+    has_effort_data = any([
+        report.work_effort_hours is not None,
+        report.travel_effort_hours is not None,
+        report.work_start_time is not None,
+        report.work_end_time is not None,
+    ])
+    if has_effort_data:
+        elements.append(Paragraph(f"<b>{t['effort_heading']}</b>", heading_style))
+        effort_lines = []
+
+        if report.work_effort_hours is not None:
+            effort_lines.append(
+                f"{t['work_effort_hours']}: {report.work_effort_hours:g} {t['hours_short']}"
+            )
+
+        if report.travel_effort_hours is not None:
+            effort_lines.append(
+                f"{t['travel_effort_hours']}: {report.travel_effort_hours:g} {t['hours_short']}"
+            )
+
+        if report.work_start_time is not None:
+            effort_lines.append(
+                f"{t['work_start_time']}: {report.work_start_time.strftime('%H:%M')}"
+            )
+
+        if report.work_end_time is not None:
+            effort_lines.append(
+                f"{t['work_end_time']}: {report.work_end_time.strftime('%H:%M')}"
+            )
+
+        elements.append(Paragraph('<br/>'.join(effort_lines), normal_style))
+        elements.append(Spacer(1, 0.5*cm))
     
     # === MEASUREMENT TABLES ===
     measurements = report.measurements.all()
@@ -301,7 +347,8 @@ def generate_service_report_pdf(report, language='de'):
         # Add remaining photos
         if current_pair:
             while len(current_pair) < 2:
-                current_pair.append([''])
+                # Keep placeholder cell as an empty flowable list (no raw strings).
+                current_pair.append([])
             photo_pairs.append(current_pair)
         
         # Create table for photos
