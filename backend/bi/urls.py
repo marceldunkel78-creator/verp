@@ -6,6 +6,7 @@ app_name = 'bi'
 urlpatterns = [
     # Tab 1: Sales Statistics
     path('statistics/sales/', views.SalesStatisticsView.as_view(), name='sales-statistics'),
+    path('statistics/invoicing/', views.InvoicingStatisticsView.as_view(), name='invoicing-statistics'),
     path('statistics/sales/by-product/', views.SalesByProductView.as_view(), name='sales-by-product'),
     path('statistics/sales/by-category/', views.SalesByCategoryView.as_view(), name='sales-by-category'),
     path('statistics/sales/by-customer/', views.SalesByCustomerView.as_view(), name='sales-by-customer'),

@@ -2,12 +2,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Sum, Count, F, Q, DecimalField
-from django.db.models.functions import TruncMonth, TruncYear
+from django.db.models.functions import TruncMonth, TruncYear, Coalesce
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
-from customer_orders.models import CustomerOrder, CustomerOrderItem
+from customer_orders.models import CustomerOrder, CustomerOrderItem, Invoice
 from sales.models import Quotation, QuotationItem
 from projects.models import Project
 from inventory.models import InventoryItem
@@ -112,6 +112,84 @@ class SalesStatisticsView(APIView):
                 'end_date': end_date.isoformat(),
                 'group_by': group_by,
                 'metric': metric
+            }
+        })
+
+
+class InvoicingStatisticsView(APIView):
+    """
+    Rechnungsstellung nach Rechnungsdatum (invoice_date).
+
+    Query-Parameter:
+    - start_date: Startdatum (YYYY-MM-DD)
+    - end_date: Enddatum (YYYY-MM-DD)
+    - group_by: 'month' oder 'year'
+    - metric: 'revenue' oder 'count'
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = date.today()
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        group_by = request.query_params.get('group_by', 'month')
+        metric = request.query_params.get('metric', 'revenue')
+
+        if start_date:
+            start_date = date.fromisoformat(start_date)
+        else:
+            start_date = today - relativedelta(months=12)
+
+        if end_date:
+            end_date = date.fromisoformat(end_date)
+        else:
+            end_date = today
+
+        invoices = Invoice.objects.filter(
+            invoice_date__isnull=False,
+            invoice_date__gte=start_date,
+            invoice_date__lte=end_date,
+        )
+
+        if group_by == 'year':
+            invoices = invoices.annotate(period=TruncYear('invoice_date'))
+        else:
+            invoices = invoices.annotate(period=TruncMonth('invoice_date'))
+
+        if metric == 'count':
+            data = list(
+                invoices.values('period').annotate(value=Count('id')).order_by('period')
+            )
+            for entry in data:
+                if entry['period']:
+                    entry['period'] = entry['period'].strftime('%Y-%m') if group_by == 'month' else entry['period'].strftime('%Y')
+        else:
+            data = list(
+                invoices.values('period').annotate(value=Coalesce(Sum('gross_amount'), Decimal('0.00'))).order_by('period')
+            )
+            for entry in data:
+                if entry['period']:
+                    entry['period'] = entry['period'].strftime('%Y-%m') if group_by == 'month' else entry['period'].strftime('%Y')
+                entry['value'] = float(entry['value'] or 0)
+
+        summary = invoices.aggregate(
+            total_invoices=Count('id'),
+            total_amount=Coalesce(Sum('gross_amount'), Decimal('0.00')),
+        )
+
+        return Response({
+            'data': data,
+            'summary': {
+                'total_invoices': summary['total_invoices'] or 0,
+                'total_amount': float(summary['total_amount'] or 0),
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+            },
+            'filters': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'group_by': group_by,
+                'metric': metric,
             }
         })
 

@@ -30,6 +30,7 @@ const TravelReportEdit = () => {
     customer: '',
     linked_system: '',
     linked_order: '',
+    executing_employee: '',
     notes: ''
   });
   
@@ -37,6 +38,7 @@ const TravelReportEdit = () => {
   const [customers, setCustomers] = useState([]);
   const [systems, setSystems] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [measurements, setMeasurements] = useState([]);
   
@@ -52,6 +54,7 @@ const TravelReportEdit = () => {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedSystem, setSelectedSystem] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedExecutingEmployee, setSelectedExecutingEmployee] = useState(null);
   
   // Dropdown visibility
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -88,6 +91,7 @@ const TravelReportEdit = () => {
       }
       setLoading(false);
     }
+    fetchEmployees();
   }, [id]);
 
   const fetchReport = async () => {
@@ -105,6 +109,7 @@ const TravelReportEdit = () => {
         customer: response.data.customer || '',
         linked_system: response.data.linked_system || '',
         linked_order: response.data.linked_order || '',
+        executing_employee: response.data.executing_employee || '',
         notes: response.data.notes || ''
       });
       setPhotos(response.data.photos || []);
@@ -114,6 +119,9 @@ const TravelReportEdit = () => {
       if (response.data.customer) fetchCustomerById(response.data.customer);
       if (response.data.linked_system) fetchSystemById(response.data.linked_system);
       if (response.data.linked_order) fetchOrderById(response.data.linked_order);
+      if (response.data.executing_employee_details) {
+        setSelectedExecutingEmployee(response.data.executing_employee_details);
+      }
     } catch (error) {
       console.error('Fehler beim Laden:', error);
       alert('Fehler beim Laden des Berichts');
@@ -146,6 +154,16 @@ const TravelReportEdit = () => {
       setSelectedOrder(response.data);
     } catch (error) {
       console.error('Fehler beim Laden des Auftrags:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await api.get('/users/employees/lookup/');
+      setEmployees(response.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Mitarbeiter:', error);
+      setEmployees([]);
     }
   };
 
@@ -546,6 +564,32 @@ const TravelReportEdit = () => {
 
             {formData.report_type === 'service' && (
               <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Ausführender Mitarbeiter</label>
+                  <select
+                    value={formData.executing_employee || ''}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const selected = employees.find((emp) => String(emp.id) === String(selectedId));
+                      setFormData({ ...formData, executing_employee: selectedId || '' });
+                      setSelectedExecutingEmployee(selected || null);
+                    }}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">Nicht gesetzt</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.first_name} {emp.last_name}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedExecutingEmployee && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Ausgewählt: {selectedExecutingEmployee.name || `${selectedExecutingEmployee.first_name || ''} ${selectedExecutingEmployee.last_name || ''}`.trim()}
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Arbeitszeitaufwand (Std.)</label>
                   <input

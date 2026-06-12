@@ -417,10 +417,37 @@ class ReminderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reminder
         fields = [
-            'id', 'title', 'description', 'due_date', 'is_completed', 'is_dismissed',
+            'id', 'title', 'description', 'checklist', 'due_date', 'is_completed', 'is_dismissed',
             'related_object_type', 'related_object_id', 'related_url', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_checklist(self, value):
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError('Checklist muss eine Liste sein.')
+
+        normalized = []
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    normalized.append({'text': text, 'is_completed': False})
+                continue
+
+            if not isinstance(item, dict):
+                raise serializers.ValidationError('Jeder Checklistenpunkt muss ein Objekt oder String sein.')
+
+            text = str(item.get('text', '')).strip()
+            if not text:
+                continue
+            normalized.append({
+                'text': text,
+                'is_completed': bool(item.get('is_completed', False)),
+            })
+
+        return normalized
 
 
 class NotificationSerializer(serializers.ModelSerializer):

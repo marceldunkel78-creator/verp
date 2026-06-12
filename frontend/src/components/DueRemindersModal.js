@@ -30,12 +30,12 @@ const DueRemindersModal = ({ onClose }) => {
     }
   };
 
-  const handleDismiss = async (id) => {
+  const handlePostpone = async (id) => {
     try {
-      await api.post(`/users/reminders/${id}/dismiss/`);
+      await api.post(`/users/reminders/${id}/postpone/`);
       setReminders(prev => prev.filter(r => r.id !== id));
     } catch (error) {
-      console.error('Fehler beim Ausblenden:', error);
+      console.error('Fehler beim Verschieben:', error);
     }
   };
 
@@ -120,6 +120,18 @@ const DueRemindersModal = ({ onClose }) => {
                           {reminder.description}
                         </p>
                       )}
+                      {Array.isArray(reminder.checklist) && reminder.checklist.length > 0 && (
+                        <ul className="mt-2 space-y-1 text-xs text-gray-700">
+                          {reminder.checklist.map((item, idx) => (
+                            <li key={idx} className="flex items-center gap-2">
+                              <span className={item.is_completed ? 'text-green-600' : 'text-gray-400'}>
+                                {item.is_completed ? '✓' : '○'}
+                              </span>
+                              <span className={item.is_completed ? 'line-through text-gray-400' : ''}>{item.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       <div className="mt-2 flex items-center gap-3">
                         <span className={`text-xs px-2 py-1 rounded-full ${
                           overdue 
@@ -153,9 +165,9 @@ const DueRemindersModal = ({ onClose }) => {
                         </button>
                       )}
                       <button
-                        onClick={() => handleDismiss(reminder.id)}
+                        onClick={() => handlePostpone(reminder.id)}
                         className="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded hover:bg-gray-300 transition-colors"
-                        title="Für heute ausblenden"
+                        title="Um 1 Tag verschieben"
                       >
                         Später
                       </button>

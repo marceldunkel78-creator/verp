@@ -1081,6 +1081,7 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    checklist: [],
     due_date: new Date().toISOString().split('T')[0]
   });
 
@@ -1149,6 +1150,7 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
     setFormData({
       title: '',
       description: '',
+      checklist: [],
       due_date: new Date().toISOString().split('T')[0]
     });
     setShowModal(true);
@@ -1159,9 +1161,49 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
     setFormData({
       title: reminder.title || '',
       description: reminder.description || '',
+      checklist: Array.isArray(reminder.checklist) ? reminder.checklist : [],
       due_date: reminder.due_date ? reminder.due_date.split('T')[0] : new Date().toISOString().split('T')[0]
     });
     setShowModal(true);
+  };
+
+  const addChecklistItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      checklist: [...(prev.checklist || []), { text: '', is_completed: false }]
+    }));
+  };
+
+  const updateChecklistItem = (index, changes) => {
+    setFormData(prev => ({
+      ...prev,
+      checklist: (prev.checklist || []).map((item, i) => (
+        i === index ? { ...item, ...changes } : item
+      ))
+    }));
+  };
+
+  const removeChecklistItem = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      checklist: (prev.checklist || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const toggleChecklistItem = async (reminder, index) => {
+    const checklist = Array.isArray(reminder.checklist) ? reminder.checklist : [];
+    if (!checklist[index]) return;
+
+    const updatedChecklist = checklist.map((item, i) => (
+      i === index ? { ...item, is_completed: !item.is_completed } : item
+    ));
+
+    try {
+      await api.patch(`/users/reminders/${reminder.id}/`, { checklist: updatedChecklist });
+      onRefresh();
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren der Checkliste:', error);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -1286,6 +1328,22 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
                         {reminder.description && (
                           <p className="text-sm text-gray-500">{reminder.description}</p>
                         )}
+                        {Array.isArray(reminder.checklist) && reminder.checklist.length > 0 && (
+                          <ul className="mt-2 space-y-1">
+                            {reminder.checklist.map((item, idx) => (
+                              <li key={idx} className="flex items-center gap-2 text-xs text-gray-600">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleChecklistItem(reminder, idx)}
+                                  className={`w-4 h-4 rounded border flex items-center justify-center ${item.is_completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300'}`}
+                                >
+                                  {item.is_completed ? '✓' : ''}
+                                </button>
+                                <span className={item.is_completed ? 'line-through text-gray-400' : ''}>{item.text}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                         {reminder.related_url && (
                           <a href={reminder.related_url} className="text-xs text-blue-600 hover:underline">
                             → Zum verknüpften Element
@@ -1357,6 +1415,46 @@ const RemindersTab = ({ reminders, onRefresh, errors }) => {
                   rows={3}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Checkliste</label>
+                  <button
+                    type="button"
+                    onClick={addChecklistItem}
+                    className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                  >
+                    + Punkt
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(formData.checklist || []).map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!item.is_completed}
+                        onChange={(e) => updateChecklistItem(idx, { is_completed: e.target.checked })}
+                      />
+                      <input
+                        type="text"
+                        value={item.text || ''}
+                        onChange={(e) => updateChecklistItem(idx, { text: e.target.value })}
+                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Unterpunkt..."
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeChecklistItem(idx)}
+                        className="px-2 py-2 text-red-600 hover:text-red-800"
+                      >
+                        X
+                      </button>
+                    </div>
+                  ))}
+                  {(formData.checklist || []).length === 0 && (
+                    <p className="text-xs text-gray-500">Keine Unterpunkte vorhanden.</p>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Fälligkeitsdatum *</label>

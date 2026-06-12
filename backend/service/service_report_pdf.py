@@ -31,6 +31,7 @@ TRANSLATIONS = {
         'service_report_order': 'Servicebericht zu Auftrag',
         'service_report': 'Servicebericht',
         'system': 'System',
+        'executing_employee': 'Ausführender Mitarbeiter',
         'description_heading': 'Beschreibung / Durchgeführte Arbeiten:',
         'measurements_heading': 'Messwerte:',
         'photos_heading': 'Fotos:',
@@ -46,6 +47,7 @@ TRANSLATIONS = {
         'service_report_order': 'Service Report for Order',
         'service_report': 'Service Report',
         'system': 'System',
+        'executing_employee': 'Executing employee',
         'description_heading': 'Description / Work Performed:',
         'measurements_heading': 'Measurements:',
         'photos_heading': 'Photos:',
@@ -229,6 +231,13 @@ def generate_service_report_pdf(report, language='de'):
     if report.linked_system:
         system_info = f"{t['system']}: {report.linked_system.system_name}"
         elements.append(Paragraph(system_info, normal_style))
+        elements.append(Spacer(1, 0.3*cm))
+
+    if report.executing_employee:
+        employee_name = f"{report.executing_employee.first_name} {report.executing_employee.last_name}".strip()
+        if report.executing_employee.employee_id:
+            employee_name = f"{employee_name} ({report.executing_employee.employee_id})"
+        elements.append(Paragraph(f"{t['executing_employee']}: {employee_name}", normal_style))
         elements.append(Spacer(1, 0.3*cm))
     
     # === NOTES / DESCRIPTION ===

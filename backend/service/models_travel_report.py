@@ -53,6 +53,14 @@ class TravelReport(models.Model):
         related_name='travel_reports',
         verbose_name='Verknüpfter Auftrag'
     )
+    executing_employee = models.ForeignKey(
+        'users.Employee',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='executed_travel_reports',
+        verbose_name='Ausführender Mitarbeiter'
+    )
     
     # Inhalt
     notes = models.TextField(blank=True, verbose_name='Notizen')

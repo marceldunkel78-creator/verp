@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Exists, OuterRef
 from django.http import HttpResponse
+from django.db.models import Value
+from django.db.models.functions import Replace
 import csv
 from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, CustomerSystem, ContactHistory
 from .serializers import (
@@ -38,6 +40,42 @@ class CustomerViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
+
+        # Explizite Suche nach Telefonnummer
+        phone = self.request.query_params.get('phone', None)
+        if phone:
+            digits = ''.join(ch for ch in phone if ch.isdigit())
+            if digits:
+                # Robuste Suche über die letzten 5 Ziffern ohne Formatierungszeichen.
+                tail = digits[-5:] if len(digits) >= 5 else digits
+                normalized_phones = CustomerPhone.objects.annotate(
+                    phone_digits=Replace(
+                        Replace(
+                            Replace(
+                                Replace(
+                                    Replace(
+                                        Replace(
+                                            Replace(
+                                                Replace(
+                                                    Replace('phone_number', Value(' '), Value('')),
+                                                    Value('-'), Value('')
+                                                ),
+                                                Value('/'), Value('')
+                                            ),
+                                            Value('('), Value('')
+                                        ),
+                                        Value(')'), Value('')
+                                    ),
+                                    Value('.'), Value('')
+                                ),
+                                Value('+'), Value('')
+                            ),
+                            Value('\t'), Value('')
+                        ),
+                        Value('\n'), Value('')
+                    )
+                ).filter(phone_digits__endswith=tail)
+                queryset = queryset.filter(id__in=normalized_phones.values('customer_id')).distinct()
         
         # Suche nach Stadt (unterstützt mehrere Städte durch Komma getrennt)
         city = self.request.query_params.get('city', None)

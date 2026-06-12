@@ -897,6 +897,12 @@ class Reminder(models.Model):
         blank=True,
         verbose_name='Beschreibung'
     )
+    checklist = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Checkliste',
+        help_text='Liste von Unterpunkten, z.B. [{"text": "Punkt", "is_completed": false}]'
+    )
     due_date = models.DateField(
         verbose_name='Fälligkeitsdatum'
     )

@@ -218,6 +218,7 @@ const Customers = () => {
   const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState({
     search: '',
+    phone: '',
     city: '',
     country: '',
     language: '',
@@ -295,6 +296,7 @@ const Customers = () => {
       const params = {};
       if (restored.filters) {
         if (restored.filters.search) params.search = restored.filters.search;
+        if (restored.filters.phone) params.phone = restored.filters.phone;
         if (restored.filters.city) params.city = restored.filters.city;
         if (restored.filters.country) params.country = restored.filters.country;
         if (restored.filters.language) params.language = restored.filters.language;
@@ -344,6 +346,7 @@ const Customers = () => {
     if (hasParams) {
       const newFilters = {
         search: params.search || '',
+        phone: params.phone || '',
         city: params.city || '',
         country: params.country || '',
         language: params.language || '',
@@ -379,6 +382,7 @@ const Customers = () => {
       const params = new URLSearchParams();
       
       if (useFilters.search) params.append('search', useFilters.search);
+      if (useFilters.phone) params.append('phone', useFilters.phone);
       if (useFilters.city) params.append('city', useFilters.city);
       if (useFilters.country) params.append('country', useFilters.country);
       if (useFilters.language) params.append('language', useFilters.language);
@@ -431,6 +435,7 @@ const Customers = () => {
     // update URL params and let the searchParams effect perform the fetch
     const params = {};
     if (filters.search) params.search = filters.search;
+    if (filters.phone) params.phone = filters.phone;
     if (filters.city) params.city = filters.city;
     if (filters.country) params.country = filters.country;
     if (filters.language) params.language = filters.language;
@@ -453,6 +458,7 @@ const Customers = () => {
   const handleReset = () => {
     setFilters({
       search: '',
+      phone: '',
       city: '',
       country: '',
       language: '',
@@ -481,6 +487,7 @@ const Customers = () => {
       
       // Gleiche Filter wie bei der Suche
       if (filters.search) params.append('search', filters.search);
+      if (filters.phone) params.append('phone', filters.phone);
       if (filters.city) params.append('city', filters.city);
       if (filters.country) params.append('country', filters.country);
       if (filters.language) params.append('language', filters.language);
@@ -622,6 +629,17 @@ const Customers = () => {
               placeholder="Name oder Kundennummer..."
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Telefonnummer</label>
+            <input
+              type="text"
+              placeholder="Telefonnummer (letzte 5 Ziffern genügen)..."
+              value={filters.phone}
+              onChange={(e) => setFilters({ ...filters, phone: e.target.value })}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             />

@@ -20,6 +20,7 @@ const BusinessIntelligence = () => {
   const [customerData, setCustomerData] = useState(null);
   const [supplierData, setSupplierData] = useState(null);
   const [inventoryCategoryData, setInventoryCategoryData] = useState(null);
+  const [invoicingData, setInvoicingData] = useState(null);
 
   // Tab 2: Forecast State
   const [projectForecast, setProjectForecast] = useState(null);
@@ -144,8 +145,9 @@ const BusinessIntelligence = () => {
         categoryParams.append('category_ids', filters.selectedCategories.join(','));
       }
 
-      const [salesRes, categoryRes, customerRes, supplierRes, invCategoryRes] = await Promise.all([
+      const [salesRes, invoicingRes, categoryRes, customerRes, supplierRes, invCategoryRes] = await Promise.all([
         api.get(`/bi/statistics/sales/?${params}`),
+        api.get(`/bi/statistics/invoicing/?${params}`),
         api.get(`/bi/statistics/sales/by-category/?${params}`),
         api.get(`/bi/statistics/sales/by-customer/?${params}&limit=10`),
         api.get(`/bi/statistics/sales/by-supplier/?${supplierParams}&limit=20`),
@@ -153,6 +155,7 @@ const BusinessIntelligence = () => {
       ]);
 
       setSalesData(salesRes.data);
+      setInvoicingData(invoicingRes.data);
       setCategoryData(categoryRes.data);
       setCustomerData(customerRes.data);
       setSupplierData(supplierRes.data);
@@ -294,6 +297,8 @@ const BusinessIntelligence = () => {
           periodMap[item.period][item.category] = filters.metric === 'revenue' ? item.revenue : item.count;
         });
         return Object.values(periodMap).sort((a, b) => a.period.localeCompare(b.period));
+      } else if (filters.dataView === 'invoicing') {
+        return invoicingData?.data || [];
       }
       return salesData?.data || [];
     };
@@ -321,7 +326,7 @@ const BusinessIntelligence = () => {
 
     const chartData = getChartData();
     const chartKeys = getChartKeys();
-    const isMultiLine = filters.dataView !== 'orders';
+    const isMultiLine = filters.dataView === 'supplier' || filters.dataView === 'inventoryCategory';
 
     return (
     <div className="space-y-6">
@@ -377,6 +382,7 @@ const BusinessIntelligence = () => {
               className="w-full px-3 py-2 border rounded-md"
             >
               <option value="orders">Aufträge</option>
+              <option value="invoicing">Rechnungsstellung</option>
               <option value="supplier">Nach Lieferant</option>
               <option value="inventoryCategory">Nach Warenkategorie</option>
             </select>
@@ -525,7 +531,7 @@ const BusinessIntelligence = () => {
       )}
 
       {/* Summary Cards */}
-      {salesData && (
+      {filters.dataView !== 'invoicing' && salesData && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg shadow p-4">
             <div className="text-sm text-gray-500">Gesamtumsatz</div>
@@ -554,10 +560,40 @@ const BusinessIntelligence = () => {
         </div>
       )}
 
+      {filters.dataView === 'invoicing' && invoicingData && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="text-sm text-gray-500">Rechnungssumme</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {formatCurrency(invoicingData.summary?.total_amount || 0)}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="text-sm text-gray-500">Anzahl Rechnungen</div>
+            <div className="text-2xl font-bold text-green-600">
+              {invoicingData.summary?.total_invoices || 0}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="text-sm text-gray-500">Durchschn. Rechnungswert</div>
+            <div className="text-2xl font-bold text-purple-600">
+              {formatCurrency((invoicingData.summary?.total_amount || 0) / (invoicingData.summary?.total_invoices || 1))}
+            </div>
+          </div>
+          <div className="bg-white rounded-lg shadow p-4">
+            <div className="text-sm text-gray-500">Zeitraum</div>
+            <div className="text-lg font-semibold text-gray-700">
+              {invoicingData.filters?.start_date} - {invoicingData.filters?.end_date}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Chart - Sales over Time */}
       <div className="bg-white rounded-lg shadow p-4">
         <h3 className="text-lg font-semibold mb-4">
           {filters.metric === 'revenue' ? 'Umsatz' : 'Anzahl'} im Zeitverlauf
+          {filters.dataView === 'invoicing' && ' (Rechnungsstellung nach Rechnungsdatum)'}
           {filters.dataView === 'supplier' && ' (nach Lieferant)'}
           {filters.dataView === 'inventoryCategory' && ' (nach Warenkategorie)'}
         </h3>
@@ -604,6 +640,7 @@ const BusinessIntelligence = () => {
       </div>
 
       {/* Two Column Charts */}
+      {filters.dataView !== 'invoicing' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category Distribution */}
         <div className="bg-white rounded-lg shadow p-4">
@@ -646,8 +683,10 @@ const BusinessIntelligence = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Category Table */}
+      {filters.dataView !== 'invoicing' && (
       <div className="bg-white rounded-lg shadow p-4">
         <h3 className="text-lg font-semibold mb-4">Detailübersicht nach Kategorie</h3>
         <div className="overflow-x-auto">
@@ -684,6 +723,7 @@ const BusinessIntelligence = () => {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
   };

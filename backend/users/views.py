@@ -1424,6 +1424,18 @@ class ReminderViewSet(viewsets.ModelViewSet):
         reminder.is_dismissed = True
         reminder.save()
         return Response({'status': 'success'})
+
+    @action(detail=True, methods=['post'])
+    def postpone(self, request, pk=None):
+        """Verschiebt die Erinnerung um einen Tag nach hinten."""
+        from datetime import timedelta
+
+        reminder = self.get_object()
+        reminder.due_date = reminder.due_date + timedelta(days=1)
+        # Falls zuvor ausgeblendet, wieder sichtbar machen.
+        reminder.is_dismissed = False
+        reminder.save(update_fields=['due_date', 'is_dismissed', 'updated_at'])
+        return Response({'status': 'success', 'due_date': reminder.due_date.isoformat()})
     
     @action(detail=False, methods=['get'])
     def due_today(self, request):

@@ -36,6 +36,7 @@ class TravelReportListSerializer(serializers.ModelSerializer):
     system_name = serializers.SerializerMethodField()
     order_number = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    executing_employee_name = serializers.SerializerMethodField()
     photo_count = serializers.SerializerMethodField()
     has_pdf = serializers.SerializerMethodField()
     
@@ -45,7 +46,8 @@ class TravelReportListSerializer(serializers.ModelSerializer):
             'id', 'report_type', 'report_type_display', 'date', 'location',
             'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time',
             'customer', 'customer_name', 'linked_system', 'system_name',
-            'linked_order', 'order_number', 'created_by', 'created_by_name',
+            'linked_order', 'order_number', 'executing_employee', 'executing_employee_name',
+            'created_by', 'created_by_name',
             'photo_count', 'has_pdf', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -69,6 +71,11 @@ class TravelReportListSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+
+    def get_executing_employee_name(self, obj):
+        if obj.executing_employee:
+            return f"{obj.executing_employee.first_name} {obj.executing_employee.last_name}".strip()
+        return None
     
     def get_photo_count(self, obj):
         return obj.photos.count()
@@ -84,6 +91,7 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
     system_details = serializers.SerializerMethodField()
     order_details = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    executing_employee_details = serializers.SerializerMethodField()
     photos = TravelReportPhotoSerializer(many=True, read_only=True)
     measurements = TravelReportMeasurementSerializer(many=True, read_only=True)
     has_pdf = serializers.SerializerMethodField()
@@ -94,7 +102,7 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
             'id', 'report_type', 'report_type_display', 'date', 'location',
             'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time',
             'customer', 'customer_details', 'linked_system', 'system_details',
-            'linked_order', 'order_details', 'notes',
+            'linked_order', 'order_details', 'executing_employee', 'executing_employee_details', 'notes',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
             'photos', 'measurements', 'has_pdf'
         ]
@@ -130,6 +138,15 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+
+    def get_executing_employee_details(self, obj):
+        if obj.executing_employee:
+            return {
+                'id': obj.executing_employee.id,
+                'name': f"{obj.executing_employee.first_name} {obj.executing_employee.last_name}".strip(),
+                'employee_id': obj.executing_employee.employee_id,
+            }
+        return None
     
     def get_has_pdf(self, obj):
         return bool(obj.pdf_file)
@@ -142,7 +159,7 @@ class TravelReportCreateUpdateSerializer(serializers.ModelSerializer):
         model = TravelReport
         fields = [
             'id', 'report_type', 'date', 'location',
-            'customer', 'linked_system', 'linked_order', 'notes',
+            'customer', 'linked_system', 'linked_order', 'executing_employee', 'notes',
             'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time'
         ]
         read_only_fields = ['id']
