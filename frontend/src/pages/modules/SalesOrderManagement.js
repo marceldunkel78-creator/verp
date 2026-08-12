@@ -89,7 +89,7 @@ const SalesOrderManagement = () => {
     },
     {
       name: 'Marketing',
-      description: 'Shows, Newsletter',
+      description: 'Shows, Newsletter, AppNotes, Technical Notes',
       icon: MegaphoneIcon,
       path: '/sales/marketing',
       color: 'pink',

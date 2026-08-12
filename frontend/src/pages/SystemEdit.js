@@ -2902,7 +2902,7 @@ const SystemEdit = () => {
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-medium">Reisebericht/Servicebericht</h3>
             <button
-              onClick={() => navigate(`/travel-reports/new?system=${id}`)}
+              onClick={() => navigate(`/sales/travel-reports/new?system=${id}`)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
             >
               <PlusIcon className="h-5 w-5" />
@@ -3196,7 +3196,7 @@ const TravelReportsTab = ({ systemId }) => {
                 <tr
                   key={report.id}
                   className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => navigate(`/travel-reports/${report.id}`)}
+                  onClick={() => navigate(`/sales/travel-reports/${report.id}`)}
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {new Date(report.date).toLocaleDateString('de-DE')}
