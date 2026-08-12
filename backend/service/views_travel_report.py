@@ -45,26 +45,55 @@ class TravelReportViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def upload_photo(self, request, pk=None):
-        """Foto zu einem Reisebericht hochladen"""
+        """Ein oder mehrere Fotos zu einem Reisebericht hochladen.
+
+        Akzeptiert wahlweise:
+          - ein einzelnes Feld 'photo' (Backwards-Kompatibilität)
+          - mehrere Felder 'photo' (HTML <input multiple>)
+          - ein Feld 'photos' (eine einzelne Datei)
+          - ein Feld 'photos' mit mehreren Dateien
+        """
         travel_report = self.get_object()
-        
-        photo_file = request.FILES.get('photo')
-        caption = request.data.get('caption', '')
-        
-        if not photo_file:
+
+        # Sammle Dateien aus allen unterstützten Feldnamen
+        photo_files = []
+        for key in ('photo', 'photos'):
+            files = request.FILES.getlist(key)
+            if files:
+                photo_files.extend(files)
+
+        # Doppelte Einträge (gleiche Datei in mehreren Feldern) vermeiden
+        seen = set()
+        unique_files = []
+        for f in photo_files:
+            if id(f) not in seen:
+                seen.add(id(f))
+                unique_files.append(f)
+
+        if not unique_files:
             return Response(
                 {'error': 'Keine Datei hochgeladen'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        photo = TravelReportPhoto.objects.create(
-            travel_report=travel_report,
-            photo=photo_file,
-            caption=caption
+
+        caption = request.data.get('caption', '')
+
+        created_photos = []
+        for photo_file in unique_files:
+            photo = TravelReportPhoto.objects.create(
+                travel_report=travel_report,
+                photo=photo_file,
+                caption=caption
+            )
+            created_photos.append(photo)
+
+        serializer = TravelReportPhotoSerializer(
+            created_photos, many=True, context={'request': request}
         )
-        
-        serializer = TravelReportPhotoSerializer(photo, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response({
+            'uploaded_count': len(created_photos),
+            'photos': serializer.data,
+        }, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['get'])
     def photos(self, request, pk=None):
