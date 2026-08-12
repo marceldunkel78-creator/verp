@@ -7,8 +7,25 @@ HTML-Subset erlaubt (b, i, u, br, p, ul/ol/li, h1-h3, strong, em).
 """
 import bleach
 import re
-from bleach.css_sanitizer import CSSSanitizer
 from html import unescape
+
+# bleach.css_sanitizer braucht das optionale Paket tinycss2. Wenn es
+# fehlt (z. B. weil jemand nur pip install bleach ohne [css]-Extra
+# gemacht hat), fallen wir auf einen None-Sanitizer zurueck. Damit ist
+# die PDF-Styles-Bereinigung weniger streng, aber das Modul laedt trotzdem
+# und der Editor funktioniert weiterhin.
+try:
+    from bleach.css_sanitizer import CSSSanitizer as _CSSSanitizer
+    _PDF_CSS_SANITIZER = _CSSSanitizer(
+        allowed_css_properties=[
+            'font-size', 'font-family', 'font-weight', 'font-style',
+            'text-decoration', 'color',
+        ]
+    )
+    _HAS_TINYCSS2 = True
+except ImportError:
+    _PDF_CSS_SANITIZER = None
+    _HAS_TINYCSS2 = False
 
 
 # Tags, die der Editor liefern darf (Tiptap-Output subset)
@@ -27,14 +44,6 @@ ALLOWED_PDF_TAGS = [
     'h1', 'h2', 'h3',
     'span',
 ]
-
-# Erlaubte Inline-Styles für PDF (nur Schrift-Eigenschaften)
-_PDF_CSS_SANITIZER = CSSSanitizer(
-    allowed_css_properties=[
-        'font-size', 'font-family', 'font-weight', 'font-style',
-        'text-decoration', 'color',
-    ]
-)
 
 
 def sanitize_editor_html(raw_html):
@@ -59,14 +68,15 @@ def sanitize_for_pdf(raw_html):
     """
     if not raw_html:
         return ''
-    cleaned = bleach.clean(
-        raw_html or '',
-        tags=ALLOWED_PDF_TAGS,
-        attributes={'*': ['style'], 'span': ['style'], 'p': ['style']},
-        css_sanitizer=_PDF_CSS_SANITIZER,
-        strip=True,
-        strip_comments=True,
-    )
+    clean_kwargs = {
+        'tags': ALLOWED_PDF_TAGS,
+        'attributes': {'*': ['style'], 'span': ['style'], 'p': ['style']},
+        'strip': True,
+        'strip_comments': True,
+    }
+    if _PDF_CSS_SANITIZER is not None:
+        clean_kwargs['css_sanitizer'] = _PDF_CSS_SANITIZER
+    cleaned = bleach.clean(raw_html or '', **clean_kwargs)
     # ReportLab verlangt <br/> statt <br>
     cleaned = re.sub(r'<br\s*/?>', '<br/>', cleaned, flags=re.IGNORECASE)
     return cleaned.strip()
