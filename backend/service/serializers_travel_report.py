@@ -3,6 +3,7 @@ Serializers für Reiseberichte/Serviceberichte
 """
 from rest_framework import serializers
 from .models_travel_report import TravelReport, TravelReportMeasurement, TravelReportPhoto
+from .notizen_utils import sanitize_editor_html, html_to_plain_text
 
 
 class TravelReportPhotoSerializer(serializers.ModelSerializer):
@@ -102,11 +103,12 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
             'id', 'report_type', 'report_type_display', 'date', 'location',
             'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time',
             'customer', 'customer_details', 'linked_system', 'system_details',
-            'linked_order', 'order_details', 'executing_employee', 'executing_employee_details', 'notes',
+            'linked_order', 'order_details', 'executing_employee', 'executing_employee_details',
+            'notes', 'notes_html',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
             'photos', 'measurements', 'has_pdf'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'notes']
     
     def get_customer_details(self, obj):
         if obj.customer:
@@ -153,13 +155,36 @@ class TravelReportDetailSerializer(serializers.ModelSerializer):
 
 
 class TravelReportCreateUpdateSerializer(serializers.ModelSerializer):
-    """Create/Update Serializer für Reiseberichte"""
-    
+
+    notes_html = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        write_only=False,
+    )
+
     class Meta:
         model = TravelReport
         fields = [
             'id', 'report_type', 'date', 'location',
-            'customer', 'linked_system', 'linked_order', 'executing_employee', 'notes',
+            'customer', 'linked_system', 'linked_order', 'executing_employee',
+            'notes', 'notes_html',
             'work_effort_hours', 'travel_effort_hours', 'work_start_time', 'work_end_time'
         ]
+        read_only_fields = ['id', 'notes']
+
+    def validate_notes_html(self, value):
+        """Bereinigt das Editor-HTML serverseitig."""
+        return sanitize_editor_html(value or '')
+
+    def to_internal_value(self, data):
+        """
+        Akzeptiert legacy 'notes' (Plain-Text) und konvertiert ihn zu HTML,
+        falls kein notes_html mitgegeben wird.
+        """
+        internal = super().to_internal_value(data)
+        # Falls Frontend 'notes_html' mitschickt, ist es schon sanitized.
+        if 'notes_html' in internal:
+            html = internal.get('notes_html') or ''
+            internal['notes'] = html_to_plain_text(html)
+        return internal
         read_only_fields = ['id']

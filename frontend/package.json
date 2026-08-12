@@ -5,6 +5,13 @@
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.2.0",
+    "@tiptap/core": "^2.27.2",
+    "@tiptap/extension-font-family": "^2.27.2",
+    "@tiptap/extension-text-style": "^2.27.2",
+    "@tiptap/extension-underline": "^2.27.2",
+    "@tiptap/pm": "^2.27.2",
+    "@tiptap/react": "^2.27.2",
+    "@tiptap/starter-kit": "^2.27.2",
     "axios": "^1.6.0",
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",

@@ -22,6 +22,7 @@ from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
 from django.conf import settings
+from .notizen_utils import sanitize_for_pdf, html_to_plain_text, html_to_pdf_blocks
 import os
 
 
@@ -112,6 +113,42 @@ def generate_service_report_pdf(report, language='de'):
         parent=styles['Normal'],
         fontSize=10,
         spaceAfter=6
+    )
+
+    h1_style = ParagraphStyle(
+        'NotesH1',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceBefore=10,
+        spaceAfter=6,
+        textColor=colors.HexColor('#1F2937'),
+    )
+
+    h2_style = ParagraphStyle(
+        'NotesH2',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceBefore=8,
+        spaceAfter=4,
+        textColor=colors.HexColor('#1F2937'),
+    )
+
+    h3_style = ParagraphStyle(
+        'NotesH3',
+        parent=styles['Heading3'],
+        fontSize=12,
+        spaceBefore=6,
+        spaceAfter=4,
+        textColor=colors.HexColor('#374151'),
+    )
+
+    list_style = ParagraphStyle(
+        'NotesListItem',
+        parent=styles['Normal'],
+        fontSize=10,
+        leftIndent=14,
+        bulletIndent=2,
+        spaceAfter=3,
     )
     
     small_style = ParagraphStyle(
@@ -241,11 +278,43 @@ def generate_service_report_pdf(report, language='de'):
         elements.append(Spacer(1, 0.3*cm))
     
     # === NOTES / DESCRIPTION ===
-    if report.notes:
+    # Bevorzugt notes_html (Rich-Text), faellt auf notes (Plain-Text) zurueck.
+    # Das HTML wird in einzelne Bloecke (p, h1-3, ul/ol-items) zerlegt, damit
+    # jeder Block einen eigenen ReportLab-Paragraph bekommt -> echte Abstaende.
+    notes_html = (getattr(report, 'notes_html', '') or '').strip()
+    notes_plain = (report.notes or '').strip()
+
+    if notes_html or notes_plain:
         elements.append(Paragraph(f"<b>{t['description_heading']}</b>", heading_style))
-        # Replace newlines with <br/> for proper rendering
-        notes_text = report.notes.replace('\n', '<br/>')
-        elements.append(Paragraph(notes_text, normal_style))
+
+        if notes_html:
+            blocks = html_to_pdf_blocks(notes_html)
+            # Wir muessen wissen, welche Bloecke zu welchem Style gehoeren.
+            # Da html_to_pdf_blocks die Original-Tags verloren hat (alles zu
+            # Paragraph-Text), nutzen wir erneut einen vereinfachten Pass, um
+            # den Stil pro Block zu waehlen.
+            styled_blocks = _split_blocks_with_style(notes_html)
+            if styled_blocks:
+                for block_html, block_tag in styled_blocks:
+                    style = normal_style
+                    if block_tag == 'h1':
+                        style = h1_style
+                    elif block_tag == 'h2':
+                        style = h2_style
+                    elif block_tag == 'h3':
+                        style = h3_style
+                    elif block_tag in ('li-bullet', 'li-number'):
+                        style = list_style
+                    elements.append(Paragraph(block_html, style))
+            elif blocks:
+                # Fallback: alle Bloecke in normal_style
+                for block_html in blocks:
+                    elements.append(Paragraph(block_html, normal_style))
+        elif notes_plain:
+            # Legacy Plain-Text: Newlines -> <br/>
+            legacy_text = notes_plain.replace('\n', '<br/>')
+            elements.append(Paragraph(legacy_text, normal_style))
+
         elements.append(Spacer(1, 0.5*cm))
 
     # === EFFORT / TIME DETAILS ===
@@ -388,3 +457,93 @@ def generate_service_report_pdf(report, language='de'):
     
     buffer.seek(0)
     return buffer
+
+
+# ---------------------------------------------------------------------------
+# HTML -> (html, tag)-Paare pro Block. Wird fuer den PDF-Build benutzt,
+# um pro Block (p, h1-3, li-bullet, li-number) den richtigen ParagraphStyle
+# zu waehlen.
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+_PDF_BLOCK_RE = _re.compile(
+    r'<(p|h[1-3]|ul|ol)(\s[^>]*)?>(.*?)</\1>',
+    _re.IGNORECASE | _re.DOTALL,
+)
+_PDF_LI_RE = _re.compile(r'<li(\s[^>]*)?>(.*?)</li>', _re.IGNORECASE | _re.DOTALL)
+_PDF_TAG_RE = _re.compile(r'<[^>]+>')
+
+
+def _split_blocks_with_style(raw_html):
+    """
+    Zerlegt das HTML in eine Liste von (html-fragment, tag)-Tupeln, die pro
+    Block den passenden ParagraphStyle ermoeglichen. Innerhalb der Bloecke
+    bleiben Inline-Tags (<b>, <i>, <u>, <br/>, <span style="...">) erhalten.
+    """
+    if not raw_html:
+        return []
+
+    from .notizen_utils import sanitize_for_pdf
+    safe = sanitize_for_pdf(raw_html)
+    if not safe:
+        return []
+
+    result = []
+    last_end = 0
+    text = safe
+
+    for match in _PDF_BLOCK_RE.finditer(text):
+        prefix = text[last_end:match.start()].strip()
+        if prefix:
+            plain = _PDF_TAG_RE.sub('', prefix).strip()
+            if plain:
+                result.append((_re.sub(r'<br\s*/?>', '<br/>', plain), 'p'))
+
+        tag = match.group(1).lower()
+        inner = match.group(3)
+
+        if tag in ('h1', 'h2', 'h3'):
+            inner_clean = _convert_inline_styles_to_rl(_strip_outer_p(inner).strip())
+            if inner_clean:
+                result.append((inner_clean, tag))
+        elif tag == 'ul':
+            for li in _PDF_LI_RE.finditer(inner):
+                li_inner = _convert_inline_styles_to_rl(_strip_outer_p(li.group(2)).strip())
+                if li_inner:
+                    result.append((f'&bull;&nbsp; {li_inner}', 'li-bullet'))
+        elif tag == 'ol':
+            for idx, li in enumerate(_PDF_LI_RE.finditer(inner), start=1):
+                li_inner = _convert_inline_styles_to_rl(_strip_outer_p(li.group(2)).strip())
+                if li_inner:
+                    result.append((f'{idx}.&nbsp; {li_inner}', 'li-number'))
+        else:  # p
+            inner_clean = _convert_inline_styles_to_rl(_strip_outer_p(inner).strip())
+            if inner_clean:
+                result.append((inner_clean, 'p'))
+
+        last_end = match.end()
+
+    suffix = text[last_end:].strip()
+    if suffix:
+        plain = _PDF_TAG_RE.sub('', suffix).strip()
+        if plain:
+            result.append((_re.sub(r'<br\s*/?>', '<br/>', plain), 'p'))
+
+    return result
+
+
+def _strip_outer_p(html_fragment):
+    """Entfernt ein einzelnes umschliessendes <p>...</p>."""
+    s = html_fragment.strip()
+    m = _re.match(r'^<p(?:\s[^>]*)?>(.*)</p>$', s, _re.IGNORECASE | _re.DOTALL)
+    if m:
+        return m.group(1)
+    return s
+
+
+def _convert_inline_styles_to_rl(html_fragment):
+    """Re-Export der Konvertierungsfunktion aus notizen_utils, damit das
+    PDF-Modul Bloecke direkt vor dem Rendern aufbereiten kann."""
+    from .notizen_utils import _convert_inline_styles_to_rl as _convert
+    return _convert(html_fragment)

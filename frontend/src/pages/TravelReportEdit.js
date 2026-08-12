@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import NotesEditor from '../components/NotesEditor';
 import { 
   ArrowLeftIcon, 
   PhotoIcon, 
@@ -31,7 +32,8 @@ const TravelReportEdit = () => {
     linked_system: '',
     linked_order: '',
     executing_employee: '',
-    notes: ''
+    notes: '',
+    notes_html: ''
   });
   
   // Selection states
@@ -41,6 +43,7 @@ const TravelReportEdit = () => {
   const [employees, setEmployees] = useState([]);
   const [photos, setPhotos] = useState([]);
   const [measurements, setMeasurements] = useState([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   
   // Search states
   const [customerSearch, setCustomerSearch] = useState('');
@@ -110,7 +113,8 @@ const TravelReportEdit = () => {
         linked_system: response.data.linked_system || '',
         linked_order: response.data.linked_order || '',
         executing_employee: response.data.executing_employee || '',
-        notes: response.data.notes || ''
+        notes: response.data.notes || '',
+        notes_html: response.data.notes_html || response.data.notes || ''
       });
       setPhotos(response.data.photos || []);
       setMeasurements(response.data.measurements || []);
@@ -168,7 +172,11 @@ const TravelReportEdit = () => {
   };
 
   const handleSave = async (e) => {
-    e.preventDefault();
+    // e kann undefined sein, wenn handleSave programmatisch (z. B. vor
+    // PDF-Generierung) aufgerufen wird.
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     setSaving(true);
     const payload = {
       ...formData,
@@ -180,14 +188,20 @@ const TravelReportEdit = () => {
     try {
       if (id && id !== 'new') {
         await api.put(`/service/travel-reports/${id}/`, payload);
-        alert('Bericht aktualisiert');
+        // Nur Alert, wenn vom Form-Submit aufgerufen (nicht von generatePDF).
+        if (e) {
+          alert('Bericht aktualisiert');
+        }
+        return { ok: true };
       } else {
         const response = await api.post('/service/travel-reports/', payload);
         navigate(`/sales/travel-reports/${response.data.id}`);
+        return { ok: true, id: response.data.id };
       }
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
       alert('Fehler beim Speichern');
+      return { ok: false, error };
     } finally {
       setSaving(false);
     }
@@ -304,20 +318,43 @@ const TravelReportEdit = () => {
 
   // Photo handling
   const handlePhotoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !id || id === 'new') return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !id || id === 'new') return;
 
-    const uploadData = new FormData();
-    uploadData.append('photo', file);
+    setUploadingPhotos(true);
+    let successCount = 0;
+    const failures = [];
 
-    try {
-      await api.post(`/service/travel-reports/${id}/upload_photo/`, uploadData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+    // Sequentiell hochladen, damit der Server nicht überlastet wird
+    // und Fehler pro Datei klar zugeordnet werden können.
+    for (const file of files) {
+      const uploadData = new FormData();
+      uploadData.append('photo', file);
+
+      try {
+        await api.post(`/service/travel-reports/${id}/upload_photo/`, uploadData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        successCount += 1;
+      } catch (error) {
+        console.error('Fehler beim Hochladen:', error);
+        failures.push(file.name);
+      }
+    }
+
+    // Input zurücksetzen, damit wieder dieselben Dateien ausgewählt werden können
+    e.target.value = '';
+
+    setUploadingPhotos(false);
+
+    if (successCount > 0) {
       fetchReport();
-    } catch (error) {
-      console.error('Fehler beim Hochladen:', error);
-      alert('Fehler beim Hochladen des Fotos');
+    }
+    if (failures.length > 0) {
+      alert(
+        `${successCount} von ${files.length} Foto(s) hochgeladen.\n` +
+        `Fehler bei: ${failures.join(', ')}`
+      );
     }
   };
 
@@ -429,13 +466,25 @@ const TravelReportEdit = () => {
     }, 500);
   };
 
-  // PDF generation
+  // PDF generation - speichert vorher ungespeicherte Aenderungen,
+  // damit das PDF den aktuellen Editor-Inhalt enthaelt.
   const generatePDF = async (language = 'de') => {
     if (formData.report_type !== 'service') {
-      alert('PDF-Generierung ist nur für Serviceberichte verfügbar.');
+      alert('PDF-Generierung ist nur fuer Serviceberichte verfuegbar.');
+      return;
+    }
+    if (id === 'new') {
+      alert('Bitte speichern Sie den Bericht zuerst.');
       return;
     }
     try {
+      // 1) Vorher speichern, damit die DB den aktuellen Editor-Inhalt hat.
+      const result = await handleSave();
+      if (!result || !result.ok) {
+        alert('PDF-Generierung abgebrochen: Bericht konnte nicht gespeichert werden.');
+        return;
+      }
+      // 2) Danach das PDF laden.
       const response = await api.get(`/service/travel-reports/${id}/generate_pdf/?language=${language}`, {
         responseType: 'blob'
       });
@@ -795,13 +844,21 @@ const TravelReportEdit = () => {
         {/* Notes */}
         <div className="bg-white shadow rounded-lg p-6">
           <h3 className="text-lg font-medium mb-4">Notizen</h3>
-          <textarea
-            value={formData.notes}
-            onChange={(e) => setFormData({...formData, notes: e.target.value})}
-            rows={6}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Beschreibung, Beobachtungen, durchgeführte Arbeiten..."
+          <NotesEditor
+            value={formData.notes_html}
+            onChange={(html) =>
+              setFormData((prev) => ({
+                ...prev,
+                notes_html: html,
+              }))
+            }
+            placeholder="Hier können formatierte Notizen zum Bericht erfasst werden…"
+            minHeight={220}
           />
+          <p className="mt-2 text-xs text-gray-500">
+            Unterstützt: Schriftart, Schriftgröße, Überschriften (H1–H3), Fett, Kursiv,
+            Unterstrichen, Durchgestrichen, Aufzählungen und nummerierte Listen.
+          </p>
         </div>
 
         {/* Measurement Tables - only for saved reports */}
@@ -889,13 +946,17 @@ const TravelReportEdit = () => {
           <div className="bg-white shadow rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium">Fotos</h3>
-              <label className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 cursor-pointer">
+              <label
+                className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 cursor-pointer ${uploadingPhotos ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
                 <PhotoIcon className="h-5 w-5 mr-2" />
-                Foto hochladen
+                {uploadingPhotos ? 'Lade hoch...' : 'Fotos hochladen'}
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   onChange={handlePhotoUpload}
+                  disabled={uploadingPhotos}
                   className="hidden"
                 />
               </label>

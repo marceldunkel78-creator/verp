@@ -63,7 +63,17 @@ class TravelReport(models.Model):
     )
     
     # Inhalt
-    notes = models.TextField(blank=True, verbose_name='Notizen')
+    notes = models.TextField(
+        blank=True,
+        verbose_name='Notizen (Plain-Text, Legacy)',
+        help_text='Wird beim ersten Speichern mit Editor automatisch aus notes_html abgeleitet'
+    )
+    notes_html = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Notizen (Rich-Text / HTML)',
+        help_text='Formatierte Notizen aus dem Editor (Tiptap). Wird serverseitig bereinigt.'
+    )
 
     # Zeitaufwand (vor allem für Serviceberichte)
     work_effort_hours = models.DecimalField(
