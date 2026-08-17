@@ -22,6 +22,13 @@ class CompanySettingsAdmin(admin.ModelAdmin):
         ('Rechtliche Informationen', {
             'fields': ('managing_director', 'commercial_register', 'register_court', 'tax_number', 'vat_id')
         }),
+        ('Geschäftsjahr Einstellungen', {
+            'fields': ('fiscal_year_start_month', 'fiscal_year_start_day')
+        }),
+        ('RMA-Kalkulation', {
+            'fields': ('default_hourly_rate', 'default_admin_fee'),
+            'description': 'Standard-Stundensatz und Verwaltungskostenpauschale, die automatisch in der RMA-Kalkulation übernommen werden.'
+        }),
         ('Dokumente', {
             'fields': ('document_header',)
         }),

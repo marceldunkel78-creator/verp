@@ -5,12 +5,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404
+from django.core.files.base import ContentFile
 
 from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
                      ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
-                     RMACaseTimeEntry)
+                     RMACaseTimeEntry, RMAItem, RMAItemPhoto, RMAReceipt, RMAReturn, RMAReturnItem,
+                     RMAAttachment, RMACostLineItem)
 from .serializers import (
     VSServiceListSerializer, VSServiceDetailSerializer, VSServiceCreateUpdateSerializer,
     VSServicePriceSerializer,
@@ -19,9 +22,15 @@ from .serializers import (
     ServiceTicketTimeEntrySerializer,
     RMACaseListSerializer, RMACaseDetailSerializer, RMACaseCreateUpdateSerializer,
     RMACaseTimeEntrySerializer,
+    RMAItemSerializer, RMAItemPhotoSerializer, RMAReceiptSerializer,
+    RMAReturnSerializer, RMAReturnCreateSerializer, RMAReturnItemSerializer,
+    RMAAttachmentSerializer, RMACostLineItemSerializer,
     TroubleshootingListSerializer, TroubleshootingDetailSerializer, TroubleshootingCreateUpdateSerializer,
     TroubleshootingCommentSerializer, TroubleshootingAttachmentSerializer
 )
+from .rma_pdf_generator import generate_rma_delivery_note_pdf
+from .rma_report_pdf import generate_rma_repair_report_pdf
+from .rma_calculation_pdf import generate_rma_calculation_pdf
 from users.models import Message
 
 
@@ -508,8 +517,297 @@ class RMACaseViewSet(viewsets.ModelViewSet):
             return RMACaseCreateUpdateSerializer
         return RMACaseDetailSerializer
     
+    def create(self, request, *args, **kwargs):
+        """Override create to return RMACaseDetailSerializer response"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        detail_serializer = RMACaseDetailSerializer(serializer.instance, context={'request': request})
+        headers = self.get_success_headers(detail_serializer.data)
+        return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def update(self, request, *args, **kwargs):
+        """Override update to return RMACaseDetailSerializer response"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+        
+        detail_serializer = RMACaseDetailSerializer(serializer.instance, context={'request': request})
+        return Response(detail_serializer.data)
+    
     def perform_create(self, serializer):
+        # Standard-Stundensatz und Verwaltungskostenpauschale aus Firmeneinstellungen übernehmen, falls nicht gesetzt
+        from company.models import CompanySettings
+        settings = CompanySettings.get_settings()
+        if 'hourly_rate' not in serializer.validated_data or serializer.validated_data.get('hourly_rate') in (None, ''):
+            serializer.validated_data['hourly_rate'] = settings.default_hourly_rate or 0
+        if 'admin_fee' not in serializer.validated_data or serializer.validated_data.get('admin_fee') in (None, ''):
+            serializer.validated_data['admin_fee'] = settings.default_admin_fee or 0
         serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['get'])
+    def items(self, request, pk=None):
+        """Gibt alle Positionen eines RMA-Falls zurück"""
+        rma_case = self.get_object()
+        items = rma_case.items.all()
+        serializer = RMAItemSerializer(items, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def add_item(self, request, pk=None):
+        """Fügt eine Position zur Warenlieferung hinzu"""
+        from django.db.models import Max
+        rma_case = self.get_object()
+        
+        max_pos = rma_case.items.aggregate(max_pos=Max('position'))['max_pos'] or 0
+        request.data['position'] = max_pos + 1
+        request.data['rma_case'] = rma_case.id
+        
+        serializer = RMAItemSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def create_receipt(self, request, pk=None):
+        """Erstellt den Wareneingang"""
+        rma_case = self.get_object()
+        
+        if hasattr(rma_case, 'receipt'):
+            return Response(
+                {'error': 'Wareneingang existiert bereits'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        receipt_date = request.data.get('receipt_date')
+        receipt = RMAReceipt.objects.create(
+            rma_case=rma_case,
+            receipt_date=receipt_date,
+            received_by=request.user,
+            notes=request.data.get('notes', '')
+        )
+        
+        # Falls noch nicht gesetzt, Eingangsdatum am Fall selbst nachtragen
+        if not rma_case.received_date:
+            rma_case.received_date = receipt_date
+            rma_case.save()
+        
+        serializer = RMAReceiptSerializer(receipt)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'])
+    def upload_receipt_document(self, request, pk=None):
+        """Lädt den Eingangslieferschein zum Wareneingang hoch"""
+        rma_case = self.get_object()
+        
+        if not hasattr(rma_case, 'receipt'):
+            return Response(
+                {'error': 'Wareneingang existiert noch nicht'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        receipt = rma_case.receipt
+        file = request.FILES.get('file')
+        
+        if not file:
+            return Response(
+                {'error': 'Keine Datei hochgeladen'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        receipt.delivery_note = file
+        receipt.save()
+        serializer = RMAReceiptSerializer(receipt)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def upload_photo(self, request, pk=None):
+        """Lädt ein Foto zu einer Position hoch"""
+        rma_case = self.get_object()
+        item_id = request.data.get('item_id')
+        
+        item = get_object_or_404(RMAItem, id=item_id, rma_case=rma_case)
+        
+        photo = RMAItemPhoto.objects.create(
+            rma_item=item,
+            photo=request.FILES.get('photo'),
+            description=request.data.get('description', ''),
+            uploaded_by=request.user
+        )
+        
+        serializer = RMAItemPhotoSerializer(photo)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['post'])
+    def create_return(self, request, pk=None):
+        """Erstellt einen Warenausgang und generiert den Lieferschein"""
+        rma_case = self.get_object()
+        
+        items_data = request.data.get('items', [])
+        if not items_data:
+            return Response(
+                {'error': 'Keine Positionen zum Versand ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils.dateparse import parse_date
+        
+        raw_date = request.data.get('return_date')
+        if isinstance(raw_date, str):
+            parsed_date = parse_date(raw_date)
+            if parsed_date is None:
+                return Response({'error': 'Ungültiges Datum für return_date'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            parsed_date = raw_date
+        
+        rma_return = RMAReturn.objects.create(
+            rma_case=rma_case,
+            return_date=parsed_date,
+            shipping_carrier=request.data.get('shipping_carrier', ''),
+            tracking_number=request.data.get('tracking_number', ''),
+            notes=request.data.get('notes', ''),
+            created_by=request.user
+        )
+        
+        for item_data in items_data:
+            RMAReturnItem.objects.create(
+                rma_return=rma_return,
+                rma_item_id=item_data.get('rma_item_id'),
+                quantity_returned=item_data.get('quantity_returned', 0),
+                condition_notes=item_data.get('condition_notes', '')
+            )
+        
+        # Sprache für den Lieferschein auswerten (de/en)
+        language = request.data.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+        pdf_content = generate_rma_delivery_note_pdf(rma_return, language=language)
+        filename = f"Lieferschein_{rma_return.return_number}.pdf"
+        rma_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+        
+        # Falls noch nicht gesetzt, Versanddatum am Fall selbst nachtragen
+        if not rma_case.shipped_date:
+            rma_case.shipped_date = parsed_date
+            rma_case.save()
+        
+        serializer = RMAReturnSerializer(rma_return)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['get'], url_path='returns')
+    def get_returns(self, request, pk=None):
+        """Gibt alle Warenausgänge eines RMA-Falls zurück"""
+        rma_case = self.get_object()
+        returns = rma_case.returns.all()
+        serializer = RMAReturnSerializer(returns, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def generate_report_pdf(self, request, pk=None):
+        """Generiert den Reparaturbericht als PDF und legt ihn im Medienordner ab"""
+        rma_case = self.get_object()
+        
+        try:
+            language = request.data.get('language', 'de')
+            if language not in ('de', 'en'):
+                language = 'de'
+            pdf_buffer = generate_rma_repair_report_pdf(rma_case, language=language)
+            
+            filename = f"Reparaturbericht_{rma_case.rma_number}.pdf"
+            
+            # Alte PDF-Datei löschen, bevor neue gespeichert wird
+            if rma_case.report_pdf:
+                old_file = rma_case.report_pdf
+                rma_case.report_pdf = None
+                rma_case.save(update_fields=['report_pdf'])
+                old_file.delete(save=False)
+            
+            rma_case.report_pdf.save(filename, ContentFile(pdf_buffer), save=True)
+            
+            serializer = RMACaseDetailSerializer(rma_case, context={'request': request})
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {'error': f'Fehler bei der PDF-Generierung: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['get'])
+    def download_report_pdf(self, request, pk=None):
+        """Download des Reparaturberichts"""
+        rma_case = self.get_object()
+        
+        if not rma_case.report_pdf:
+            return Response(
+                {'error': 'Noch kein Reparaturbericht generiert'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        response = HttpResponse(rma_case.report_pdf.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Reparaturbericht_{rma_case.rma_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['get'])
+    def view_report_pdf(self, request, pk=None):
+        """Zeigt den Reparaturbericht inline im Browser an"""
+        rma_case = self.get_object()
+        
+        if not rma_case.report_pdf:
+            return Response(
+                {'error': 'Noch kein Reparaturbericht generiert'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        response = HttpResponse(rma_case.report_pdf.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="Reparaturbericht_{rma_case.rma_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['get'])
+    def download_calculation_pdf(self, request, pk=None):
+        """Generiert und lädt die RMA-Kalkulation als PDF (Dokumentation, keine Rechnung)"""
+        rma_case = self.get_object()
+        
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+        
+        try:
+            pdf_buffer = generate_rma_calculation_pdf(rma_case, language=language)
+            filename = f"RMA_Kalkulation_{rma_case.rma_number}.pdf"
+            response = HttpResponse(pdf_buffer, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response(
+                {'error': f'Fehler bei der PDF-Generierung: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['get'])
+    def view_calculation_pdf(self, request, pk=None):
+        """Zeigt die RMA-Kalkulation inline im Browser an"""
+        rma_case = self.get_object()
+        
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+        
+        try:
+            pdf_buffer = generate_rma_calculation_pdf(rma_case, language=language)
+            filename = f"RMA_Kalkulation_{rma_case.rma_number}.pdf"
+            response = HttpResponse(pdf_buffer, content_type='application/pdf')
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response(
+                {'error': f'Fehler bei der PDF-Generierung: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['get'])
     def time_entries(self, request, pk=None):
@@ -587,6 +885,228 @@ class RMACaseViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except RMACaseTimeEntry.DoesNotExist:
             raise Http404("Zeiteintrag nicht gefunden")
+    
+    @action(detail=True, methods=['post'])
+    def upload_attachment(self, request, pk=None):
+        """Lädt ein Auftragsdokument zum RMA-Fall hoch"""
+        rma_case = self.get_object()
+        file = request.FILES.get('file')
+        
+        if not file:
+            return Response(
+                {'error': 'Keine Datei hochgeladen'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        attachment = RMAAttachment.objects.create(
+            rma_case=rma_case,
+            file=file,
+            description=request.data.get('description', ''),
+            uploaded_by=request.user
+        )
+        
+        serializer = RMAAttachmentSerializer(attachment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """Löscht ein Auftragsdokument"""
+        rma_case = self.get_object()
+        try:
+            attachment = RMAAttachment.objects.get(id=attachment_id, rma_case=rma_case)
+            attachment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except RMAAttachment.DoesNotExist:
+            raise Http404("Dokument nicht gefunden")
+    
+    @action(detail=True, methods=['post'])
+    def add_cost_line_item(self, request, pk=None):
+        """Fügt einen Kostenposten zur RMA-Kalkulation hinzu"""
+        rma_case = self.get_object()
+        
+        cost_type = request.data.get('cost_type', 'material')
+        if cost_type not in ('material', 'labor', 'shipping'):
+            cost_type = 'material'
+        
+        line = RMACostLineItem.objects.create(
+            rma_case=rma_case,
+            cost_type=cost_type,
+            description=request.data.get('description', ''),
+            quantity=request.data.get('quantity', 1),
+            unit=request.data.get('unit', 'Stk'),
+            unit_price=request.data.get('unit_price', 0)
+        )
+        
+        serializer = RMACostLineItemSerializer(line)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['delete'], url_path='delete_cost_line_item/(?P<line_id>[^/.]+)')
+    def delete_cost_line_item(self, request, pk=None, line_id=None):
+        """Löscht einen Kostenposten"""
+        rma_case = self.get_object()
+        try:
+            line = RMACostLineItem.objects.get(id=line_id, rma_case=rma_case)
+            line.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except RMACostLineItem.DoesNotExist:
+            raise Http404("Kostenposition nicht gefunden")
+    
+    @action(detail=True, methods=['post'])
+    def import_time_to_labor(self, request, pk=None):
+        """Importiert Zeiteinträge in Arbeitskosten-Positionen (Stunden x Stundensatz)"""
+        rma_case = self.get_object()
+        
+        # Stundensatz aus Firmeneinstellungen oder vom Fall
+        from company.models import CompanySettings
+        settings = CompanySettings.get_settings()
+        hourly_rate = request.data.get('hourly_rate')
+        if hourly_rate in (None, ''):
+            hourly_rate = rma_case.hourly_rate or settings.default_hourly_rate or 0
+        
+        entry_id = request.data.get('entry_id')
+        
+        if entry_id:
+            entries = rma_case.time_entries.filter(id=entry_id)
+        else:
+            # Alle Zeiteinträge importieren, die noch keinen Kostenposten haben
+            already_imported = RMACostLineItem.objects.filter(
+                rma_case=rma_case,
+                source_time_entry__isnull=False
+            ).values_list('source_time_entry_id', flat=True)
+            entries = rma_case.time_entries.exclude(id__in=already_imported)
+        
+        imported_count = 0
+        for entry in entries:
+            # Bereits importierte überspringen
+            if RMACostLineItem.objects.filter(rma_case=rma_case, source_time_entry=entry).exists():
+                continue
+            RMACostLineItem.objects.create(
+                rma_case=rma_case,
+                cost_type='labor',
+                description=f"Zeiterfassung {entry.date.strftime('%d.%m.%Y')}: {entry.description[:250]}" if entry.description else f"Zeiterfassung {entry.date.strftime('%d.%m.%Y')}",
+                quantity=entry.hours_spent,
+                unit='Std',
+                unit_price=hourly_rate,
+                source_time_entry=entry
+            )
+            imported_count += 1
+        
+        detail_serializer = RMACaseDetailSerializer(rma_case, context={'request': request})
+        return Response({
+            'imported': imported_count,
+            'hourly_rate': hourly_rate,
+            'rma_case': detail_serializer.data
+        })
+
+
+class RMAItemViewSet(viewsets.ModelViewSet):
+    """ViewSet für RMA-Positionen"""
+    permission_classes = [IsAuthenticated]
+    queryset = RMAItem.objects.all()
+    serializer_class = RMAItemSerializer
+
+
+class RMAReturnViewSet(viewsets.ModelViewSet):
+    """ViewSet für Warenausgänge (Rückversand)"""
+    permission_classes = [IsAuthenticated]
+    queryset = RMAReturn.objects.all().order_by('-created_at')
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return RMAReturnCreateSerializer
+        return RMAReturnSerializer
+    
+    @action(detail=True, methods=['get'])
+    def download_pdf(self, request, pk=None):
+        """Download des Lieferscheins"""
+        rma_return = self.get_object()
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+
+        # Wenn gewünschte Sprache von der gespeicherten Datei abweicht, neu generieren
+        if not rma_return.pdf_file or rma_return.pdf_language != language:
+            pdf_content = generate_rma_delivery_note_pdf(rma_return, language=language)
+            filename = f"Lieferschein_{rma_return.return_number}.pdf"
+            rma_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+            rma_return.pdf_language = language
+            rma_return.save(update_fields=['pdf_language'])
+
+        response = HttpResponse(rma_return.pdf_file.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Lieferschein_{rma_return.return_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['get'])
+    def view_pdf(self, request, pk=None):
+        """Zeigt den Lieferschein inline im Browser an (neuer Tab)"""
+        rma_return = self.get_object()
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+
+        if not rma_return.pdf_file or rma_return.pdf_language != language:
+            pdf_content = generate_rma_delivery_note_pdf(rma_return, language=language)
+            filename = f"Lieferschein_{rma_return.return_number}.pdf"
+            rma_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+            rma_return.pdf_language = language
+            rma_return.save(update_fields=['pdf_language'])
+
+        response = HttpResponse(rma_return.pdf_file.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="Lieferschein_{rma_return.return_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['post'])
+    def regenerate_pdf(self, request, pk=None):
+        """Regeneriert den PDF-Lieferschein"""
+        rma_return = self.get_object()
+        language = request.data.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+
+        if rma_return.pdf_file:
+            rma_return.pdf_file.delete(save=False)
+        
+        pdf_content = generate_rma_delivery_note_pdf(rma_return, language=language)
+        filename = f"Lieferschein_{rma_return.return_number}.pdf"
+        rma_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+        rma_return.pdf_language = language
+        rma_return.save(update_fields=['pdf_language'])
+        
+        serializer = RMAReturnSerializer(rma_return)
+        return Response(serializer.data)
+    
+    def perform_destroy(self, instance):
+        """Löscht den Warenausgang inkl. PDF, sodass der Lieferschein neu erstellt werden kann"""
+        if instance.pdf_file:
+            instance.pdf_file.delete(save=False)
+        instance.delete()
+
+
+class RMAItemPhotoViewSet(viewsets.ModelViewSet):
+    """ViewSet für RMA-Positions-Fotos"""
+    permission_classes = [IsAuthenticated]
+    queryset = RMAItemPhoto.objects.all()
+    serializer_class = RMAItemPhotoSerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+class RMAAttachmentViewSet(viewsets.ModelViewSet):
+    """ViewSet für RMA Auftragsdokumente"""
+    permission_classes = [IsAuthenticated]
+    queryset = RMAAttachment.objects.all()
+    serializer_class = RMAAttachmentSerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+class RMACostLineItemViewSet(viewsets.ModelViewSet):
+    """ViewSet für RMA Kostenpositionen"""
+    permission_classes = [IsAuthenticated]
+    queryset = RMACostLineItem.objects.all()
+    serializer_class = RMACostLineItemSerializer
 
 
 class TroubleshootingViewSet(viewsets.ModelViewSet):

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   PlusIcon,
-  PencilIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon,
   ChevronLeftIcon,
@@ -130,90 +129,87 @@ const RMACases = () => {
 
       {/* RMA Cases Table */}
       <div className="bg-white shadow rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                RMA-Nummer
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Titel / Beschreibung
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Kunde
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Seriennummer
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Eingang
-              </th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Aktionen
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
+        {/* Scrollbar oben: flex-column-reverse zeigt den horizontalen Scrollbalken am oberen Rand */}
+        <div className="flex flex-col-reverse">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                  Laden...
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  RMA-Nummer
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Titel / Beschreibung
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Kunde
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Seriennummer
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Eingang
+                </th>
+                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
               </tr>
-            ) : rmaCases.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
-                  Keine RMA-Fälle gefunden
-                </td>
-              </tr>
-            ) : (
-              rmaCases.map((rma) => (
-                <tr key={rma.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <ArrowPathIcon className="h-5 w-5 text-orange-500 mr-2" />
-                      <span className="font-mono text-sm font-medium text-gray-900">
-                        {rma.rma_number}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{rma.title}</div>
-                    {rma.description && (
-                      <div className="text-xs text-gray-500 truncate max-w-xs">
-                        {rma.description}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{rma.customer_name || '-'}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-mono text-gray-500">{rma.product_serial || '-'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(rma.received_date)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    {getStatusBadge(rma.status)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      onClick={() => navigate(`/service/rma/${rma.id}`)}
-                      className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-900"
-                    >
-                      <PencilIcon className="h-4 w-4" />
-                      <span className="text-sm">Bearbeiten</span>
-                    </button>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                    Laden...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : rmaCases.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                    Keine RMA-Fälle gefunden
+                  </td>
+                </tr>
+              ) : (
+                rmaCases.map((rma) => (
+                  <tr
+                    key={rma.id}
+                    onClick={() => navigate(`/service/rma/${rma.id}`)}
+                    className="hover:bg-gray-50 cursor-pointer"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <ArrowPathIcon className="h-5 w-5 text-orange-500 mr-2" />
+                        <span className="font-mono text-sm font-medium text-gray-900">
+                          {rma.rma_number}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{rma.title}</div>
+                      {rma.description && (
+                        <div className="text-xs text-gray-500 truncate max-w-xs">
+                          {rma.description}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{rma.customer_display || rma.customer_name || '-'}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-mono text-gray-500">{rma.product_serial || '-'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(rma.received_date)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {getStatusBadge(rma.status)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          </div>
+        </div>
       </div>
 
       {/* Pagination */}

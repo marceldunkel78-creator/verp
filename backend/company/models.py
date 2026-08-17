@@ -87,6 +87,24 @@ class CompanySettings(models.Model):
         help_text='Tag, an dem das Geschäftsjahr beginnt (1-31)'
     )
     
+    # Standard-Stundensatz für RMA-Kalkulation
+    default_hourly_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name='Standard-Stundensatz',
+        help_text='Wird automatisch in der RMA-Kalkulation übernommen (bleibt editierbar)'
+    )
+    
+    # Verwaltungskostenpauschale für RMA-Kalkulation
+    default_admin_fee = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        verbose_name='Verwaltungskostenpauschale',
+        help_text='Wird automatisch in der RMA-Kalkulation übernommen (bleibt editierbar)'
+    )
+    
     # Metadaten
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

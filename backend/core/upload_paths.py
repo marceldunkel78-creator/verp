@@ -75,6 +75,46 @@ def visiview_ticket_attachment_path(instance, filename):
     ticket_number = _sanitize_path_component(instance.ticket.ticket_number or 'unknown')
     return os.path.join('VisiView', 'VisiView-Tickets', ticket_number, safe_filename)
 
+
+def _get_rma_number(instance):
+    """Ermittelt die RMA-Nummer aus der Instanz oder einer verknüpften rma_case-Relation."""
+    rma_number = getattr(instance, 'rma_number', None)
+    if not rma_number and hasattr(instance, 'rma_case'):
+        rma_number = getattr(instance.rma_case, 'rma_number', None)
+    if not rma_number and hasattr(instance, 'rma_item'):
+        rma_number = getattr(instance.rma_item.rma_case, 'rma_number', None)
+    return _sanitize_path_component(rma_number or 'unknown')
+
+
+def rma_item_photo_path(instance, filename):
+    """Upload-Pfad für RMA Positions-Fotos: /Service/RMA/RMA-Nummer/photos/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'photos', safe_filename)
+
+
+def rma_receipt_document_path(instance, filename):
+    """Upload-Pfad für RMA Wareneingangs-Dokumente: /Service/RMA/RMA-Nummer/documents/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'documents', safe_filename)
+
+
+def rma_return_pdf_path(instance, filename):
+    """Upload-Pfad für RMA Lieferschein-PDFs (Warenausgang): /Service/RMA/RMA-Nummer/returns/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'returns', safe_filename)
+
+
+def rma_report_pdf_path(instance, filename):
+    """Upload-Pfad für RMA Reparaturbericht-PDFs: /Service/RMA/RMA-Nummer/report/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'report', safe_filename)
+
+
+def rma_attachment_path(instance, filename):
+    """Upload-Pfad für RMA Auftragsdokumente: /Service/RMA/RMA-Nummer/documents/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'documents', safe_filename)
+
     """
     Upload-Pfad: /customer_orders/Jahr/Auftragsnummer/filename
     """

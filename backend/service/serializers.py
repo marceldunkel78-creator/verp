@@ -2,7 +2,8 @@ from rest_framework import serializers
 from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
                      ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
-                     RMACaseTimeEntry)
+                     RMACaseTimeEntry, RMAItem, RMAItemPhoto, RMAReceipt, RMAReturn, RMAReturnItem,
+                     RMAAttachment, RMACostLineItem)
 
 
 class VSServicePriceSerializer(serializers.ModelSerializer):
@@ -318,18 +319,169 @@ class RMACaseTimeEntrySerializer(serializers.ModelSerializer):
         return None
 
 
+class RMAItemPhotoSerializer(serializers.ModelSerializer):
+    """Serializer für Fotos von RMA-Positionen"""
+    uploaded_by_display = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
+    photo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RMAItemPhoto
+        fields = [
+            'id', 'rma_item', 'photo', 'photo_url', 'description',
+            'uploaded_at', 'uploaded_by', 'uploaded_by_display'
+        ]
+        read_only_fields = ['uploaded_at', 'uploaded_by', 'uploaded_by_display', 'photo_url']
+
+    def get_photo_url(self, obj):
+        if obj.photo:
+            return obj.photo.url
+        return None
+
+
+class RMAItemSerializer(serializers.ModelSerializer):
+    """Serializer für RMA-Positionen"""
+    photos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RMAItem
+        fields = [
+            'id', 'rma_case', 'position', 'product_name',
+            'article_number', 'quantity', 'unit',
+            'serial_number', 'notes', 'photos'
+        ]
+
+    def get_photos(self, obj):
+        photos = obj.photos.all()
+        return RMAItemPhotoSerializer(photos, many=True, context=self.context).data
+
+
+class RMAItemNestedSerializer(serializers.ModelSerializer):
+    """Nested serializer für verschachtelte Item-Erstellung/Aktualisierung ohne rma_case-Feld"""
+    id = serializers.IntegerField(required=False, allow_null=True)
+
+    class Meta:
+        model = RMAItem
+        fields = [
+            'id', 'position', 'product_name',
+            'article_number', 'quantity', 'unit',
+            'serial_number', 'notes'
+        ]
+
+
+class RMAReceiptSerializer(serializers.ModelSerializer):
+    """Serializer für Wareneingang eines RMA-Falls"""
+    received_by_display = serializers.CharField(source='received_by.get_full_name', read_only=True)
+    delivery_note_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RMAReceipt
+        fields = [
+            'id', 'rma_case', 'receipt_date', 'received_by', 'received_by_display',
+            'delivery_note', 'delivery_note_url', 'notes'
+        ]
+        read_only_fields = ['received_by', 'received_by_display', 'delivery_note_url']
+
+    def get_delivery_note_url(self, obj):
+        if obj.delivery_note:
+            return obj.delivery_note.url
+        return None
+
+
+class RMAReturnItemSerializer(serializers.ModelSerializer):
+    """Serializer für Warenausgangs-Positionen"""
+    rma_item_detail = RMAItemSerializer(source='rma_item', read_only=True)
+
+    class Meta:
+        model = RMAReturnItem
+        fields = ['id', 'rma_return', 'rma_item', 'rma_item_detail', 'quantity_returned', 'condition_notes']
+
+
+class RMAReturnSerializer(serializers.ModelSerializer):
+    """Serializer für Warenausgänge (Rückversand)"""
+    items = RMAReturnItemSerializer(many=True, read_only=True)
+    created_by_display = serializers.CharField(source='created_by.get_full_name', read_only=True)
+
+    class Meta:
+        model = RMAReturn
+        fields = [
+            'id', 'rma_case', 'return_number', 'return_date',
+            'shipping_carrier', 'tracking_number', 'pdf_file', 'pdf_language',
+            'notes', 'created_at', 'created_by', 'created_by_display', 'items'
+        ]
+        read_only_fields = ['return_number', 'created_at', 'created_by', 'created_by_display', 'pdf_file', 'pdf_language']
+
+
+class RMAReturnCreateSerializer(serializers.ModelSerializer):
+    """Serializer für Warenausgangs-Erstellung"""
+    items = RMAReturnItemSerializer(many=True, write_only=True)
+
+    class Meta:
+        model = RMAReturn
+        fields = ['rma_case', 'return_date', 'shipping_carrier', 'tracking_number', 'notes', 'items']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        rma_return = RMAReturn.objects.create(**validated_data)
+
+        for item_data in items_data:
+            RMAReturnItem.objects.create(rma_return=rma_return, **item_data)
+
+        return rma_return
+
+
+class RMAAttachmentSerializer(serializers.ModelSerializer):
+    """Serializer für RMA Auftragsdokumente"""
+    uploaded_by_display = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RMAAttachment
+        fields = [
+            'id', 'rma_case', 'file', 'file_url', 'description',
+            'uploaded_at', 'uploaded_by', 'uploaded_by_display'
+        ]
+        read_only_fields = ['uploaded_at', 'uploaded_by', 'uploaded_by_display', 'file_url']
+
+    def get_file_url(self, obj):
+        if obj.file:
+            return obj.file.url
+        return None
+
+
+class RMACostLineItemSerializer(serializers.ModelSerializer):
+    """Serializer für RMA Kostenpositionen"""
+    total_price = serializers.DecimalField(read_only=True, max_digits=12, decimal_places=2)
+    cost_type_display = serializers.CharField(source='get_cost_type_display', read_only=True)
+
+    class Meta:
+        model = RMACostLineItem
+        fields = [
+            'id', 'rma_case', 'cost_type', 'cost_type_display',
+            'description', 'quantity', 'unit', 'unit_price', 'total_price',
+            'source_time_entry'
+        ]
+        read_only_fields = ['source_time_entry']
+
+
 class RMACaseListSerializer(serializers.ModelSerializer):
     """Serializer für RMA-Fall Liste"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    customer_display = serializers.SerializerMethodField()
     
     class Meta:
         model = RMACase
         fields = [
             'id', 'rma_number', 'title', 'description',
-            'customer_name', 'product_serial',
+            'customer', 'customer_name', 'customer_display', 'product_serial',
             'status', 'status_display',
             'received_date', 'created_at', 'updated_at'
         ]
+    
+    def get_customer_display(self, obj):
+        """Zeigt den verknüpften Kunden aus den Basisinfos (FK) an"""
+        if obj.customer:
+            return str(obj.customer)
+        return obj.customer_name or None
 
 
 class RMACaseDetailSerializer(serializers.ModelSerializer):
@@ -339,6 +491,13 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     time_entries = RMACaseTimeEntrySerializer(many=True, read_only=True)
     total_hours_spent = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
+    receipt = serializers.SerializerMethodField()
+    returns = RMAReturnSerializer(many=True, read_only=True)
+    report_pdf_url = serializers.SerializerMethodField()
+    attachments = RMAAttachmentSerializer(many=True, read_only=True)
+    cost_line_items = RMACostLineItemSerializer(many=True, read_only=True)
+    cost_totals = serializers.SerializerMethodField()
     
     class Meta:
         model = RMACase
@@ -351,19 +510,25 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             'customer', 'customer_name', 'customer_contact', 'customer_email', 'customer_phone',
             'linked_system', 'inventory_item',
             'product_name', 'product_serial', 'product_purchase_date',
-            'warranty_status', 'fault_description',
+            'warranty_status', 'fault_description', 'attachments',
             
             # Tab 2: Wareneingang/-ausgang
             'received_date', 'received_by', 'received_condition', 'tracking_inbound',
             'shipped_date', 'shipped_by', 'tracking_outbound', 'shipping_notes',
+            'address_name', 'address_street', 'address_house_number',
+            'address_postal_code', 'address_city', 'address_country',
+            'items', 'receipt', 'returns',
             
             # Tab 3: RMA-Kalkulation
             'estimated_cost', 'actual_cost', 'parts_cost', 'labor_cost',
-            'shipping_cost', 'total_cost', 'quote_sent', 'quote_accepted',
+            'shipping_cost', 'total_cost', 'evaluation_cost', 'margin_percent',
+            'final_price', 'hourly_rate', 'admin_fee', 'cost_line_items', 'cost_totals',
+            'quote_sent', 'quote_accepted',
             
             # Tab 4: Reparaturbericht
             'diagnosis', 'repair_actions', 'parts_used', 'repair_date',
             'repaired_by', 'test_results', 'final_notes',
+            'report_pdf', 'report_pdf_url',
             
             # Metadaten
             'assigned_to', 'assigned_to_name',
@@ -372,7 +537,16 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             # Zeiterfassung
             'time_entries', 'total_hours_spent'
         ]
-        read_only_fields = ['rma_number', 'created_at', 'updated_at']
+        read_only_fields = ['rma_number', 'created_at', 'updated_at', 'report_pdf', 'report_pdf_url']
+
+    def get_cost_totals(self, obj):
+        return obj.get_cost_totals()
+    
+    
+    def get_report_pdf_url(self, obj):
+        if obj.report_pdf:
+            return obj.report_pdf.url
+        return None
     
     def get_assigned_to_name(self, obj):
         if obj.assigned_to:
@@ -389,10 +563,20 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
         from django.db.models import Sum
         total = obj.time_entries.aggregate(Sum('hours_spent'))['hours_spent__sum']
         return float(total) if total else 0.0
+    
+    def get_items(self, obj):
+        items = obj.items.all()
+        return RMAItemSerializer(items, many=True, context=self.context).data
+    
+    def get_receipt(self, obj):
+        if hasattr(obj, 'receipt'):
+            return RMAReceiptSerializer(obj.receipt, context=self.context).data
+        return None
 
 
 class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Erstellen/Aktualisieren von RMA-Fällen"""
+    items = RMAItemNestedSerializer(many=True, required=False)
     
     class Meta:
         model = RMACase
@@ -409,9 +593,13 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             # Tab 2 - Wareneingang / Warenausgang
             'received_date', 'received_by', 'received_condition', 'tracking_inbound',
             'shipped_date', 'shipped_by', 'tracking_outbound', 'shipping_notes',
+            'address_name', 'address_street', 'address_house_number',
+            'address_postal_code', 'address_city', 'address_country',
+            'items',
 
             # Tab 3 - Kalkulation
             'estimated_cost', 'actual_cost', 'parts_cost', 'labor_cost', 'shipping_cost', 'total_cost',
+            'evaluation_cost', 'margin_percent', 'final_price', 'hourly_rate', 'admin_fee',
             'quote_sent', 'quote_accepted',
 
             # Tab 4 - Reparaturbericht
@@ -420,7 +608,57 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             # Metadaten
             'assigned_to'
         ]
-        read_only_fields = ['id', 'rma_number']
+        read_only_fields = ['id', 'rma_number', 'final_price']
+
+    def to_internal_value(self, data):
+        """Leere Datums-Strings in None umwandeln, damit optionale Datumsfelder leer bleiben können"""
+        nullable_date_fields = [
+            'product_purchase_date', 'received_date', 'shipped_date', 'repair_date'
+        ]
+        if isinstance(data, dict):
+            data = data.copy()
+            for field in nullable_date_fields:
+                if field in data and data[field] in (None, ''):
+                    data[field] = None
+        return super().to_internal_value(data)
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        rma_case = RMACase.objects.create(**validated_data)
+
+        for idx, item_data in enumerate(items_data, 1):
+            item_data.pop('rma_case', None)
+            position = item_data.pop('position', idx)
+            RMAItem.objects.create(rma_case=rma_case, position=position, **item_data)
+
+        return rma_case
+
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop('items', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if items_data is not None:
+            existing_ids = set(instance.items.values_list('id', flat=True))
+            updated_ids = set()
+
+            for idx, item_data in enumerate(items_data, 1):
+                item_id = item_data.pop('id', None)
+                item_data.pop('rma_case', None)
+                item_data.pop('position', None)
+
+                if item_id and item_id in existing_ids:
+                    RMAItem.objects.filter(id=item_id).update(position=idx, **item_data)
+                    updated_ids.add(item_id)
+                else:
+                    RMAItem.objects.create(rma_case=instance, position=idx, **item_data)
+
+            items_to_delete = existing_ids - updated_ids
+            instance.items.filter(id__in=items_to_delete).delete()
+
+        return instance
 
 
 class TroubleshootingCommentSerializer(serializers.ModelSerializer):

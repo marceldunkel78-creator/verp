@@ -3,7 +3,11 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from customers.models import Customer
 from django.utils import timezone
-from core.upload_paths import service_ticket_attachment_path, troubleshooting_attachment_path
+from core.upload_paths import (
+    service_ticket_attachment_path, troubleshooting_attachment_path,
+    rma_item_photo_path, rma_receipt_document_path, rma_return_pdf_path, rma_report_pdf_path,
+    rma_attachment_path
+)
 import re
 import json
 
@@ -682,6 +686,15 @@ class RMACase(models.Model):
     tracking_outbound = models.CharField(max_length=100, blank=True, verbose_name='Sendungsverfolgung Ausgang')
     shipping_notes = models.TextField(blank=True, verbose_name='Versandnotizen')
     
+    # Empfängeradresse (für Warenausgang/Lieferschein und Reparaturbericht)
+    # Kann manuell eingetragen oder per Dropdown aus den Kundenadressen übernommen werden
+    address_name = models.CharField(max_length=200, blank=True, verbose_name='Empfänger')
+    address_street = models.CharField(max_length=200, blank=True, verbose_name='Straße')
+    address_house_number = models.CharField(max_length=20, blank=True, verbose_name='Hausnummer')
+    address_postal_code = models.CharField(max_length=20, blank=True, verbose_name='PLZ')
+    address_city = models.CharField(max_length=100, blank=True, verbose_name='Stadt')
+    address_country = models.CharField(max_length=100, blank=True, default='Deutschland', verbose_name='Land')
+    
     # =====================
     # Tab 3: RMA-Kalkulation
     # =====================
@@ -709,6 +722,35 @@ class RMACase(models.Model):
         max_digits=12, decimal_places=2, null=True, blank=True,
         verbose_name='Gesamtkosten (berechnet)'
     )
+    # Evaluierungskosten
+    evaluation_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Evaluierungskosten'
+    )
+    # Marge in Prozent für den Endpreis
+    margin_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        default=0,
+        verbose_name='Marge (%)',
+        help_text='Endpreis = Gesamtkosten / (100 - Marge) * 100'
+    )
+    # Endpreis (aus Marge berechnet)
+    final_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Endpreis'
+    )
+    # Stundensatz (automatisch aus Firmeneinstellungen übernommen, bleibt editierbar)
+    hourly_rate = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name='Stundensatz',
+        help_text='Wird automatisch aus den Firmeneinstellungen übernommen, bleibt aber editierbar'
+    )
+    # Verwaltungskostenpauschale (automatisch aus Firmeneinstellungen übernommen, bleibt editierbar)
+    admin_fee = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Verwaltungskostenpauschale',
+        help_text='Wird automatisch aus den Firmeneinstellungen übernommen, bleibt aber editierbar'
+    )
     quote_sent = models.BooleanField(default=False, verbose_name='KV gesendet')
     quote_accepted = models.BooleanField(default=False, verbose_name='KV akzeptiert')
     
@@ -722,6 +764,14 @@ class RMACase(models.Model):
     repaired_by = models.CharField(max_length=200, blank=True, verbose_name='Repariert von')
     test_results = models.TextField(blank=True, verbose_name='Testergebnisse')
     final_notes = models.TextField(blank=True, verbose_name='Abschlussnotizen')
+    
+    # Generierter Reparaturbericht als PDF (wird im Medienordner abgelegt)
+    report_pdf = models.FileField(
+        upload_to=rma_report_pdf_path,
+        null=True,
+        blank=True,
+        verbose_name='Reparaturbericht PDF'
+    )
     
     # =====================
     # Metadaten
@@ -780,6 +830,317 @@ class RMACase(models.Model):
         
         next_number = max(numeric_numbers) + 1
         return f'RMA-{next_number:05d}'
+
+    def get_cost_totals(self):
+        """Berechnet die Summen der Kostenpositionen je Kostenart (material/labor/shipping) plus Verwaltungskostenpauschale."""
+        totals = {'material': 0, 'labor': 0, 'shipping': 0, 'admin': float(self.admin_fee or 0)}
+        for line in self.cost_line_items.all():
+            key = line.cost_type if line.cost_type in totals else 'material'
+            totals[key] += float(line.total_price)
+        return totals
+
+
+class RMAItem(models.Model):
+    """
+    Einzelne Position der Warenlieferung eines RMA-Falls
+    """
+    rma_case = models.ForeignKey(
+        RMACase,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='RMA-Fall'
+    )
+    position = models.PositiveIntegerField(default=1, verbose_name='Position')
+
+    product_name = models.CharField(max_length=200, verbose_name='Warenname')
+    article_number = models.CharField(max_length=100, blank=True, verbose_name='Artikelnummer')
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=1, verbose_name='Menge')
+    unit = models.CharField(max_length=20, default='Stück', verbose_name='Einheit')
+    serial_number = models.CharField(max_length=100, blank=True, verbose_name='Seriennummer')
+    notes = models.TextField(blank=True, verbose_name='Notizen')
+
+    class Meta:
+        verbose_name = 'RMA-Position'
+        verbose_name_plural = 'RMA-Positionen'
+        ordering = ['rma_case', 'position']
+
+    def __str__(self):
+        return f"{self.rma_case.rma_number} Pos. {self.position}: {self.product_name}"
+
+
+class RMAItemPhoto(models.Model):
+    """
+    Fotos zum Wareneingang einer RMA-Position
+    """
+    rma_item = models.ForeignKey(
+        RMAItem,
+        on_delete=models.CASCADE,
+        related_name='photos',
+        verbose_name='RMA-Position'
+    )
+    photo = models.ImageField(upload_to=rma_item_photo_path, verbose_name='Foto')
+    description = models.CharField(max_length=200, blank=True, verbose_name='Beschreibung')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='rma_photos_uploaded'
+    )
+
+    class Meta:
+        verbose_name = 'Foto'
+        verbose_name_plural = 'Fotos'
+        ordering = ['rma_item', '-uploaded_at']
+
+    def __str__(self):
+        return f"Foto {self.rma_item} - {self.uploaded_at}"
+
+
+class RMAReceipt(models.Model):
+    """
+    Wareneingang eines RMA-Falls
+    """
+    rma_case = models.OneToOneField(
+        RMACase,
+        on_delete=models.CASCADE,
+        related_name='receipt',
+        verbose_name='RMA-Fall'
+    )
+    receipt_date = models.DateField(verbose_name='Wareneingangsdatum')
+    received_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_receipts_received',
+        verbose_name='Entgegengenommen von'
+    )
+    delivery_note = models.FileField(
+        upload_to=rma_receipt_document_path,
+        blank=True,
+        null=True,
+        verbose_name='Eingangslieferschein',
+        help_text='Lieferschein des Kunden/Absenders als PDF/Bild'
+    )
+    notes = models.TextField(blank=True, verbose_name='Notizen zum Wareneingang')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Wareneingang'
+        verbose_name_plural = 'Wareneingänge'
+
+    def __str__(self):
+        return f"Wareneingang {self.rma_case.rma_number} vom {self.receipt_date}"
+
+
+class RMAReturn(models.Model):
+    """
+    Warenausgang (Rückversand an den Kunden) eines RMA-Falls.
+    Ein Lieferschein kann mehrere Positionen enthalten.
+    """
+    rma_case = models.ForeignKey(
+        RMACase,
+        on_delete=models.CASCADE,
+        related_name='returns',
+        verbose_name='RMA-Fall'
+    )
+    return_number = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='Lieferschein-Nr.',
+        help_text='Automatisch generiert'
+    )
+    return_date = models.DateField(verbose_name='Versanddatum')
+    shipping_carrier = models.CharField(max_length=100, blank=True, verbose_name='Versanddienstleister')
+    tracking_number = models.CharField(max_length=100, blank=True, verbose_name='Sendungsnummer')
+
+    pdf_file = models.FileField(
+        upload_to=rma_return_pdf_path,
+        null=True,
+        blank=True,
+        verbose_name='Lieferschein PDF'
+    )
+    # Sprache des zuletzt generierten Lieferscheins (de/en)
+    pdf_language = models.CharField(
+        max_length=10,
+        default='de',
+        blank=True,
+        verbose_name='PDF-Sprache'
+    )
+    notes = models.TextField(blank=True, verbose_name='Notizen')
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='rma_returns_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Warenausgang'
+        verbose_name_plural = 'Warenausgänge'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Lieferschein {self.return_number} für {self.rma_case.rma_number}"
+
+    def save(self, *args, **kwargs):
+        if not self.return_number:
+            self.return_number = self._generate_return_number()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def _generate_return_number():
+        """Generiert die nächste freie Lieferschein-Nummer im Format RMA-A-00001"""
+        existing_numbers = RMAReturn.objects.filter(
+            return_number__isnull=False
+        ).values_list('return_number', flat=True)
+
+        numeric_numbers = []
+        for num in existing_numbers:
+            try:
+                numeric_part = int(num.split('-')[-1])
+                numeric_numbers.append(numeric_part)
+            except (ValueError, IndexError):
+                continue
+
+        next_number = (max(numeric_numbers) + 1) if numeric_numbers else 1
+        return f'RMA-A-{next_number:05d}'
+
+
+class RMAReturnItem(models.Model):
+    """
+    Einzelne Position eines Warenausgangs (Rückversand)
+    """
+    rma_return = models.ForeignKey(
+        RMAReturn,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='Warenausgang'
+    )
+    rma_item = models.ForeignKey(
+        RMAItem,
+        on_delete=models.CASCADE,
+        related_name='return_items',
+        verbose_name='RMA-Position'
+    )
+    quantity_returned = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Menge')
+    condition_notes = models.CharField(max_length=200, blank=True, verbose_name='Zustand/Bemerkung')
+
+    class Meta:
+        verbose_name = 'Warenausgangs-Position'
+        verbose_name_plural = 'Warenausgangs-Positionen'
+
+    def __str__(self):
+        return f"{self.rma_return.return_number} - {self.rma_item.product_name}"
+
+
+class RMAAttachment(models.Model):
+    """
+    Auftragsdokumente eines RMA-Falls (ein oder mehrere hochladbare Dokumente)
+    """
+    rma_case = models.ForeignKey(
+        RMACase,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        verbose_name='RMA-Fall'
+    )
+    file = models.FileField(
+        upload_to=rma_attachment_path,
+        verbose_name='Datei'
+    )
+    description = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Beschreibung'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='rma_attachments_uploaded'
+    )
+
+    class Meta:
+        verbose_name = 'RMA Auftragsdokument'
+        verbose_name_plural = 'RMA Auftragsdokumente'
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"Dokument {self.rma_case.rma_number} - {self.file.name}"
+
+
+class RMACostLineItem(models.Model):
+    """
+    Einzelner Kostenposten in der RMA-Kalkulation.
+    cost_type: material, labor oder shipping
+    """
+    COST_TYPE_CHOICES = [
+        ('material', 'Material'),
+        ('labor', 'Arbeit'),
+        ('shipping', 'Versand'),
+    ]
+
+    rma_case = models.ForeignKey(
+        RMACase,
+        on_delete=models.CASCADE,
+        related_name='cost_line_items',
+        verbose_name='RMA-Fall'
+    )
+    cost_type = models.CharField(
+        max_length=20,
+        choices=COST_TYPE_CHOICES,
+        default='material',
+        verbose_name='Kostenart'
+    )
+    description = models.CharField(
+        max_length=300,
+        blank=True,
+        verbose_name='Beschreibung'
+    )
+    quantity = models.DecimalField(
+        max_digits=10, decimal_places=2, default=1,
+        verbose_name='Menge'
+    )
+    unit = models.CharField(
+        max_length=20,
+        blank=True,
+        default='Stk',
+        verbose_name='Einheit'
+    )
+    unit_price = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        verbose_name='Einzelpreis'
+    )
+    # Für Arbeitskosten: optionale Verknüpfung zum Zeiteintrag
+    source_time_entry = models.ForeignKey(
+        'RMACaseTimeEntry',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cost_line_items',
+        verbose_name='Aus Zeiteintrag importiert'
+    )
+
+    class Meta:
+        verbose_name = 'RMA Kostenposition'
+        verbose_name_plural = 'RMA Kostenpositionen'
+        ordering = ['rma_case', 'cost_type', 'id']
+
+    def __str__(self):
+        return f"{self.get_cost_type_display()} - {self.description} ({self.total_price})"
+
+    @property
+    def total_price(self):
+        return (self.quantity or 0) * (self.unit_price or 0)
 
 
 class TroubleshootingTicket(models.Model):

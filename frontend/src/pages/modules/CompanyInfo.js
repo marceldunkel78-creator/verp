@@ -7,6 +7,7 @@ import {
   BanknotesIcon,
   DocumentTextIcon,
   PhotoIcon,
+  CalculatorIcon,
   PlusIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
@@ -40,6 +41,8 @@ const CompanyInfo = () => {
     vat_id: '',
     fiscal_year_start_month: 4,
     fiscal_year_start_day: 1,
+    default_hourly_rate: 0,
+    default_admin_fee: 0,
     document_header: null
   });
 
@@ -647,6 +650,49 @@ const CompanyInfo = () => {
             <p className="text-sm text-blue-800">
               <strong>Beispiel:</strong> Wenn das Geschäftsjahr am 1. April beginnt, wird das Jahr 2025/2026 vom 01.04.2025 bis 31.03.2026 laufen.
             </p>
+          </div>
+        </div>
+
+        {/* Standard-Stundensatz */}
+        <div className="bg-white rounded-lg shadow mb-6 p-6">
+          <div className="flex items-center mb-4">
+            <CalculatorIcon className="h-6 w-6 text-blue-600 mr-2" />
+            <h2 className="text-xl font-semibold text-gray-900">RMA-Kalkulation</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Standard-Stundensatz (€/h) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                name="default_hourly_rate"
+                value={formData.default_hourly_rate}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Wird automatisch in der RMA-Kalkulation übernommen (bleibt dort editierbar)
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Verwaltungskostenpauschale (€) *
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                name="default_admin_fee"
+                value={formData.default_admin_fee}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Wird automatisch in der RMA-Kalkulation übernommen (bleibt dort editierbar)
+              </p>
+            </div>
           </div>
         </div>
 
