@@ -215,7 +215,8 @@ const TravelReportEdit = () => {
     }
     setSearchingCustomers(true);
     try {
-      const response = await api.get(`/customers/customers/?search=${query}`);
+      // Nur aktive Kunden anzeigen (inaktive Kunden nicht zur Auswahl anbieten)
+      const response = await api.get(`/customers/customers/?search=${query}&is_active=true`);
       setCustomers(response.data.results || response.data || []);
     } catch (error) {
       console.error('Fehler bei Kundensuche:', error);
@@ -273,6 +274,35 @@ const TravelReportEdit = () => {
     } finally {
       setSearchingOrders(false);
     }
+  };
+
+  // Arbeitszeitaufwand automatisch aus Beginn/Ende der Arbeiten berechnen
+  const calculateWorkEffortHours = (startTime, endTime) => {
+    if (!startTime || !endTime) return '';
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+    if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) return '';
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    let diffMinutes = endMinutes - startMinutes;
+    if (diffMinutes < 0) diffMinutes += 24 * 60; // Über Mitternacht
+    const hours = diffMinutes / 60;
+    // Auf 0.25 Stunden runden
+    return (Math.round(hours * 4) / 4).toFixed(2);
+  };
+
+  const handleWorkStartTimeChange = (value) => {
+    setFormData(prev => {
+      const work_effort_hours = calculateWorkEffortHours(value, prev.work_end_time);
+      return { ...prev, work_start_time: value, work_effort_hours };
+    });
+  };
+
+  const handleWorkEndTimeChange = (value) => {
+    setFormData(prev => {
+      const work_effort_hours = calculateWorkEffortHours(prev.work_start_time, value);
+      return { ...prev, work_end_time: value, work_effort_hours };
+    });
   };
 
   // Selection handlers
@@ -670,7 +700,7 @@ const TravelReportEdit = () => {
                   <input
                     type="time"
                     value={formData.work_start_time}
-                    onChange={(e) => setFormData({...formData, work_start_time: e.target.value})}
+                    onChange={(e) => handleWorkStartTimeChange(e.target.value)}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>
@@ -680,7 +710,7 @@ const TravelReportEdit = () => {
                   <input
                     type="time"
                     value={formData.work_end_time}
-                    onChange={(e) => setFormData({...formData, work_end_time: e.target.value})}
+                    onChange={(e) => handleWorkEndTimeChange(e.target.value)}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />
                 </div>

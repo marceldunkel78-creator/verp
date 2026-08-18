@@ -39,6 +39,7 @@ CALC_TRANSLATIONS = {
         'evaluation': 'Evaluierungskosten',
         'margin': 'Marge (%)',
         'end_price': 'Endpreis nach Marge',
+        'shipping_after_margin': 'Versandkosten (nach Marge)',
         'total_cost': 'Gesamtkosten / Endpreis',
         'hourly_rate': 'Stundensatz',
         'regards': 'Mit freundlichen Grüßen',
@@ -64,6 +65,7 @@ CALC_TRANSLATIONS = {
         'evaluation': 'Evaluation Costs',
         'margin': 'Margin (%)',
         'end_price': 'End Price after Margin',
+        'shipping_after_margin': 'Shipping Costs (after Margin)',
         'total_cost': 'Total Cost / Final Price',
         'hourly_rate': 'Hourly Rate',
         'regards': 'Best regards',
@@ -289,22 +291,26 @@ def generate_rma_calculation_pdf(rma_case, language='de'):
 
     # === ZUSAMMENFASSUNG ===
     admin_fee = float(rma_case.admin_fee or 0)
-    subtotal = totals['material'] + totals['labor'] + totals['shipping'] + admin_fee
+    # Versandkosten werden erst NACH der Marge aufgerechnet:
+    # Zwischensumme (ohne Versand) -> Marge -> + Versandkosten
+    subtotal_without_shipping = totals['material'] + totals['labor'] + admin_fee
     margin = float(rma_case.margin_percent or 0)
-    end_price = (subtotal / (100 - margin) * 100) if subtotal > 0 and (100 - margin) > 0 else subtotal
+    end_price = (subtotal_without_shipping / (100 - margin) * 100) if subtotal_without_shipping > 0 and (100 - margin) > 0 else subtotal_without_shipping
+    shipping = totals['shipping']
+    total_with_shipping = end_price + shipping
     evaluation = float(rma_case.evaluation_cost or 0)
-    total_cost = max(end_price, evaluation)
+    total_cost = max(total_with_shipping, evaluation)
 
     elements.append(Paragraph(f"<b>{t['subtotal']}</b>", style_heading))
     summary_data = [
         [t['material'], _fmt_eur(totals['material'])],
         [t['labor'], _fmt_eur(totals['labor'])],
-        [t['shipping'], _fmt_eur(totals['shipping'])],
         [t['admin'], _fmt_eur(admin_fee)],
-        [t['subtotal'], _fmt_eur(subtotal)],
-        [t['evaluation'], _fmt_eur(evaluation)],
+        [t['subtotal'], _fmt_eur(subtotal_without_shipping)],
         [t['margin'], f"{margin:g} %"],
         [t['end_price'], _fmt_eur(end_price)],
+        [t['shipping_after_margin'], _fmt_eur(shipping)],
+        [t['evaluation'], _fmt_eur(evaluation)],
         [t['total_cost'], _fmt_eur(total_cost)],
     ]
     summary_table = Table(summary_data, colWidths=[8 * cm, 8 * cm])

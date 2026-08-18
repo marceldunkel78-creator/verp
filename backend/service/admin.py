@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (VSService, VSServicePrice, ServiceTicket, TicketComment, TicketChangeLog, 
                      RMACase, TroubleshootingTicket, TroubleshootingComment,
-                     ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry, RMACaseTimeEntry)
+                     ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry, RMACaseTimeEntry,
+                     RMAManufacturerReturn, RMAManufacturerReturnItem)
 
 
 @admin.register(VSService)
@@ -29,10 +30,23 @@ class ServiceTicketAdmin(admin.ModelAdmin):
 
 @admin.register(RMACase)
 class RMACaseAdmin(admin.ModelAdmin):
-    list_display = ['rma_number', 'title', 'status', 'customer_name', 'created_at']
+    list_display = ['rma_number', 'title', 'status', 'customer_name', 'customer_order', 'service_ticket', 'created_at']
     list_filter = ['status', 'warranty_status']
     search_fields = ['rma_number', 'title', 'product_serial']
     readonly_fields = ['rma_number', 'created_at', 'updated_at']
+
+
+@admin.register(RMAManufacturerReturn)
+class RMAManufacturerReturnAdmin(admin.ModelAdmin):
+    list_display = ['return_number', 'rma_case', 'return_date', 'shipping_carrier', 'tracking_number', 'created_at']
+    list_filter = ['return_date']
+    search_fields = ['return_number', 'rma_case__rma_number']
+    readonly_fields = ['return_number', 'created_at']
+
+
+@admin.register(RMAManufacturerReturnItem)
+class RMAManufacturerReturnItemAdmin(admin.ModelAdmin):
+    list_display = ['manufacturer_return', 'rma_item', 'quantity_returned', 'condition_notes']
 
 
 @admin.register(TroubleshootingTicket)

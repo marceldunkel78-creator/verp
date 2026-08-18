@@ -15,13 +15,17 @@ import {
   PlusIcon,
   TrashIcon,
   EyeIcon,
-  DocumentArrowDownIcon
+  DocumentArrowDownIcon,
+  WrenchScrewdriverIcon,
+  BuildingOfficeIcon,
+  PaperClipIcon
 } from '@heroicons/react/24/outline';
 
 const TABS = [
   { id: 'basic', name: 'Basisinfos', icon: InformationCircleIcon },
   { id: 'receipt', name: 'Wareneingang', icon: TruckIcon, disabledWhenNew: true },
   { id: 'time', name: 'Zeiterfassung', icon: ClockIcon },
+  { id: 'manufacturer', name: 'Herstellerreparatur', icon: WrenchScrewdriverIcon, disabledWhenNew: true },
   { id: 'report', name: 'Reparaturbericht', icon: DocumentTextIcon },
   { id: 'calculation', name: 'RMA-Kalkulation', icon: CalculatorIcon },
   { id: 'issue', name: 'Warenausgang', icon: ArrowUturnLeftIcon, disabledWhenNew: true }
@@ -31,6 +35,7 @@ const STATUS_OPTIONS = [
   { value: 'open', label: 'Offen' },
   { value: 'in_progress', label: 'In Bearbeitung' },
   { value: 'waiting_parts', label: 'Warte auf Teile' },
+  { value: 'at_manufacturer', label: 'Beim Hersteller' },
   { value: 'repaired', label: 'Repariert' },
   { value: 'not_repairable', label: 'Nicht reparierbar' },
   { value: 'returned', label: 'Zurückgesendet' },
@@ -73,6 +78,18 @@ const RMACaseEdit = () => {
   const [inventoryResults, setInventoryResults] = useState([]);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
 
+  // Customer order search state
+  const [customerOrderSearch, setCustomerOrderSearch] = useState('');
+  const [searchingCustomerOrders, setSearchingCustomerOrders] = useState(false);
+  const [customerOrderResults, setCustomerOrderResults] = useState([]);
+  const [selectedCustomerOrder, setSelectedCustomerOrder] = useState(null);
+
+  // Service ticket search state
+  const [serviceTicketSearch, setServiceTicketSearch] = useState('');
+  const [searchingServiceTickets, setSearchingServiceTickets] = useState(false);
+  const [serviceTicketResults, setServiceTicketResults] = useState([]);
+  const [selectedServiceTicket, setSelectedServiceTicket] = useState(null);
+
   // Time tracking state
   const [timeEntries, setTimeEntries] = useState([]);
   const [newTimeEntry, setNewTimeEntry] = useState({
@@ -109,6 +126,31 @@ const RMACaseEdit = () => {
   const [creatingReturn, setCreatingReturn] = useState(false);
   const [returnPdfLanguage, setReturnPdfLanguage] = useState('de');
 
+  // Herstellerreparatur state
+  const [manufacturerSearch, setManufacturerSearch] = useState('');
+  const [searchingManufacturers, setSearchingManufacturers] = useState(false);
+  const [manufacturerResults, setManufacturerResults] = useState([]);
+  const [selectedManufacturer, setSelectedManufacturer] = useState(null);
+  const [manufacturerReturnForm, setManufacturerReturnForm] = useState({
+    return_date: new Date().toISOString().split('T')[0],
+    shipping_carrier: '',
+    tracking_number: '',
+    notes: '',
+    proforma_title: 'Proforma Invoice – For Customs Purposes Only / No Commercial Value',
+    proforma_comment: '',
+    proforma_address_name: '',
+    proforma_address_street: '',
+    proforma_address_house_number: '',
+    proforma_address_postal_code: '',
+    proforma_address_city: '',
+    proforma_address_country: '',
+    items: []
+  });
+  const [creatingManufacturerReturn, setCreatingManufacturerReturn] = useState(false);
+  const [manufacturerPdfLanguage, setManufacturerPdfLanguage] = useState('de');
+  const [uploadingManufacturerQuotation, setUploadingManufacturerQuotation] = useState(false);
+  const [generatingProformaPdf, setGeneratingProformaPdf] = useState(false);
+
   // Form data for all tabs
   const [formData, setFormData] = useState({
     // Basic Info
@@ -122,6 +164,8 @@ const RMACaseEdit = () => {
     customer_phone: '',
     linked_system: urlSystemId || '',
     inventory_item: urlInventoryItemId || '',
+    customer_order: '',
+    service_ticket: '',
     product_name: '',
     product_serial: '',
     product_purchase_date: '',
@@ -195,6 +239,8 @@ const RMACaseEdit = () => {
           customer_phone: data.customer_phone || '',
           linked_system: data.linked_system || '',
           inventory_item: data.inventory_item || '',
+          customer_order: data.customer_order || '',
+          service_ticket: data.service_ticket || '',
           product_name: data.product_name || '',
           product_serial: data.product_serial || '',
           product_purchase_date: data.product_purchase_date || '',
@@ -240,7 +286,14 @@ const RMACaseEdit = () => {
           repair_date: data.repair_date || '',
           repaired_by: data.repaired_by || '',
           test_results: data.test_results || '',
-          final_notes: data.final_notes || ''
+          final_notes: data.final_notes || '',
+          
+          // Herstellerreparatur
+          manufacturer: data.manufacturer || '',
+          manufacturer_rma_number: data.manufacturer_rma_number || '',
+          manufacturer_ship_date: data.manufacturer_ship_date || '',
+          manufacturer_quotation_amount: data.manufacturer_quotation_amount || '',
+          manufacturer_quotation_currency: data.manufacturer_quotation_currency || 'EUR'
         });
         
         // Positionen für das Warenausgangs-Formular initialisieren
@@ -256,6 +309,43 @@ const RMACaseEdit = () => {
               condition_notes: ''
             }))
           }));
+          // Positionen für das Herstellerreparatur-Formular initialisieren.
+          // Bereits vorhandene Proforma-Daten und Auswahl beibehalten (merge),
+          // damit sie beim Erstellen weiterer Herstellerreparaturen nicht verloren gehen.
+          setManufacturerReturnForm(prev => {
+            const existingItems = prev.items || [];
+            const existingMap = {};
+            existingItems.forEach(it => { existingMap[it.rma_item_id] = it; });
+            return {
+              ...prev,
+              items: data.items.map(item => {
+                const existing = existingMap[item.id];
+                return {
+                  rma_item_id: item.id,
+                  product_name: item.product_name,
+                  quantity_available: item.quantity,
+                  quantity_returned: existing?.quantity_returned ?? 0,
+                  selected: existing?.selected ?? false,
+                  condition_notes: existing?.condition_notes ?? '',
+                  proforma_description: existing?.proforma_description ?? (item.product_name || ''),
+                  proforma_weight: existing?.proforma_weight ?? '',
+                  proforma_hs_code: existing?.proforma_hs_code ?? '',
+                  proforma_value: existing?.proforma_value ?? '',
+                  proforma_origin_country: existing?.proforma_origin_country ?? ''
+                };
+              })
+            };
+          });
+        }
+        
+        // Load manufacturer details if set
+        if (data.manufacturer) {
+          try {
+            const manRes = await api.get(`/suppliers/suppliers/${data.manufacturer}/`);
+            setSelectedManufacturer(manRes.data);
+          } catch (err) {
+            console.error('Error loading manufacturer:', err);
+          }
         }
         
         // Load customer details if set
@@ -285,6 +375,26 @@ const RMACaseEdit = () => {
             setSelectedInventoryItem(invRes.data);
           } catch (err) {
             console.error('Error loading inventory item:', err);
+          }
+        }
+
+        // Load customer order details if set
+        if (data.customer_order) {
+          try {
+            const coRes = await api.get(`/customer-orders/customer-orders/${data.customer_order}/`);
+            setSelectedCustomerOrder(coRes.data);
+          } catch (err) {
+            console.error('Error loading customer order:', err);
+          }
+        }
+
+        // Load service ticket details if set
+        if (data.service_ticket) {
+          try {
+            const stRes = await api.get(`/service/tickets/${data.service_ticket}/`);
+            setSelectedServiceTicket(stRes.data);
+          } catch (err) {
+            console.error('Error loading service ticket:', err);
           }
         }
       } else {
@@ -497,19 +607,105 @@ const RMACaseEdit = () => {
     setHasChanges(true);
   };
 
+  // Customer order search functions
+  const searchCustomerOrders = async () => {
+    if (!customerOrderSearch.trim()) return;
+    setSearchingCustomerOrders(true);
+    try {
+      const response = await api.get(`/customer-orders/customer-orders/?search=${encodeURIComponent(customerOrderSearch)}&page_size=20`);
+      setCustomerOrderResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error searching customer orders:', error);
+    } finally {
+      setSearchingCustomerOrders(false);
+    }
+  };
+
+  const selectCustomerOrder = (order) => {
+    setSelectedCustomerOrder(order);
+    setFormData(prev => ({ ...prev, customer_order: order.id }));
+    setCustomerOrderSearch('');
+    setCustomerOrderResults([]);
+    setHasChanges(true);
+  };
+
+  const clearCustomerOrder = () => {
+    setSelectedCustomerOrder(null);
+    setFormData(prev => ({ ...prev, customer_order: '' }));
+    setHasChanges(true);
+  };
+
+  // Service ticket search functions
+  const searchServiceTickets = async () => {
+    if (!serviceTicketSearch.trim()) return;
+    setSearchingServiceTickets(true);
+    try {
+      const response = await api.get(`/service/tickets/?search=${encodeURIComponent(serviceTicketSearch)}&page_size=20`);
+      setServiceTicketResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error searching service tickets:', error);
+    } finally {
+      setSearchingServiceTickets(false);
+    }
+  };
+
+  const selectServiceTicket = (ticket) => {
+    setSelectedServiceTicket(ticket);
+    setFormData(prev => ({ ...prev, service_ticket: ticket.id }));
+    setServiceTicketSearch('');
+    setServiceTicketResults([]);
+    setHasChanges(true);
+  };
+
+  const clearServiceTicket = () => {
+    setSelectedServiceTicket(null);
+    setFormData(prev => ({ ...prev, service_ticket: '' }));
+    setHasChanges(true);
+  };
+
+  // Manufacturer (Hersteller) search functions
+  const searchManufacturers = async () => {
+    if (!manufacturerSearch.trim()) return;
+    setSearchingManufacturers(true);
+    try {
+      const response = await api.get(`/suppliers/suppliers/?search=${encodeURIComponent(manufacturerSearch)}&is_active=true`);
+      setManufacturerResults(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error searching manufacturers:', error);
+    } finally {
+      setSearchingManufacturers(false);
+    }
+  };
+
+  const selectManufacturer = (supplier) => {
+    setSelectedManufacturer(supplier);
+    setFormData(prev => ({ ...prev, manufacturer: supplier.id }));
+    setManufacturerSearch('');
+    setManufacturerResults([]);
+    setHasChanges(true);
+  };
+
+  const clearManufacturer = () => {
+    setSelectedManufacturer(null);
+    setFormData(prev => ({ ...prev, manufacturer: '' }));
+    setHasChanges(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const payload = { ...formData };
 
       // Gesamtkosten und Endpreis aus der Kalkulation automatisch berechnen
-      const subtotal = calcTotals.material + calcTotals.labor + calcTotals.shipping + (parseFloat(payload.admin_fee) || 0);
+      // Versandkosten werden erst NACH der Marge aufgerechnet
+      const subtotalWithoutShipping = calcTotals.material + calcTotals.labor + (parseFloat(payload.admin_fee) || 0);
       const margin = parseFloat(payload.margin_percent) || 0;
-      const endPrice = subtotal > 0 && (100 - margin) > 0
-        ? (subtotal / (100 - margin)) * 100
-        : subtotal;
-      // Evaluierungskosten mit dem Endpreis (nach Marge) vergleichen
-      const computedTotal = Math.max(endPrice, parseFloat(payload.evaluation_cost) || 0);
+      const endPrice = subtotalWithoutShipping > 0 && (100 - margin) > 0
+        ? (subtotalWithoutShipping / (100 - margin)) * 100
+        : subtotalWithoutShipping;
+      const totalWithShipping = endPrice + calcTotals.shipping;
+      // Evaluierungskosten mit dem Endpreis (inkl. Versand) vergleichen
+      const computedTotal = Math.max(totalWithShipping, parseFloat(payload.evaluation_cost) || 0);
       payload.total_cost = computedTotal.toFixed(2);
       payload.final_price = computedTotal.toFixed(2);
 
@@ -723,6 +919,190 @@ const RMACaseEdit = () => {
     } catch (error) {
       console.error('Error viewing PDF:', error);
       alert('Fehler beim Anzeigen des Lieferscheins');
+    }
+  };
+
+  // Herstellerreparatur: Lieferschein erstellen
+  const handleCreateManufacturerReturn = async () => {
+    const selectedItems = manufacturerReturnForm.items.filter(item => item.selected && item.quantity_returned > 0);
+
+    if (selectedItems.length === 0) {
+      alert('Bitte mindestens eine Position zum Versand auswählen');
+      return;
+    }
+
+    setCreatingManufacturerReturn(true);
+    try {
+      await api.post(`/service/rma/${id}/create_manufacturer_return/`, {
+        return_date: manufacturerReturnForm.return_date,
+        shipping_carrier: manufacturerReturnForm.shipping_carrier,
+        tracking_number: manufacturerReturnForm.tracking_number,
+        notes: manufacturerReturnForm.notes,
+        language: manufacturerPdfLanguage,
+        proforma_title: manufacturerReturnForm.proforma_title,
+        proforma_comment: manufacturerReturnForm.proforma_comment,
+        proforma_address_name: manufacturerReturnForm.proforma_address_name,
+        proforma_address_street: manufacturerReturnForm.proforma_address_street,
+        proforma_address_house_number: manufacturerReturnForm.proforma_address_house_number,
+        proforma_address_postal_code: manufacturerReturnForm.proforma_address_postal_code,
+        proforma_address_city: manufacturerReturnForm.proforma_address_city,
+        proforma_address_country: manufacturerReturnForm.proforma_address_country,
+        items: selectedItems.map(item => ({
+          rma_item_id: item.rma_item_id,
+          quantity_returned: item.quantity_returned,
+          condition_notes: item.condition_notes,
+          proforma_description: item.proforma_description,
+          proforma_weight: item.proforma_weight,
+          proforma_hs_code: item.proforma_hs_code,
+          proforma_value: item.proforma_value,
+          proforma_origin_country: item.proforma_origin_country
+        }))
+      });
+      setManufacturerReturnForm(prev => ({
+        ...prev,
+        shipping_carrier: '',
+        tracking_number: '',
+        notes: '',
+        // Positionen und Proforma-Daten behalten, damit weitere Herstellerreparaturen
+        // ohne erneutes Eintragen erstellt werden können
+      }));
+      fetchRMACase();
+    } catch (error) {
+      console.error('Error creating manufacturer return:', error);
+      alert('Fehler beim Erstellen der Herstellerreparatur');
+    } finally {
+      setCreatingManufacturerReturn(false);
+    }
+  };
+
+  // Herstellerreparatur: Lieferschein herunterladen
+  const handleDownloadManufacturerPdf = async (returnId, returnNumber, language) => {
+    try {
+      const response = await api.get(`/service/rma-manufacturer-returns/${returnId}/download_pdf/`, {
+        params: { language: language || 'de' },
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Lieferschein_${returnNumber || ''}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading manufacturer PDF:', error);
+      alert('Fehler beim Herunterladen des Lieferscheins');
+    }
+  };
+
+  // Herstellerreparatur: Lieferschein anzeigen
+  const handleViewManufacturerPdf = async (returnId, language) => {
+    try {
+      const response = await api.get(`/service/rma-manufacturer-returns/${returnId}/view_pdf/`, {
+        params: { language: language || 'de' },
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Error viewing manufacturer PDF:', error);
+      alert('Fehler beim Anzeigen des Lieferscheins');
+    }
+  };
+
+  // Herstellerreparatur: Lieferschein löschen
+  const handleDeleteManufacturerReturn = async (returnId) => {
+    if (!window.confirm('Diese Herstellerreparatur wirklich löschen? Der Lieferschein kann danach mit korrigierten Positionen neu erstellt werden.')) {
+      return;
+    }
+    try {
+      await api.delete(`/service/rma-manufacturer-returns/${returnId}/`);
+      fetchRMACase();
+    } catch (error) {
+      console.error('Error deleting manufacturer return:', error);
+      alert('Fehler beim Löschen der Herstellerreparatur');
+    }
+  };
+
+  // Kostenvoranschlag des Herstellers hochladen
+  const handleUploadManufacturerQuotation = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingManufacturerQuotation(true);
+    try {
+      const formData = new FormData();
+      formData.append('manufacturer_quotation', file);
+      const response = await api.patch(`/service/rma/${id}/`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setRmaCase(response.data);
+      setFormData(prev => ({ ...prev, manufacturer_quotation: response.data.manufacturer_quotation }));
+      fetchRMACase();
+    } catch (error) {
+      console.error('Error uploading manufacturer quotation:', error);
+      alert('Fehler beim Hochladen des Kostenvoranschlags');
+    } finally {
+      setUploadingManufacturerQuotation(false);
+    }
+  };
+
+  // Proforma-Invoice: generieren
+  const handleGenerateProformaPdf = async (returnId) => {
+    setGeneratingProformaPdf(true);
+    try {
+      await api.post(`/service/rma-manufacturer-returns/${returnId}/generate_proforma_pdf/`, {
+        proforma_title: manufacturerReturnForm.proforma_title,
+        proforma_comment: manufacturerReturnForm.proforma_comment,
+        proforma_address_name: manufacturerReturnForm.proforma_address_name,
+        proforma_address_street: manufacturerReturnForm.proforma_address_street,
+        proforma_address_house_number: manufacturerReturnForm.proforma_address_house_number,
+        proforma_address_postal_code: manufacturerReturnForm.proforma_address_postal_code,
+        proforma_address_city: manufacturerReturnForm.proforma_address_city,
+        proforma_address_country: manufacturerReturnForm.proforma_address_country
+      });
+      fetchRMACase();
+    } catch (error) {
+      console.error('Error generating proforma PDF:', error);
+      alert('Fehler beim Generieren der Proforma-Invoice');
+    } finally {
+      setGeneratingProformaPdf(false);
+    }
+  };
+
+  // Proforma-Invoice: herunterladen
+  const handleDownloadProformaPdf = async (returnId, returnNumber) => {
+    try {
+      const response = await api.get(`/service/rma-manufacturer-returns/${returnId}/download_proforma_pdf/`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Proforma_Invoice_${returnNumber || ''}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading proforma PDF:', error);
+      alert('Fehler beim Herunterladen der Proforma-Invoice');
+    }
+  };
+
+  // Proforma-Invoice: anzeigen
+  const handleViewProformaPdf = async (returnId) => {
+    try {
+      const response = await api.get(`/service/rma-manufacturer-returns/${returnId}/view_proforma_pdf/`, {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Error viewing proforma PDF:', error);
+      alert('Fehler beim Anzeigen der Proforma-Invoice');
     }
   };
 
@@ -941,15 +1321,19 @@ const RMACaseEdit = () => {
 
   const calcTotals = calculateTotal();
   const adminFee = parseFloat(formData.admin_fee) || 0;
-  const calcSubtotal = calcTotals.material + calcTotals.labor + calcTotals.shipping + adminFee;
+  // Versandkosten werden erst NACH der Marge aufgerechnet:
+  // Zwischensumme (ohne Versand) -> Marge -> + Versandkosten
+  const calcSubtotalWithoutShipping = calcTotals.material + calcTotals.labor + adminFee;
   const margin = parseFloat(formData.margin_percent) || 0;
-  // Endpreis nach Margenaufschlag: Zwischensumme / (100 - Marge) * 100
-  const calcEndPrice = calcSubtotal > 0 && (100 - margin) > 0
-    ? ((calcSubtotal / (100 - margin)) * 100)
-    : calcSubtotal;
-  // Gesamtkosten: Evaluierungskosten werden mit dem Endpreis (nach Marge) verglichen.
+  // Endpreis nach Margenaufschlag (ohne Versand): Zwischensumme / (100 - Marge) * 100
+  const calcEndPrice = calcSubtotalWithoutShipping > 0 && (100 - margin) > 0
+    ? ((calcSubtotalWithoutShipping / (100 - margin)) * 100)
+    : calcSubtotalWithoutShipping;
+  // Versandkosten nach der Marge aufschlagen
+  const calcTotalWithShipping = calcEndPrice + calcTotals.shipping;
+  // Gesamtkosten: Evaluierungskosten werden mit dem Endpreis (inkl. Versand) verglichen.
   // Ist die Evaluierung höher, wird sie als Gesamtkosten eingetragen, sonst der Endpreis.
-  const calcTotalCost = Math.max(calcEndPrice, parseFloat(formData.evaluation_cost) || 0);
+  const calcTotalCost = Math.max(calcTotalWithShipping, parseFloat(formData.evaluation_cost) || 0);
   const calcFinalPrice = calcTotalCost.toFixed(2);
 
   // Time entry handlers
@@ -1177,7 +1561,13 @@ const RMACaseEdit = () => {
                 {selectedCustomer ? (
                   <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div className="flex-1">
-                      <div className="font-medium">{selectedCustomer.first_name} {selectedCustomer.last_name}</div>
+                      <a
+                        href={`/sales/customers/${selectedCustomer.id}`}
+                        onClick={(e) => { e.preventDefault(); navigate(`/sales/customers/${selectedCustomer.id}`); }}
+                        className="font-medium text-orange-600 hover:text-orange-800 hover:underline"
+                      >
+                        {selectedCustomer.first_name} {selectedCustomer.last_name}
+                      </a>
                       <div className="text-sm text-gray-600">{selectedCustomer.customer_number}</div>
                     </div>
                     <button
@@ -1277,7 +1667,13 @@ const RMACaseEdit = () => {
                 {selectedSystem ? (
                   <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
                     <div className="flex-1">
-                      <div className="font-medium">{selectedSystem.system_name || selectedSystem.name}</div>
+                      <a
+                        href={`/sales/systems/${selectedSystem.id}`}
+                        onClick={(e) => { e.preventDefault(); navigate(`/sales/systems/${selectedSystem.id}`); }}
+                        className="font-medium text-orange-600 hover:text-orange-800 hover:underline"
+                      >
+                        {selectedSystem.system_name || selectedSystem.name}
+                      </a>
                       <div className="text-sm text-gray-600">{selectedSystem.system_number}</div>
                     </div>
                     <button
@@ -1323,6 +1719,143 @@ const RMACaseEdit = () => {
                           >
                             <div className="font-medium">{sys.system_name || sys.name}</div>
                             <div className="text-sm text-gray-600">{sys.system_number}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mt-8">Verknüpfte Aufträge & Tickets</h3>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Kundenauftrag (optional)
+                </label>
+                {selectedCustomerOrder ? (
+                  <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex-1">
+                      <a
+                        href={`/sales/order-processing/${selectedCustomerOrder.id}`}
+                        onClick={(e) => { e.preventDefault(); navigate(`/sales/order-processing/${selectedCustomerOrder.id}`); }}
+                        className="font-medium text-orange-600 hover:text-orange-800 hover:underline"
+                      >
+                        {selectedCustomerOrder.order_number || `Auftrag #${selectedCustomerOrder.id}`}
+                      </a>
+                      <div className="text-sm text-gray-600">
+                        {selectedCustomerOrder.customer_name || ''}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearCustomerOrder}
+                      className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={customerOrderSearch}
+                        onChange={(e) => setCustomerOrderSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            searchCustomerOrders();
+                          }
+                        }}
+                        placeholder="Auftragsnummer suchen..."
+                        className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchCustomerOrders}
+                        disabled={searchingCustomerOrders}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+                      >
+                        {searchingCustomerOrders ? 'Suchen...' : 'Suchen'}
+                      </button>
+                    </div>
+                    {customerOrderResults.length > 0 && (
+                      <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                        {customerOrderResults.map((order) => (
+                          <div
+                            key={order.id}
+                            onClick={() => selectCustomerOrder(order)}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                          >
+                            <div className="font-medium">{order.order_number || `Auftrag #${order.id}`}</div>
+                            <div className="text-sm text-gray-600">{order.customer_name || ''}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Service Ticket (optional)
+                </label>
+                {selectedServiceTicket ? (
+                  <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex-1">
+                      <a
+                        href={`/service/tickets/${selectedServiceTicket.id}`}
+                        onClick={(e) => { e.preventDefault(); navigate(`/service/tickets/${selectedServiceTicket.id}`); }}
+                        className="font-medium text-orange-600 hover:text-orange-800 hover:underline"
+                      >
+                        {selectedServiceTicket.ticket_number || `Ticket #${selectedServiceTicket.id}`}
+                      </a>
+                      <div className="text-sm text-gray-600">{selectedServiceTicket.title || ''}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearServiceTicket}
+                      className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={serviceTicketSearch}
+                        onChange={(e) => setServiceTicketSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            searchServiceTickets();
+                          }
+                        }}
+                        placeholder="Ticket-Nummer suchen..."
+                        className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchServiceTickets}
+                        disabled={searchingServiceTickets}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+                      >
+                        {searchingServiceTickets ? 'Suchen...' : 'Suchen'}
+                      </button>
+                    </div>
+                    {serviceTicketResults.length > 0 && (
+                      <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                        {serviceTicketResults.map((ticket) => (
+                          <div
+                            key={ticket.id}
+                            onClick={() => selectServiceTicket(ticket)}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                          >
+                            <div className="font-medium">{ticket.ticket_number || `Ticket #${ticket.id}`}</div>
+                            <div className="text-sm text-gray-600">{ticket.title || ''}</div>
                           </div>
                         ))}
                       </div>
@@ -1984,16 +2517,16 @@ const RMACaseEdit = () => {
                     <span className="font-medium">{formatCurrency(calcTotals.labor)}</span>
                   </div>
                   <div>
-                    <span className="text-orange-600">Versand:</span>{' '}
-                    <span className="font-medium">{formatCurrency(calcTotals.shipping)}</span>
-                  </div>
-                  <div>
                     <span className="text-orange-600">Verwaltung:</span>{' '}
                     <span className="font-medium">{formatCurrency(adminFee)}</span>
                   </div>
                   <div className="border-l pl-4 border-orange-300">
                     <span className="text-orange-700 font-medium">Zwischensumme:</span>{' '}
-                    <span className="font-bold text-orange-900">{formatCurrency(calcSubtotal)}</span>
+                    <span className="font-bold text-orange-900">{formatCurrency(calcSubtotalWithoutShipping)}</span>
+                  </div>
+                  <div>
+                    <span className="text-orange-600">Versand (nach Marge):</span>{' '}
+                    <span className="font-medium">{formatCurrency(calcTotals.shipping)}</span>
                   </div>
                 </div>
               </div>
@@ -2028,7 +2561,7 @@ const RMACaseEdit = () => {
                     className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-700"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Zwischensumme / (100 - Marge) * 100
+                    Zwischensumme (ohne Versand) / (100 - Marge) * 100
                   </p>
                 </div>
                 <div>
@@ -2056,7 +2589,7 @@ const RMACaseEdit = () => {
                     className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-700"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Evaluierungskosten, falls größer als der Endpreis nach Marge
+                    Evaluierungskosten, falls größer als der Endpreis nach Marge (inkl. Versand)
                   </p>
                 </div>
               </div>
@@ -2078,6 +2611,652 @@ const RMACaseEdit = () => {
                     Überschreibt die automatische Summe bei Bedarf
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: Herstellerreparatur */}
+          {activeTab === 'manufacturer' && (
+            <div className="space-y-6">
+              {/* Hersteller auswählen */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mb-3">Hersteller</h3>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hersteller (aus Lieferanten)
+                </label>
+                {selectedManufacturer ? (
+                  <div className="mt-1 flex items-center gap-2 p-3 bg-gray-50 border border-gray-300 rounded-md">
+                    <div className="flex-1">
+                      <div className="font-medium">{selectedManufacturer.company_name}</div>
+                      <div className="text-sm text-gray-600">{selectedManufacturer.supplier_number}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearManufacturer}
+                      className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mt-1 flex gap-2">
+                      <input
+                        type="text"
+                        value={manufacturerSearch}
+                        onChange={(e) => setManufacturerSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            searchManufacturers();
+                          }
+                        }}
+                        placeholder="Hersteller suchen..."
+                        className="block flex-1 rounded-md border-gray-300 shadow-sm focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchManufacturers}
+                        disabled={searchingManufacturers}
+                        className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:bg-gray-400"
+                      >
+                        {searchingManufacturers ? 'Suchen...' : 'Suchen'}
+                      </button>
+                    </div>
+                    {manufacturerResults.length > 0 && (
+                      <div className="mt-2 border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                        {manufacturerResults.map((sup) => (
+                          <div
+                            key={sup.id}
+                            onClick={() => selectManufacturer(sup)}
+                            className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                          >
+                            <div className="font-medium">{sup.company_name}</div>
+                            <div className="text-sm text-gray-600">{sup.supplier_number}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Hersteller-RMA-Nummer & Versanddatum */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hersteller-RMA-Nummer
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.manufacturer_rma_number}
+                    onChange={(e) => handleInputChange('manufacturer_rma_number', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    placeholder="z.B. RMA-12345"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Versanddatum zum Hersteller
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.manufacturer_ship_date}
+                    onChange={(e) => handleInputChange('manufacturer_ship_date', e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+
+              {/* Kostenvoranschlag des Herstellers */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mb-3">Kostenvoranschlag des Herstellers</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Kostenvoranschlag / Evaluierungsgebühr (€)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.manufacturer_quotation_amount}
+                      onChange={(e) => handleInputChange('manufacturer_quotation_amount', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Währung</label>
+                    <select
+                      value={formData.manufacturer_quotation_currency || 'EUR'}
+                      onChange={(e) => handleInputChange('manufacturer_quotation_currency', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 bg-white"
+                    >
+                      <option value="EUR">EUR</option>
+                      <option value="USD">USD</option>
+                      <option value="GBP">GBP</option>
+                      <option value="CHF">CHF</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Kostenvoranschlag-Datei
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="file"
+                        onChange={handleUploadManufacturerQuotation}
+                        disabled={uploadingManufacturerQuotation}
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                      />
+                      {uploadingManufacturerQuotation && (
+                        <span className="text-sm text-gray-500">Lädt hoch...</span>
+                      )}
+                    </div>
+                    {rmaCase?.manufacturer_quotation_url && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <PaperClipIcon className="h-4 w-4 text-gray-400" />
+                        <a
+                          href={rmaCase.manufacturer_quotation_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-orange-600 hover:text-orange-800 hover:underline"
+                        >
+                          Kostenvoranschlag anzeigen
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bisherige Herstellerreparaturen */}
+              {rmaCase?.manufacturer_returns && rmaCase.manufacturer_returns.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mb-3">Bisherige Herstellerreparaturen</h3>
+                  <div className="space-y-3">
+                    {rmaCase.manufacturer_returns.map(ret => (
+                      <div key={ret.id} className="border rounded-lg p-4 bg-gray-50">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-medium">{ret.return_number}</h4>
+                            <p className="text-sm text-gray-500">
+                              {formatDate(ret.return_date)}
+                              {ret.shipping_carrier && ` • ${ret.shipping_carrier}`}
+                              {ret.tracking_number && ` • ${ret.tracking_number}`}
+                            </p>
+                            <p className="text-sm mt-1">{ret.items?.length || 0} Position(en)</p>
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            <select
+                              value={ret.pdf_language || 'de'}
+                              onChange={async (e) => {
+                                const lang = e.target.value;
+                                await api.post(`/service/rma-manufacturer-returns/${ret.id}/regenerate_pdf/`, {
+                                  language: lang
+                                });
+                                fetchRMACase();
+                              }}
+                              className="border border-gray-300 rounded px-2 py-1 text-sm bg-white"
+                              title="Sprache des Lieferscheins"
+                            >
+                              <option value="de">DE</option>
+                              <option value="en">EN</option>
+                            </select>
+                            <button
+                              onClick={() => handleViewManufacturerPdf(ret.id, ret.pdf_language || 'de')}
+                              className="border border-gray-300 text-gray-600 hover:bg-gray-100 px-3 py-1 rounded text-sm flex items-center gap-1"
+                              title="Lieferschein anzeigen"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                              Anzeigen
+                            </button>
+                            <button
+                              onClick={() => handleDownloadManufacturerPdf(ret.id, ret.return_number, ret.pdf_language || 'de')}
+                              className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Lieferschein PDF
+                            </button>
+                            <button
+                              onClick={() => handleGenerateProformaPdf(ret.id)}
+                              disabled={generatingProformaPdf}
+                              className="border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded text-sm"
+                              title="Proforma-Invoice generieren (Englisch)"
+                            >
+                              Proforma generieren
+                            </button>
+                            {ret.proforma_pdf_url && (
+                              <>
+                                <button
+                                  onClick={() => handleViewProformaPdf(ret.id)}
+                                  className="border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded text-sm flex items-center gap-1"
+                                  title="Proforma-Invoice anzeigen"
+                                >
+                                  <EyeIcon className="h-4 w-4" />
+                                  Proforma
+                                </button>
+                                <button
+                                  onClick={() => handleDownloadProformaPdf(ret.id, ret.return_number)}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+                                >
+                                  Proforma PDF
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleDeleteManufacturerReturn(ret.id)}
+                              className="border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1 rounded text-sm"
+                              title="Löschen, um den Lieferschein neu zu erstellen"
+                            >
+                              Löschen
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Neue Herstellerreparatur */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mb-3">Neue Herstellerreparatur erstellen</h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Versanddatum</label>
+                    <input
+                      type="date"
+                      value={manufacturerReturnForm.return_date}
+                      onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, return_date: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Versanddienstleister</label>
+                    <input
+                      type="text"
+                      value={manufacturerReturnForm.shipping_carrier}
+                      onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, shipping_carrier: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      placeholder="z.B. DHL, UPS..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sendungsnummer</label>
+                    <input
+                      type="text"
+                      value={manufacturerReturnForm.tracking_number}
+                      onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, tracking_number: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Lieferschein-Sprache</label>
+                    <select
+                      value={manufacturerPdfLanguage}
+                      onChange={(e) => setManufacturerPdfLanguage(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 bg-white"
+                    >
+                      <option value="de">Deutsch</option>
+                      <option value="en">Englisch</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Herstelleradresse als Versandadresse */}
+                <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-medium text-gray-700">Herstelleradresse (Versandadresse)</h4>
+                    {selectedManufacturer && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            address_name: selectedManufacturer.company_name || '',
+                            address_street: selectedManufacturer.street || '',
+                            address_house_number: selectedManufacturer.house_number || '',
+                            address_postal_code: selectedManufacturer.postal_code || '',
+                            address_city: selectedManufacturer.city || '',
+                            address_country: selectedManufacturer.country === 'DE' ? 'Deutschland' : (selectedManufacturer.country || 'Deutschland')
+                          }));
+                          setHasChanges(true);
+                        }}
+                        className="text-sm text-orange-600 hover:text-orange-800 hover:underline"
+                      >
+                        Aus Hersteller übernehmen
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name / Firma</label>
+                      <input
+                        type="text"
+                        value={formData.address_name}
+                        onChange={(e) => handleInputChange('address_name', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Straße</label>
+                      <input
+                        type="text"
+                        value={formData.address_street}
+                        onChange={(e) => handleInputChange('address_street', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hausnummer</label>
+                      <input
+                        type="text"
+                        value={formData.address_house_number}
+                        onChange={(e) => handleInputChange('address_house_number', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">PLZ</label>
+                      <input
+                        type="text"
+                        value={formData.address_postal_code}
+                        onChange={(e) => handleInputChange('address_postal_code', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stadt</label>
+                      <input
+                        type="text"
+                        value={formData.address_city}
+                        onChange={(e) => handleInputChange('address_city', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Land</label>
+                      <input
+                        type="text"
+                        value={formData.address_country}
+                        onChange={(e) => handleInputChange('address_country', e.target.value)}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Proforma-Invoice */}
+                <div className="bg-indigo-50 rounded-lg p-4 mb-4 border border-indigo-200">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-medium text-indigo-800">Proforma-Invoice (für Versand ins nicht-europäische Ausland)</h4>
+                    {selectedManufacturer && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManufacturerReturnForm(prev => ({
+                            ...prev,
+                            proforma_address_name: selectedManufacturer.company_name || '',
+                            proforma_address_street: selectedManufacturer.street || '',
+                            proforma_address_house_number: selectedManufacturer.house_number || '',
+                            proforma_address_postal_code: selectedManufacturer.postal_code || '',
+                            proforma_address_city: selectedManufacturer.city || '',
+                            proforma_address_country: selectedManufacturer.country === 'DE' ? 'Deutschland' : (selectedManufacturer.country || 'Deutschland')
+                          }));
+                        }}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+                      >
+                        Aus Hersteller übernehmen
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Titel (editierbar)</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_title}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_title: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Proforma Invoice – For Customs Purposes Only / No Commercial Value"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Proforma-Adresse (Empfänger)</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_address_name}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_address_name: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Name / Firma"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Straße</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_address_street}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_address_street: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hausnummer</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_address_house_number}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_address_house_number: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">PLZ</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_address_postal_code}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_address_postal_code: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stadt</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_address_city}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_address_city: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Land</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_address_country}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_address_country: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Kommentar (erscheint im PDF unterhalb der Positionen)</label>
+                      <textarea
+                        value={manufacturerReturnForm.proforma_comment}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_comment: e.target.value }))}
+                        rows={2}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="z.B. Goods for repair, no commercial value..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <h4 className="font-medium text-gray-700 mb-2">Positionen zum Versand auswählen:</h4>
+                <div className="space-y-2 mb-4">
+                  {manufacturerReturnForm.items.map((item, idx) => (
+                    <div key={item.rma_item_id} className="border rounded-lg p-3 flex items-center gap-4">
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={(e) => {
+                          const newItems = [...manufacturerReturnForm.items];
+                          newItems[idx].selected = e.target.checked;
+                          if (e.target.checked && !newItems[idx].quantity_returned) {
+                            newItems[idx].quantity_returned = item.quantity_available;
+                          }
+                          setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                        }}
+                        className="h-5 w-5 text-orange-600 rounded"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium">{item.product_name}</p>
+                        <p className="text-sm text-gray-500">Verfügbar: {item.quantity_available}</p>
+                      </div>
+                      {item.selected && (
+                        <>
+                          <div className="w-24">
+                            <input
+                              type="number"
+                              value={item.quantity_returned}
+                              onChange={(e) => {
+                                const newItems = [...manufacturerReturnForm.items];
+                                newItems[idx].quantity_returned = parseFloat(e.target.value) || 0;
+                                setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                              }}
+                              min="0"
+                              max={item.quantity_available}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              placeholder="Zustand/Bemerkung"
+                              value={item.condition_notes}
+                              onChange={(e) => {
+                                const newItems = [...manufacturerReturnForm.items];
+                                newItems[idx].condition_notes = e.target.value;
+                                setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                              }}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {manufacturerReturnForm.items.length === 0 && (
+                    <p className="text-sm text-gray-500 italic">Keine Positionen vorhanden - bitte zunächst im Tab "Wareneingang" erfassen.</p>
+                  )}
+                </div>
+
+                {/* Proforma-Invoice Positionsdaten */}
+                <div className="bg-indigo-50 rounded-lg p-4 mb-4 border border-indigo-200">
+                  <h4 className="font-medium text-indigo-800 mb-3">Proforma-Invoice Positionsdaten</h4>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Pro ausgewählter Position: Beschreibung, Gewicht, Zolltarifnummer, Warenwert und Ursprungsland
+                  </p>
+                  <div className="space-y-3">
+                    {manufacturerReturnForm.items.filter(i => i.selected).map((item, idx) => {
+                      const origIdx = manufacturerReturnForm.items.findIndex(i => i.rma_item_id === item.rma_item_id);
+                      return (
+                        <div key={item.rma_item_id} className="border rounded-lg p-3 bg-white">
+                          <p className="font-medium text-sm mb-2">{item.product_name}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            <div className="md:col-span-2">
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Beschreibung</label>
+                              <input
+                                type="text"
+                                value={item.proforma_description}
+                                onChange={(e) => {
+                                  const newItems = [...manufacturerReturnForm.items];
+                                  newItems[origIdx].proforma_description = e.target.value;
+                                  setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                                }}
+                                className="w-full px-2 py-1 border rounded text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Gewicht (kg)</label>
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={item.proforma_weight}
+                                onChange={(e) => {
+                                  const newItems = [...manufacturerReturnForm.items];
+                                  newItems[origIdx].proforma_weight = e.target.value;
+                                  setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                                }}
+                                className="w-full px-2 py-1 border rounded text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Zolltarifnummer (HS-Code)</label>
+                              <input
+                                type="text"
+                                value={item.proforma_hs_code}
+                                onChange={(e) => {
+                                  const newItems = [...manufacturerReturnForm.items];
+                                  newItems[origIdx].proforma_hs_code = e.target.value;
+                                  setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                                }}
+                                className="w-full px-2 py-1 border rounded text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Warenwert</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.proforma_value}
+                                onChange={(e) => {
+                                  const newItems = [...manufacturerReturnForm.items];
+                                  newItems[origIdx].proforma_value = e.target.value;
+                                  setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                                }}
+                                className="w-full px-2 py-1 border rounded text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Ursprungsland</label>
+                              <input
+                                type="text"
+                                value={item.proforma_origin_country}
+                                onChange={(e) => {
+                                  const newItems = [...manufacturerReturnForm.items];
+                                  newItems[origIdx].proforma_origin_country = e.target.value;
+                                  setManufacturerReturnForm(prev => ({ ...prev, items: newItems }));
+                                }}
+                                className="w-full px-2 py-1 border rounded text-sm"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {manufacturerReturnForm.items.filter(i => i.selected).length === 0 && (
+                      <p className="text-sm text-gray-500 italic">Bitte oben Positionen zum Versand auswählen, um Proforma-Daten zu erfassen.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bemerkungen</label>
+                  <textarea
+                    value={manufacturerReturnForm.notes}
+                    onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={2}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <button
+                  onClick={handleCreateManufacturerReturn}
+                  disabled={creatingManufacturerReturn}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg disabled:opacity-50"
+                >
+                  {creatingManufacturerReturn ? 'Erstelle...' : 'Herstellerreparatur erstellen & Lieferschein generieren'}
+                </button>
               </div>
             </div>
           )}

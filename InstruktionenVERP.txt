@@ -62,7 +62,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 python manage.py runserver
 
 # Frontend (Terminal 2)
-cd frontend
+cd C:\Users\mdunk\Documents\VERP\frontend
 npm start
 
 

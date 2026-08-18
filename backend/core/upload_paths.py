@@ -115,6 +115,18 @@ def rma_attachment_path(instance, filename):
     safe_filename = _sanitize_path_component(filename)
     return os.path.join('Service', 'RMA', _get_rma_number(instance), 'documents', safe_filename)
 
+
+def rma_manufacturer_return_pdf_path(instance, filename):
+    """Upload-Pfad für Herstellerreparatur-Lieferschein-PDFs: /Service/RMA/RMA-Nummer/manufacturer/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'manufacturer', safe_filename)
+
+
+def rma_manufacturer_quotation_path(instance, filename):
+    """Upload-Pfad für Hersteller-Kostenvoranschlag: /Service/RMA/RMA-Nummer/manufacturer/quotation/filename"""
+    safe_filename = _sanitize_path_component(filename)
+    return os.path.join('Service', 'RMA', _get_rma_number(instance), 'manufacturer', 'quotation', safe_filename)
+
     """
     Upload-Pfad: /customer_orders/Jahr/Auftragsnummer/filename
     """

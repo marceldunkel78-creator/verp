@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import SortableHeader from '../components/SortableHeader';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -14,6 +15,7 @@ const STATUS_LABELS = {
   'open': { label: 'Offen', color: 'bg-blue-100 text-blue-800' },
   'in_progress': { label: 'In Bearbeitung', color: 'bg-yellow-100 text-yellow-800' },
   'waiting_parts': { label: 'Warte auf Teile', color: 'bg-orange-100 text-orange-800' },
+  'at_manufacturer': { label: 'Beim Hersteller', color: 'bg-indigo-100 text-indigo-800' },
   'repaired': { label: 'Repariert', color: 'bg-green-100 text-green-800' },
   'not_repairable': { label: 'Nicht reparierbar', color: 'bg-red-100 text-red-800' },
   'returned': { label: 'Zurückgesendet', color: 'bg-gray-100 text-gray-800' },
@@ -26,6 +28,7 @@ const RMACases = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('-created_at');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -38,6 +41,7 @@ const RMACases = () => {
       params.append('page_size', '10');
       if (searchTerm) params.append('search', searchTerm);
       if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (sortBy) params.append('ordering', sortBy);
       
       const response = await api.get(`/service/rma/?${params.toString()}`);
       setRmaCases(response.data.results || response.data);
@@ -50,7 +54,7 @@ const RMACases = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, statusFilter]);
+  }, [currentPage, searchTerm, statusFilter, sortBy]);
 
   useEffect(() => {
     fetchRMACases();
@@ -118,6 +122,7 @@ const RMACases = () => {
               <option value="open">Offen</option>
               <option value="in_progress">In Bearbeitung</option>
               <option value="waiting_parts">Warte auf Teile</option>
+              <option value="at_manufacturer">Beim Hersteller</option>
               <option value="repaired">Repariert</option>
               <option value="not_repairable">Nicht reparierbar</option>
               <option value="returned">Zurückgesendet</option>
@@ -135,24 +140,12 @@ const RMACases = () => {
             <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  RMA-Nummer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Titel / Beschreibung
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Kunde
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Seriennummer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Eingang
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
+                <SortableHeader field="rma_number" label="RMA-Nummer" sortBy={sortBy} setSortBy={setSortBy} />
+                <SortableHeader field="title" label="Titel / Beschreibung" sortBy={sortBy} setSortBy={setSortBy} />
+                <SortableHeader field="customer__last_name" label="Kunde" sortBy={sortBy} setSortBy={setSortBy} />
+                <SortableHeader field="product_serial" label="Seriennummer" sortBy={sortBy} setSortBy={setSortBy} />
+                <SortableHeader field="received_date" label="Eingang" sortBy={sortBy} setSortBy={setSortBy} />
+                <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} align="center" />
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">

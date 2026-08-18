@@ -3,7 +3,7 @@ from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketCo
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
                      ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
                      RMACaseTimeEntry, RMAItem, RMAItemPhoto, RMAReceipt, RMAReturn, RMAReturnItem,
-                     RMAAttachment, RMACostLineItem)
+                     RMAAttachment, RMACostLineItem, RMAManufacturerReturn, RMAManufacturerReturnItem)
 
 
 class VSServicePriceSerializer(serializers.ModelSerializer):
@@ -429,6 +429,71 @@ class RMAReturnCreateSerializer(serializers.ModelSerializer):
         return rma_return
 
 
+class RMAManufacturerReturnItemSerializer(serializers.ModelSerializer):
+    """Serializer für Herstellerreparatur-Positionen"""
+    rma_item_detail = RMAItemSerializer(source='rma_item', read_only=True)
+
+    class Meta:
+        model = RMAManufacturerReturnItem
+        fields = [
+            'id', 'manufacturer_return', 'rma_item', 'rma_item_detail',
+            'quantity_returned', 'condition_notes',
+            'proforma_description', 'proforma_weight', 'proforma_hs_code',
+            'proforma_value', 'proforma_origin_country'
+        ]
+
+
+class RMAManufacturerReturnSerializer(serializers.ModelSerializer):
+    """Serializer für Herstellerreparaturen (Versand an den Hersteller)"""
+    items = RMAManufacturerReturnItemSerializer(many=True, read_only=True)
+    created_by_display = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    proforma_pdf_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RMAManufacturerReturn
+        fields = [
+            'id', 'rma_case', 'return_number', 'return_date',
+            'shipping_carrier', 'tracking_number', 'pdf_file', 'pdf_language',
+            'proforma_pdf', 'proforma_pdf_url', 'proforma_title', 'proforma_comment',
+            'proforma_address_name', 'proforma_address_street', 'proforma_address_house_number',
+            'proforma_address_postal_code', 'proforma_address_city', 'proforma_address_country',
+            'notes', 'created_at', 'created_by', 'created_by_display', 'items'
+        ]
+        read_only_fields = [
+            'return_number', 'created_at', 'created_by', 'created_by_display',
+            'pdf_file', 'pdf_language', 'proforma_pdf', 'proforma_pdf_url'
+        ]
+
+    def get_proforma_pdf_url(self, obj):
+        if obj.proforma_pdf:
+            return obj.proforma_pdf.url
+        return None
+
+
+class RMAManufacturerReturnCreateSerializer(serializers.ModelSerializer):
+    """Serializer für Herstellerreparatur-Erstellung"""
+    items = RMAManufacturerReturnItemSerializer(many=True, write_only=True)
+
+    class Meta:
+        model = RMAManufacturerReturn
+        fields = [
+            'rma_case', 'return_date', 'shipping_carrier', 'tracking_number', 'notes',
+            'proforma_title', 'proforma_comment',
+            'proforma_address_name', 'proforma_address_street', 'proforma_address_house_number',
+            'proforma_address_postal_code', 'proforma_address_city', 'proforma_address_country',
+            'items'
+        ]
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+        manufacturer_return = RMAManufacturerReturn.objects.create(**validated_data)
+
+        for item_data in items_data:
+            RMAManufacturerReturnItem.objects.create(manufacturer_return=manufacturer_return, **item_data)
+
+        return manufacturer_return
+
+
 class RMAAttachmentSerializer(serializers.ModelSerializer):
     """Serializer für RMA Auftragsdokumente"""
     uploaded_by_display = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
@@ -467,6 +532,9 @@ class RMACaseListSerializer(serializers.ModelSerializer):
     """Serializer für RMA-Fall Liste"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     customer_display = serializers.SerializerMethodField()
+    customer_order_display = serializers.SerializerMethodField()
+    service_ticket_display = serializers.SerializerMethodField()
+    linked_system_display = serializers.SerializerMethodField()
     
     class Meta:
         model = RMACase
@@ -474,6 +542,9 @@ class RMACaseListSerializer(serializers.ModelSerializer):
             'id', 'rma_number', 'title', 'description',
             'customer', 'customer_name', 'customer_display', 'product_serial',
             'status', 'status_display',
+            'customer_order', 'customer_order_display',
+            'service_ticket', 'service_ticket_display',
+            'linked_system', 'linked_system_display',
             'received_date', 'created_at', 'updated_at'
         ]
     
@@ -482,6 +553,21 @@ class RMACaseListSerializer(serializers.ModelSerializer):
         if obj.customer:
             return str(obj.customer)
         return obj.customer_name or None
+    
+    def get_customer_order_display(self, obj):
+        if obj.customer_order:
+            return obj.customer_order.order_number or f"Auftrag #{obj.customer_order.id}"
+        return None
+    
+    def get_service_ticket_display(self, obj):
+        if obj.service_ticket:
+            return obj.service_ticket.ticket_number or f"Ticket #{obj.service_ticket.id}"
+        return None
+    
+    def get_linked_system_display(self, obj):
+        if obj.linked_system:
+            return str(obj.linked_system)
+        return None
 
 
 class RMACaseDetailSerializer(serializers.ModelSerializer):
@@ -498,6 +584,8 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
     attachments = RMAAttachmentSerializer(many=True, read_only=True)
     cost_line_items = RMACostLineItemSerializer(many=True, read_only=True)
     cost_totals = serializers.SerializerMethodField()
+    manufacturer_returns = RMAManufacturerReturnSerializer(many=True, read_only=True)
+    manufacturer_quotation_url = serializers.SerializerMethodField()
     
     class Meta:
         model = RMACase
@@ -508,7 +596,7 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             # Tab 1: Basisinfos
             'title', 'description', 'status', 'status_display',
             'customer', 'customer_name', 'customer_contact', 'customer_email', 'customer_phone',
-            'linked_system', 'inventory_item',
+            'linked_system', 'inventory_item', 'customer_order', 'service_ticket',
             'product_name', 'product_serial', 'product_purchase_date',
             'warranty_status', 'fault_description', 'attachments',
             
@@ -530,6 +618,12 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             'repaired_by', 'test_results', 'final_notes',
             'report_pdf', 'report_pdf_url',
             
+            # Tab 5: Herstellerreparatur
+            'manufacturer', 'manufacturer_rma_number', 'manufacturer_ship_date',
+            'manufacturer_quotation', 'manufacturer_quotation_url',
+            'manufacturer_quotation_amount', 'manufacturer_quotation_currency',
+            'manufacturer_returns',
+            
             # Metadaten
             'assigned_to', 'assigned_to_name',
             'created_by', 'created_by_name', 'created_at', 'updated_at',
@@ -542,6 +636,10 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
     def get_cost_totals(self, obj):
         return obj.get_cost_totals()
     
+    def get_manufacturer_quotation_url(self, obj):
+        if obj.manufacturer_quotation:
+            return obj.manufacturer_quotation.url
+        return None
     
     def get_report_pdf_url(self, obj):
         if obj.report_pdf:
@@ -586,7 +684,7 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             
             # Tab 1 - Basisinfos
             'customer', 'customer_name', 'customer_contact', 'customer_email', 'customer_phone',
-            'linked_system', 'inventory_item',
+            'linked_system', 'inventory_item', 'customer_order', 'service_ticket',
             'title', 'description', 'status',
             'product_name', 'product_serial', 'product_purchase_date', 'warranty_status', 'fault_description',
 
@@ -605,6 +703,10 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             # Tab 4 - Reparaturbericht
             'diagnosis', 'repair_actions', 'parts_used', 'repair_date', 'repaired_by', 'test_results', 'final_notes',
 
+            # Tab 5 - Herstellerreparatur
+            'manufacturer', 'manufacturer_rma_number', 'manufacturer_ship_date',
+            'manufacturer_quotation', 'manufacturer_quotation_amount', 'manufacturer_quotation_currency',
+
             # Metadaten
             'assigned_to'
         ]
@@ -613,7 +715,7 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
     def to_internal_value(self, data):
         """Leere Datums-Strings in None umwandeln, damit optionale Datumsfelder leer bleiben können"""
         nullable_date_fields = [
-            'product_purchase_date', 'received_date', 'shipped_date', 'repair_date'
+            'product_purchase_date', 'received_date', 'shipped_date', 'repair_date', 'manufacturer_ship_date'
         ]
         if isinstance(data, dict):
             data = data.copy()

@@ -45,7 +45,7 @@ const CustomerOrderSearch = ({
     const loadSelected = async () => {
       if (value && !selectedOrder) {
         try {
-          const res = await api.get(`/customer-orders/${value}/`);
+          const res = await api.get(`/customer-orders/customer-orders/${value}/`);
           setSelectedOrder(res.data);
           setSearchTerm(`${res.data.order_number} - ${res.data.customer_name || ''}`);
         } catch (error) {
@@ -82,7 +82,7 @@ const CustomerOrderSearch = ({
 
       setIsLoading(true);
       try {
-        let url = `/customer-orders/?search=${encodeURIComponent(searchTerm)}&page_size=20`;
+        let url = `/customer-orders/customer-orders/?search=${encodeURIComponent(searchTerm)}&page_size=20`;
         if (customerId) {
           url += `&customer=${customerId}`;
         }

@@ -6,7 +6,7 @@ from django.utils import timezone
 from core.upload_paths import (
     service_ticket_attachment_path, troubleshooting_attachment_path,
     rma_item_photo_path, rma_receipt_document_path, rma_return_pdf_path, rma_report_pdf_path,
-    rma_attachment_path
+    rma_attachment_path, rma_manufacturer_return_pdf_path, rma_manufacturer_quotation_path
 )
 import re
 import json
@@ -580,6 +580,7 @@ class RMACase(models.Model):
         ('open', 'Offen'),
         ('in_progress', 'In Bearbeitung'),
         ('waiting_parts', 'Warte auf Teile'),
+        ('at_manufacturer', 'Beim Hersteller'),
         ('repaired', 'Repariert'),
         ('not_repairable', 'Nicht reparierbar'),
         ('returned', 'Zurückgesendet'),
@@ -653,6 +654,22 @@ class RMACase(models.Model):
         blank=True,
         related_name='rma_cases',
         verbose_name='Warenlager-Artikel'
+    )
+    customer_order = models.ForeignKey(
+        'customer_orders.CustomerOrder',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_cases',
+        verbose_name='Kundenauftrag'
+    )
+    service_ticket = models.ForeignKey(
+        'ServiceTicket',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_cases',
+        verbose_name='Service Ticket'
     )
     
     # Produktdaten
@@ -771,6 +788,46 @@ class RMACase(models.Model):
         null=True,
         blank=True,
         verbose_name='Reparaturbericht PDF'
+    )
+    
+    # =====================
+    # Tab 5: Herstellerreparatur
+    # =====================
+    manufacturer = models.ForeignKey(
+        'suppliers.Supplier',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_manufacturer_cases',
+        verbose_name='Hersteller'
+    )
+    manufacturer_rma_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Hersteller-RMA-Nummer'
+    )
+    manufacturer_ship_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Versanddatum zum Hersteller'
+    )
+    # Kostenvoranschlag des Herstellers (hochgeladene Datei)
+    manufacturer_quotation = models.FileField(
+        upload_to=rma_manufacturer_quotation_path,
+        null=True,
+        blank=True,
+        verbose_name='Kostenvoranschlag des Herstellers'
+    )
+    # Wert des Kostenvoranschlags / Evaluierungsgebühr
+    manufacturer_quotation_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Kostenvoranschlag / Evaluierungsgebühr'
+    )
+    manufacturer_quotation_currency = models.CharField(
+        max_length=3,
+        blank=True,
+        default='EUR',
+        verbose_name='Währung'
     )
     
     # =====================
@@ -1040,6 +1097,150 @@ class RMAReturnItem(models.Model):
 
     def __str__(self):
         return f"{self.rma_return.return_number} - {self.rma_item.product_name}"
+
+
+class RMAManufacturerReturn(models.Model):
+    """
+    Herstellerreparatur (Versand an den Hersteller) eines RMA-Falls.
+    Ein Lieferschein kann mehrere Positionen enthalten.
+    """
+    rma_case = models.ForeignKey(
+        RMACase,
+        on_delete=models.CASCADE,
+        related_name='manufacturer_returns',
+        verbose_name='RMA-Fall'
+    )
+    return_number = models.CharField(
+        max_length=20,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name='Lieferschein-Nr.',
+        help_text='Automatisch generiert'
+    )
+    return_date = models.DateField(verbose_name='Versanddatum')
+    shipping_carrier = models.CharField(max_length=100, blank=True, verbose_name='Versanddienstleister')
+    tracking_number = models.CharField(max_length=100, blank=True, verbose_name='Sendungsnummer')
+
+    pdf_file = models.FileField(
+        upload_to=rma_manufacturer_return_pdf_path,
+        null=True,
+        blank=True,
+        verbose_name='Lieferschein PDF'
+    )
+    # Sprache des zuletzt generierten Lieferscheins (de/en)
+    pdf_language = models.CharField(
+        max_length=10,
+        default='de',
+        blank=True,
+        verbose_name='PDF-Sprache'
+    )
+    # Proforma-Invoice (für Versand ins nicht-europäische Ausland)
+    proforma_pdf = models.FileField(
+        upload_to=rma_manufacturer_return_pdf_path,
+        null=True,
+        blank=True,
+        verbose_name='Proforma-Invoice PDF'
+    )
+    proforma_title = models.CharField(
+        max_length=200,
+        blank=True,
+        default='Proforma Invoice – For Customs Purposes Only / No Commercial Value',
+        verbose_name='Proforma-Invoice Titel'
+    )
+    proforma_comment = models.TextField(
+        blank=True,
+        verbose_name='Proforma-Invoice Kommentar',
+        help_text='Wird im PDF unterhalb der Positionen angezeigt'
+    )
+    # Proforma-Invoice Adresse (aus Herstelleradressen übernommen)
+    proforma_address_name = models.CharField(max_length=200, blank=True, verbose_name='Proforma Empfänger')
+    proforma_address_street = models.CharField(max_length=200, blank=True, verbose_name='Proforma Straße')
+    proforma_address_house_number = models.CharField(max_length=20, blank=True, verbose_name='Proforma Hausnummer')
+    proforma_address_postal_code = models.CharField(max_length=20, blank=True, verbose_name='Proforma PLZ')
+    proforma_address_city = models.CharField(max_length=100, blank=True, verbose_name='Proforma Stadt')
+    proforma_address_country = models.CharField(max_length=100, blank=True, verbose_name='Proforma Land')
+    notes = models.TextField(blank=True, verbose_name='Notizen')
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='rma_manufacturer_returns_created'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Herstellerreparatur'
+        verbose_name_plural = 'Herstellerreparaturen'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Hersteller-Lieferschein {self.return_number} für {self.rma_case.rma_number}"
+
+    def save(self, *args, **kwargs):
+        if not self.return_number:
+            self.return_number = self._generate_return_number()
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def _generate_return_number():
+        """Generiert die nächste freie Lieferschein-Nummer im Format RMA-H-00001"""
+        existing_numbers = RMAManufacturerReturn.objects.filter(
+            return_number__isnull=False
+        ).values_list('return_number', flat=True)
+
+        numeric_numbers = []
+        for num in existing_numbers:
+            try:
+                numeric_part = int(num.split('-')[-1])
+                numeric_numbers.append(numeric_part)
+            except (ValueError, IndexError):
+                continue
+
+        next_number = (max(numeric_numbers) + 1) if numeric_numbers else 1
+        return f'RMA-H-{next_number:05d}'
+
+
+class RMAManufacturerReturnItem(models.Model):
+    """
+    Einzelne Position einer Herstellerreparatur (Versand an den Hersteller)
+    """
+    manufacturer_return = models.ForeignKey(
+        RMAManufacturerReturn,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='Herstellerreparatur'
+    )
+    rma_item = models.ForeignKey(
+        RMAItem,
+        on_delete=models.CASCADE,
+        related_name='manufacturer_return_items',
+        verbose_name='RMA-Position'
+    )
+    quantity_returned = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Menge')
+    condition_notes = models.CharField(max_length=200, blank=True, verbose_name='Zustand/Bemerkung')
+
+    # Proforma-Invoice Felder pro Position
+    proforma_description = models.CharField(max_length=300, blank=True, verbose_name='Beschreibung (Proforma)')
+    proforma_weight = models.DecimalField(
+        max_digits=10, decimal_places=3, null=True, blank=True,
+        verbose_name='Gewicht (kg)'
+    )
+    proforma_hs_code = models.CharField(max_length=20, blank=True, verbose_name='Zolltarifnummer (HS-Code)')
+    proforma_value = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Warenwert'
+    )
+    proforma_origin_country = models.CharField(max_length=100, blank=True, verbose_name='Ursprungsland')
+
+    class Meta:
+        verbose_name = 'Herstellerreparatur-Position'
+        verbose_name_plural = 'Herstellerreparatur-Positionen'
+
+    def __str__(self):
+        return f"{self.manufacturer_return.return_number} - {self.rma_item.product_name}"
 
 
 class RMAAttachment(models.Model):

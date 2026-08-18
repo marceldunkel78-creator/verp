@@ -13,7 +13,7 @@ from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketCo
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
                      ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
                      RMACaseTimeEntry, RMAItem, RMAItemPhoto, RMAReceipt, RMAReturn, RMAReturnItem,
-                     RMAAttachment, RMACostLineItem)
+                     RMAAttachment, RMACostLineItem, RMAManufacturerReturn, RMAManufacturerReturnItem)
 from .serializers import (
     VSServiceListSerializer, VSServiceDetailSerializer, VSServiceCreateUpdateSerializer,
     VSServicePriceSerializer,
@@ -25,12 +25,15 @@ from .serializers import (
     RMAItemSerializer, RMAItemPhotoSerializer, RMAReceiptSerializer,
     RMAReturnSerializer, RMAReturnCreateSerializer, RMAReturnItemSerializer,
     RMAAttachmentSerializer, RMACostLineItemSerializer,
+    RMAManufacturerReturnSerializer, RMAManufacturerReturnCreateSerializer, RMAManufacturerReturnItemSerializer,
     TroubleshootingListSerializer, TroubleshootingDetailSerializer, TroubleshootingCreateUpdateSerializer,
     TroubleshootingCommentSerializer, TroubleshootingAttachmentSerializer
 )
 from .rma_pdf_generator import generate_rma_delivery_note_pdf
 from .rma_report_pdf import generate_rma_repair_report_pdf
 from .rma_calculation_pdf import generate_rma_calculation_pdf
+from .rma_manufacturer_pdf import generate_rma_manufacturer_delivery_note_pdf
+from .rma_proforma_pdf import generate_proforma_invoice_pdf
 from users.models import Message
 
 
@@ -505,9 +508,9 @@ class RMACaseViewSet(viewsets.ModelViewSet):
     queryset = RMACase.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'customer', 'warranty_status', 'assigned_to', 'linked_system']
+    filterset_fields = ['status', 'customer', 'warranty_status', 'assigned_to', 'linked_system', 'customer_order', 'service_ticket']
     search_fields = ['rma_number', 'title', 'description', 'serial_number', 'product_name']
-    ordering_fields = ['rma_number', 'created_at', 'status']
+    ordering_fields = ['rma_number', 'created_at', 'status', 'title', 'customer__last_name', 'product_serial', 'received_date']
     ordering = ['-created_at']
     
     def get_serializer_class(self):
@@ -705,6 +708,82 @@ class RMACaseViewSet(viewsets.ModelViewSet):
         rma_case = self.get_object()
         returns = rma_case.returns.all()
         serializer = RMAReturnSerializer(returns, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def create_manufacturer_return(self, request, pk=None):
+        """Erstellt eine Herstellerreparatur und generiert den Lieferschein"""
+        rma_case = self.get_object()
+        
+        items_data = request.data.get('items', [])
+        if not items_data:
+            return Response(
+                {'error': 'Keine Positionen zum Versand ausgewählt'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from django.utils.dateparse import parse_date
+        
+        raw_date = request.data.get('return_date')
+        if isinstance(raw_date, str):
+            parsed_date = parse_date(raw_date)
+            if parsed_date is None:
+                return Response({'error': 'Ungültiges Datum für return_date'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            parsed_date = raw_date
+        
+        manufacturer_return = RMAManufacturerReturn.objects.create(
+            rma_case=rma_case,
+            return_date=parsed_date,
+            shipping_carrier=request.data.get('shipping_carrier', ''),
+            tracking_number=request.data.get('tracking_number', ''),
+            notes=request.data.get('notes', ''),
+            proforma_title=request.data.get('proforma_title', 'Proforma Invoice – For Customs Purposes Only / No Commercial Value'),
+            proforma_comment=request.data.get('proforma_comment', ''),
+            proforma_address_name=request.data.get('proforma_address_name', ''),
+            proforma_address_street=request.data.get('proforma_address_street', ''),
+            proforma_address_house_number=request.data.get('proforma_address_house_number', ''),
+            proforma_address_postal_code=request.data.get('proforma_address_postal_code', ''),
+            proforma_address_city=request.data.get('proforma_address_city', ''),
+            proforma_address_country=request.data.get('proforma_address_country', ''),
+            created_by=request.user
+        )
+        
+        for item_data in items_data:
+            RMAManufacturerReturnItem.objects.create(
+                manufacturer_return=manufacturer_return,
+                rma_item_id=item_data.get('rma_item_id'),
+                quantity_returned=item_data.get('quantity_returned', 0),
+                condition_notes=item_data.get('condition_notes', ''),
+                proforma_description=item_data.get('proforma_description', ''),
+                proforma_weight=item_data.get('proforma_weight'),
+                proforma_hs_code=item_data.get('proforma_hs_code', ''),
+                proforma_value=item_data.get('proforma_value'),
+                proforma_origin_country=item_data.get('proforma_origin_country', '')
+            )
+        
+        # Sprache für den Lieferschein auswerten (de/en)
+        language = request.data.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+        pdf_content = generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language=language)
+        filename = f"Lieferschein_{manufacturer_return.return_number}.pdf"
+        manufacturer_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+        
+        # Falls noch nicht gesetzt, Versanddatum zum Hersteller am Fall selbst nachtragen
+        if not rma_case.manufacturer_ship_date:
+            rma_case.manufacturer_ship_date = parsed_date
+            rma_case.save()
+        
+        serializer = RMAManufacturerReturnSerializer(manufacturer_return)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['get'], url_path='manufacturer-returns')
+    def get_manufacturer_returns(self, request, pk=None):
+        """Gibt alle Herstellerreparaturen eines RMA-Falls zurück"""
+        rma_case = self.get_object()
+        manufacturer_returns = rma_case.manufacturer_returns.all()
+        serializer = RMAManufacturerReturnSerializer(manufacturer_returns, many=True)
         return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
@@ -1079,6 +1158,145 @@ class RMAReturnViewSet(viewsets.ModelViewSet):
         """Löscht den Warenausgang inkl. PDF, sodass der Lieferschein neu erstellt werden kann"""
         if instance.pdf_file:
             instance.pdf_file.delete(save=False)
+        instance.delete()
+
+
+class RMAManufacturerReturnViewSet(viewsets.ModelViewSet):
+    """ViewSet für Herstellerreparaturen (Versand an den Hersteller)"""
+    permission_classes = [IsAuthenticated]
+    queryset = RMAManufacturerReturn.objects.all().order_by('-created_at')
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return RMAManufacturerReturnCreateSerializer
+        return RMAManufacturerReturnSerializer
+    
+    @action(detail=True, methods=['get'])
+    def download_pdf(self, request, pk=None):
+        """Download des Hersteller-Lieferscheins"""
+        manufacturer_return = self.get_object()
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+
+        if not manufacturer_return.pdf_file or manufacturer_return.pdf_language != language:
+            pdf_content = generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language=language)
+            filename = f"Lieferschein_{manufacturer_return.return_number}.pdf"
+            manufacturer_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+            manufacturer_return.pdf_language = language
+            manufacturer_return.save(update_fields=['pdf_language'])
+
+        response = HttpResponse(manufacturer_return.pdf_file.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Lieferschein_{manufacturer_return.return_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['get'])
+    def view_pdf(self, request, pk=None):
+        """Zeigt den Hersteller-Lieferschein inline im Browser an (neuer Tab)"""
+        manufacturer_return = self.get_object()
+        language = request.query_params.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+
+        if not manufacturer_return.pdf_file or manufacturer_return.pdf_language != language:
+            pdf_content = generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language=language)
+            filename = f"Lieferschein_{manufacturer_return.return_number}.pdf"
+            manufacturer_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+            manufacturer_return.pdf_language = language
+            manufacturer_return.save(update_fields=['pdf_language'])
+
+        response = HttpResponse(manufacturer_return.pdf_file.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="Lieferschein_{manufacturer_return.return_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['post'])
+    def regenerate_pdf(self, request, pk=None):
+        """Regeneriert den Hersteller-Lieferschein"""
+        manufacturer_return = self.get_object()
+        language = request.data.get('language', 'de')
+        if language not in ('de', 'en'):
+            language = 'de'
+
+        if manufacturer_return.pdf_file:
+            manufacturer_return.pdf_file.delete(save=False)
+        
+        pdf_content = generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language=language)
+        filename = f"Lieferschein_{manufacturer_return.return_number}.pdf"
+        manufacturer_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+        manufacturer_return.pdf_language = language
+        manufacturer_return.save(update_fields=['pdf_language'])
+        
+        serializer = RMAManufacturerReturnSerializer(manufacturer_return)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def generate_proforma_pdf(self, request, pk=None):
+        """Generiert die Proforma-Invoice (immer Englisch)"""
+        manufacturer_return = self.get_object()
+        
+        # Titel, Kommentar und Adresse aus dem Request übernehmen (editierbar)
+        if 'proforma_title' in request.data:
+            manufacturer_return.proforma_title = request.data.get('proforma_title', '')
+        if 'proforma_comment' in request.data:
+            manufacturer_return.proforma_comment = request.data.get('proforma_comment', '')
+        if 'proforma_address_name' in request.data:
+            manufacturer_return.proforma_address_name = request.data.get('proforma_address_name', '')
+        if 'proforma_address_street' in request.data:
+            manufacturer_return.proforma_address_street = request.data.get('proforma_address_street', '')
+        if 'proforma_address_house_number' in request.data:
+            manufacturer_return.proforma_address_house_number = request.data.get('proforma_address_house_number', '')
+        if 'proforma_address_postal_code' in request.data:
+            manufacturer_return.proforma_address_postal_code = request.data.get('proforma_address_postal_code', '')
+        if 'proforma_address_city' in request.data:
+            manufacturer_return.proforma_address_city = request.data.get('proforma_address_city', '')
+        if 'proforma_address_country' in request.data:
+            manufacturer_return.proforma_address_country = request.data.get('proforma_address_country', '')
+        manufacturer_return.save()
+        
+        if manufacturer_return.proforma_pdf:
+            manufacturer_return.proforma_pdf.delete(save=False)
+        
+        pdf_content = generate_proforma_invoice_pdf(manufacturer_return)
+        filename = f"Proforma_Invoice_{manufacturer_return.return_number}.pdf"
+        manufacturer_return.proforma_pdf.save(filename, ContentFile(pdf_content), save=True)
+        
+        serializer = RMAManufacturerReturnSerializer(manufacturer_return)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    def download_proforma_pdf(self, request, pk=None):
+        """Download der Proforma-Invoice"""
+        manufacturer_return = self.get_object()
+        
+        if not manufacturer_return.proforma_pdf:
+            pdf_content = generate_proforma_invoice_pdf(manufacturer_return)
+            filename = f"Proforma_Invoice_{manufacturer_return.return_number}.pdf"
+            manufacturer_return.proforma_pdf.save(filename, ContentFile(pdf_content), save=True)
+        
+        response = HttpResponse(manufacturer_return.proforma_pdf.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Proforma_Invoice_{manufacturer_return.return_number}.pdf"'
+        return response
+    
+    @action(detail=True, methods=['get'])
+    def view_proforma_pdf(self, request, pk=None):
+        """Zeigt die Proforma-Invoice inline im Browser an (neuer Tab)"""
+        manufacturer_return = self.get_object()
+        
+        if not manufacturer_return.proforma_pdf:
+            pdf_content = generate_proforma_invoice_pdf(manufacturer_return)
+            filename = f"Proforma_Invoice_{manufacturer_return.return_number}.pdf"
+            manufacturer_return.proforma_pdf.save(filename, ContentFile(pdf_content), save=True)
+        
+        response = HttpResponse(manufacturer_return.proforma_pdf.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="Proforma_Invoice_{manufacturer_return.return_number}.pdf"'
+        return response
+    
+    def perform_destroy(self, instance):
+        """Löscht die Herstellerreparatur inkl. PDF, sodass der Lieferschein neu erstellt werden kann"""
+        if instance.pdf_file:
+            instance.pdf_file.delete(save=False)
+        if instance.proforma_pdf:
+            instance.proforma_pdf.delete(save=False)
         instance.delete()
 
 
