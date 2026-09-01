@@ -1774,17 +1774,22 @@ const CustomerEdit = () => {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Art</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kommentar</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">System</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Erstellt von</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aktionen</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Datum</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Art</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-full">Kommentar</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">System</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Erstellt von</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Aktionen</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {contactHistory.map((entry) => (
-                          <tr key={entry.id} className="hover:bg-gray-50">
+                          <tr
+                            key={entry.id}
+                            onClick={() => openEditContactHistory(entry)}
+                            className="hover:bg-gray-50 cursor-pointer"
+                            title="Zum Bearbeiten auf die Zeile klicken"
+                          >
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {new Date(entry.contact_date).toLocaleDateString('de-DE')}
                             </td>
@@ -1797,12 +1802,14 @@ const CustomerEdit = () => {
                                 {entry.contact_type_display}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-900 max-w-md">
+                            <td className="px-6 py-4 text-sm text-gray-900 w-full">
                               <div className="line-clamp-2">{entry.comment}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-[220px]">
                               {entry.system_name ? (
-                                <span className="text-blue-600">{entry.system_number} - {entry.system_name}</span>
+                                <span className="text-blue-600 block truncate" title={`${entry.system_number} - ${entry.system_name}`}>
+                                  {entry.system_number} - {entry.system_name}
+                                </span>
                               ) : '-'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1811,14 +1818,14 @@ const CustomerEdit = () => {
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                               <button
                                 type="button"
-                                onClick={() => openEditContactHistory(entry)}
+                                onClick={(e) => { e.stopPropagation(); openEditContactHistory(entry); }}
                                 className="text-blue-600 hover:text-blue-900 mr-3"
                               >
                                 Bearbeiten
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleDeleteContactHistory(entry.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDeleteContactHistory(entry.id); }}
                                 className="text-red-600 hover:text-red-900"
                               >
                                 <TrashIcon className="h-5 w-5 inline" />
