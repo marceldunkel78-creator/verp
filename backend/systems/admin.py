@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import System, SystemComponent, SystemPhoto
+from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption, WorkGroupOption
 
 
 class SystemComponentInline(admin.TabularInline):
@@ -56,3 +56,24 @@ class SystemPhotoAdmin(admin.ModelAdmin):
     list_display = ['system', 'title', 'is_primary', 'position', 'created_at']
     list_filter = ['is_primary', 'system']
     search_fields = ['title', 'system__system_number']
+
+
+@admin.register(ModelOrganismOption)
+class ModelOrganismOptionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name']
+
+
+@admin.register(ResearchFieldOption)
+class ResearchFieldOptionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name']
+
+
+@admin.register(WorkGroupOption)
+class WorkGroupOptionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name']

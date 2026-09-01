@@ -1,6 +1,6 @@
 from datetime import date
 from rest_framework import serializers
-from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption
+from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption, WorkGroupOption
 from customers.models import Customer
 
 
@@ -57,6 +57,12 @@ class ModelOrganismOptionSerializer(serializers.ModelSerializer):
 class ResearchFieldOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResearchFieldOption
+        fields = ['id', 'name', 'is_active']
+
+
+class WorkGroupOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkGroupOption
         fields = ['id', 'name', 'is_active']
 
 

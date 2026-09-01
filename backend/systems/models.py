@@ -54,6 +54,22 @@ class ResearchFieldOption(models.Model):
         return self.name
 
 
+class WorkGroupOption(models.Model):
+    """Globale Liste der Arbeitsgruppen"""
+    name = models.CharField(max_length=255, unique=True, verbose_name='Arbeitsgruppe')
+    is_active = models.BooleanField(default=True, verbose_name='Aktiv')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    class Meta:
+        verbose_name = 'Arbeitsgruppe'
+        verbose_name_plural = 'Arbeitsgruppen'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class System(models.Model):
     """
     Kunden-Mikroskopsystem

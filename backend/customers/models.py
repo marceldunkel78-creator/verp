@@ -147,6 +147,25 @@ class Customer(models.Model):
         related_name='responsible_for_customers',
         verbose_name='Zuständiger Mitarbeiter'
     )
+    # Arbeitsgruppen, Forschungsgebiete und Modellorganismen (globale Optionen aus systems)
+    work_groups = models.ManyToManyField(
+        'systems.WorkGroupOption',
+        blank=True,
+        related_name='customers',
+        verbose_name='Arbeitsgruppen'
+    )
+    research_fields = models.ManyToManyField(
+        'systems.ResearchFieldOption',
+        blank=True,
+        related_name='customers',
+        verbose_name='Forschungsgebiete'
+    )
+    model_organisms = models.ManyToManyField(
+        'systems.ModelOrganismOption',
+        blank=True,
+        related_name='customers',
+        verbose_name='Modellorganismen'
+    )
     # Legacy-ID aus der SQL-Datenbank (veraltet, siehe CustomerLegacyMapping)
     # Wird noch als Schnell-Referenz behalten, aber nicht mehr unique
     legacy_sql_id = models.IntegerField(

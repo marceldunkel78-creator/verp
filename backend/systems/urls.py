@@ -5,7 +5,8 @@ from .views import (
     SystemComponentViewSet,
     SystemPhotoViewSet,
     ModelOrganismOptionViewSet,
-    ResearchFieldOptionViewSet
+    ResearchFieldOptionViewSet,
+    WorkGroupOptionViewSet
 )
 
 router = DefaultRouter()
@@ -14,6 +15,7 @@ router.register(r'components', SystemComponentViewSet, basename='system-componen
 router.register(r'photos', SystemPhotoViewSet, basename='system-photo')
 router.register(r'model-organisms', ModelOrganismOptionViewSet, basename='model-organism')
 router.register(r'research-fields', ResearchFieldOptionViewSet, basename='research-field')
+router.register(r'work-groups', WorkGroupOptionViewSet, basename='work-group')
 
 urlpatterns = [
     path('', include(router.urls)),

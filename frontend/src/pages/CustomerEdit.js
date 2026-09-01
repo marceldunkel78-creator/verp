@@ -23,7 +23,10 @@ const CustomerEdit = () => {
     notes: '',
     is_active: true,
     is_reference: false,
-    responsible_user: null
+    responsible_user: null,
+    work_group_ids: [],
+    research_field_ids: [],
+    model_organism_ids: []
   });
 
   const [addresses, setAddresses] = useState([]);
@@ -32,6 +35,14 @@ const CustomerEdit = () => {
   const [saving, setSaving] = useState(false);
   const [selectedAddressIndex, setSelectedAddressIndex] = useState(0);
   const [users, setUsers] = useState([]);
+
+  // Arbeitsgruppen / Forschungsgebiete / Modellorganismen (globale Optionen)
+  const [workGroupOptions, setWorkGroupOptions] = useState([]);
+  const [researchFieldOptions, setResearchFieldOptions] = useState([]);
+  const [modelOrganismOptions, setModelOrganismOptions] = useState([]);
+  const [newWorkGroupName, setNewWorkGroupName] = useState('');
+  const [newResearchFieldName, setNewResearchFieldName] = useState('');
+  const [newModelOrganismName, setNewModelOrganismName] = useState('');
   
   // Change tracking
   const originalDataRef = useRef(null);
@@ -66,6 +77,9 @@ const CustomerEdit = () => {
 
   useEffect(() => {
     loadUsers();
+    fetchWorkGroupOptions();
+    fetchResearchFieldOptions();
+    fetchModelOrganismOptions();
     if (isEditing) {
       loadCustomer();
     }
@@ -96,7 +110,10 @@ const CustomerEdit = () => {
         notes: customer.notes || '',
         is_active: customer.is_active !== undefined ? customer.is_active : true,
         is_reference: customer.is_reference || false,
-        responsible_user: customer.responsible_user || null
+        responsible_user: customer.responsible_user || null,
+        work_group_ids: (customer.work_groups || []).map((opt) => opt.id),
+        research_field_ids: (customer.research_fields || []).map((opt) => opt.id),
+        model_organism_ids: (customer.model_organisms || []).map((opt) => opt.id)
       });
       setAddresses((customer.addresses || []).map(a => ({
         ...a,
@@ -119,7 +136,10 @@ const CustomerEdit = () => {
           notes: customer.notes || '',
           is_active: customer.is_active !== undefined ? customer.is_active : true,
           is_reference: customer.is_reference || false,
-          responsible_user: customer.responsible_user || null
+          responsible_user: customer.responsible_user || null,
+          work_group_ids: (customer.work_groups || []).map((opt) => opt.id),
+          research_field_ids: (customer.research_fields || []).map((opt) => opt.id),
+          model_organism_ids: (customer.model_organisms || []).map((opt) => opt.id)
         },
         addresses: JSON.stringify((customer.addresses || []).map(a => ({
           ...a,
@@ -146,6 +166,126 @@ const CustomerEdit = () => {
       setUsers(response.data.results || response.data || []);
     } catch (error) {
       console.error('Error loading users:', error);
+    }
+  };
+
+  const fetchWorkGroupOptions = async () => {
+    try {
+      const response = await api.get('/systems/work-groups/?is_active=true&page_size=1000');
+      setWorkGroupOptions(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching work groups:', error);
+    }
+  };
+
+  const fetchResearchFieldOptions = async () => {
+    try {
+      const response = await api.get('/systems/research-fields/?is_active=true&page_size=1000');
+      setResearchFieldOptions(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching research fields:', error);
+    }
+  };
+
+  const fetchModelOrganismOptions = async () => {
+    try {
+      const response = await api.get('/systems/model-organisms/?is_active=true&page_size=1000');
+      setModelOrganismOptions(response.data.results || response.data || []);
+    } catch (error) {
+      console.error('Error fetching model organisms:', error);
+    }
+  };
+
+  const addWorkGroupOption = async () => {
+    const name = newWorkGroupName.trim();
+    if (!name) return;
+
+    const existing = workGroupOptions.find(
+      (opt) => opt.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      setFormData(prev => ({
+        ...prev,
+        work_group_ids: Array.from(new Set([...prev.work_group_ids, existing.id]))
+      }));
+      setNewWorkGroupName('');
+      return;
+    }
+
+    try {
+      const response = await api.post('/systems/work-groups/', { name });
+      const created = response.data;
+      setWorkGroupOptions(prev => [...prev, created]);
+      setFormData(prev => ({
+        ...prev,
+        work_group_ids: Array.from(new Set([...prev.work_group_ids, created.id]))
+      }));
+      setNewWorkGroupName('');
+    } catch (error) {
+      console.error('Error adding work group:', error);
+      alert('Fehler beim Hinzufügen der Arbeitsgruppe');
+    }
+  };
+
+  const addResearchFieldOption = async () => {
+    const name = newResearchFieldName.trim();
+    if (!name) return;
+
+    const existing = researchFieldOptions.find(
+      (opt) => opt.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      setFormData(prev => ({
+        ...prev,
+        research_field_ids: Array.from(new Set([...prev.research_field_ids, existing.id]))
+      }));
+      setNewResearchFieldName('');
+      return;
+    }
+
+    try {
+      const response = await api.post('/systems/research-fields/', { name });
+      const created = response.data;
+      setResearchFieldOptions(prev => [...prev, created]);
+      setFormData(prev => ({
+        ...prev,
+        research_field_ids: Array.from(new Set([...prev.research_field_ids, created.id]))
+      }));
+      setNewResearchFieldName('');
+    } catch (error) {
+      console.error('Error adding research field:', error);
+      alert('Fehler beim Hinzufügen des Forschungsgebiets');
+    }
+  };
+
+  const addModelOrganismOption = async () => {
+    const name = newModelOrganismName.trim();
+    if (!name) return;
+
+    const existing = modelOrganismOptions.find(
+      (opt) => opt.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      setFormData(prev => ({
+        ...prev,
+        model_organism_ids: Array.from(new Set([...prev.model_organism_ids, existing.id]))
+      }));
+      setNewModelOrganismName('');
+      return;
+    }
+
+    try {
+      const response = await api.post('/systems/model-organisms/', { name });
+      const created = response.data;
+      setModelOrganismOptions(prev => [...prev, created]);
+      setFormData(prev => ({
+        ...prev,
+        model_organism_ids: Array.from(new Set([...prev.model_organism_ids, created.id]))
+      }));
+      setNewModelOrganismName('');
+    } catch (error) {
+      console.error('Error adding model organism:', error);
+      alert('Fehler beim Hinzufügen des Modellorganismus');
     }
   };
 
@@ -457,6 +597,9 @@ const CustomerEdit = () => {
       if (key === 'responsible_user') {
         return String(formData[key] || '') !== String(origFD[key] || '');
       }
+      if (key === 'work_group_ids' || key === 'research_field_ids' || key === 'model_organism_ids') {
+        return JSON.stringify(formData[key] || []) !== JSON.stringify(origFD[key] || []);
+      }
       return formData[key] !== origFD[key];
     });
     if (formChanged) return true;
@@ -676,6 +819,248 @@ const CustomerEdit = () => {
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* Arbeitsgruppen / Forschungsgebiete / Modellorganismen */}
+                <div className="border-t pt-6">
+                  <h3 className="text-lg font-semibold mb-4">Arbeitsgruppen, Forschungsgebiete & Modellorganismen</h3>
+
+                  {/* Arbeitsgruppen */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Arbeitsgruppen</label>
+                    {formData.work_group_ids.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {formData.work_group_ids.map(id => {
+                          const opt = workGroupOptions.find(o => o.id === id);
+                          return opt ? (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                            >
+                              {opt.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    work_group_ids: prev.work_group_ids.filter(i => i !== id)
+                                  }));
+                                }}
+                                className="ml-1 text-purple-600 hover:text-purple-800"
+                              >
+                                <XMarkIcon className="h-4 w-4" />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const selectedId = parseInt(e.target.value, 10);
+                          if (selectedId && !formData.work_group_ids.includes(selectedId)) {
+                            setFormData(prev => ({
+                              ...prev,
+                              work_group_ids: [...prev.work_group_ids, selectedId]
+                            }));
+                          }
+                        }}
+                        className="flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Arbeitsgruppe auswählen --</option>
+                        {workGroupOptions
+                          .filter(opt => !formData.work_group_ids.includes(opt.id))
+                          .map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={newWorkGroupName}
+                        onChange={(e) => setNewWorkGroupName(e.target.value)}
+                        placeholder="Neue Arbeitsgruppe erstellen"
+                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addWorkGroupOption();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={addWorkGroupOption}
+                        disabled={!newWorkGroupName.trim()}
+                        className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <PlusIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Forschungsgebiete */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Forschungsgebiete</label>
+                    {formData.research_field_ids.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {formData.research_field_ids.map(id => {
+                          const opt = researchFieldOptions.find(o => o.id === id);
+                          return opt ? (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm"
+                            >
+                              {opt.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    research_field_ids: prev.research_field_ids.filter(i => i !== id)
+                                  }));
+                                }}
+                                className="ml-1 text-green-600 hover:text-green-800"
+                              >
+                                <XMarkIcon className="h-4 w-4" />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const selectedId = parseInt(e.target.value, 10);
+                          if (selectedId && !formData.research_field_ids.includes(selectedId)) {
+                            setFormData(prev => ({
+                              ...prev,
+                              research_field_ids: [...prev.research_field_ids, selectedId]
+                            }));
+                          }
+                        }}
+                        className="flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Forschungsgebiet auswählen --</option>
+                        {researchFieldOptions
+                          .filter(opt => !formData.research_field_ids.includes(opt.id))
+                          .map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={newResearchFieldName}
+                        onChange={(e) => setNewResearchFieldName(e.target.value)}
+                        placeholder="Neues Forschungsgebiet erstellen"
+                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addResearchFieldOption();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={addResearchFieldOption}
+                        disabled={!newResearchFieldName.trim()}
+                        className="px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <PlusIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Modellorganismen */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Modellorganismen</label>
+                    {formData.model_organism_ids.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {formData.model_organism_ids.map(id => {
+                          const opt = modelOrganismOptions.find(o => o.id === id);
+                          return opt ? (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                            >
+                              {opt.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    model_organism_ids: prev.model_organism_ids.filter(i => i !== id)
+                                  }));
+                                }}
+                                className="ml-1 text-blue-600 hover:text-blue-800"
+                              >
+                                <XMarkIcon className="h-4 w-4" />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const selectedId = parseInt(e.target.value, 10);
+                          if (selectedId && !formData.model_organism_ids.includes(selectedId)) {
+                            setFormData(prev => ({
+                              ...prev,
+                              model_organism_ids: [...prev.model_organism_ids, selectedId]
+                            }));
+                          }
+                        }}
+                        className="flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Modellorganismus auswählen --</option>
+                        {modelOrganismOptions
+                          .filter(opt => !formData.model_organism_ids.includes(opt.id))
+                          .map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={newModelOrganismName}
+                        onChange={(e) => setNewModelOrganismName(e.target.value)}
+                        placeholder="Neuen Modellorganismus erstellen"
+                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addModelOrganismOption();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={addModelOrganismOption}
+                        disabled={!newModelOrganismName.trim()}
+                        className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <PlusIcon className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 

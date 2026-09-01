@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from .models import Customer, CustomerAddress, CustomerPhone, CustomerEmail, ContactHistory, CustomerSystem, CustomerLegacyMapping
+from systems.models import ModelOrganismOption, ResearchFieldOption, WorkGroupOption
+from systems.serializers import ModelOrganismOptionSerializer, ResearchFieldOptionSerializer, WorkGroupOptionSerializer
 
 
 class CustomerAddressSerializer(serializers.ModelSerializer):
@@ -124,6 +126,9 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     responsible_user_name = serializers.CharField(source='responsible_user.get_full_name', read_only=True)
     legacy_sql_ids = serializers.SerializerMethodField()
+    work_groups = WorkGroupOptionSerializer(many=True, read_only=True)
+    research_fields = ResearchFieldOptionSerializer(many=True, read_only=True)
+    model_organisms = ModelOrganismOptionSerializer(many=True, read_only=True)
     
     class Meta:
         model = Customer
@@ -133,6 +138,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
             'advertising_status', 'advertising_status_display',
             'description', 'is_reference', 'responsible_user', 'responsible_user_name',
             'addresses', 'phones', 'emails',
+            'work_groups', 'research_fields', 'model_organisms',
             'notes', 'is_active',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
@@ -150,6 +156,24 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
     addresses = CustomerAddressSerializer(many=True, required=False)
     phones = CustomerPhoneSerializer(many=True, required=False)
     emails = CustomerEmailSerializer(many=True, required=False)
+    work_group_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        required=False,
+        queryset=WorkGroupOption.objects.all(),
+        source='work_groups'
+    )
+    research_field_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        required=False,
+        queryset=ResearchFieldOption.objects.all(),
+        source='research_fields'
+    )
+    model_organism_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        required=False,
+        queryset=ModelOrganismOption.objects.all(),
+        source='model_organisms'
+    )
     
     class Meta:
         model = Customer
@@ -158,6 +182,7 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
             'salutation', 'title', 'first_name', 'last_name', 'language',
             'advertising_status', 'description', 'is_reference', 'responsible_user',
             'addresses', 'phones', 'emails',
+            'work_group_ids', 'research_field_ids', 'model_organism_ids',
             'notes', 'is_active'
         ]
         read_only_fields = ['id', 'customer_number']
@@ -166,8 +191,18 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
         addresses_data = validated_data.pop('addresses', [])
         phones_data = validated_data.pop('phones', [])
         emails_data = validated_data.pop('emails', [])
+        work_groups = validated_data.pop('work_groups', [])
+        research_fields = validated_data.pop('research_fields', [])
+        model_organisms = validated_data.pop('model_organisms', [])
         
         customer = Customer.objects.create(**validated_data)
+        
+        if work_groups:
+            customer.work_groups.set(work_groups)
+        if research_fields:
+            customer.research_fields.set(research_fields)
+        if model_organisms:
+            customer.model_organisms.set(model_organisms)
         
         # Adressen erstellen
         for address_data in addresses_data:
@@ -187,11 +222,21 @@ class CustomerCreateUpdateSerializer(serializers.ModelSerializer):
         addresses_data = validated_data.pop('addresses', None)
         phones_data = validated_data.pop('phones', None)
         emails_data = validated_data.pop('emails', None)
+        work_groups = validated_data.pop('work_groups', None)
+        research_fields = validated_data.pop('research_fields', None)
+        model_organisms = validated_data.pop('model_organisms', None)
         
         # Update Customer fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        if work_groups is not None:
+            instance.work_groups.set(work_groups)
+        if research_fields is not None:
+            instance.research_fields.set(research_fields)
+        if model_organisms is not None:
+            instance.model_organisms.set(model_organisms)
         
         # Update Addresses - preserve existing if they have IDs
         if addresses_data is not None:

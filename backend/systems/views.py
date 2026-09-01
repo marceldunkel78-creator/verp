@@ -7,11 +7,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
 from django.db.models import Q
 
-from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption
+from .models import System, SystemComponent, SystemPhoto, ModelOrganismOption, ResearchFieldOption, WorkGroupOption
 from .serializers import (
     SystemListSerializer, SystemDetailSerializer, SystemCreateUpdateSerializer,
     SystemComponentSerializer, SystemPhotoSerializer,
-    ModelOrganismOptionSerializer, ResearchFieldOptionSerializer
+    ModelOrganismOptionSerializer, ResearchFieldOptionSerializer, WorkGroupOptionSerializer
 )
 from .star_names import get_unused_star_name, search_star_names, IAU_STAR_NAMES
 
@@ -501,6 +501,16 @@ class ModelOrganismOptionViewSet(viewsets.ModelViewSet):
 class ResearchFieldOptionViewSet(viewsets.ModelViewSet):
     queryset = ResearchFieldOption.objects.all()
     serializer_class = ResearchFieldOptionSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+
+class WorkGroupOptionViewSet(viewsets.ModelViewSet):
+    queryset = WorkGroupOption.objects.all()
+    serializer_class = WorkGroupOptionSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active']
     search_fields = ['name']

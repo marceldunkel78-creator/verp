@@ -28,7 +28,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
     """
     queryset = Customer.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'language', 'is_reference', 'advertising_status', 'responsible_user']
+    filterset_fields = ['is_active', 'language', 'is_reference', 'advertising_status', 'responsible_user',
+                        'work_groups', 'research_fields', 'model_organisms']
     # Use only valid model fields. Include related fields for broader search (emails, phones, addresses).
     search_fields = [
         'customer_number', 'first_name', 'last_name', 'title',

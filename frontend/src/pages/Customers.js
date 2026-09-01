@@ -215,6 +215,9 @@ const Customers = () => {
   const [viewMode, setViewMode] = useState('cards'); // 'cards', 'list', 'map'
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [users, setUsers] = useState([]);
+  const [workGroupOptions, setWorkGroupOptions] = useState([]);
+  const [researchFieldOptions, setResearchFieldOptions] = useState([]);
+  const [modelOrganismOptions, setModelOrganismOptions] = useState([]);
   const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState({
     search: '',
@@ -231,7 +234,10 @@ const Customers = () => {
     has_phone: '',
     has_address: '',
     has_newsletter: '',
-    has_system: ''
+    has_system: '',
+    work_group: '',
+    research_field: '',
+    model_organism: ''
   });
 
   const SESSION_KEY = 'customers_search_state';
@@ -248,6 +254,34 @@ const Customers = () => {
       }
     };
     fetchUsers();
+
+    const fetchWorkGroupOptions = async () => {
+      try {
+        const response = await api.get('/systems/work-groups/?is_active=true&page_size=1000');
+        setWorkGroupOptions(response.data.results || response.data || []);
+      } catch (error) {
+        console.error('Fehler beim Laden der Arbeitsgruppen:', error);
+      }
+    };
+    const fetchResearchFieldOptions = async () => {
+      try {
+        const response = await api.get('/systems/research-fields/?is_active=true&page_size=1000');
+        setResearchFieldOptions(response.data.results || response.data || []);
+      } catch (error) {
+        console.error('Fehler beim Laden der Forschungsgebiete:', error);
+      }
+    };
+    const fetchModelOrganismOptions = async () => {
+      try {
+        const response = await api.get('/systems/model-organisms/?is_active=true&page_size=1000');
+        setModelOrganismOptions(response.data.results || response.data || []);
+      } catch (error) {
+        console.error('Fehler beim Laden der Modellorganismen:', error);
+      }
+    };
+    fetchWorkGroupOptions();
+    fetchResearchFieldOptions();
+    fetchModelOrganismOptions();
   }, []);
 
   const loadSearchState = () => {
@@ -310,6 +344,9 @@ const Customers = () => {
         if (restored.filters.has_address) params.has_address = restored.filters.has_address;
         if (restored.filters.has_newsletter) params.has_newsletter = restored.filters.has_newsletter;
         if (restored.filters.has_system) params.has_system = restored.filters.has_system;
+        if (restored.filters.work_group) params.work_group = restored.filters.work_group;
+        if (restored.filters.research_field) params.research_field = restored.filters.research_field;
+        if (restored.filters.model_organism) params.model_organism = restored.filters.model_organism;
       }
       params.page = String(restored.page);
       setSearchParams(params);
@@ -359,7 +396,10 @@ const Customers = () => {
         has_phone: params.has_phone || '',
         has_address: params.has_address || '',
         has_newsletter: params.has_newsletter || '',
-        has_system: params.has_system || ''
+        has_system: params.has_system || '',
+        work_group: params.work_group || '',
+        research_field: params.research_field || '',
+        model_organism: params.model_organism || ''
       };
       setFilters(newFilters);
       const page = params.page ? parseInt(params.page, 10) : 1;
@@ -402,6 +442,9 @@ const Customers = () => {
       if (useFilters.has_address) params.append('has_address', useFilters.has_address);
       if (useFilters.has_newsletter) params.append('has_newsletter', useFilters.has_newsletter);
       if (useFilters.has_system) params.append('has_system', useFilters.has_system);
+      if (useFilters.work_group) params.append('work_groups', useFilters.work_group);
+      if (useFilters.research_field) params.append('research_fields', useFilters.research_field);
+      if (useFilters.model_organism) params.append('model_organisms', useFilters.model_organism);
       
       // For map view, load more customers
       const pageSize = viewMode === 'map' ? 10000 : 9;
@@ -449,6 +492,9 @@ const Customers = () => {
     if (filters.has_address) params.has_address = filters.has_address;
     if (filters.has_newsletter) params.has_newsletter = filters.has_newsletter;
     if (filters.has_system) params.has_system = filters.has_system;
+    if (filters.work_group) params.work_group = filters.work_group;
+    if (filters.research_field) params.research_field = filters.research_field;
+    if (filters.model_organism) params.model_organism = filters.model_organism;
     params.page = '1';
     setSearchParams(params);
     setCurrentPage(1);
@@ -470,7 +516,10 @@ const Customers = () => {
       has_phone: '',
       has_address: '',
       has_newsletter: '',
-      has_system: ''
+      has_system: '',
+      work_group: '',
+      research_field: '',
+      model_organism: ''
     });
     setCustomers([]);
     setCurrentPage(1);
@@ -506,6 +555,9 @@ const Customers = () => {
       if (filters.has_address) params.append('has_address', filters.has_address);
       if (filters.has_newsletter) params.append('has_newsletter', filters.has_newsletter);
       if (filters.has_system) params.append('has_system', filters.has_system);
+      if (filters.work_group) params.append('work_groups', filters.work_group);
+      if (filters.research_field) params.append('research_fields', filters.research_field);
+      if (filters.model_organism) params.append('model_organisms', filters.model_organism);
       
       const response = await api.get(`/customers/customers/export_csv/?${params.toString()}`, {
         responseType: 'blob'
@@ -820,6 +872,45 @@ const Customers = () => {
                   <option value="">Alle</option>
                   <option value="true">Mit System</option>
                   <option value="false">Ohne System</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Arbeitsgruppe</label>
+                <select
+                  value={filters.work_group}
+                  onChange={(e) => setFilters({ ...filters, work_group: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Alle</option>
+                  {workGroupOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Forschungsgebiet</label>
+                <select
+                  value={filters.research_field}
+                  onChange={(e) => setFilters({ ...filters, research_field: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Alle</option>
+                  {researchFieldOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Modellorganismus</label>
+                <select
+                  value={filters.model_organism}
+                  onChange={(e) => setFilters({ ...filters, model_organism: e.target.value })}
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Alle</option>
+                  {modelOrganismOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
