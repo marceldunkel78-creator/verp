@@ -57,6 +57,7 @@ const DevelopmentProjectEdit = () => {
     status: 'new',
     priority: 'normal',
     assigned_to: '',
+    project_start: '',
     planned_end: '',
     todos: [],
     comments: [],
@@ -169,6 +170,7 @@ const DevelopmentProjectEdit = () => {
           status: 'new',
           priority: 'normal',
           assigned_to: '',
+          project_start: '',
           planned_end: '',
           todos: [],
           comments: [],
@@ -257,6 +259,7 @@ const DevelopmentProjectEdit = () => {
         status: project.status,
         priority: project.priority,
         assigned_to: project.assigned_to || null,
+          project_start: project.project_start || null,
         planned_end: project.planned_end || null
       };
 
@@ -282,6 +285,7 @@ const DevelopmentProjectEdit = () => {
           status: norm(response.data.status),
           priority: norm(response.data.priority),
           assigned_to: norm(response.data.assigned_to),
+          project_start: norm(response.data.project_start),
           planned_end: norm(response.data.planned_end)
         };
       }
@@ -585,9 +589,10 @@ const DevelopmentProjectEdit = () => {
       norm(project.status) !== norm(orig.status) ||
       norm(project.priority) !== norm(orig.priority) ||
       norm(project.assigned_to) !== norm(orig.assigned_to) ||
+      norm(project.project_start) !== norm(orig.project_start) ||
       norm(project.planned_end) !== norm(orig.planned_end)
     );
-  }, [project.name, project.description, project.status, project.priority, project.assigned_to, project.planned_end, isNew]);
+  }, [project.name, project.description, project.status, project.priority, project.assigned_to, project.project_start, project.planned_end, isNew]);
 
   // Determine if cost calculation has changed
   const hasCostCalcChanges = useMemo(() => {
@@ -778,19 +783,17 @@ const DevelopmentProjectEdit = () => {
                 />
               </div>
 
-              {!isNew && (
-                <div>
+              <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Projektbeginn
                   </label>
                   <input
                     type="date"
                     value={project.project_start || ''}
-                    disabled
-                    className="block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
+                    onChange={(e) => setProject(prev => ({ ...prev, project_start: e.target.value || null }))}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
                   />
-                </div>
-              )}
+              </div>
             </div>
 
             <div>

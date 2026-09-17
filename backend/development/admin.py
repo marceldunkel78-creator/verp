@@ -42,7 +42,7 @@ class DevelopmentProjectAdmin(admin.ModelAdmin):
     list_display = ['project_number', 'name', 'status', 'assigned_to', 'project_start', 'planned_end', 'updated_at']
     list_filter = ['status', 'assigned_to', 'project_start']
     search_fields = ['project_number', 'name', 'description']
-    readonly_fields = ['project_number', 'project_start', 'created_at', 'updated_at', 'created_by']
+    readonly_fields = ['project_number', 'created_at', 'updated_at', 'created_by']
     autocomplete_fields = ['assigned_to']
     inlines = [
         DevelopmentProjectTodoInline,

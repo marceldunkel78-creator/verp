@@ -236,7 +236,7 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'project_number', 'project_start', 'created_at', 'updated_at',
+            'project_number', 'created_at', 'updated_at',
             'todos', 'comments', 'material_items', 'cost_calculations',
             'attachments', 'time_entries', 'sources'
         ]
@@ -268,6 +268,6 @@ class DevelopmentProjectCreateUpdateSerializer(serializers.ModelSerializer):
         model = DevelopmentProject
         fields = [
             'id', 'project_number', 'name', 'description',
-            'status', 'priority', 'assigned_to', 'planned_end'
+            'status', 'priority', 'assigned_to', 'project_start', 'planned_end'
         ]
         read_only_fields = ['id', 'project_number']

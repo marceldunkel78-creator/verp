@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from decimal import Decimal
 from core.upload_paths import development_project_attachment_path
 
@@ -64,7 +65,7 @@ class DevelopmentProject(models.Model):
     )
     
     project_start = models.DateField(
-        auto_now_add=True,
+        default=timezone.localdate,
         verbose_name='Projektbeginn'
     )
     
