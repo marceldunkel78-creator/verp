@@ -7,10 +7,13 @@ from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.http import FileResponse, Http404
 from django.apps import apps
+from django.db.models import Q
 from suppliers.models import Supplier, TradingProduct
 from customers.models import Customer
 from visiview.models import VisiViewProduct, VisiViewLicense
 from systems.models import System
+from inventory.models import InventoryItem
+from customer_orders.models import CustomerOrder
 from manufacturing.models import VSHardware
 from service.models import VSService
 import os
@@ -18,6 +21,96 @@ from pathlib import Path
 import mimetypes
 
 User = get_user_model()
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def global_search(request):
+    """Durchsucht zentrale VERP-Stammdaten und liefert direkt verlinkbare Treffer."""
+    query = request.query_params.get('q', '').strip()
+    if len(query) < 2:
+        return Response({'query': query, 'results': []})
+
+    results = []
+
+    customers = Customer.objects.filter(
+        Q(customer_number__icontains=query) |
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query)
+    )[:10]
+    for customer in customers:
+        results.append({
+            'module': 'Kunden',
+            'type': 'customer',
+            'title': str(customer),
+            'subtitle': ' · '.join(filter(None, [customer.first_name, customer.last_name, customer.customer_number])),
+            'url': f'/sales/customers/{customer.pk}',
+        })
+
+    inventory_items = InventoryItem.objects.filter(
+        Q(name__icontains=query) |
+        Q(inventory_number__icontains=query) |
+        Q(article_number__icontains=query) |
+        Q(visitron_part_number__icontains=query) |
+        Q(serial_number__icontains=query)
+    )[:10]
+    for item in inventory_items:
+        results.append({
+            'module': 'Warenlager',
+            'type': 'inventory',
+            'title': item.name,
+            'subtitle': ' · '.join(filter(None, [item.inventory_number, item.serial_number, item.article_number])),
+            'url': f'/inventory/warehouse/{item.pk}',
+        })
+
+    orders = CustomerOrder.objects.filter(
+        Q(order_number__icontains=query) |
+        Q(project_reference__icontains=query) |
+        Q(system_reference__icontains=query) |
+        Q(items__serial_number__icontains=query) |
+        Q(customer__first_name__icontains=query) |
+        Q(customer__last_name__icontains=query)
+    ).distinct()[:10]
+    for order in orders:
+        results.append({
+            'module': 'Kundenauftrag',
+            'type': 'customer-order',
+            'title': order.order_number or f'Kundenauftrag #{order.pk}',
+            'subtitle': str(order.customer) if order.customer else order.legacy_customer_name,
+            'url': f'/sales/order-processing/{order.pk}',
+        })
+
+    systems = System.objects.filter(
+        Q(system_number__icontains=query) |
+        Q(system_name__icontains=query) |
+        Q(visiview_license__serial_number__icontains=query) |
+        Q(visiview_license__license_number__icontains=query) |
+        Q(location_city__icontains=query)
+    ).distinct()[:10]
+    for system in systems:
+        results.append({
+            'module': 'Systeme',
+            'type': 'system',
+            'title': system.system_name or system.system_number,
+            'subtitle': ' · '.join(filter(None, [system.system_number, system.location_city])),
+            'url': f'/sales/systems/{system.pk}',
+        })
+
+    licenses = VisiViewLicense.objects.filter(
+        Q(serial_number__icontains=query) |
+        Q(license_number__icontains=query) |
+        Q(customer_name_legacy__icontains=query)
+    )[:10]
+    for license_obj in licenses:
+        results.append({
+            'module': 'VisiView-Lizenzen',
+            'type': 'visiview-license',
+            'title': license_obj.license_number,
+            'subtitle': license_obj.serial_number,
+            'url': f'/visiview/licenses/{license_obj.pk}',
+        })
+
+    return Response({'query': query, 'results': results[:30]})
 
 
 @api_view(['GET'])

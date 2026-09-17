@@ -21,6 +21,9 @@ function CustomerLoanEdit() {
     const [filteredCustomers, setFilteredCustomers] = useState([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [employees, setEmployees] = useState([]);
+    const [supplierContacts, setSupplierContacts] = useState([]);
+    const [dealerEmployees, setDealerEmployees] = useState([]);
+    const [recipientType, setRecipientType] = useState('customer');
     const [inventorySearch, setInventorySearch] = useState('');
     const [inventoryResults, setInventoryResults] = useState([]);
     const [showInventoryDropdown, setShowInventoryDropdown] = useState(false);
@@ -33,6 +36,8 @@ function CustomerLoanEdit() {
 
     const [loan, setLoan] = useState({
         customer: '',
+        supplier_contact: '',
+        distributor_employee: '',
         status: 'offen',
         loan_date: new Date().toISOString().split('T')[0],
         return_deadline: '',
@@ -70,6 +75,7 @@ function CustomerLoanEdit() {
         try {
             const response = await api.get(`/customer-loans/customer-loans/${id}/`);
             setLoan(response.data);
+            setRecipientType(response.data.customer ? 'customer' : response.data.supplier_contact ? 'supplier' : 'distributor');
             if (response.data.customer_name) {
                 setCustomerSearch(response.data.customer_name);
             }
@@ -81,9 +87,15 @@ function CustomerLoanEdit() {
 
     const loadEmployees = async () => {
         try {
-            const response = await api.get('/users/employees/?is_active=true&page_size=500');
-            const data = response.data && (response.data.results || response.data);
-            setEmployees(Array.isArray(data) ? data : []);
+            const [employeeResponse, contactResponse, dealerEmployeeResponse] = await Promise.all([
+                api.get('/users/employees/?is_active=true&page_size=500'),
+                api.get('/suppliers/contacts/?is_active=true&page_size=500'),
+                api.get('/dealers/dealer-employees/?is_active=true&page_size=500'),
+            ]);
+            const getData = response => response.data && (response.data.results || response.data);
+            setEmployees(Array.isArray(getData(employeeResponse)) ? getData(employeeResponse) : []);
+            setSupplierContacts(Array.isArray(getData(contactResponse)) ? getData(contactResponse) : []);
+            setDealerEmployees(Array.isArray(getData(dealerEmployeeResponse)) ? getData(dealerEmployeeResponse) : []);
         } catch (error) {
             console.error('Error loading employees:', error);
         }
@@ -182,6 +194,8 @@ function CustomerLoanEdit() {
         setLoan(prev => ({
             ...prev,
             customer: customer.id,
+            supplier_contact: '',
+            distributor_employee: '',
             delivery_address_name: customer.full_name || `${customer.title || ''} ${customer.first_name} ${customer.last_name}`.trim(),
         }));
         // Fetch detail to get address
@@ -255,8 +269,8 @@ function CustomerLoanEdit() {
     };
 
     const handleSave = async () => {
-        if (!loan.customer) {
-            alert('Bitte wählen Sie einen Kunden aus.');
+        if (!loan.customer && !loan.supplier_contact && !loan.distributor_employee) {
+            alert('Bitte wählen Sie einen Empfänger aus.');
             return;
         }
         if (!loan.loan_date) {
@@ -268,6 +282,8 @@ function CustomerLoanEdit() {
         try {
             const payload = {
                 customer: loan.customer,
+                supplier_contact: loan.supplier_contact || null,
+                distributor_employee: loan.distributor_employee || null,
                 status: loan.status,
                 loan_date: loan.loan_date,
                 return_deadline: loan.return_deadline || null,
@@ -479,6 +495,47 @@ function CustomerLoanEdit() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Empfängerart</label>
+                            <select
+                                value={loan.customer ? 'customer' : loan.supplier_contact ? 'supplier' : loan.distributor_employee ? 'distributor' : ''}
+                                onChange={(e) => {
+                                    const type = e.target.value;
+                                    setRecipientType(type);
+                                    setLoan(prev => ({
+                                        ...prev,
+                                        customer: type === 'customer' ? prev.customer : '',
+                                        supplier_contact: type === 'supplier' ? prev.supplier_contact : '',
+                                        distributor_employee: type === 'distributor' ? prev.distributor_employee : '',
+                                    }));
+                                }}
+                                className="w-full px-3 py-2 border rounded-lg"
+                                disabled={!canWrite}
+                            >
+                                <option value="">-- Empfänger auswählen --</option>
+                                <option value="customer">Kunde</option>
+                                <option value="supplier">Lieferantenmitarbeiter</option>
+                                <option value="distributor">Distributormitarbeiter</option>
+                            </select>
+                        </div>
+                        {recipientType === 'supplier' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Lieferantenmitarbeiter</label>
+                                <select value={loan.supplier_contact} onChange={(e) => setLoan(prev => ({ ...prev, supplier_contact: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" disabled={!canWrite}>
+                                    <option value="">-- Auswählen --</option>
+                                    {supplierContacts.map(contact => <option key={contact.id} value={contact.id}>{contact.contact_person}</option>)}
+                                </select>
+                            </div>
+                        )}
+                        {recipientType === 'distributor' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Distributormitarbeiter</label>
+                                <select value={loan.distributor_employee} onChange={(e) => setLoan(prev => ({ ...prev, distributor_employee: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" disabled={!canWrite}>
+                                    <option value="">-- Auswählen --</option>
+                                    {dealerEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.full_name || `${employee.first_name} ${employee.last_name}`}</option>)}
+                                </select>
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                             <select

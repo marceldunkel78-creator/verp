@@ -41,6 +41,7 @@ class CustomerLoanListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
     responsible_employee_display = serializers.SerializerMethodField()
+    recipient_display = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomerLoan
@@ -49,6 +50,7 @@ class CustomerLoanListSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'loan_date', 'return_deadline',
             'items_count', 'created_at',
             'responsible_employee', 'responsible_employee_display'
+            , 'recipient_display'
         ]
 
     def get_items_count(self, obj):
@@ -63,6 +65,9 @@ class CustomerLoanListSerializer(serializers.ModelSerializer):
         c = obj.customer
         return f"{c.title} {c.first_name} {c.last_name}".strip() if c else ''
 
+    def get_recipient_display(self, obj):
+        return obj.get_recipient_display()
+
 
 class CustomerLoanDetailSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
@@ -74,11 +79,15 @@ class CustomerLoanDetailSerializer(serializers.ModelSerializer):
         source='responsible_employee', read_only=True
     )
     pdf_url = serializers.SerializerMethodField()
+    supplier_contact_name = serializers.CharField(source='supplier_contact.contact_person', read_only=True)
+    distributor_employee_name = serializers.CharField(source='distributor_employee.full_name', read_only=True)
 
     class Meta:
         model = CustomerLoan
         fields = [
             'id', 'loan_number', 'customer', 'customer_name',
+            'supplier_contact', 'supplier_contact_name',
+            'distributor_employee', 'distributor_employee_name',
             'status', 'status_display', 'loan_date', 'return_deadline',
             'delivery_address_name', 'delivery_address_street',
             'delivery_address_house_number', 'delivery_address_postal_code',
@@ -123,13 +132,22 @@ class CustomerLoanCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerLoan
         fields = [
-            'customer', 'status', 'loan_date', 'return_deadline',
+            'customer', 'supplier_contact', 'distributor_employee',
+            'status', 'loan_date', 'return_deadline',
             'delivery_address_name', 'delivery_address_street',
             'delivery_address_house_number', 'delivery_address_postal_code',
             'delivery_address_city', 'delivery_address_country',
             'standard_clause', 'notes', 'items',
             'responsible_employee'
         ]
+
+    def validate(self, attrs):
+        selected = sum(bool(attrs.get(field)) for field in ('customer', 'supplier_contact', 'distributor_employee'))
+        if selected != 1:
+            raise serializers.ValidationError(
+                'Bitte genau einen Empfänger (Kunde, Lieferantenmitarbeiter oder Distributormitarbeiter) auswählen.'
+            )
+        return attrs
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])

@@ -41,8 +41,28 @@ class CustomerLoan(models.Model):
     customer = models.ForeignKey(
         'customers.Customer',
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name='customer_loans',
         verbose_name='Kunde'
+    )
+
+    supplier_contact = models.ForeignKey(
+        'suppliers.SupplierContact',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='customer_loans_as_recipient',
+        verbose_name='Lieferantenmitarbeiter als Empfänger'
+    )
+
+    distributor_employee = models.ForeignKey(
+        'dealers.DealerEmployee',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='customer_loans_as_recipient',
+        verbose_name='Distributormitarbeiter als Empfänger'
     )
 
     status = models.CharField(
@@ -150,6 +170,15 @@ class CustomerLoan(models.Model):
         if self.delivery_address_country and self.delivery_address_country != 'Deutschland':
             parts.append(self.delivery_address_country)
         return '\n'.join(parts)
+
+    def get_recipient_display(self):
+        if self.supplier_contact:
+            return self.supplier_contact.contact_person
+        if self.distributor_employee:
+            return self.distributor_employee.full_name
+        if self.customer:
+            return f"{self.customer.title} {self.customer.first_name} {self.customer.last_name}".strip()
+        return self.delivery_address_name
 
 
 class CustomerLoanItem(models.Model):

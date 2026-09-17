@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DueRemindersModal from './DueRemindersModal';
 import NotificationCenter from './NotificationCenter';
+import GlobalSearch from './GlobalSearch';
 import {
   Bars3Icon,
   XMarkIcon,
@@ -226,6 +227,7 @@ const Layout = () => {
 
       {/* Main Content */}
       <div className="lg:pl-64 flex flex-col flex-1">
+        <GlobalSearch />
         {/* Top Bar */}
         <div className="sticky top-0 z-10 flex h-16 bg-white border-b border-gray-200 lg:hidden">
           <button

@@ -218,8 +218,7 @@ def generate_loan_delivery_note_pdf(customer_loan, language='de'):
     # === TITEL ===
     doc_title = f"Loan Delivery Note {customer_loan.loan_number}" if language == 'en' else f"Leihlieferschein {customer_loan.loan_number}"
     elements.append(Paragraph(f"<b>{doc_title}</b>", style_title))
-    customer = customer_loan.customer
-    customer_display = f"{customer.title} {customer.first_name} {customer.last_name}".strip()
+    customer_display = customer_loan.get_recipient_display()
     elements.append(Paragraph(
         f"Verleihung an {customer_display}" if language == 'de' else f"Loan to {customer_display}",
         style_subtitle

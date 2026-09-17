@@ -50,6 +50,7 @@ def import_options(csv_path, dry_run=True):
         for row_num, row in enumerate(reader, start=2):
             try:
                 bit_position = int(row.get('Bit', row.get('bit', 0)))
+                option_id = row.get('OptionID', row.get('optionid', '')).strip()
                 name = row.get('Name', row.get('name', '')).strip()
                 price_str = row.get('Preis', row.get('preis', '0'))
                 
@@ -65,7 +66,7 @@ def import_options(csv_path, dry_run=True):
                 
                 if dry_run:
                     status = "active" if is_active else "reserved"
-                    print(f"Bit {bit_position}: {name} - {price} EUR ({status})")
+                    print(f"Bit {bit_position} / OptionID {option_id}: {name} - {price} EUR ({status})")
                 else:
                     option, was_created = VisiViewOption.objects.update_or_create(
                         bit_position=bit_position,
