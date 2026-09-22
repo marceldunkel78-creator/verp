@@ -158,18 +158,18 @@ def _get_proforma_recipient(manufacturer_return):
     return "\n".join([l for l in lines if l])
 
 
-def generate_proforma_invoice_pdf(manufacturer_return):
+def generate_proforma_invoice_pdf(document):
     """
     Generiert ein professionelles PDF für eine Proforma-Invoice (immer Englisch)
 
     Args:
-        manufacturer_return: RMAManufacturerReturn instance
+        document: RMAManufacturerReturn or RMAReturn instance
     """
     t = PROFORMA_TRANSLATIONS
     buffer = BytesIO()
 
     company = CompanySettings.get_settings()
-    rma_case = manufacturer_return.rma_case
+    rma_case = document.rma_case
 
     doc = ProformaInvoiceDocTemplate(
         buffer,
@@ -179,7 +179,7 @@ def generate_proforma_invoice_pdf(manufacturer_return):
         leftMargin=2 * cm,
         rightMargin=2 * cm,
         company=company,
-        manufacturer_return=manufacturer_return
+        manufacturer_return=document
     )
 
     elements = []
@@ -212,26 +212,27 @@ def generate_proforma_invoice_pdf(manufacturer_return):
         elements.append(Spacer(1, 0.3 * cm))
 
     # === EMPFÄNGER (Proforma-Adresse) ===
-    recipient_address = _get_proforma_recipient(manufacturer_return).replace('\n', '<br/>')
+    recipient_address = _get_proforma_recipient(document).replace('\n', '<br/>')
     elements.append(Paragraph(f"<b>{recipient_address}</b>", style_normal))
     elements.append(Spacer(1, 1 * cm))
 
     # === DOKUMENT-METADATEN ===
     meta_text = f"""<para align=right>
-    <b>{t['invoice_number']}:</b> {manufacturer_return.return_number}<br/>
+    <b>{t['invoice_number']}:</b> {document.return_number}<br/>
     <b>{t['rma_number']}:</b> {rma_case.rma_number}<br/>
     """
-    if rma_case.manufacturer_rma_number:
+    if getattr(rma_case, 'manufacturer_rma_number', None):
         meta_text += f"<b>{t['manufacturer_rma']}:</b> {rma_case.manufacturer_rma_number}<br/>"
-    meta_text += f"""<b>{t['date']}:</b> {manufacturer_return.return_date.strftime('%d.%m.%Y')}<br/>
+    meta_text += f"""<b>{t['date']}:</b> {document.return_date.strftime('%d.%m.%Y')}<br/>
     </para>"""
     elements.append(Paragraph(meta_text, style_normal))
     elements.append(Spacer(1, 0.8 * cm))
 
     # === TITEL (editierbar) ===
-    title_text = manufacturer_return.proforma_title or t['title']
+    title_text = document.proforma_title or t['title']
     elements.append(Paragraph(f"<b>{sanitize_for_pdf(title_text)}</b>", style_title))
-    elements.append(Paragraph(t['subtitle'], style_subtitle))
+    subtitle = getattr(document, 'proforma_subtitle', '') or t['subtitle']
+    elements.append(Paragraph(sanitize_for_pdf(subtitle), style_subtitle))
 
     # === POSITIONS-TABELLE ===
     table_data = [[
@@ -242,10 +243,10 @@ def generate_proforma_invoice_pdf(manufacturer_return):
     total_weight = 0
     total_value = 0
 
-    for idx, item in enumerate(manufacturer_return.items.all().select_related('rma_item'), 1):
+    for idx, item in enumerate(document.items.all().select_related('rma_item'), 1):
         rma_item = item.rma_item
-        desc = item.proforma_description or rma_item.product_name
-        serial = item.rma_item.serial_number or '—'
+        desc = item.proforma_description or (rma_item.product_name if rma_item else item.custom_product_name or 'Eigene Position')
+        serial = (rma_item.serial_number if rma_item else getattr(item, 'custom_serial_number', '')) or '—'
         weight = float(item.proforma_weight or 0)
         value = float(item.proforma_value or 0)
         total_weight += weight
@@ -310,9 +311,9 @@ def generate_proforma_invoice_pdf(manufacturer_return):
     elements.append(Spacer(1, 0.8 * cm))
 
     # === KOMMENTAR (unterhalb der Positionen) ===
-    if manufacturer_return.proforma_comment:
+    if document.proforma_comment:
         elements.append(Paragraph(f"<b>{t['comment']}</b>", style_normal))
-        elements.append(Paragraph(sanitize_for_pdf(manufacturer_return.proforma_comment).replace('\n', '<br/>'), style_small))
+        elements.append(Paragraph(sanitize_for_pdf(document.proforma_comment).replace('\n', '<br/>'), style_small))
         elements.append(Spacer(1, 0.5 * cm))
 
     # === SCHLUSSTEXT ===

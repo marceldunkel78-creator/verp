@@ -26,6 +26,7 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
       'sales-ticket': 'sales/sales-tickets',
       marketing: 'sales/marketing-items',
       development: 'development/projects'
+      ,rma: 'service/rma'
     };
     return typeMap[ticketType] || 'service/tickets';
   };

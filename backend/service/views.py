@@ -8,6 +8,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.core.files.base import ContentFile
+from django.db import transaction
 
 from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
@@ -675,15 +676,47 @@ class RMACaseViewSet(viewsets.ModelViewSet):
             shipping_carrier=request.data.get('shipping_carrier', ''),
             tracking_number=request.data.get('tracking_number', ''),
             notes=request.data.get('notes', ''),
+            proforma_title=request.data.get(
+                'proforma_title',
+                'Proforma Invoice – For Customs Purposes Only / No Commercial Value'
+            ),
+            proforma_subtitle=request.data.get(
+                'proforma_subtitle', 'For Customs Purposes Only / No Commercial Value'
+            ),
+            proforma_comment=request.data.get('proforma_comment', ''),
+            proforma_address_name=request.data.get('proforma_address_name', ''),
+            proforma_address_street=request.data.get('proforma_address_street', ''),
+            proforma_address_house_number=request.data.get('proforma_address_house_number', ''),
+            proforma_address_postal_code=request.data.get('proforma_address_postal_code', ''),
+            proforma_address_city=request.data.get('proforma_address_city', ''),
+            proforma_address_country=request.data.get('proforma_address_country', ''),
             created_by=request.user
         )
         
         for item_data in items_data:
+            rma_item_id = item_data.get('rma_item_id')
+            rma_item = None
+            if rma_item_id:
+                rma_item = RMAItem.objects.filter(id=rma_item_id, rma_case=rma_case).first()
+                if rma_item is None:
+                    return Response({'error': 'Die ausgewählte RMA-Position gehört nicht zu diesem Fall.'}, status=status.HTTP_400_BAD_REQUEST)
+            elif not item_data.get('custom_product_name'):
+                return Response({'error': 'Eigene Position benötigt einen Produktnamen.'}, status=status.HTTP_400_BAD_REQUEST)
+
             RMAReturnItem.objects.create(
                 rma_return=rma_return,
-                rma_item_id=item_data.get('rma_item_id'),
+                rma_item=rma_item,
                 quantity_returned=item_data.get('quantity_returned', 0),
-                condition_notes=item_data.get('condition_notes', '')
+                condition_notes=item_data.get('condition_notes') or '',
+                custom_product_name=item_data.get('custom_product_name') or '',
+                custom_article_number=item_data.get('custom_article_number') or '',
+                custom_serial_number=item_data.get('custom_serial_number') or '',
+                custom_unit=item_data.get('custom_unit') or 'Stk',
+                proforma_description=item_data.get('proforma_description') or '',
+                proforma_weight=item_data.get('proforma_weight') or None,
+                proforma_hs_code=item_data.get('proforma_hs_code') or '',
+                proforma_value=item_data.get('proforma_value') or None,
+                proforma_origin_country=item_data.get('proforma_origin_country') or ''
             )
         
         # Sprache für den Lieferschein auswerten (de/en)
@@ -731,49 +764,72 @@ class RMACaseViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'Ungültiges Datum für return_date'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             parsed_date = raw_date
-        
-        manufacturer_return = RMAManufacturerReturn.objects.create(
-            rma_case=rma_case,
-            return_date=parsed_date,
-            shipping_carrier=request.data.get('shipping_carrier', ''),
-            tracking_number=request.data.get('tracking_number', ''),
-            notes=request.data.get('notes', ''),
-            proforma_title=request.data.get('proforma_title', 'Proforma Invoice – For Customs Purposes Only / No Commercial Value'),
-            proforma_comment=request.data.get('proforma_comment', ''),
-            proforma_address_name=request.data.get('proforma_address_name', ''),
-            proforma_address_street=request.data.get('proforma_address_street', ''),
-            proforma_address_house_number=request.data.get('proforma_address_house_number', ''),
-            proforma_address_postal_code=request.data.get('proforma_address_postal_code', ''),
-            proforma_address_city=request.data.get('proforma_address_city', ''),
-            proforma_address_country=request.data.get('proforma_address_country', ''),
-            created_by=request.user
-        )
-        
+
+        if parsed_date is None:
+            return Response({'error': 'return_date ist erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Alle Positionen vor dem Anlegen des Lieferscheins prüfen. Die IDs
+        # müssen zu genau diesem RMA-Fall gehören.
+        validated_items = []
         for item_data in items_data:
-            RMAManufacturerReturnItem.objects.create(
-                manufacturer_return=manufacturer_return,
-                rma_item_id=item_data.get('rma_item_id'),
-                quantity_returned=item_data.get('quantity_returned', 0),
-                condition_notes=item_data.get('condition_notes', ''),
-                proforma_description=item_data.get('proforma_description', ''),
-                proforma_weight=item_data.get('proforma_weight'),
-                proforma_hs_code=item_data.get('proforma_hs_code', ''),
-                proforma_value=item_data.get('proforma_value'),
-                proforma_origin_country=item_data.get('proforma_origin_country', '')
+            rma_item_id = item_data.get('rma_item_id')
+            rma_item = None
+            if rma_item_id:
+                rma_item = RMAItem.objects.filter(id=rma_item_id, rma_case=rma_case).first()
+                if rma_item is None:
+                    return Response({'error': 'Die ausgewählte RMA-Position gehört nicht zu diesem Fall.'}, status=status.HTTP_400_BAD_REQUEST)
+            elif not item_data.get('custom_product_name'):
+                return Response({'error': 'Eigene Position benötigt einen Produktnamen.'}, status=status.HTTP_400_BAD_REQUEST)
+            validated_items.append((item_data, rma_item))
+        
+        with transaction.atomic():
+            manufacturer_return = RMAManufacturerReturn.objects.create(
+                rma_case=rma_case,
+                return_date=parsed_date,
+                shipping_carrier=request.data.get('shipping_carrier', ''),
+                tracking_number=request.data.get('tracking_number', ''),
+                notes=request.data.get('notes', ''),
+                proforma_title=request.data.get('proforma_title', 'Proforma Invoice – For Customs Purposes Only / No Commercial Value'),
+                proforma_subtitle=request.data.get('proforma_subtitle', 'For Customs Purposes Only / No Commercial Value'),
+                proforma_comment=request.data.get('proforma_comment', ''),
+                proforma_address_name=request.data.get('proforma_address_name', ''),
+                proforma_address_street=request.data.get('proforma_address_street', ''),
+                proforma_address_house_number=request.data.get('proforma_address_house_number', ''),
+                proforma_address_postal_code=request.data.get('proforma_address_postal_code', ''),
+                proforma_address_city=request.data.get('proforma_address_city', ''),
+                proforma_address_country=request.data.get('proforma_address_country', ''),
+                created_by=request.user
             )
-        
-        # Sprache für den Lieferschein auswerten (de/en)
-        language = request.data.get('language', 'de')
-        if language not in ('de', 'en'):
-            language = 'de'
-        pdf_content = generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language=language)
-        filename = f"Lieferschein_{manufacturer_return.return_number}.pdf"
-        manufacturer_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
-        
-        # Falls noch nicht gesetzt, Versanddatum zum Hersteller am Fall selbst nachtragen
-        if not rma_case.manufacturer_ship_date:
-            rma_case.manufacturer_ship_date = parsed_date
-            rma_case.save()
+
+            for item_data, rma_item in validated_items:
+                RMAManufacturerReturnItem.objects.create(
+                    manufacturer_return=manufacturer_return,
+                    rma_item=rma_item,
+                    quantity_returned=item_data.get('quantity_returned', 0),
+                    condition_notes=item_data.get('condition_notes', ''),
+                    proforma_description=item_data.get('proforma_description', ''),
+                    proforma_weight=item_data.get('proforma_weight') or None,
+                    proforma_hs_code=item_data.get('proforma_hs_code', ''),
+                    proforma_value=item_data.get('proforma_value') or None,
+                    proforma_origin_country=item_data.get('proforma_origin_country', ''),
+                    custom_product_name=item_data.get('custom_product_name', ''),
+                    custom_article_number=item_data.get('custom_article_number', ''),
+                    custom_serial_number=item_data.get('custom_serial_number', ''),
+                    custom_unit=item_data.get('custom_unit', 'Stk')
+                )
+
+            # Sprache für den Lieferschein auswerten (de/en)
+            language = request.data.get('language', 'de')
+            if language not in ('de', 'en'):
+                language = 'de'
+            pdf_content = generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language=language)
+            filename = f"Lieferschein_{manufacturer_return.return_number}.pdf"
+            manufacturer_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+
+            # Falls noch nicht gesetzt, Versanddatum zum Hersteller am Fall selbst nachtragen
+            if not rma_case.manufacturer_ship_date:
+                rma_case.manufacturer_ship_date = parsed_date
+                rma_case.save()
         
         serializer = RMAManufacturerReturnSerializer(manufacturer_return)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -965,7 +1021,7 @@ class RMACaseViewSet(viewsets.ModelViewSet):
         except RMACaseTimeEntry.DoesNotExist:
             raise Http404("Zeiteintrag nicht gefunden")
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def upload_attachment(self, request, pk=None):
         """Lädt ein Auftragsdokument zum RMA-Fall hoch"""
         rma_case = self.get_object()
@@ -1160,6 +1216,54 @@ class RMAReturnViewSet(viewsets.ModelViewSet):
             instance.pdf_file.delete(save=False)
         instance.delete()
 
+    @action(detail=True, methods=['post'])
+    def generate_proforma_pdf(self, request, pk=None):
+        """Generiert die Proforma-Rechnung für einen Warenausgang."""
+        rma_return = self.get_object()
+        for field in (
+            'proforma_title', 'proforma_subtitle', 'proforma_comment', 'proforma_address_name',
+            'proforma_address_street', 'proforma_address_house_number',
+            'proforma_address_postal_code', 'proforma_address_city',
+            'proforma_address_country'
+        ):
+            if field in request.data:
+                setattr(rma_return, field, request.data.get(field) or '')
+        rma_return.save()
+        if rma_return.proforma_pdf:
+            rma_return.proforma_pdf.delete(save=False)
+        pdf_content = generate_proforma_invoice_pdf(rma_return)
+        rma_return.proforma_pdf.save(
+            f'Proforma_Invoice_{rma_return.return_number}.pdf',
+            ContentFile(pdf_content), save=True
+        )
+        return Response(RMAReturnSerializer(rma_return).data)
+
+    @action(detail=True, methods=['get'])
+    def download_proforma_pdf(self, request, pk=None):
+        rma_return = self.get_object()
+        if not rma_return.proforma_pdf:
+            pdf_content = generate_proforma_invoice_pdf(rma_return)
+            rma_return.proforma_pdf.save(
+                f'Proforma_Invoice_{rma_return.return_number}.pdf',
+                ContentFile(pdf_content), save=True
+            )
+        response = HttpResponse(rma_return.proforma_pdf.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Proforma_Invoice_{rma_return.return_number}.pdf"'
+        return response
+
+    @action(detail=True, methods=['get'])
+    def view_proforma_pdf(self, request, pk=None):
+        rma_return = self.get_object()
+        if not rma_return.proforma_pdf:
+            pdf_content = generate_proforma_invoice_pdf(rma_return)
+            rma_return.proforma_pdf.save(
+                f'Proforma_Invoice_{rma_return.return_number}.pdf',
+                ContentFile(pdf_content), save=True
+            )
+        response = HttpResponse(rma_return.proforma_pdf.read(), content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="Proforma_Invoice_{rma_return.return_number}.pdf"'
+        return response
+
 
 class RMAManufacturerReturnViewSet(viewsets.ModelViewSet):
     """ViewSet für Herstellerreparaturen (Versand an den Hersteller)"""
@@ -1237,6 +1341,8 @@ class RMAManufacturerReturnViewSet(viewsets.ModelViewSet):
         # Titel, Kommentar und Adresse aus dem Request übernehmen (editierbar)
         if 'proforma_title' in request.data:
             manufacturer_return.proforma_title = request.data.get('proforma_title', '')
+        if 'proforma_subtitle' in request.data:
+            manufacturer_return.proforma_subtitle = request.data.get('proforma_subtitle', '')
         if 'proforma_comment' in request.data:
             manufacturer_return.proforma_comment = request.data.get('proforma_comment', '')
         if 'proforma_address_name' in request.data:

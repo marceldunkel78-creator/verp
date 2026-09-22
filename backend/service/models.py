@@ -176,6 +176,7 @@ class VSServicePrice(models.Model):
     )
     
     notes = models.TextField(blank=True, verbose_name='Notizen')
+
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         User,
@@ -578,12 +579,14 @@ class RMACase(models.Model):
     """
     STATUS_CHOICES = [
         ('open', 'Offen'),
+        ('dead_on_arrival', 'Dead On Arrival'),
         ('in_progress', 'In Bearbeitung'),
         ('waiting_parts', 'Warte auf Teile'),
         ('at_manufacturer', 'Beim Hersteller'),
         ('repaired', 'Repariert'),
         ('not_repairable', 'Nicht reparierbar'),
         ('returned', 'Zurückgesendet'),
+        ('payment_pending', 'Zahlung offen'),
         ('closed', 'Abgeschlossen'),
     ]
     
@@ -829,6 +832,14 @@ class RMACase(models.Model):
         default='EUR',
         verbose_name='Währung'
     )
+    # Separate Versandadresse für Herstellerreparaturen. Die address_*-Felder
+    # bleiben ausschließlich die Empfängeradresse des Warenausgangs.
+    manufacturer_address_name = models.CharField(max_length=200, blank=True, verbose_name='Hersteller Empfänger')
+    manufacturer_address_street = models.CharField(max_length=200, blank=True, verbose_name='Hersteller Straße')
+    manufacturer_address_house_number = models.CharField(max_length=20, blank=True, verbose_name='Hersteller Hausnummer')
+    manufacturer_address_postal_code = models.CharField(max_length=20, blank=True, verbose_name='Hersteller PLZ')
+    manufacturer_address_city = models.CharField(max_length=100, blank=True, verbose_name='Hersteller Stadt')
+    manufacturer_address_country = models.CharField(max_length=100, blank=True, default='Deutschland', verbose_name='Hersteller Land')
     
     # =====================
     # Metadaten
@@ -1032,6 +1043,36 @@ class RMAReturn(models.Model):
     )
     notes = models.TextField(blank=True, verbose_name='Notizen')
 
+    # Diese Felder wurden durch die bereits angewendete Migration angelegt.
+    # Sie müssen auch nach dem Zurücksetzen der UI-/Backendänderung im Modell
+    # verbleiben und beim normalen Lieferschein mit Defaults befüllt werden.
+    proforma_pdf = models.FileField(
+        upload_to=rma_return_pdf_path, null=True, blank=True,
+        verbose_name='Proforma-Invoice PDF'
+    )
+    proforma_title = models.CharField(
+        max_length=200, blank=True,
+        default='Proforma Invoice – For Customs Purposes Only / No Commercial Value',
+        verbose_name='Proforma-Invoice Titel'
+    )
+    proforma_subtitle = models.CharField(
+        max_length=300,
+        blank=True,
+        default='For Customs Purposes Only / No Commercial Value',
+        verbose_name='Proforma-Invoice Untertitel'
+    )
+    proforma_comment = models.TextField(
+        blank=True,
+        help_text='Wird im PDF unterhalb der Positionen angezeigt',
+        verbose_name='Proforma-Invoice Kommentar'
+    )
+    proforma_address_name = models.CharField(max_length=200, blank=True, verbose_name='Proforma Empfänger')
+    proforma_address_street = models.CharField(max_length=200, blank=True, verbose_name='Proforma Straße')
+    proforma_address_house_number = models.CharField(max_length=20, blank=True, verbose_name='Proforma Hausnummer')
+    proforma_address_postal_code = models.CharField(max_length=20, blank=True, verbose_name='Proforma PLZ')
+    proforma_address_city = models.CharField(max_length=100, blank=True, verbose_name='Proforma Stadt')
+    proforma_address_country = models.CharField(max_length=100, blank=True, verbose_name='Proforma Land')
+
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -1085,11 +1126,24 @@ class RMAReturnItem(models.Model):
     rma_item = models.ForeignKey(
         RMAItem,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='return_items',
         verbose_name='RMA-Position'
     )
     quantity_returned = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Menge')
     condition_notes = models.CharField(max_length=200, blank=True, verbose_name='Zustand/Bemerkung')
+    # Diese Spalten sind durch die bereits angewendete Dokument-Migration
+    # vorhanden und müssen auch beim klassischen Warenausgang befüllt werden.
+    custom_product_name = models.CharField(max_length=300, default='', blank=True)
+    custom_article_number = models.CharField(max_length=100, default='', blank=True)
+    custom_serial_number = models.CharField(max_length=200, default='', blank=True)
+    custom_unit = models.CharField(max_length=50, default='Stk', blank=True)
+    proforma_description = models.CharField(max_length=300, default='', blank=True)
+    proforma_weight = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    proforma_hs_code = models.CharField(max_length=20, default='', blank=True)
+    proforma_value = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    proforma_origin_country = models.CharField(max_length=100, default='', blank=True)
 
     class Meta:
         verbose_name = 'Warenausgangs-Position'
@@ -1148,6 +1202,12 @@ class RMAManufacturerReturn(models.Model):
         blank=True,
         default='Proforma Invoice – For Customs Purposes Only / No Commercial Value',
         verbose_name='Proforma-Invoice Titel'
+    )
+    proforma_subtitle = models.CharField(
+        max_length=300,
+        blank=True,
+        default='For Customs Purposes Only / No Commercial Value',
+        verbose_name='Proforma-Invoice Untertitel'
     )
     proforma_comment = models.TextField(
         blank=True,
@@ -1216,6 +1276,8 @@ class RMAManufacturerReturnItem(models.Model):
     rma_item = models.ForeignKey(
         RMAItem,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='manufacturer_return_items',
         verbose_name='RMA-Position'
     )
@@ -1234,6 +1296,10 @@ class RMAManufacturerReturnItem(models.Model):
         verbose_name='Warenwert'
     )
     proforma_origin_country = models.CharField(max_length=100, blank=True, verbose_name='Ursprungsland')
+    custom_product_name = models.CharField(max_length=300, blank=True, default='')
+    custom_article_number = models.CharField(max_length=100, blank=True, default='')
+    custom_serial_number = models.CharField(max_length=200, blank=True, default='')
+    custom_unit = models.CharField(max_length=50, blank=True, default='Stk')
 
     class Meta:
         verbose_name = 'Herstellerreparatur-Position'

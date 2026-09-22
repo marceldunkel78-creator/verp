@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import FileUpload from '../components/FileUpload';
 import {
   ArrowLeftIcon,
   InformationCircleIcon,
@@ -33,12 +34,14 @@ const TABS = [
 
 const STATUS_OPTIONS = [
   { value: 'open', label: 'Offen' },
+  { value: 'dead_on_arrival', label: 'Dead On Arrival' },
   { value: 'in_progress', label: 'In Bearbeitung' },
   { value: 'waiting_parts', label: 'Warte auf Teile' },
   { value: 'at_manufacturer', label: 'Beim Hersteller' },
   { value: 'repaired', label: 'Repariert' },
   { value: 'not_repairable', label: 'Nicht reparierbar' },
   { value: 'returned', label: 'Zurückgesendet' },
+  { value: 'payment_pending', label: 'Zahlung offen' },
   { value: 'closed', label: 'Abgeschlossen' }
 ];
 
@@ -121,10 +124,20 @@ const RMACaseEdit = () => {
     shipping_carrier: '',
     tracking_number: '',
     notes: '',
+    proforma_title: 'Proforma Invoice – For Customs Purposes Only / No Commercial Value',
+    proforma_subtitle: 'For Customs Purposes Only / No Commercial Value',
+    proforma_comment: '',
+    proforma_address_name: '',
+    proforma_address_street: '',
+    proforma_address_house_number: '',
+    proforma_address_postal_code: '',
+    proforma_address_city: '',
+    proforma_address_country: '',
     items: []
   });
   const [creatingReturn, setCreatingReturn] = useState(false);
   const [returnPdfLanguage, setReturnPdfLanguage] = useState('de');
+  const [generatingReturnProforma, setGeneratingReturnProforma] = useState(false);
 
   // Herstellerreparatur state
   const [manufacturerSearch, setManufacturerSearch] = useState('');
@@ -137,6 +150,7 @@ const RMACaseEdit = () => {
     tracking_number: '',
     notes: '',
     proforma_title: 'Proforma Invoice – For Customs Purposes Only / No Commercial Value',
+    proforma_subtitle: 'For Customs Purposes Only / No Commercial Value',
     proforma_comment: '',
     proforma_address_name: '',
     proforma_address_street: '',
@@ -262,6 +276,12 @@ const RMACaseEdit = () => {
           address_postal_code: data.address_postal_code || '',
           address_city: data.address_city || '',
           address_country: data.address_country || 'Deutschland',
+          manufacturer_address_name: data.manufacturer_address_name || '',
+          manufacturer_address_street: data.manufacturer_address_street || '',
+          manufacturer_address_house_number: data.manufacturer_address_house_number || '',
+          manufacturer_address_postal_code: data.manufacturer_address_postal_code || '',
+          manufacturer_address_city: data.manufacturer_address_city || '',
+          manufacturer_address_country: data.manufacturer_address_country || 'Deutschland',
           items: data.items || [],
           
           // Calculation
@@ -293,7 +313,13 @@ const RMACaseEdit = () => {
           manufacturer_rma_number: data.manufacturer_rma_number || '',
           manufacturer_ship_date: data.manufacturer_ship_date || '',
           manufacturer_quotation_amount: data.manufacturer_quotation_amount || '',
-          manufacturer_quotation_currency: data.manufacturer_quotation_currency || 'EUR'
+          manufacturer_quotation_currency: data.manufacturer_quotation_currency || 'EUR',
+          manufacturer_address_name: data.manufacturer_address_name || '',
+          manufacturer_address_street: data.manufacturer_address_street || '',
+          manufacturer_address_house_number: data.manufacturer_address_house_number || '',
+          manufacturer_address_postal_code: data.manufacturer_address_postal_code || '',
+          manufacturer_address_city: data.manufacturer_address_city || '',
+          manufacturer_address_country: data.manufacturer_address_country || 'Deutschland'
         });
         
         // Positionen für das Warenausgangs-Formular initialisieren
@@ -306,7 +332,12 @@ const RMACaseEdit = () => {
               quantity_available: item.quantity,
               quantity_returned: 0,
               selected: false,
-              condition_notes: ''
+              condition_notes: '',
+              proforma_description: item.product_name || '',
+              proforma_weight: '',
+              proforma_hs_code: '',
+              proforma_value: '',
+              proforma_origin_country: ''
             }))
           }));
           // Positionen für das Herstellerreparatur-Formular initialisieren.
@@ -338,6 +369,82 @@ const RMACaseEdit = () => {
           });
         }
         
+        // Proforma-Daten aus dem zuletzt gespeicherten Warenausgang laden
+        if (data.returns && data.returns.length > 0) {
+          const latest = [...data.returns].sort((a, b) => (
+            new Date(b.created_at || b.return_date) - new Date(a.created_at || a.return_date)
+          ))[0];
+          const savedItems = Object.fromEntries(
+            (latest.items || [])
+              .filter(item => item.rma_item)
+              .map(item => [String(item.rma_item), item])
+          );
+          setReturnForm(prev => ({
+            ...prev,
+            items: prev.items.map(item => {
+              const saved = savedItems[String(item.rma_item_id)];
+              return saved ? {
+                ...item,
+                quantity_returned: saved.quantity_returned ?? item.quantity_returned,
+                selected: true,
+                condition_notes: saved.condition_notes ?? item.condition_notes,
+                proforma_description: saved.proforma_description ?? item.proforma_description,
+                proforma_weight: saved.proforma_weight ?? '',
+                proforma_hs_code: saved.proforma_hs_code ?? '',
+                proforma_value: saved.proforma_value ?? '',
+                proforma_origin_country: saved.proforma_origin_country ?? ''
+              } : item;
+            }),
+            proforma_title: latest.proforma_title ?? prev.proforma_title,
+            proforma_subtitle: latest.proforma_subtitle ?? prev.proforma_subtitle,
+            proforma_comment: latest.proforma_comment ?? prev.proforma_comment,
+            proforma_address_name: latest.proforma_address_name ?? '',
+            proforma_address_street: latest.proforma_address_street ?? '',
+            proforma_address_house_number: latest.proforma_address_house_number ?? '',
+            proforma_address_postal_code: latest.proforma_address_postal_code ?? '',
+            proforma_address_city: latest.proforma_address_city ?? '',
+            proforma_address_country: latest.proforma_address_country ?? ''
+          }));
+        }
+
+        // Gespeicherte Proforma-Kopfdaten der letzten Herstellerreparatur laden
+        if (data.manufacturer_returns && data.manufacturer_returns.length > 0) {
+          const latestManufacturerReturn = [...data.manufacturer_returns].sort((a, b) => (
+            new Date(b.created_at || b.return_date) - new Date(a.created_at || a.return_date)
+          ))[0];
+          const savedItems = Object.fromEntries(
+            (latestManufacturerReturn.items || [])
+              .filter(item => item.rma_item)
+              .map(item => [String(item.rma_item), item])
+          );
+          setManufacturerReturnForm(prev => ({
+            ...prev,
+            items: prev.items.map(item => {
+              const saved = savedItems[String(item.rma_item_id)];
+              return saved ? {
+                ...item,
+                quantity_returned: saved.quantity_returned ?? item.quantity_returned,
+                selected: true,
+                condition_notes: saved.condition_notes ?? item.condition_notes,
+                proforma_description: saved.proforma_description ?? item.proforma_description,
+                proforma_weight: saved.proforma_weight ?? '',
+                proforma_hs_code: saved.proforma_hs_code ?? '',
+                proforma_value: saved.proforma_value ?? '',
+                proforma_origin_country: saved.proforma_origin_country ?? ''
+              } : item;
+            }),
+            proforma_title: latestManufacturerReturn.proforma_title ?? prev.proforma_title,
+            proforma_subtitle: latestManufacturerReturn.proforma_subtitle ?? prev.proforma_subtitle,
+            proforma_comment: latestManufacturerReturn.proforma_comment ?? prev.proforma_comment,
+            proforma_address_name: latestManufacturerReturn.proforma_address_name ?? '',
+            proforma_address_street: latestManufacturerReturn.proforma_address_street ?? '',
+            proforma_address_house_number: latestManufacturerReturn.proforma_address_house_number ?? '',
+            proforma_address_postal_code: latestManufacturerReturn.proforma_address_postal_code ?? '',
+            proforma_address_city: latestManufacturerReturn.proforma_address_city ?? '',
+            proforma_address_country: latestManufacturerReturn.proforma_address_country ?? ''
+          }));
+        }
+
         // Load manufacturer details if set
         if (data.manufacturer) {
           try {
@@ -539,6 +646,19 @@ const RMACaseEdit = () => {
       address_country: address.country === 'DE' ? 'Deutschland' : (address.country || 'Deutschland')
     }));
     setHasChanges(true);
+  };
+
+  const applyCustomerProformaAddress = (address) => {
+    if (!address) return;
+    setReturnForm(prev => ({
+      ...prev,
+      proforma_address_name: selectedCustomer?.full_name || selectedCustomer?.customer_name || formData.customer_name || '',
+      proforma_address_street: address.street || '',
+      proforma_address_house_number: address.house_number || '',
+      proforma_address_postal_code: address.postal_code || '',
+      proforma_address_city: address.city || '',
+      proforma_address_country: address.country === 'DE' ? 'Deutschland' : (address.country || 'Deutschland')
+    }));
   };
 
   // System search functions
@@ -747,10 +867,12 @@ const RMACaseEdit = () => {
         } else {
           fetchRMACase();
         }
+        return response.data;
       }
     } catch (error) {
       console.error('Error saving:', error);
       setSaveMessage({ type: 'error', text: 'Fehler beim Speichern' });
+      return false;
     } finally {
       setSaving(false);
     }
@@ -781,6 +903,11 @@ const RMACaseEdit = () => {
   const handleCreateReceipt = async () => {
     setCreatingReceipt(true);
     try {
+      if (hasChanges) {
+        const saved = await handleSave();
+        if (!saved) return;
+        await fetchRMACase();
+      }
       await api.post(`/service/rma/${id}/create_receipt/`, {
         receipt_date: new Date().toISOString().split('T')[0],
         notes: ''
@@ -850,11 +977,29 @@ const RMACaseEdit = () => {
         shipping_carrier: returnForm.shipping_carrier,
         tracking_number: returnForm.tracking_number,
         notes: returnForm.notes,
+        proforma_title: returnForm.proforma_title,
+        proforma_subtitle: returnForm.proforma_subtitle,
+        proforma_comment: returnForm.proforma_comment,
+        proforma_address_name: returnForm.proforma_address_name,
+        proforma_address_street: returnForm.proforma_address_street,
+        proforma_address_house_number: returnForm.proforma_address_house_number,
+        proforma_address_postal_code: returnForm.proforma_address_postal_code,
+        proforma_address_city: returnForm.proforma_address_city,
+        proforma_address_country: returnForm.proforma_address_country,
         language: returnPdfLanguage,
         items: selectedItems.map(item => ({
-          rma_item_id: item.rma_item_id,
+          rma_item_id: item.rma_item_id || null,
           quantity_returned: item.quantity_returned,
-          condition_notes: item.condition_notes
+          condition_notes: item.condition_notes,
+          custom_product_name: item.custom_product_name || '',
+          custom_article_number: item.custom_article_number || '',
+          custom_serial_number: item.custom_serial_number || '',
+          custom_unit: item.custom_unit || 'Stk',
+          proforma_description: item.proforma_description,
+          proforma_weight: item.proforma_weight,
+          proforma_hs_code: item.proforma_hs_code,
+          proforma_value: item.proforma_value,
+          proforma_origin_country: item.proforma_origin_country
         }))
       });
       setReturnForm(prev => ({
@@ -871,6 +1016,29 @@ const RMACaseEdit = () => {
     } finally {
       setCreatingReturn(false);
     }
+  };
+
+  const addCustomReturnPosition = () => {
+    setReturnForm(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        custom_id: `custom-${Date.now()}`,
+        custom_product_name: '',
+        product_name: '',
+        custom_article_number: '',
+        custom_serial_number: '',
+        custom_unit: 'Stk',
+        quantity_available: 999999,
+        quantity_returned: 1,
+        selected: true,
+        condition_notes: '',
+        proforma_description: '',
+        proforma_weight: '',
+        proforma_hs_code: '',
+        proforma_value: '',
+        proforma_origin_country: ''
+      }]
+    }));
   };
 
   const handleDownloadPdf = async (returnId, returnNumber, language) => {
@@ -922,17 +1090,159 @@ const RMACaseEdit = () => {
     }
   };
 
+  const handleGenerateReturnProforma = async (returnId) => {
+    setGeneratingReturnProforma(true);
+    try {
+      await api.post(`/service/rma-returns/${returnId}/generate_proforma_pdf/`, {
+        proforma_title: returnForm.proforma_title,
+        proforma_subtitle: returnForm.proforma_subtitle,
+        proforma_comment: returnForm.proforma_comment,
+        proforma_address_name: returnForm.proforma_address_name,
+        proforma_address_street: returnForm.proforma_address_street,
+        proforma_address_house_number: returnForm.proforma_address_house_number,
+        proforma_address_postal_code: returnForm.proforma_address_postal_code,
+        proforma_address_city: returnForm.proforma_address_city,
+        proforma_address_country: returnForm.proforma_address_country
+      });
+      fetchRMACase();
+    } catch (error) {
+      console.error('Error generating return proforma:', error);
+      alert('Fehler beim Generieren der Proforma-Invoice');
+    } finally {
+      setGeneratingReturnProforma(false);
+    }
+  };
+
+  const handleDownloadReturnProforma = async (returnId, returnNumber) => {
+    const response = await api.get(`/service/rma-returns/${returnId}/download_proforma_pdf/`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Proforma_Invoice_${returnNumber || ''}.pdf`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleViewReturnProforma = async (returnId) => {
+    const response = await api.get(`/service/rma-returns/${returnId}/view_proforma_pdf/`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    window.open(url, '_blank');
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+  };
+
+  const loadReturnDocumentIntoForm = (document) => {
+    setReturnForm(prev => ({
+      ...prev,
+      return_date: document.return_date || prev.return_date,
+      shipping_carrier: document.shipping_carrier || '',
+      tracking_number: document.tracking_number || '',
+      notes: document.notes || '',
+      proforma_title: document.proforma_title ?? prev.proforma_title,
+      proforma_subtitle: document.proforma_subtitle ?? prev.proforma_subtitle,
+      proforma_comment: document.proforma_comment ?? '',
+      proforma_address_name: document.proforma_address_name ?? '',
+      proforma_address_street: document.proforma_address_street ?? '',
+      proforma_address_house_number: document.proforma_address_house_number ?? '',
+      proforma_address_postal_code: document.proforma_address_postal_code ?? '',
+      proforma_address_city: document.proforma_address_city ?? '',
+      proforma_address_country: document.proforma_address_country ?? '',
+      items: (document.items || []).map(item => ({
+        rma_item_id: item.rma_item || null,
+        custom_id: item.rma_item ? undefined : `custom-${item.id}`,
+        product_name: item.custom_product_name || item.rma_item_detail?.product_name || 'Eigene Position',
+        custom_product_name: item.custom_product_name || '',
+        custom_article_number: item.custom_article_number || '',
+        custom_serial_number: item.custom_serial_number || '',
+        custom_unit: item.custom_unit || item.rma_item_detail?.unit || 'Stk',
+        quantity_available: item.rma_item_detail?.quantity || 999999,
+        quantity_returned: item.quantity_returned || 0,
+        selected: true,
+        condition_notes: item.condition_notes || '',
+        proforma_description: item.proforma_description || item.custom_product_name || item.rma_item_detail?.product_name || '',
+        proforma_weight: item.proforma_weight ?? '',
+        proforma_hs_code: item.proforma_hs_code || '',
+        proforma_value: item.proforma_value ?? '',
+        proforma_origin_country: item.proforma_origin_country || ''
+      }))
+    }));
+    setHasChanges(true);
+  };
+
+  const loadManufacturerDocumentIntoForm = (document) => {
+    setManufacturerReturnForm(prev => ({
+      ...prev,
+      return_date: document.return_date || prev.return_date,
+      shipping_carrier: document.shipping_carrier || '',
+      tracking_number: document.tracking_number || '',
+      notes: document.notes || '',
+      proforma_title: document.proforma_title ?? prev.proforma_title,
+      proforma_subtitle: document.proforma_subtitle ?? prev.proforma_subtitle,
+      proforma_comment: document.proforma_comment ?? '',
+      proforma_address_name: document.proforma_address_name ?? '',
+      proforma_address_street: document.proforma_address_street ?? '',
+      proforma_address_house_number: document.proforma_address_house_number ?? '',
+      proforma_address_postal_code: document.proforma_address_postal_code ?? '',
+      proforma_address_city: document.proforma_address_city ?? '',
+      proforma_address_country: document.proforma_address_country ?? '',
+      items: (document.items || []).map(item => ({
+        rma_item_id: item.rma_item || null,
+        custom_id: item.rma_item ? undefined : `custom-${item.id}`,
+        product_name: item.custom_product_name || item.rma_item_detail?.product_name || 'Eigene Position',
+        custom_product_name: item.custom_product_name || '',
+        custom_article_number: item.custom_article_number || '',
+        custom_serial_number: item.custom_serial_number || '',
+        custom_unit: item.custom_unit || item.rma_item_detail?.unit || 'Stk',
+        quantity_available: item.rma_item_detail?.quantity || 999999,
+        quantity_returned: item.quantity_returned || 0,
+        selected: true,
+        condition_notes: item.condition_notes || '',
+        proforma_description: item.proforma_description || item.custom_product_name || item.rma_item_detail?.product_name || '',
+        proforma_weight: item.proforma_weight ?? '',
+        proforma_hs_code: item.proforma_hs_code || '',
+        proforma_value: item.proforma_value ?? '',
+        proforma_origin_country: item.proforma_origin_country || ''
+      }))
+    }));
+    setHasChanges(true);
+  };
+
   // Herstellerreparatur: Lieferschein erstellen
   const handleCreateManufacturerReturn = async () => {
-    const selectedItems = manufacturerReturnForm.items.filter(item => item.selected && item.quantity_returned > 0);
-
-    if (selectedItems.length === 0) {
-      alert('Bitte mindestens eine Position zum Versand auswählen');
-      return;
-    }
-
     setCreatingManufacturerReturn(true);
     try {
+      // Positionen aus dem Wareneingang liegen zunächst nur im Formular-State.
+      // Vor dem Erstellen des Hersteller-Lieferscheins müssen sie persistiert sein,
+      // da der Backend-Endpunkt auf bestehende RMAItem-IDs verweist.
+      let manufacturerItems = manufacturerReturnForm.items;
+      if (hasChanges) {
+        const savedData = await handleSave();
+        if (!savedData) return;
+
+        // Nach dem Speichern die vom Backend vergebenen RMAItem-IDs mit den
+        // bisherigen Auswahl-/Proforma-Daten zusammenführen.
+        const previousItems = manufacturerReturnForm.items || [];
+        const previousById = Object.fromEntries(
+          previousItems.map(item => [String(item.rma_item_id), item])
+        );
+        manufacturerItems = (savedData.items || []).map(item => ({
+          ...item,
+          rma_item_id: item.id,
+          product_name: item.product_name,
+          quantity_available: item.quantity,
+          ...(previousById[String(item.id)] || {}),
+          rma_item_id: item.id,
+          product_name: item.product_name,
+          quantity_available: item.quantity
+        }));
+        setManufacturerReturnForm(prev => ({ ...prev, items: manufacturerItems }));
+      }
+
+      const selectedItems = manufacturerItems.filter(item => item.selected && item.quantity_returned > 0);
+      if (selectedItems.length === 0) {
+        alert('Bitte mindestens eine Position zum Versand auswählen');
+        return;
+      }
+
       await api.post(`/service/rma/${id}/create_manufacturer_return/`, {
         return_date: manufacturerReturnForm.return_date,
         shipping_carrier: manufacturerReturnForm.shipping_carrier,
@@ -940,6 +1250,7 @@ const RMACaseEdit = () => {
         notes: manufacturerReturnForm.notes,
         language: manufacturerPdfLanguage,
         proforma_title: manufacturerReturnForm.proforma_title,
+        proforma_subtitle: manufacturerReturnForm.proforma_subtitle,
         proforma_comment: manufacturerReturnForm.proforma_comment,
         proforma_address_name: manufacturerReturnForm.proforma_address_name,
         proforma_address_street: manufacturerReturnForm.proforma_address_street,
@@ -948,7 +1259,7 @@ const RMACaseEdit = () => {
         proforma_address_city: manufacturerReturnForm.proforma_address_city,
         proforma_address_country: manufacturerReturnForm.proforma_address_country,
         items: selectedItems.map(item => ({
-          rma_item_id: item.rma_item_id,
+          rma_item_id: item.rma_item_id || null,
           quantity_returned: item.quantity_returned,
           condition_notes: item.condition_notes,
           proforma_description: item.proforma_description,
@@ -956,6 +1267,10 @@ const RMACaseEdit = () => {
           proforma_hs_code: item.proforma_hs_code,
           proforma_value: item.proforma_value,
           proforma_origin_country: item.proforma_origin_country
+          ,custom_product_name: item.custom_product_name || '',
+          custom_article_number: item.custom_article_number || '',
+          custom_serial_number: item.custom_serial_number || '',
+          custom_unit: item.custom_unit || 'Stk'
         }))
       });
       setManufacturerReturnForm(prev => ({
@@ -973,6 +1288,29 @@ const RMACaseEdit = () => {
     } finally {
       setCreatingManufacturerReturn(false);
     }
+  };
+
+  const addCustomManufacturerPosition = () => {
+    setManufacturerReturnForm(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        custom_id: `custom-${Date.now()}`,
+        custom_product_name: '',
+        product_name: '',
+        custom_article_number: '',
+        custom_serial_number: '',
+        custom_unit: 'Stk',
+        quantity_available: 999999,
+        quantity_returned: 1,
+        selected: true,
+        condition_notes: '',
+        proforma_description: '',
+        proforma_weight: '',
+        proforma_hs_code: '',
+        proforma_value: '',
+        proforma_origin_country: ''
+      }]
+    }));
   };
 
   // Herstellerreparatur: Lieferschein herunterladen
@@ -1054,6 +1392,7 @@ const RMACaseEdit = () => {
     try {
       await api.post(`/service/rma-manufacturer-returns/${returnId}/generate_proforma_pdf/`, {
         proforma_title: manufacturerReturnForm.proforma_title,
+        proforma_subtitle: manufacturerReturnForm.proforma_subtitle,
         proforma_comment: manufacturerReturnForm.proforma_comment,
         proforma_address_name: manufacturerReturnForm.proforma_address_name,
         proforma_address_street: manufacturerReturnForm.proforma_address_street,
@@ -2818,6 +3157,14 @@ const RMACaseEdit = () => {
                               Lieferschein PDF
                             </button>
                             <button
+                              type="button"
+                              onClick={() => loadManufacturerDocumentIntoForm(ret)}
+                              className="border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1 rounded text-sm"
+                              title="Daten dieses Dokuments in das Formular laden"
+                            >
+                              Daten laden
+                            </button>
+                            <button
                               onClick={() => handleGenerateProformaPdf(ret.id)}
                               disabled={generatingProformaPdf}
                               className="border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded text-sm"
@@ -2914,12 +3261,12 @@ const RMACaseEdit = () => {
                         onClick={() => {
                           setFormData(prev => ({
                             ...prev,
-                            address_name: selectedManufacturer.company_name || '',
-                            address_street: selectedManufacturer.street || '',
-                            address_house_number: selectedManufacturer.house_number || '',
-                            address_postal_code: selectedManufacturer.postal_code || '',
-                            address_city: selectedManufacturer.city || '',
-                            address_country: selectedManufacturer.country === 'DE' ? 'Deutschland' : (selectedManufacturer.country || 'Deutschland')
+                            manufacturer_address_name: selectedManufacturer.company_name || '',
+                            manufacturer_address_street: selectedManufacturer.street || '',
+                            manufacturer_address_house_number: selectedManufacturer.house_number || '',
+                            manufacturer_address_postal_code: selectedManufacturer.postal_code || '',
+                            manufacturer_address_city: selectedManufacturer.city || '',
+                            manufacturer_address_country: selectedManufacturer.country === 'DE' ? 'Deutschland' : (selectedManufacturer.country || 'Deutschland')
                           }));
                           setHasChanges(true);
                         }}
@@ -2934,8 +3281,8 @@ const RMACaseEdit = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Name / Firma</label>
                       <input
                         type="text"
-                        value={formData.address_name}
-                        onChange={(e) => handleInputChange('address_name', e.target.value)}
+                        value={formData.manufacturer_address_name}
+                        onChange={(e) => handleInputChange('manufacturer_address_name', e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -2943,8 +3290,8 @@ const RMACaseEdit = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Straße</label>
                       <input
                         type="text"
-                        value={formData.address_street}
-                        onChange={(e) => handleInputChange('address_street', e.target.value)}
+                        value={formData.manufacturer_address_street}
+                        onChange={(e) => handleInputChange('manufacturer_address_street', e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -2952,8 +3299,8 @@ const RMACaseEdit = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Hausnummer</label>
                       <input
                         type="text"
-                        value={formData.address_house_number}
-                        onChange={(e) => handleInputChange('address_house_number', e.target.value)}
+                        value={formData.manufacturer_address_house_number}
+                        onChange={(e) => handleInputChange('manufacturer_address_house_number', e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -2961,8 +3308,8 @@ const RMACaseEdit = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">PLZ</label>
                       <input
                         type="text"
-                        value={formData.address_postal_code}
-                        onChange={(e) => handleInputChange('address_postal_code', e.target.value)}
+                        value={formData.manufacturer_address_postal_code}
+                        onChange={(e) => handleInputChange('manufacturer_address_postal_code', e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -2970,8 +3317,8 @@ const RMACaseEdit = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Stadt</label>
                       <input
                         type="text"
-                        value={formData.address_city}
-                        onChange={(e) => handleInputChange('address_city', e.target.value)}
+                        value={formData.manufacturer_address_city}
+                        onChange={(e) => handleInputChange('manufacturer_address_city', e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -2979,8 +3326,8 @@ const RMACaseEdit = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Land</label>
                       <input
                         type="text"
-                        value={formData.address_country}
-                        onChange={(e) => handleInputChange('address_country', e.target.value)}
+                        value={formData.manufacturer_address_country}
+                        onChange={(e) => handleInputChange('manufacturer_address_country', e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -3021,6 +3368,16 @@ const RMACaseEdit = () => {
                         onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_title: e.target.value }))}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
                         placeholder="Proforma Invoice – For Customs Purposes Only / No Commercial Value"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Untertitel (editierbar)</label>
+                      <input
+                        type="text"
+                        value={manufacturerReturnForm.proforma_subtitle}
+                        onChange={(e) => setManufacturerReturnForm(prev => ({ ...prev, proforma_subtitle: e.target.value }))}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="For Customs Purposes Only / No Commercial Value"
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -3091,7 +3448,12 @@ const RMACaseEdit = () => {
                   </div>
                 </div>
 
-                <h4 className="font-medium text-gray-700 mb-2">Positionen zum Versand auswählen:</h4>
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-medium text-gray-700">Positionen zum Versand auswählen:</h4>
+                  <button type="button" onClick={addCustomManufacturerPosition} className="border border-orange-300 text-orange-700 px-3 py-1 rounded-lg text-sm">
+                    Eigene Position hinzufügen
+                  </button>
+                </div>
                 <div className="space-y-2 mb-4">
                   {manufacturerReturnForm.items.map((item, idx) => (
                     <div key={item.rma_item_id} className="border rounded-lg p-3 flex items-center gap-4">
@@ -3109,7 +3471,14 @@ const RMACaseEdit = () => {
                         className="h-5 w-5 text-orange-600 rounded"
                       />
                       <div className="flex-1">
-                        <p className="font-medium">{item.product_name}</p>
+                        {item.custom_id ? (
+                          <input type="text" value={item.custom_product_name || ''} placeholder="Eigene Produktbezeichnung" onChange={(e) => {
+                            const items = [...manufacturerReturnForm.items];
+                            items[idx].custom_product_name = e.target.value;
+                            items[idx].product_name = e.target.value;
+                            setManufacturerReturnForm(prev => ({ ...prev, items }));
+                          }} className="w-full px-2 py-1 border rounded text-sm" />
+                        ) : <p className="font-medium">{item.product_name}</p>}
                         <p className="text-sm text-gray-500">Verfügbar: {item.quantity_available}</p>
                       </div>
                       {item.selected && (
@@ -3345,6 +3714,23 @@ const RMACaseEdit = () => {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="bg-white border rounded-lg p-4">
+                <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mb-4">Testdaten und Bilder</h3>
+                <FileUpload
+                  attachments={rmaCase?.attachments || []}
+                  ticketId={id}
+                  ticketType="rma"
+                  onUploadSuccess={(attachment) => setRmaCase(prev => ({
+                    ...prev,
+                    attachments: [attachment, ...(prev?.attachments || [])]
+                  }))}
+                  onDeleteSuccess={(attachmentId) => setRmaCase(prev => ({
+                    ...prev,
+                    attachments: (prev?.attachments || []).filter(att => att.id !== attachmentId)
+                  }))}
+                />
               </div>
 
               {/* PDF-Aktionen */}
@@ -3714,6 +4100,37 @@ const RMACaseEdit = () => {
                               Lieferschein PDF
                             </button>
                             <button
+                              type="button"
+                              onClick={() => loadReturnDocumentIntoForm(ret)}
+                              className="border border-blue-300 text-blue-700 hover:bg-blue-50 px-3 py-1 rounded text-sm"
+                              title="Daten dieses Dokuments in das Formular laden"
+                            >
+                              Daten laden
+                            </button>
+                            <button
+                              onClick={() => handleGenerateReturnProforma(ret.id)}
+                              disabled={generatingReturnProforma}
+                              className="border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded text-sm"
+                            >
+                              Proforma generieren
+                            </button>
+                            {ret.proforma_pdf && (
+                              <>
+                                <button
+                                  onClick={() => handleViewReturnProforma(ret.id)}
+                                  className="border border-indigo-300 text-indigo-600 hover:bg-indigo-50 px-3 py-1 rounded text-sm"
+                                >
+                                  Proforma anzeigen
+                                </button>
+                                <button
+                                  onClick={() => handleDownloadReturnProforma(ret.id, ret.return_number)}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+                                >
+                                  Proforma PDF
+                                </button>
+                              </>
+                            )}
+                            <button
                               onClick={() => handleDeleteReturn(ret.id)}
                               className="border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1 rounded text-sm"
                               title="Löschen, um den Lieferschein neu zu erstellen"
@@ -3857,7 +4274,66 @@ const RMACaseEdit = () => {
                   </div>
                 </div>
 
-                <h4 className="font-medium text-gray-700 mb-2">Positionen zum Versand auswählen:</h4>
+                {/* Proforma-Invoice (Kopf + Adresse) */}
+                <div className="bg-indigo-50 rounded-lg p-4 mb-4 border border-indigo-200">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-medium text-indigo-800">Proforma-Invoice</h4>
+                    {getCustomerAddresses().length > 0 && (
+                      <select defaultValue="" onChange={(e) => applyCustomerProformaAddress(getCustomerAddresses().find(a => a.id === parseInt(e.target.value)))} className="border border-indigo-300 rounded-lg px-2 py-1.5 text-sm bg-white">
+                        <option value="">Kundenadresse wählen</option>
+                        {getCustomerAddresses().map(a => <option key={a.id} value={a.id}>{a.address_type_display || a.address_type}: {a.street} {a.house_number}, {a.postal_code} {a.city}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Titel</label>
+                      <input type="text" value={returnForm.proforma_title} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_title: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Proforma Invoice…" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Untertitel</label>
+                      <input type="text" value={returnForm.proforma_subtitle} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_subtitle: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="For Customs Purposes Only / No Commercial Value" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Kommentar</label>
+                      <textarea value={returnForm.proforma_comment} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_comment: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" rows={2} placeholder="Kommentar" />
+                    </div>
+                    <div className="md:col-span-2 border-t border-indigo-200 pt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Proforma-Invoice Adresse (Empfänger)</label>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name / Firma</label>
+                      <input type="text" value={returnForm.proforma_address_name} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_address_name: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Straße</label>
+                      <input type="text" value={returnForm.proforma_address_street} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_address_street: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Hausnummer</label>
+                      <input type="text" value={returnForm.proforma_address_house_number} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_address_house_number: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">PLZ</label>
+                      <input type="text" value={returnForm.proforma_address_postal_code} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_address_postal_code: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stadt</label>
+                      <input type="text" value={returnForm.proforma_address_city} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_address_city: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Land</label>
+                      <input type="text" value={returnForm.proforma_address_country} onChange={(e) => setReturnForm(prev => ({ ...prev, proforma_address_country: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-medium text-gray-700">Positionen zum Versand auswählen:</h4>
+                  <button type="button" onClick={addCustomReturnPosition} className="border border-green-300 text-green-700 px-3 py-1 rounded-lg text-sm">
+                    Eigene Position hinzufügen
+                  </button>
+                </div>
                 <div className="space-y-2 mb-4">
                   {returnForm.items.map((item, idx) => (
                     <div key={item.rma_item_id} className="border rounded-lg p-3 flex items-center gap-4">
@@ -3875,7 +4351,14 @@ const RMACaseEdit = () => {
                         className="h-5 w-5 text-orange-600 rounded"
                       />
                       <div className="flex-1">
-                        <p className="font-medium">{item.product_name}</p>
+                        {item.custom_id ? (
+                          <input type="text" value={item.custom_product_name || ''} placeholder="Eigene Produktbezeichnung" onChange={(e) => {
+                            const items = [...returnForm.items];
+                            items[idx].custom_product_name = e.target.value;
+                            items[idx].product_name = e.target.value;
+                            setReturnForm(prev => ({ ...prev, items }));
+                          }} className="w-full px-2 py-1 border rounded text-sm" />
+                        ) : <p className="font-medium">{item.product_name}</p>}
                         <p className="text-sm text-gray-500">Verfügbar: {item.quantity_available}</p>
                       </div>
                       {item.selected && (
@@ -3914,6 +4397,29 @@ const RMACaseEdit = () => {
                   {returnForm.items.length === 0 && (
                     <p className="text-sm text-gray-500 italic">Keine Positionen vorhanden - bitte zunächst im Tab "Wareneingang" erfassen.</p>
                   )}
+                </div>
+
+                <div className="bg-indigo-50 rounded-lg p-4 mb-4 border border-indigo-200">
+                  <h4 className="font-medium text-indigo-800 mb-3">Proforma-Invoice Positionsdaten</h4>
+                  <p className="text-sm text-gray-500 mb-3">Pro ausgewählter Position: Beschreibung, Gewicht, Zolltarifnummer, Warenwert und Ursprungsland</p>
+                  <div className="space-y-3">
+                    {returnForm.items.filter(item => item.selected).map(item => {
+                      const index = returnForm.items.findIndex(candidate => candidate.rma_item_id === item.rma_item_id);
+                      return (
+                        <div key={item.rma_item_id} className="border rounded-lg p-3 bg-white">
+                          <p className="font-medium text-sm mb-2">{item.product_name}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            <input className="md:col-span-2 border rounded px-2 py-1 text-sm" value={item.proforma_description || ''} placeholder="Beschreibung" onChange={e => setReturnForm(prev => ({ ...prev, items: prev.items.map((x, i) => i === index ? { ...x, proforma_description: e.target.value } : x) }))} />
+                            <input className="border rounded px-2 py-1 text-sm" type="number" step="0.001" value={item.proforma_weight || ''} placeholder="Gewicht (kg)" onChange={e => setReturnForm(prev => ({ ...prev, items: prev.items.map((x, i) => i === index ? { ...x, proforma_weight: e.target.value } : x) }))} />
+                            <input className="border rounded px-2 py-1 text-sm" value={item.proforma_hs_code || ''} placeholder="HS-Code" onChange={e => setReturnForm(prev => ({ ...prev, items: prev.items.map((x, i) => i === index ? { ...x, proforma_hs_code: e.target.value } : x) }))} />
+                            <input className="border rounded px-2 py-1 text-sm" type="number" step="0.01" value={item.proforma_value || ''} placeholder="Warenwert" onChange={e => setReturnForm(prev => ({ ...prev, items: prev.items.map((x, i) => i === index ? { ...x, proforma_value: e.target.value } : x) }))} />
+                            <input className="border rounded px-2 py-1 text-sm" value={item.proforma_origin_country || ''} placeholder="Ursprungsland" onChange={e => setReturnForm(prev => ({ ...prev, items: prev.items.map((x, i) => i === index ? { ...x, proforma_origin_country: e.target.value } : x) }))} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {returnForm.items.filter(item => item.selected).length === 0 && <p className="text-sm text-gray-500 italic">Bitte zunächst eine Position auswählen.</p>}
+                  </div>
                 </div>
 
                 <div className="mb-4">

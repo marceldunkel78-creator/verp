@@ -16,6 +16,7 @@ from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
 from django.conf import settings
 import os
+from xml.sax.saxutils import escape
 
 from .notizen_utils import sanitize_for_pdf
 
@@ -160,6 +161,28 @@ class RMAManufacturerDocTemplate(BaseDocTemplate):
 def _get_manufacturer_address(rma_case):
     """Ermittelt die Herstelleradresse für den Lieferschein aus dem RMA-Fall"""
     lines = []
+    if any([
+        rma_case.manufacturer_address_name,
+        rma_case.manufacturer_address_street,
+        rma_case.manufacturer_address_house_number,
+        rma_case.manufacturer_address_postal_code,
+        rma_case.manufacturer_address_city,
+        rma_case.manufacturer_address_country,
+    ]):
+        if rma_case.manufacturer_address_name:
+            lines.append(rma_case.manufacturer_address_name)
+        street = rma_case.manufacturer_address_street or ''
+        if rma_case.manufacturer_address_house_number:
+            street += f" {rma_case.manufacturer_address_house_number}"
+        if street:
+            lines.append(street)
+        city_line = f"{rma_case.manufacturer_address_postal_code or ''} {rma_case.manufacturer_address_city or ''}".strip()
+        if city_line:
+            lines.append(city_line)
+        if rma_case.manufacturer_address_country and rma_case.manufacturer_address_country != 'DE':
+            lines.append(rma_case.manufacturer_address_country)
+        return "\n".join([l for l in lines if l])
+
     manufacturer = rma_case.manufacturer
     if manufacturer:
         lines.append(manufacturer.company_name or '')
@@ -176,7 +199,9 @@ def _get_manufacturer_address(rma_case):
         if manufacturer.country and manufacturer.country != 'DE':
             lines.append(manufacturer.country)
     else:
-        lines.append(rma_case.manufacturer_rma_number or '')
+        # Niemals die Hersteller-RMA-Nummer als Adresse ausgeben. Wenn kein
+        # verknüpft ist, darf keine RMA-Nummer als Adresse erscheinen.
+        return ''
 
     return "\n".join([l for l in lines if l])
 
@@ -237,8 +262,9 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
         elements.append(Spacer(1, 0.3 * cm))
 
     # === EMPFÄNGER (Hersteller) ===
-    recipient_address = _get_manufacturer_address(rma_case).replace('\n', '<br/>')
-    elements.append(Paragraph(f"<b>{recipient_address}</b>", style_normal))
+    recipient_address = escape(_get_manufacturer_address(rma_case)).replace('\n', '<br/>')
+    if recipient_address:
+        elements.append(Paragraph(f"<b>{recipient_address}</b>", style_normal))
     elements.append(Spacer(1, 1 * cm))
 
     # === DOKUMENT-METADATEN ===
@@ -269,9 +295,13 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
 
     for idx, item in enumerate(manufacturer_return.items.all().select_related('rma_item'), 1):
         rma_item = item.rma_item
-        desc = rma_item.product_name
-        if rma_item.serial_number:
-            desc += f"\nS/N: {rma_item.serial_number}"
+        product_name = item.custom_product_name or (rma_item.product_name if rma_item else 'Eigene Position')
+        article_number = item.custom_article_number or (rma_item.article_number if rma_item else '')
+        serial_number = item.custom_serial_number or (rma_item.serial_number if rma_item else '')
+        unit = item.custom_unit or (rma_item.unit if rma_item else 'Stk')
+        desc = product_name
+        if serial_number:
+            desc += f"\nS/N: {serial_number}"
 
         condition = item.condition_notes or 'OK'
         if len(condition) > 50:
@@ -279,11 +309,11 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
 
         table_data.append([
             str(idx),
-            Paragraph(rma_item.article_number or '—', style_small),
-            Paragraph(desc, style_small),
+            Paragraph(escape(article_number or '—'), style_small),
+            Paragraph(escape(desc).replace('\n', '<br/>'), style_small),
             f"{item.quantity_returned:g}",
-            rma_item.unit,
-            Paragraph(condition, style_small)
+            unit,
+            Paragraph(escape(condition), style_small)
         ])
 
     table = Table(table_data, colWidths=[1.2 * cm, 2.5 * cm, 6 * cm, 1.5 * cm, 1.5 * cm, 4 * cm])

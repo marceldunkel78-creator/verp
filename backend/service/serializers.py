@@ -393,7 +393,13 @@ class RMAReturnItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RMAReturnItem
-        fields = ['id', 'rma_return', 'rma_item', 'rma_item_detail', 'quantity_returned', 'condition_notes']
+        fields = [
+            'id', 'rma_return', 'rma_item', 'rma_item_detail', 'quantity_returned',
+            'condition_notes', 'custom_product_name', 'custom_article_number',
+            'custom_serial_number', 'custom_unit', 'proforma_description',
+            'proforma_weight', 'proforma_hs_code', 'proforma_value',
+            'proforma_origin_country'
+        ]
 
 
 class RMAReturnSerializer(serializers.ModelSerializer):
@@ -406,9 +412,16 @@ class RMAReturnSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'rma_case', 'return_number', 'return_date',
             'shipping_carrier', 'tracking_number', 'pdf_file', 'pdf_language',
-            'notes', 'created_at', 'created_by', 'created_by_display', 'items'
+            'notes', 'created_at', 'created_by', 'created_by_display', 'items',
+            'proforma_pdf', 'proforma_title', 'proforma_subtitle', 'proforma_comment',
+            'proforma_address_name', 'proforma_address_street',
+            'proforma_address_house_number', 'proforma_address_postal_code',
+            'proforma_address_city', 'proforma_address_country'
         ]
-        read_only_fields = ['return_number', 'created_at', 'created_by', 'created_by_display', 'pdf_file', 'pdf_language']
+        read_only_fields = [
+            'return_number', 'created_at', 'created_by', 'created_by_display',
+            'pdf_file', 'pdf_language', 'proforma_pdf'
+        ]
 
 
 class RMAReturnCreateSerializer(serializers.ModelSerializer):
@@ -417,7 +430,13 @@ class RMAReturnCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RMAReturn
-        fields = ['rma_case', 'return_date', 'shipping_carrier', 'tracking_number', 'notes', 'items']
+        fields = [
+            'rma_case', 'return_date', 'shipping_carrier', 'tracking_number', 'notes',
+            'proforma_title', 'proforma_subtitle', 'proforma_comment', 'proforma_address_name',
+            'proforma_address_street', 'proforma_address_house_number',
+            'proforma_address_postal_code', 'proforma_address_city',
+            'proforma_address_country', 'items'
+        ]
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
@@ -439,7 +458,8 @@ class RMAManufacturerReturnItemSerializer(serializers.ModelSerializer):
             'id', 'manufacturer_return', 'rma_item', 'rma_item_detail',
             'quantity_returned', 'condition_notes',
             'proforma_description', 'proforma_weight', 'proforma_hs_code',
-            'proforma_value', 'proforma_origin_country'
+            'proforma_value', 'proforma_origin_country', 'custom_product_name',
+            'custom_article_number', 'custom_serial_number', 'custom_unit'
         ]
 
 
@@ -454,7 +474,7 @@ class RMAManufacturerReturnSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'rma_case', 'return_number', 'return_date',
             'shipping_carrier', 'tracking_number', 'pdf_file', 'pdf_language',
-            'proforma_pdf', 'proforma_pdf_url', 'proforma_title', 'proforma_comment',
+            'proforma_pdf', 'proforma_pdf_url', 'proforma_title', 'proforma_subtitle', 'proforma_comment',
             'proforma_address_name', 'proforma_address_street', 'proforma_address_house_number',
             'proforma_address_postal_code', 'proforma_address_city', 'proforma_address_country',
             'notes', 'created_at', 'created_by', 'created_by_display', 'items'
@@ -478,7 +498,7 @@ class RMAManufacturerReturnCreateSerializer(serializers.ModelSerializer):
         model = RMAManufacturerReturn
         fields = [
             'rma_case', 'return_date', 'shipping_carrier', 'tracking_number', 'notes',
-            'proforma_title', 'proforma_comment',
+            'proforma_title', 'proforma_subtitle', 'proforma_comment',
             'proforma_address_name', 'proforma_address_street', 'proforma_address_house_number',
             'proforma_address_postal_code', 'proforma_address_city', 'proforma_address_country',
             'items'
@@ -498,11 +518,15 @@ class RMAAttachmentSerializer(serializers.ModelSerializer):
     """Serializer für RMA Auftragsdokumente"""
     uploaded_by_display = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
     file_url = serializers.SerializerMethodField()
+    filename = serializers.SerializerMethodField()
+    file_size = serializers.SerializerMethodField()
+    content_type = serializers.SerializerMethodField()
+    is_image = serializers.SerializerMethodField()
 
     class Meta:
         model = RMAAttachment
         fields = [
-            'id', 'rma_case', 'file', 'file_url', 'description',
+            'id', 'rma_case', 'file', 'file_url', 'filename', 'file_size', 'content_type', 'is_image', 'description',
             'uploaded_at', 'uploaded_by', 'uploaded_by_display'
         ]
         read_only_fields = ['uploaded_at', 'uploaded_by', 'uploaded_by_display', 'file_url']
@@ -511,6 +535,22 @@ class RMAAttachmentSerializer(serializers.ModelSerializer):
         if obj.file:
             return obj.file.url
         return None
+
+    def get_filename(self, obj):
+        return obj.file.name.rsplit('/', 1)[-1] if obj.file else ''
+
+    def get_file_size(self, obj):
+        try:
+            return obj.file.size if obj.file else 0
+        except (FileNotFoundError, OSError):
+            return 0
+
+    def get_content_type(self, obj):
+        filename = self.get_filename(obj).lower()
+        return 'application/pdf' if filename.endswith('.pdf') else ''
+
+    def get_is_image(self, obj):
+        return self.get_filename(obj).lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
 
 
 class RMACostLineItemSerializer(serializers.ModelSerializer):
@@ -622,6 +662,9 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             'manufacturer', 'manufacturer_rma_number', 'manufacturer_ship_date',
             'manufacturer_quotation', 'manufacturer_quotation_url',
             'manufacturer_quotation_amount', 'manufacturer_quotation_currency',
+            'manufacturer_address_name', 'manufacturer_address_street',
+            'manufacturer_address_house_number', 'manufacturer_address_postal_code',
+            'manufacturer_address_city', 'manufacturer_address_country',
             'manufacturer_returns',
             
             # Metadaten
@@ -706,6 +749,10 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             # Tab 5 - Herstellerreparatur
             'manufacturer', 'manufacturer_rma_number', 'manufacturer_ship_date',
             'manufacturer_quotation', 'manufacturer_quotation_amount', 'manufacturer_quotation_currency',
+            'manufacturer_address_name', 'manufacturer_address_street', 'manufacturer_address_house_number',
+            'manufacturer_address_postal_code', 'manufacturer_address_city', 'manufacturer_address_country',
+            'manufacturer_address_name', 'manufacturer_address_street', 'manufacturer_address_house_number',
+            'manufacturer_address_postal_code', 'manufacturer_address_city', 'manufacturer_address_country',
 
             # Metadaten
             'assigned_to'

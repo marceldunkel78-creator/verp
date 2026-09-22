@@ -13,12 +13,14 @@ import {
 // Status mapping
 const STATUS_LABELS = {
   'open': { label: 'Offen', color: 'bg-blue-100 text-blue-800' },
+  'dead_on_arrival': { label: 'Dead On Arrival', color: 'bg-red-100 text-red-800' },
   'in_progress': { label: 'In Bearbeitung', color: 'bg-yellow-100 text-yellow-800' },
   'waiting_parts': { label: 'Warte auf Teile', color: 'bg-orange-100 text-orange-800' },
   'at_manufacturer': { label: 'Beim Hersteller', color: 'bg-indigo-100 text-indigo-800' },
   'repaired': { label: 'Repariert', color: 'bg-green-100 text-green-800' },
   'not_repairable': { label: 'Nicht reparierbar', color: 'bg-red-100 text-red-800' },
   'returned': { label: 'Zurückgesendet', color: 'bg-gray-100 text-gray-800' },
+  'payment_pending': { label: 'Zahlung offen', color: 'bg-amber-100 text-amber-800' },
   'closed': { label: 'Abgeschlossen', color: 'bg-purple-100 text-purple-800' }
 };
 
@@ -120,12 +122,14 @@ const RMACases = () => {
             >
               <option value="all">Alle Status</option>
               <option value="open">Offen</option>
+              <option value="dead_on_arrival">Dead On Arrival</option>
               <option value="in_progress">In Bearbeitung</option>
               <option value="waiting_parts">Warte auf Teile</option>
               <option value="at_manufacturer">Beim Hersteller</option>
               <option value="repaired">Repariert</option>
               <option value="not_repairable">Nicht reparierbar</option>
               <option value="returned">Zurückgesendet</option>
+              <option value="payment_pending">Zahlung offen</option>
               <option value="closed">Abgeschlossen</option>
             </select>
           </div>

@@ -16,6 +16,7 @@ from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
 from django.conf import settings
 import os
+from xml.sax.saxutils import escape
 
 from .notizen_utils import sanitize_for_pdf
 
@@ -160,7 +161,31 @@ class RMADeliveryNoteDocTemplate(BaseDocTemplate):
 def _get_recipient_address(rma_case):
     """Ermittelt die Empfängeradresse für den Lieferschein aus dem RMA-Fall"""
     lines = []
-    if rma_case.customer:
+
+    # Die im Warenausgang-Tab eingetragene Adresse ist die maßgebliche
+    # Versandadresse. Zuvor wurde sie ignoriert und immer die erste aktive
+    # Kundenadresse verwendet.
+    if any([
+        rma_case.address_name,
+        rma_case.address_street,
+        rma_case.address_house_number,
+        rma_case.address_postal_code,
+        rma_case.address_city,
+        rma_case.address_country,
+    ]):
+        if rma_case.address_name:
+            lines.append(rma_case.address_name)
+        street = rma_case.address_street or ''
+        if rma_case.address_house_number:
+            street += f" {rma_case.address_house_number}"
+        if street:
+            lines.append(street)
+        city_line = f"{rma_case.address_postal_code or ''} {rma_case.address_city or ''}".strip()
+        if city_line:
+            lines.append(city_line)
+        if rma_case.address_country and rma_case.address_country != 'DE':
+            lines.append(rma_case.address_country)
+    elif rma_case.customer:
         customer = rma_case.customer
         full_name = f"{customer.title} {customer.first_name} {customer.last_name}".strip()
         lines.append(rma_case.customer_name or full_name)
@@ -238,7 +263,7 @@ def generate_rma_delivery_note_pdf(rma_return, language='de'):
         elements.append(Spacer(1, 0.3 * cm))
 
     # === EMPFÄNGER ===
-    recipient_address = _get_recipient_address(rma_case).replace('\n', '<br/>')
+    recipient_address = escape(_get_recipient_address(rma_case)).replace('\n', '<br/>')
     elements.append(Paragraph(f"<b>{recipient_address}</b>", style_normal))
     elements.append(Spacer(1, 1 * cm))
 
@@ -268,9 +293,13 @@ def generate_rma_delivery_note_pdf(rma_return, language='de'):
 
     for idx, item in enumerate(rma_return.items.all().select_related('rma_item'), 1):
         rma_item = item.rma_item
-        desc = rma_item.product_name
-        if rma_item.serial_number:
-            desc += f"\nS/N: {rma_item.serial_number}"
+        product_name = item.custom_product_name or (rma_item.product_name if rma_item else 'Eigene Position')
+        article_number = item.custom_article_number or (rma_item.article_number if rma_item else '')
+        serial_number = item.custom_serial_number or (rma_item.serial_number if rma_item else '')
+        unit = item.custom_unit or (rma_item.unit if rma_item else 'Stk')
+        desc = product_name
+        if serial_number:
+            desc += f"\nS/N: {serial_number}"
 
         condition = item.condition_notes or 'OK'
         if len(condition) > 50:
@@ -278,10 +307,10 @@ def generate_rma_delivery_note_pdf(rma_return, language='de'):
 
         table_data.append([
             str(idx),
-            Paragraph(rma_item.article_number or '—', style_small),
-            Paragraph(desc, style_small),
+            Paragraph(article_number or '—', style_small),
+            Paragraph(desc.replace('\n', '<br/>'), style_small),
             f"{item.quantity_returned:g}",
-            rma_item.unit,
+            unit,
             Paragraph(condition, style_small)
         ])
 
