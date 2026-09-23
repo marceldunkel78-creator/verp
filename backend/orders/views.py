@@ -25,7 +25,12 @@ class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'supplier', 'order_type']
-    search_fields = ['order_number', 'notes', 'supplier__company_name']
+    search_fields = [
+        'order_number', 'notes', 'supplier__company_name',
+        'items__article_number', 'items__name',
+        'items__trading_product__name',
+        'items__material_supply__name',
+    ]
     ordering_fields = ['order_number', 'order_date', 'created_at', 'status']
     ordering = ['-created_at']
     pagination_class = OrderPagination

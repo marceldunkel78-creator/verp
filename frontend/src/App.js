@@ -80,6 +80,7 @@ import SalesTicketEdit from './pages/SalesTicketEdit';
 import NotificationSettings from './pages/NotificationSettings';
 import CustomerSync from './pages/CustomerSync';
 import OrderImport from './pages/OrderImport';
+import LegacyProcurementImport from './pages/LegacyProcurementImport';
 import RedmineSync from './pages/RedmineSync';
 import ChecklistSettings from './pages/ChecklistSettings';
 import VisiViewLicenseImport from './pages/VisiViewLicenseImport';
@@ -260,6 +261,7 @@ function App() {
             <Route path="settings/admin-delete" element={<AdminDelete />} />
             <Route path="settings/customer-sync" element={<CustomerSync />} />
             <Route path="settings/order-import" element={<OrderImport />} />
+            <Route path="settings/legacy-procurement-import" element={<LegacyProcurementImport />} />
             <Route path="settings/redmine-sync" element={<RedmineSync />} />
             <Route path="settings/checklists" element={<ChecklistSettings />} />
             <Route path="settings/visiview-license-import" element={<VisiViewLicenseImport />} />

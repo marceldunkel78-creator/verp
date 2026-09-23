@@ -65,6 +65,14 @@ const Settings = () => {
       color: 'teal'
     },
     {
+      name: 'Legacy Procurement-Import',
+      description: 'Alte Lieferantenbestellungen aus bestlist.csv importieren',
+      icon: ArchiveBoxIcon,
+      path: '/settings/legacy-procurement-import',
+      color: 'cyan',
+      superUserOnly: true
+    },
+    {
       name: 'Redmine Ticket-Sync',
       description: 'Tickets und Zeitaufwendungen aus Redmine synchronisieren',
       icon: TicketIcon,

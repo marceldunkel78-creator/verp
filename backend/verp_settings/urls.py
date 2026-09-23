@@ -24,6 +24,9 @@ from .redmine_sync_views import (
 from .visiview_license_import_views import (
     VisiViewLicenseImportPreviewView, VisiViewLicenseImportExecuteView
 )
+from .legacy_procurement_import_views import (
+    LegacyProcurementImportPreviewView, LegacyProcurementImportExecuteView
+)
 
 router = DefaultRouter()
 router.register(r'exchange-rates', ExchangeRateViewSet, basename='exchange-rate')
@@ -66,4 +69,7 @@ urlpatterns = [
     # VisiView License Import
     path('visiview-license-import/preview/', VisiViewLicenseImportPreviewView.as_view(), name='visiview-license-import-preview'),
     path('visiview-license-import/execute/', VisiViewLicenseImportExecuteView.as_view(), name='visiview-license-import-execute'),
+    # Legacy Procurement Orders aus Datenvorlagen/bestlist.csv
+    path('legacy-procurement-import/preview/', LegacyProcurementImportPreviewView.as_view(), name='legacy-procurement-import-preview'),
+    path('legacy-procurement-import/execute/', LegacyProcurementImportExecuteView.as_view(), name='legacy-procurement-import-execute'),
 ]

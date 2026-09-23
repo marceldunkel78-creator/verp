@@ -54,6 +54,8 @@ const OrderFormNew = () => {
   const [incomingExists, setIncomingExists] = useState(false);
   
   const [selectedSupplier, setSelectedSupplier] = useState(null);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
   const [productSearch, setProductSearch] = useState({});
   const [productDropdownOpen, setProductDropdownOpen] = useState({});
   const productInputRefs = useRef({});
@@ -199,7 +201,7 @@ const OrderFormNew = () => {
   const fetchInitialData = async () => {
     try {
       // Fetch suppliers
-      const suppliersRes = await api.get('/suppliers/suppliers/?is_active=true');
+      const suppliersRes = await api.get('/suppliers/suppliers/?is_active=true&page_size=1000');
       const supplierData = suppliersRes.data.results || suppliersRes.data;
       setSuppliers(Array.isArray(supplierData) ? supplierData : []);
       
@@ -241,7 +243,7 @@ const OrderFormNew = () => {
     try {
       const response = await api.get(`/orders/orders/${id}/`);
       const order = response.data;
-      
+
       // Ensure all item fields are properly initialized
       const normalizedItems = (order.items || []).map(item => ({
         ...item,
@@ -316,6 +318,7 @@ const OrderFormNew = () => {
   const loadSupplierProducts = async (supplierId) => {
     if (!supplierId) {
       setSelectedSupplier(null);
+      setSupplierSearch('');
       setProducts([]);
       return;
     }
@@ -323,19 +326,25 @@ const OrderFormNew = () => {
     try {
       const supplierResponse = await api.get(`/suppliers/suppliers/${supplierId}/`);
       setSelectedSupplier(supplierResponse.data);
+      setSupplierSearch(supplierResponse.data.company_name || '');
 
       const [tradingRes, materialsRes] = await Promise.all([
-        api.get(`/suppliers/products/?supplier=${supplierId}`).catch(() => ({ data: { results: [] } })),
-        api.get(`/suppliers/material-supplies/?supplier=${supplierId}`).catch(() => ({ data: { results: [] } }))
+        api.get(`/suppliers/products/?supplier=${supplierId}&is_active=true&page_size=100`),
+        api.get(`/suppliers/material-supplies/?supplier=${supplierId}&is_active=true&page_size=100`)
       ]);
 
-      const tradingProducts = (tradingRes.data.results || tradingRes.data || []).map(p => ({
+      const getResults = (response) => {
+        const data = response.data;
+        return Array.isArray(data) ? data : (data.results || []);
+      };
+
+      const tradingProducts = getResults(tradingRes).map(p => ({
         ...p,
         type: 'trading',
         display_name: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Handelswaren)`
       }));
 
-      const materials = (materialsRes.data.results || materialsRes.data || []).map(p => ({
+      const materials = getResults(materialsRes).map(p => ({
         ...p,
         type: 'material',
         display_name: `${p.supplier_part_number || p.visitron_part_number || 'N/A'} - ${p.name} (Materialien)`
@@ -367,6 +376,7 @@ const OrderFormNew = () => {
     try {
       const supplierResponse = await api.get(`/suppliers/suppliers/${supplierId}/`);
       setSelectedSupplier(supplierResponse.data);
+      setSupplierSearch(supplierResponse.data.company_name || '');
       
       // Auto-populate settings
       const updates = {};
@@ -399,6 +409,14 @@ const OrderFormNew = () => {
     setFormData({ ...formData, [field]: value });
     setHasUnsavedChanges(true);
   };
+
+  const filteredSuppliers = suppliers.filter((supplier) => {
+    const query = supplierSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [supplier.company_name, supplier.supplier_number, supplier.email, supplier.phone]
+      .filter(Boolean)
+      .some(value => String(value).toLowerCase().includes(query));
+  });
 
   const addItem = () => {
     if (formData.status === 'bestaetigt') {
@@ -463,8 +481,10 @@ const OrderFormNew = () => {
     setHasUnsavedChanges(true);
   };
 
-  const selectProduct = (index, productId) => {
-    const product = products.find(p => p.id === parseInt(productId));
+  const selectProduct = (index, productOrId) => {
+    const product = typeof productOrId === 'object'
+      ? productOrId
+      : products.find(p => p.id === parseInt(productOrId, 10));
     if (!product) return;
 
     const newItems = [...formData.items];
@@ -509,7 +529,7 @@ const OrderFormNew = () => {
 
   // Helper for searchable product input
   const handleSelectProductFromSearch = (index, product) => {
-    selectProduct(index, product.id);
+    selectProduct(index, product);
     setProductSearch(prev => ({ ...prev, [index]: '' }));
     setProductDropdownOpen(prev => ({ ...prev, [index]: false }));
   };
@@ -1036,20 +1056,44 @@ const OrderFormNew = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Lieferant *
               </label>
-              <select
-                value={formData.supplier}
-                onChange={(e) => handleSupplierChange(e.target.value)}
-                disabled={isConfirmed}
-                className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
-                required
-              >
-                <option value="">Bitte wählen...</option>
-                {suppliers.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.company_name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={supplierSearch}
+                  onChange={(e) => {
+                    setSupplierSearch(e.target.value);
+                    setSupplierDropdownOpen(true);
+                  }}
+                  onFocus={() => setSupplierDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setSupplierDropdownOpen(false), 150)}
+                  disabled={isConfirmed}
+                  placeholder="Lieferant suchen..."
+                  className="w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                  required={!formData.supplier}
+                />
+                {supplierDropdownOpen && !isConfirmed && (
+                  <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                    {filteredSuppliers.length > 0 ? filteredSuppliers.map((supplier) => (
+                      <button
+                        key={supplier.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          handleSupplierChange(String(supplier.id));
+                          setSupplierSearch(supplier.company_name);
+                          setSupplierDropdownOpen(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-blue-50"
+                      >
+                        <span className="font-medium text-gray-900">{supplier.company_name}</span>
+                        {supplier.supplier_number && <span className="ml-2 text-gray-500">({supplier.supplier_number})</span>}
+                      </button>
+                    )) : (
+                      <div className="px-3 py-2 text-sm text-gray-500">Keine Lieferanten gefunden</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Supplier Details Display */}
@@ -1133,15 +1177,6 @@ const OrderFormNew = () => {
                 </div>
               )}
             </div>
-
-            {/* Angebotsdokument Upload */}
-            <OrderFileUpload
-              currentFile={formData.offer_document}
-              onFileSelect={(file) => updateFormData('offer_document', file)}
-              label="Angebotsdokument hochladen"
-              accept=".pdf,.doc,.docx"
-              disabled={isConfirmed}
-            />
 
             {/* Besteller Auswahl */}
             <div>
@@ -1652,49 +1687,21 @@ const OrderFormNew = () => {
               )}
             </div>
 
-            {/* Bestelldokument hochladen */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Bestelldokument hochladen (optional)
-              </label>
-              {formData.order_document && typeof formData.order_document === 'string' && (
-                <div className="mb-2 flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <span className="text-sm text-blue-800">
-                    📄 {formData.order_document.split('/').pop()}
-                  </span>
-                  <a
-                    href={formData.order_document}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    Öffnen
-                  </a>
-                </div>
-              )}
-              {formData.order_document && typeof formData.order_document !== 'string' && (
-                <div className="mb-2 flex items-center p-3 bg-green-50 border border-green-200 rounded-md">
-                  <span className="text-sm text-green-800">
-                    📄 {formData.order_document.name} (neu hochgeladen)
-                  </span>
-                </div>
-              )}
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx"
-                disabled={formData.order_type !== 'online'}
-                onChange={(e) => {
-                  if (e.target.files[0]) {
-                    updateFormData('order_document', e.target.files[0]);
-                  }
-                }}
-                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
-              />
-              {formData.order_type !== 'online' && (
-                <p className="mt-1 text-xs text-gray-500">Upload nur für Online-Bestellungen möglich. Deaktivieren Sie die Checkbox "Online-Bestellung", um ein generiertes PDF zu verwenden.</p>
-              )}
-              <p className="mt-1 text-xs text-gray-500">PDF, DOC, DOCX (max. 10MB)</p>
-            </div>
+            {/* Bestelldokumente hochladen */}
+            <OrderFileUpload
+              currentFile={formData.order_document}
+              onFileSelect={(file) => updateFormData('order_document', file)}
+              label="Bestelldokument hochladen"
+              accept=".pdf,.doc,.docx"
+              disabled={formData.order_type !== 'online' || isConfirmed}
+            />
+            <OrderFileUpload
+              currentFile={formData.offer_document}
+              onFileSelect={(file) => updateFormData('offer_document', file)}
+              label="Weiteres Bestelldokument hochladen"
+              accept=".pdf,.doc,.docx"
+              disabled={formData.order_type !== 'online' || isConfirmed}
+            />
 
             {/* Bestelldatum */}
             <div>

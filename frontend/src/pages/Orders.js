@@ -25,6 +25,7 @@ const Orders = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [sessionExists, setSessionExists] = useState(false);
+  const [sessionRestored, setSessionRestored] = useState(false);
 
   const SESSION_KEY = 'orders_search_state';
   importSessionHelpers();
@@ -42,10 +43,8 @@ const Orders = () => {
 
   // Try to restore session state on mount
   useEffect(() => {
-    const restored = loadSearchState();
-    if (!restored && hasSearched) {
-      fetchOrders(currentPage);
-    }
+    loadSearchState();
+    setSessionRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -59,11 +58,15 @@ const Orders = () => {
   // Persist state whenever relevant parts change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (!sessionRestored) return;
     saveSearchState();
-  }, [filters, currentPage, orders, totalPages, hasSearched]);
+  }, [filters, currentPage, orders, totalPages, hasSearched, viewMode, sessionRestored]);
 
   const loadSearchState = () => {
     try {
+      const storedState = (window.__sessionStore && window.__sessionStore.get)
+        ? window.__sessionStore.get(SESSION_KEY)
+        : null;
       // URL params take precedence for navigation/back/forward behavior
       const urlParams = Object.fromEntries([...searchParams]);
       if (Object.keys(urlParams).length > 0) {
@@ -76,6 +79,7 @@ const Orders = () => {
         const p = urlParams.page ? parseInt(urlParams.page, 10) : 1;
         setCurrentPage(p);
         setHasSearched(true);
+        if (storedState?.viewMode) setViewMode(storedState.viewMode);
         // Fetch immediately so results match URL — pass the freshly built filters
         fetchOrders(p, newFilters);
         setSessionExists(true);
@@ -83,13 +87,14 @@ const Orders = () => {
       }
 
       // use helper if available
-      const st = (window.__sessionStore && window.__sessionStore.get) ? window.__sessionStore.get(SESSION_KEY) : (function(){ try { const raw = localStorage.getItem(SESSION_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } })();
+      const st = storedState;
       if (!st) return false;
       if (st.filters) setFilters(st.filters);
       if (st.currentPage) setCurrentPage(st.currentPage);
       if (st.orders) setOrders(st.orders);
       if (st.totalPages) setTotalPages(st.totalPages);
       if (st.hasSearched) setHasSearched(true);
+      if (st.viewMode) setViewMode(st.viewMode);
       setSessionExists(true);
       return true;
     } catch (e) {
@@ -100,11 +105,11 @@ const Orders = () => {
 
   const saveSearchState = () => {
     try {
-      const st = { filters, currentPage, orders, totalPages, hasSearched };
+      const st = { filters, currentPage, orders, totalPages, hasSearched, viewMode };
       if (window.__sessionStore && window.__sessionStore.set) {
         window.__sessionStore.set(SESSION_KEY, st);
       } else {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(st));
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(st));
       }
       setSessionExists(true);
     } catch (e) {
@@ -114,8 +119,9 @@ const Orders = () => {
 
   useEffect(() => {
     // persist state whenever relevant parts change
+    if (!sessionRestored) return;
     saveSearchState();
-  }, [filters, currentPage, orders, totalPages, hasSearched]);
+  }, [filters, currentPage, orders, totalPages, hasSearched, viewMode, sessionRestored]);
 
   // React to URL query param changes (back/forward navigation)
   useEffect(() => {
@@ -328,7 +334,7 @@ const Orders = () => {
             Suchen
           </button>
           <button
-            onClick={() => { setFilters({ search: '', status: '', year: '' }); setOrders([]); setHasSearched(false); setCurrentPage(1); (window.__sessionStore && window.__sessionStore.remove) ? window.__sessionStore.remove('orders_search_state') : localStorage.removeItem('orders_search_state'); setSessionExists(false); setSearchParams({}); }}
+            onClick={() => { setFilters({ search: '', status: '', year: '' }); setOrders([]); setHasSearched(false); setCurrentPage(1); setViewMode('cards'); if (window.__sessionStore && window.__sessionStore.remove) window.__sessionStore.remove('orders_search_state'); setSessionExists(false); setSearchParams({}); }}
             className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             Filter zurücksetzen

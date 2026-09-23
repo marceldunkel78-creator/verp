@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { 
   ArrowLeftIcon, ShoppingCartIcon, CheckCircleIcon, TruckIcon, 
-  BanknotesIcon, ClockIcon, XCircleIcon 
+  BanknotesIcon, ClockIcon, XCircleIcon, PencilIcon, TrashIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 const OrderDetail = () => {
@@ -33,7 +33,7 @@ const OrderDetail = () => {
 
   // eslint-disable-next-line no-unused-vars
   const handleEdit = async () => {
-    if (order.status === 'angelegt') {
+    if (['angelegt', 'bestellt', 'geliefert'].includes(order.status)) {
       navigate(`/procurement/orders/${id}/edit`);
     } else {
       // Status is not "angelegt" - ask if user wants to cancel order
@@ -200,7 +200,7 @@ const OrderDetail = () => {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/procurement/orders')}
+          onClick={() => navigate(-1)}
           className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 mb-4"
         >
           <ArrowLeftIcon className="h-4 w-4 mr-1" />
@@ -208,9 +208,29 @@ const OrderDetail = () => {
         </button>
         
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Bestellung {order.order_number}
-          </h1>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">
+              Bestellung {order.order_number}
+            </h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleEdit}
+                className="inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+              >
+                <PencilIcon className="h-4 w-4 mr-2" />
+                {['angelegt', 'bestellt', 'geliefert'].includes(order.status) ? 'Bearbeiten' : 'Bearbeiten/Kopie'}
+              </button>
+              {order.status === 'storniert' && (
+                <button
+                  onClick={handleDelete}
+                  className="inline-flex items-center px-3 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                >
+                  <TrashIcon className="h-4 w-4 mr-2" />
+                  Löschen
+                </button>
+              )}
+            </div>
+          </div>
           <div className="mt-2 flex items-center space-x-3">
             <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
               {getStatusIcon(order.status)}
@@ -269,22 +289,6 @@ const OrderDetail = () => {
             </div>
           </div>
 
-          {order.supplier_confirmation_document && (
-            <div>
-              <label className="block text-sm font-medium text-gray-600">Auftragsbestätigung (Dokument)</label>
-              <div className="mt-1">
-                <a
-                  href={order.supplier_confirmation_document}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-                >
-                  📄 {order.supplier_confirmation_document.split('/').pop()}
-                </a>
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="block text-sm font-medium text-gray-600">Zahlungsdatum</label>
             <div className="mt-1 text-sm text-gray-900">
@@ -332,22 +336,6 @@ const OrderDetail = () => {
             </div>
           )}
 
-          {order.order_document && (
-            <div>
-              <label className="block text-sm font-medium text-gray-600">Bestelldokument</label>
-              <div className="mt-1">
-                <a
-                  href={order.order_document}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-                >
-                  📄 {order.order_document.split('/').pop()}
-                </a>
-              </div>
-            </div>
-          )}
-
           {order.custom_text && (
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-600">Benutzerdefinierter Text</label>
@@ -356,8 +344,40 @@ const OrderDetail = () => {
               </div>
             </div>
           )}
+
         </div>
       </div>
+
+      {/* Linked documents */}
+      {(order.order_document || order.offer_document || order.supplier_confirmation_document) && (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <DocumentTextIcon className="h-5 w-5 mr-2 text-blue-600" />
+            Verknüpfte Dokumente
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              ['Bestelldokument', order.order_document],
+              ['Weiteres Bestelldokument', order.offer_document],
+              ['Auftragsbestätigung', order.supplier_confirmation_document]
+            ].filter(([, url]) => url).map(([label, url]) => {
+              const fileName = url.split('/').pop();
+              return (
+                <div key={label} className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-800">{label}</div>
+                    <div className="truncate text-xs text-gray-500" title={fileName}>{fileName}</div>
+                  </div>
+                  <div className="flex shrink-0 gap-3 text-sm">
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">Öffnen</a>
+                    <a href={url} download className="text-blue-600 hover:text-blue-800">Download</a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Supplier Details */}
       {order.supplier_details && (
