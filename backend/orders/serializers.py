@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 from .models import Order, OrderItem
 from suppliers.models import Supplier
@@ -64,6 +65,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     
     # Lieferanten-Informationen für Bestelldokumente
     supplier_details = serializers.SerializerMethodField()
+    offer_document = serializers.SerializerMethodField()
+    order_document = serializers.SerializerMethodField()
+    supplier_confirmation_document = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
@@ -100,6 +104,25 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     def get_total_amount(self, obj):
         total = sum(item.total_price for item in obj.items.all())
         return float(total)
+
+    def _get_document_url(self, document):
+        if not document:
+            return None
+        relative_url = document.url
+        base_url = getattr(settings, 'MEDIA_BASE_URL', None)
+        if base_url:
+            return f"{base_url.rstrip('/')}{relative_url}"
+        # Keep media links relative so reverse proxies and IIS use the public host.
+        return relative_url
+
+    def get_offer_document(self, obj):
+        return self._get_document_url(obj.offer_document)
+
+    def get_order_document(self, obj):
+        return self._get_document_url(obj.order_document)
+
+    def get_supplier_confirmation_document(self, obj):
+        return self._get_document_url(obj.supplier_confirmation_document)
     
     def get_payment_term_display(self, obj):
         try:
