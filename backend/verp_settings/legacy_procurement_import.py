@@ -194,18 +194,25 @@ def _extract_items(documents):
     return [], None
 
 
-def _row_preview(row, suppliers, documents):
+def _row_preview(row, suppliers, documents, extract_items=True, supplier_cache=None):
     legacy_number = _clean_number(row.get('B-Nr.'))
     order_date = _parse_date(row.get('bestellt am'))
     confirmation = _parse_date(row.get('Auftragsbestätigung'))
     delivery = _parse_date(row.get('Est. Ship Date')) or _parse_date(row.get('Lieferdatum'))
-    supplier, match_type = _supplier_match(row.get('Lieferant'), suppliers)
+    supplier_name = str(row.get('Lieferant') or '').strip()
+    cache_key = supplier_name.casefold()
+    if supplier_cache is not None and cache_key in supplier_cache:
+        supplier, match_type = supplier_cache[cache_key]
+    else:
+        supplier, match_type = _supplier_match(supplier_name, suppliers)
+        if supplier_cache is not None:
+            supplier_cache[cache_key] = (supplier, match_type)
     total, currency = _parse_money(row.get('Rechnungspreis'))
     if total is None:
         total, currency = _parse_money(row.get('Summe NETTO'))
     document_key = f"{str(order_date.year)[-2:]}-{legacy_number.zfill(3)}".lower() if legacy_number and order_date else ''
     docs = documents.get(document_key, [])
-    items, source = _extract_items(docs)
+    items, source = _extract_items(docs) if extract_items else ([], None)
     order_number = f"B-{legacy_number.zfill(3)}-{order_date.month:02d}/{str(order_date.year)[-2:]}" if legacy_number and order_date else ''
     return {
         'legacy_number': legacy_number,
@@ -229,10 +236,13 @@ def _row_preview(row, suppliers, documents):
 def preview_legacy_procurement_import():
     suppliers = list(Supplier.objects.all())
     documents = _document_map()
-    rows = [_row_preview(row, suppliers, documents) for row in _read_csv()]
-    document_rows = [row for row in rows if row['document_names']]
-    visible_rows = document_rows + [row for row in rows if not row['document_names']][:500]
-    visible_rows = visible_rows[:500]
+    supplier_cache = {}
+    source_rows = _read_csv()
+    rows = [_row_preview(row, suppliers, documents, extract_items=False, supplier_cache=supplier_cache) for row in source_rows]
+    document_indices = [index for index, row in enumerate(rows) if row['document_names']]
+    other_indices = [index for index, row in enumerate(rows) if not row['document_names']]
+    visible_indices = (document_indices + other_indices[:500])[:500]
+    visible_rows = [rows[index] for index in visible_indices]
     return {
         'success': True,
         'total': len(rows),
