@@ -235,9 +235,13 @@ const Orders = () => {
     );
   }
 
-  // Generiere Jahre für Dropdown
+  // Zeige alle relevanten Bestelljahre einschließlich des aktuellen Jahres.
   const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
+  const firstSupportedYear = 1990;
+  const years = Array.from(
+    { length: currentYear - firstSupportedYear + 1 },
+    (_, i) => currentYear - i
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">
