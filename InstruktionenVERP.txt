@@ -29,6 +29,10 @@ Umgebungsvariablen konfigurieren (.env Datei):
 
   # Media Storage - Absoluter Pfad zum externen Medienordner
   MEDIA_ROOT=C:/VERP-Media
+
+  # Legacy Procurement-Import
+  # Muss im Windows-Produktivsystem auf den Ordner mit bestlist.csv zeigen.
+  LEGACY_PROCUREMENT_DATA_DIR=C:/VERP/Datenvorlagen
   
   # Media Base URL - Für Produktion (falls Backend unter anderer URL als Frontend läuft)
   # Beispiel: MEDIA_BASE_URL=http://verp.intern.local
@@ -122,6 +126,19 @@ git pull origin main
 cd C:\VERP
 python manage.py migrate
 Restart-Service VERP-Backend
+
+# Legacy Procurement-Import auf Windows-Servern
+# 1) Datenvorlagen manuell nach C:\VERP\Datenvorlagen kopieren:
+#    - bestlist.csv
+#    - optionale B<YY>_<XXX>.pdf/.docx Dokumente
+# 2) In C:\VERP\backend\.env setzen:
+#    LEGACY_PROCUREMENT_DATA_DIR=C:/VERP/Datenvorlagen
+# 3) Prüfen:
+#    cd C:\VERP\backend
+#    .\venv\Scripts\Activate
+#    python manage.py shell -c "from verp_settings.legacy_procurement_import import _data_dir; print(_data_dir())"
+# 4) Backend neu starten:
+#    Restart-Service VERP-Backend
 
 bzw. 
 cd C:\VERP

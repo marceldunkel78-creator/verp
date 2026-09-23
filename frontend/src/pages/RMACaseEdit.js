@@ -2324,6 +2324,8 @@ const RMACaseEdit = () => {
                     <option value="in_warranty">In Garantie</option>
                     <option value="out_of_warranty">Außerhalb Garantie</option>
                     <option value="extended_warranty">Erweiterte Garantie</option>
+                    <option value="dead_on_arrival">DeadOnArrival</option>
+                    <option value="goodwill">Kulanz</option>
                   </select>
                 </div>
                 

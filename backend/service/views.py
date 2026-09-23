@@ -511,7 +511,7 @@ class RMACaseViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'customer', 'warranty_status', 'assigned_to', 'linked_system', 'customer_order', 'service_ticket']
     search_fields = ['rma_number', 'title', 'description', 'serial_number', 'product_name']
-    ordering_fields = ['rma_number', 'created_at', 'status', 'title', 'customer__last_name', 'product_serial', 'received_date']
+    ordering_fields = ['rma_number', 'created_at', 'status', 'warranty_status', 'title', 'customer__last_name', 'product_serial', 'received_date']
     ordering = ['-created_at']
     
     def get_serializer_class(self):

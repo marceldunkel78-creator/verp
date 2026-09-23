@@ -24,12 +24,22 @@ const STATUS_LABELS = {
   'closed': { label: 'Abgeschlossen', color: 'bg-purple-100 text-purple-800' }
 };
 
+const WARRANTY_LABELS = {
+  unknown: { label: 'Unbekannt', color: 'bg-gray-100 text-gray-800' },
+  in_warranty: { label: 'In Garantie', color: 'bg-green-100 text-green-800' },
+  out_of_warranty: { label: 'Außerhalb Garantie', color: 'bg-red-100 text-red-800' },
+  extended_warranty: { label: 'Erweiterte Garantie', color: 'bg-blue-100 text-blue-800' },
+  dead_on_arrival: { label: 'DeadOnArrival', color: 'bg-orange-100 text-orange-800' },
+  goodwill: { label: 'Kulanz', color: 'bg-purple-100 text-purple-800' }
+};
+
 const RMACases = () => {
   const navigate = useNavigate();
   const [rmaCases, setRmaCases] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [warrantyFilter, setWarrantyFilter] = useState('all');
   const [sortBy, setSortBy] = useState('-created_at');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -43,6 +53,7 @@ const RMACases = () => {
       params.append('page_size', '10');
       if (searchTerm) params.append('search', searchTerm);
       if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (warrantyFilter !== 'all') params.append('warranty_status', warrantyFilter);
       if (sortBy) params.append('ordering', sortBy);
       
       const response = await api.get(`/service/rma/?${params.toString()}`);
@@ -56,7 +67,7 @@ const RMACases = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, statusFilter, sortBy]);
+  }, [currentPage, searchTerm, statusFilter, warrantyFilter, sortBy]);
 
   useEffect(() => {
     fetchRMACases();
@@ -80,6 +91,11 @@ const RMACases = () => {
         {statusInfo.label}
       </span>
     );
+  };
+
+  const getWarrantyBadge = (status, display) => {
+    const info = WARRANTY_LABELS[status] || { label: display || status || '-', color: 'bg-gray-100 text-gray-800' };
+    return <span className={`px-2 py-1 text-xs font-medium rounded-full ${info.color}`}>{info.label}</span>;
   };
 
   return (
@@ -132,6 +148,16 @@ const RMACases = () => {
               <option value="payment_pending">Zahlung offen</option>
               <option value="closed">Abgeschlossen</option>
             </select>
+            <select
+              value={warrantyFilter}
+              onChange={(e) => { setWarrantyFilter(e.target.value); setCurrentPage(1); }}
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              <option value="all">Alle Garantiestatus</option>
+              {Object.entries(WARRANTY_LABELS).map(([value, info]) => (
+                <option key={value} value={value}>{info.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -150,18 +176,19 @@ const RMACases = () => {
                 <SortableHeader field="product_serial" label="Seriennummer" sortBy={sortBy} setSortBy={setSortBy} />
                 <SortableHeader field="received_date" label="Eingang" sortBy={sortBy} setSortBy={setSortBy} />
                 <SortableHeader field="status" label="Status" sortBy={sortBy} setSortBy={setSortBy} align="center" />
+                <SortableHeader field="warranty_status" label="Garantiestatus" sortBy={sortBy} setSortBy={setSortBy} align="center" />
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                     Laden...
                   </td>
                 </tr>
               ) : rmaCases.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                     Keine RMA-Fälle gefunden
                   </td>
                 </tr>
@@ -199,6 +226,9 @@ const RMACases = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       {getStatusBadge(rma.status)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      {getWarrantyBadge(rma.warranty_status, rma.warranty_status_display)}
                     </td>
                   </tr>
                 ))

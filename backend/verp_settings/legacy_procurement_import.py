@@ -1,6 +1,7 @@
 """Import legacy procurement orders from Datenvorlagen/bestlist.csv."""
 import csv
 import logging
+import os
 import re
 import unicodedata
 from datetime import datetime
@@ -23,7 +24,18 @@ DOCUMENT_RE = re.compile(r'^B(?P<year>\d{2})_(?P<number>[0-9A-Za-z]+)(?P<suffix>
 
 
 def _data_dir():
-    return Path(settings.BASE_DIR).parent / 'Datenvorlagen'
+    configured_path = os.environ.get('LEGACY_PROCUREMENT_DATA_DIR')
+    if configured_path:
+        return Path(configured_path)
+
+    candidates = [
+        Path(settings.BASE_DIR).parent / 'Datenvorlagen',
+        Path(settings.BASE_DIR) / 'Datenvorlagen',
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def _parse_date(value):

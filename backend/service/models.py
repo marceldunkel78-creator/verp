@@ -595,6 +595,8 @@ class RMACase(models.Model):
         ('in_warranty', 'In Garantie'),
         ('out_of_warranty', 'Außerhalb Garantie'),
         ('extended_warranty', 'Erweiterte Garantie'),
+        ('dead_on_arrival', 'DeadOnArrival'),
+        ('goodwill', 'Kulanz'),
     ]
     
     CONDITION_CHOICES = [

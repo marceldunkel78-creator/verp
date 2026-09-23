@@ -571,6 +571,7 @@ class RMACostLineItemSerializer(serializers.ModelSerializer):
 class RMACaseListSerializer(serializers.ModelSerializer):
     """Serializer für RMA-Fall Liste"""
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    warranty_status_display = serializers.CharField(source='get_warranty_status_display', read_only=True)
     customer_display = serializers.SerializerMethodField()
     customer_order_display = serializers.SerializerMethodField()
     service_ticket_display = serializers.SerializerMethodField()
@@ -582,6 +583,7 @@ class RMACaseListSerializer(serializers.ModelSerializer):
             'id', 'rma_number', 'title', 'description',
             'customer', 'customer_name', 'customer_display', 'product_serial',
             'status', 'status_display',
+            'warranty_status', 'warranty_status_display',
             'customer_order', 'customer_order_display',
             'service_ticket', 'service_ticket_display',
             'linked_system', 'linked_system_display',
