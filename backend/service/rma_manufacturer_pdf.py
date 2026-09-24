@@ -256,10 +256,17 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
     style_normal = styles['Normal']
     style_small = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8)
 
+    def pdf_text(value):
+        """Escape dynamic values before inserting them into ReportLab markup."""
+        return escape(str(value or ''))
+
     # === ABSENDER (einzeilig) ===
     elements.append(Spacer(1, 0.5 * cm))
     if company:
-        sender_line = f"{company.company_name} • {company.street} {company.house_number} • {company.postal_code} {company.city}"
+        sender_line = pdf_text(
+            f"{company.company_name} • {company.street} {company.house_number} • "
+            f"{company.postal_code} {company.city}"
+        )
         elements.append(Paragraph(sender_line, style_small))
         elements.append(Spacer(1, 0.3 * cm))
 
@@ -271,21 +278,21 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
 
     # === DOKUMENT-METADATEN ===
     meta_text = f"""<para align=right>
-    <b>{t['delivery_note_number']}:</b> {manufacturer_return.return_number}<br/>
-    <b>{t['rma_number']}:</b> {rma_case.rma_number}<br/>
+    <b>{t['delivery_note_number']}:</b> {pdf_text(manufacturer_return.return_number)}<br/>
+    <b>{t['rma_number']}:</b> {pdf_text(rma_case.rma_number)}<br/>
     <b>{t['return_date']}:</b> {manufacturer_return.return_date.strftime('%d.%m.%Y')}<br/>
     """
     if rma_case.manufacturer_rma_number:
-        meta_text += f"<b>{t['manufacturer_rma_number']}:</b> {rma_case.manufacturer_rma_number}<br/>"
+        meta_text += f"<b>{t['manufacturer_rma_number']}:</b> {pdf_text(rma_case.manufacturer_rma_number)}<br/>"
     meta_text += "</para>"
     elements.append(Paragraph(meta_text, style_normal))
     elements.append(Spacer(1, 0.8 * cm))
 
     # === TITEL ===
-    elements.append(Paragraph(f"<b>{t['delivery_note']} {manufacturer_return.return_number}</b>", style_title))
+    elements.append(Paragraph(f"<b>{t['delivery_note']} {pdf_text(manufacturer_return.return_number)}</b>", style_title))
     your_rma_label = 'your RMA-Number' if language == 'en' else 'Ihre RMA-Nummer'
     your_rma_number = rma_case.manufacturer_rma_number or rma_case.rma_number
-    elements.append(Paragraph(f"{your_rma_label}: {your_rma_number}", style_subtitle))
+    elements.append(Paragraph(f"{your_rma_label}: {pdf_text(your_rma_number)}", style_subtitle))
 
     # === EINLEITUNG ===
     elements.append(Paragraph(
@@ -352,9 +359,9 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
     if manufacturer_return.shipping_carrier or manufacturer_return.tracking_number:
         elements.append(Paragraph(f"<b>{t['shipping_info']}</b>", style_normal))
         if manufacturer_return.shipping_carrier:
-            elements.append(Paragraph(f"{t['carrier']}: {manufacturer_return.shipping_carrier}", style_small))
+            elements.append(Paragraph(f"{t['carrier']}: {pdf_text(manufacturer_return.shipping_carrier)}", style_small))
         if manufacturer_return.tracking_number:
-            elements.append(Paragraph(f"{t['tracking']}: {manufacturer_return.tracking_number}", style_small))
+            elements.append(Paragraph(f"{t['tracking']}: {pdf_text(manufacturer_return.tracking_number)}", style_small))
         elements.append(Spacer(1, 0.5 * cm))
 
     # === NOTIZEN ===
@@ -369,7 +376,7 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
     elements.append(Spacer(1, 1 * cm))
 
     if company:
-        elements.append(Paragraph(company.company_name or '', style_normal))
+        elements.append(Paragraph(pdf_text(company.company_name), style_normal))
 
     doc.build(elements)
 
