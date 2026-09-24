@@ -284,7 +284,8 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
     # === TITEL ===
     elements.append(Paragraph(f"<b>{t['delivery_note']} {manufacturer_return.return_number}</b>", style_title))
     your_rma_label = 'your RMA-Number' if language == 'en' else 'Ihre RMA-Nummer'
-    elements.append(Paragraph(f"{your_rma_label}: {rma_case.rma_number}", style_subtitle))
+    your_rma_number = rma_case.manufacturer_rma_number or rma_case.rma_number
+    elements.append(Paragraph(f"{your_rma_label}: {your_rma_number}", style_subtitle))
 
     # === EINLEITUNG ===
     elements.append(Paragraph(
