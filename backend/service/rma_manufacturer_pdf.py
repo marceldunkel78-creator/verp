@@ -24,7 +24,8 @@ from .notizen_utils import sanitize_for_pdf
 MANUFACTURER_DELIVERY_NOTE_TRANSLATIONS = {
     'de': {
         'delivery_note': 'Lieferschein',
-        'rma_number': 'RMA-Nummer',
+        'rma_number': 'Visitron RMA-Nummer',
+        'manufacturer_rma_number': 'Hersteller-RMA-Nummer',
         'return_date': 'Versanddatum',
         'delivery_note_number': 'Lieferschein-Nr.',
         'intro': 'Hiermit senden wir folgende Ware zur Reparatur an den Hersteller:',
@@ -43,7 +44,8 @@ MANUFACTURER_DELIVERY_NOTE_TRANSLATIONS = {
     },
     'en': {
         'delivery_note': 'Delivery Note',
-        'rma_number': 'RMA Number',
+        'rma_number': 'Visitron RMA Number',
+        'manufacturer_rma_number': 'Manufacturer RMA Number',
         'return_date': 'Shipment Date',
         'delivery_note_number': 'Delivery Note No.',
         'intro': 'We are sending the following goods to the manufacturer for repair:',
@@ -274,14 +276,15 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
     <b>{t['return_date']}:</b> {manufacturer_return.return_date.strftime('%d.%m.%Y')}<br/>
     """
     if rma_case.manufacturer_rma_number:
-        meta_text += f"<b>{t['rma_number']} (Hersteller):</b> {rma_case.manufacturer_rma_number}<br/>"
+        meta_text += f"<b>{t['manufacturer_rma_number']}:</b> {rma_case.manufacturer_rma_number}<br/>"
     meta_text += "</para>"
     elements.append(Paragraph(meta_text, style_normal))
     elements.append(Spacer(1, 0.8 * cm))
 
     # === TITEL ===
     elements.append(Paragraph(f"<b>{t['delivery_note']} {manufacturer_return.return_number}</b>", style_title))
-    elements.append(Paragraph(f"RMA {rma_case.rma_number} - {rma_case.title}", style_subtitle))
+    your_rma_label = 'your RMA-Number' if language == 'en' else 'Ihre RMA-Nummer'
+    elements.append(Paragraph(f"{your_rma_label}: {rma_case.rma_number}", style_subtitle))
 
     # === EINLEITUNG ===
     elements.append(Paragraph(

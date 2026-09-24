@@ -24,7 +24,7 @@ from .notizen_utils import sanitize_for_pdf
 DELIVERY_NOTE_TRANSLATIONS = {
     'de': {
         'delivery_note': 'Lieferschein',
-        'rma_number': 'RMA-Nummer',
+        'rma_number': 'Visitron RMA-Nummer',
         'return_date': 'Versanddatum',
         'delivery_note_number': 'Lieferschein-Nr.',
         'intro': 'Hiermit senden wir folgende Ware zurück:',
@@ -43,7 +43,7 @@ DELIVERY_NOTE_TRANSLATIONS = {
     },
     'en': {
         'delivery_note': 'Delivery Note',
-        'rma_number': 'RMA Number',
+        'rma_number': 'Visitron RMA Number',
         'return_date': 'Shipment Date',
         'delivery_note_number': 'Delivery Note No.',
         'intro': 'We are returning the following goods:',
@@ -279,7 +279,7 @@ def generate_rma_delivery_note_pdf(rma_return, language='de'):
 
     # === TITEL ===
     elements.append(Paragraph(f"<b>{t['delivery_note']} {rma_return.return_number}</b>", style_title))
-    elements.append(Paragraph(f"RMA {rma_case.rma_number} - {rma_case.title}", style_subtitle))
+    elements.append(Paragraph(f"{t['rma_number']}: {rma_case.rma_number}", style_subtitle))
 
     # === EINLEITUNG ===
     elements.append(Paragraph(

@@ -1098,7 +1098,7 @@ class RMAReturn(models.Model):
 
     @staticmethod
     def _generate_return_number():
-        """Generiert die nächste freie Lieferschein-Nummer im Format RMA-A-00001"""
+        """Generiert die nächste freie Lieferschein-Nummer im Format A-00001."""
         existing_numbers = RMAReturn.objects.filter(
             return_number__isnull=False
         ).values_list('return_number', flat=True)
@@ -1112,7 +1112,7 @@ class RMAReturn(models.Model):
                 continue
 
         next_number = (max(numeric_numbers) + 1) if numeric_numbers else 1
-        return f'RMA-A-{next_number:05d}'
+        return f'A-{next_number:05d}'
 
 
 class RMAReturnItem(models.Model):
@@ -1248,7 +1248,7 @@ class RMAManufacturerReturn(models.Model):
 
     @staticmethod
     def _generate_return_number():
-        """Generiert die nächste freie Lieferschein-Nummer im Format RMA-H-00001"""
+        """Generiert die nächste freie Lieferschein-Nummer im Format H-00001."""
         existing_numbers = RMAManufacturerReturn.objects.filter(
             return_number__isnull=False
         ).values_list('return_number', flat=True)
@@ -1262,7 +1262,7 @@ class RMAManufacturerReturn(models.Model):
                 continue
 
         next_number = (max(numeric_numbers) + 1) if numeric_numbers else 1
-        return f'RMA-H-{next_number:05d}'
+        return f'H-{next_number:05d}'
 
 
 class RMAManufacturerReturnItem(models.Model):
