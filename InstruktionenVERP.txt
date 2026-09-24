@@ -178,6 +178,31 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 # - .env und web.config werden in Z:\VERP-Backup\YYYY-MM-DD\Config gesichert
 # - Alte Backups > RetentionDays werden gelöscht
 
+
+# Medien-Dokumente 404 "Not Found" trotz vorhandener Datei (Berechtigungsproblem)
+# Symptom: Manche /media/... Links funktionieren (z.B. Sales-Tickets, Systems-Fotos),
+# andere (z.B. Procurement/Loans, Procurement/orders, Entwicklung) liefern 404,
+# OBWOHL eine interaktive Admin-PowerShell (Test-Path) die Datei findet.
+# Ursache: Der VERP-Backend-Dienst läuft als LocalSystem. Ordner, die durch
+# manuelle Kopien/Restores (statt durch normale App-Uploads) entstanden sind,
+# erben teilweise nicht dieselben NTFS-Rechte wie C:\VERP-Media selbst -
+# LocalSystem/IIS_IUSRS haben dort keinen Lesezugriff, daher meldet
+# django.views.static.serve() "existiert nicht", obwohl die Datei da ist.
+# Fix: ACLs unterhalb von C:\VERP-Media zurücksetzen und einheitlich neu vergeben
+# (nicht destruktiv fuer Dateien, nur Berechtigungen):
+#
+#   icacls "C:\VERP-Media" /reset /T /C
+#   icacls "C:\VERP-Media" /grant "SYSTEM:(OI)(CI)F" /T
+#   icacls "C:\VERP-Media" /grant "IIS_IUSRS:(OI)(CI)RX" /T
+#   icacls "C:\VERP-Media" /grant "Administrators:(OI)(CI)F" /T
+#   iisreset
+#   Restart-Service VERP-Backend
+#
+# Verifikation je Datei (als der Dienst-Account, nicht als Admin testen!):
+#   Get-Service VERP-Backend | Select-Object -ExpandProperty StartName
+#   icacls "C:\VERP-Media\Procurement\Loans\L-00008\receipts\17120.jpg"
+# Danach im Browser die zuvor fehlschlagenden /media/-Links erneut testen.
+
 # Was passiert beim Update?
 # - Optionales Backup
 # - Backend-Dienst stoppen
