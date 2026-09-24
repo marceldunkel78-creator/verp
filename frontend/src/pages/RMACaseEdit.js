@@ -3133,10 +3133,19 @@ const RMACaseEdit = () => {
                               value={ret.pdf_language || 'de'}
                               onChange={async (e) => {
                                 const lang = e.target.value;
-                                await api.post(`/service/rma-manufacturer-returns/${ret.id}/regenerate_pdf/`, {
-                                  language: lang
-                                });
-                                fetchRMACase();
+                                try {
+                                  setSaving(true);
+                                  await api.post(`/service/rma-manufacturer-returns/${ret.id}/regenerate_pdf/`, {
+                                    language: lang
+                                  });
+                                  await fetchRMACase();
+                                } catch (error) {
+                                  console.error('Error regenerating manufacturer PDF:', error);
+                                  const detail = error.response?.data?.detail || error.response?.data?.error;
+                                  alert(detail || 'Der Hersteller-Lieferschein konnte nicht neu erzeugt werden.');
+                                } finally {
+                                  setSaving(false);
+                                }
                               }}
                               className="border border-gray-300 rounded px-2 py-1 text-sm bg-white"
                               title="Sprache des Lieferscheins"
