@@ -49,6 +49,7 @@ const InventoryItemEdit = () => {
     customer: null,
     customer_name: '',
     serial_number: '',
+    order: null,
     order_number: '',
     customer_order_number: '',
     system: null,
@@ -122,6 +123,7 @@ const InventoryItemEdit = () => {
         customer: data.customer,
         customer_name: data.customer_name || '',
         serial_number: data.serial_number || '',
+        order: data.order,
         order_number: data.order_number || '',
         customer_order_number: data.customer_order_number || '',
         system: data.system,
@@ -613,11 +615,90 @@ const InstanceTab = ({ data, onChange, customers, projects, systems, users }) =>
   const [customerOrderFilter, setCustomerOrderFilter] = useState('');
   const [customerOrderOptions, setCustomerOrderOptions] = useState([]);
 
+  const [orderFilter, setOrderFilter] = useState('');
+  const [orderOptions, setOrderOptions] = useState([]);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
   const [systemFilter, setSystemFilter] = useState('');
   const [systemOptionsLocal, setSystemOptionsLocal] = useState([]);
 
   const [projectFilter, setProjectFilter] = useState('');
   const [projectOptionsLocal, setProjectOptionsLocal] = useState([]);
+
+  // Load the selected order so an existing order number is rendered as a link.
+  useEffect(() => {
+    let active = true;
+    if (!data.order) {
+      setSelectedOrder(null);
+      return undefined;
+    }
+
+    axios.get(`${BACKEND_BASE}/api/orders/orders/${data.order}/`, { withCredentials: true })
+      .then((res) => {
+        if (active) setSelectedOrder(res.data);
+      })
+      .catch(() => {
+        if (active) setSelectedOrder(null);
+      });
+
+    return () => { active = false; };
+  }, [data.order]);
+
+  // Order search (after 3 chars), by order number, supplier or item name.
+  useEffect(() => {
+    let active = true;
+    if (!orderFilter || orderFilter.length < 3) {
+      setOrderOptions([]);
+      return undefined;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('search', orderFilter);
+        params.append('page_size', '20');
+        const res = await axios.get(`${BACKEND_BASE}/api/orders/orders/?${params.toString()}`, { withCredentials: true });
+        const results = res.data.results || res.data || [];
+        if (active) setOrderOptions(Array.isArray(results) ? results : []);
+      } catch (err) {
+        console.error('Order search error:', err);
+        if (active) setOrderOptions([]);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [orderFilter]);
+
+  // Resolve legacy records that contain only the text order number.
+  useEffect(() => {
+    let active = true;
+    if (data.order || !data.order_number || data.order_number.length < 3) {
+      return undefined;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ search: data.order_number, page_size: '20' });
+        const res = await axios.get(`${BACKEND_BASE}/api/orders/orders/?${params.toString()}`, { withCredentials: true });
+        const results = res.data.results || res.data || [];
+        const match = results.find((order) => order.order_number === data.order_number);
+        if (active && match) {
+          setSelectedOrder(match);
+          onChange('order', match.id);
+        }
+      } catch (err) {
+        console.error('Existing order lookup error:', err);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [data.order, data.order_number, onChange]);
 
   // Fetch customers by search query (debounced, min 3 chars) for performance
   useEffect(() => {
@@ -848,12 +929,59 @@ const InstanceTab = ({ data, onChange, customers, projects, systems, users }) =>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Bestellnummer (Order)
           </label>
+          {data.order && (selectedOrder || data.order_number) ? (
+            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md mb-2">
+              <a
+                href={`/procurement/orders/${data.order}`}
+                className="text-sm text-blue-800 hover:text-blue-950 hover:underline truncate"
+              >
+                📄 {selectedOrder?.order_number || data.order_number}
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('order', null);
+                  onChange('order_number', '');
+                  setSelectedOrder(null);
+                }}
+                className="text-red-600 hover:text-red-800 ml-2"
+                title="Entfernen"
+              >
+                ✖
+              </button>
+            </div>
+          ) : null}
+
           <input
             type="text"
-            value={data.order_number}
-            onChange={(e) => onChange('order_number', e.target.value)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2"
+            placeholder="Suche Bestellung (Nr., Lieferant oder Artikel)..."
+            value={orderFilter}
+            onChange={(e) => setOrderFilter(e.target.value)}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 mb-1"
           />
+
+          {orderOptions.length > 0 && (
+            <div className="border border-gray-200 rounded bg-white mt-1 max-h-44 overflow-auto">
+              {orderOptions.map((order) => (
+                <div
+                  key={order.id}
+                  className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  onClick={() => {
+                    onChange('order', order.id);
+                    onChange('order_number', order.order_number || '');
+                    setSelectedOrder(order);
+                    setOrderOptions([]);
+                    setOrderFilter('');
+                  }}
+                >
+                  <div className="font-medium">{order.order_number || order.id}</div>
+                  <div className="text-xs text-gray-500">
+                    {order.supplier_name || order.supplier?.company_name || ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         
         {/* Kundenauftragsnummer (Suche) */}
