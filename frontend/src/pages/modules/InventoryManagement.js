@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { InboxArrowDownIcon, ArchiveBoxIcon, ClipboardDocumentListIcon, ArrowPathIcon, GiftIcon } from '@heroicons/react/24/outline';
+import { InboxArrowDownIcon, ArchiveBoxIcon, ClipboardDocumentListIcon, ArrowPathIcon, GiftIcon, CameraIcon } from '@heroicons/react/24/outline';
 
 const hasPermission = (user, permission) => {
   if (!permission) return true;
@@ -33,6 +33,14 @@ const InventoryManagement = () => {
       icon: GiftIcon,
       path: '/inventory/customer-loans',
       color: 'orange',
+    },
+    {
+      name: 'Demo-Systeme',
+      description: 'Mikroskop-Demosysteme: Setup, Geräte, Belegung & Änderungsprotokoll',
+      icon: CameraIcon,
+      path: '/inventory/demo-systems',
+      color: 'blue',
+      permission: 'can_read_inventory_demo_systems'
     },
     {
       name: 'Bestandsübersicht',

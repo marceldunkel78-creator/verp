@@ -34,6 +34,8 @@ import Inventory from './pages/Inventory';
 import GoodsReceipt from './pages/GoodsReceipt';
 import CustomerLoans from './pages/CustomerLoans';
 import CustomerLoanEdit from './pages/CustomerLoanEdit';
+import DemoSystems from './pages/DemoSystems';
+import DemoSystemEdit from './pages/DemoSystemEdit';
 import Projects from './pages/Projects';
 import ProjectEdit from './pages/ProjectEdit';
 import Systems from './pages/Systems';
@@ -136,6 +138,9 @@ function App() {
             <Route path="inventory/customer-loans" element={<CustomerLoans />} />
             <Route path="inventory/customer-loans/new" element={<CustomerLoanEdit />} />
             <Route path="inventory/customer-loans/:id" element={<CustomerLoanEdit />} />
+            <Route path="inventory/demo-systems" element={<DemoSystems />} />
+            <Route path="inventory/demo-systems/new" element={<DemoSystemEdit />} />
+            <Route path="inventory/demo-systems/:id" element={<DemoSystemEdit />} />
             <Route path="sales" element={<SalesOrderManagement />} />
             <Route path="hr" element={<PermissionRoute permission="can_read_hr"><HumanResources /></PermissionRoute>} />
             <Route path="hr/employees" element={<PermissionRoute permission="can_read_hr"><EmployeeList /></PermissionRoute>} />

@@ -77,7 +77,8 @@ const Layout = () => {
     can_read_inventory: [
       'can_read_inventory_stock',
       'can_read_inventory_planning',
-      'can_read_inventory_customer_loans'
+      'can_read_inventory_customer_loans',
+      'can_read_inventory_demo_systems'
     ],
     can_read_manufacturing: [
       'can_read_manufacturing_vs_hardware',

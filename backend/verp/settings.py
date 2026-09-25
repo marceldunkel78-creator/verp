@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'meetings',
     'company_calendar',
     'customer_loans',
+    'demo_systems',
     'sql_angebote',
     'sql_projekte',
 ]
