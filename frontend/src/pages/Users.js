@@ -43,6 +43,7 @@ const MODULE_HIERARCHY = [
     submodules: [
       { key: 'inventory_warehouse', label: 'Lager' },
       { key: 'inventory_customer_loans', label: 'Verleihungen' },
+      { key: 'inventory_demo_systems', label: 'Demo-Systeme' },
     ]
   },
   {
