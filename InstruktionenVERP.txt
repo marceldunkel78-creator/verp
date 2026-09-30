@@ -411,10 +411,38 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     cd C:\VERP\scripts
 #     .\register-inventory-sync-task.ps1 -ExcelPath Z:\Warenlager -DailyAt "02:00"
 #
-# Schritt 7 - Testweise starten:
+#     Alternative OHNE Skript, direkt in der GUI:
+#     Taskplanung -> Aufgabe erstellen -> Aufgabe mit Zeitplan erstellen
+#     Name:    VERP-Inventory-Sync
+#     Programm:   powershell.exe
+#     Argumente: -NoProfile -ExecutionPolicy Bypass -File "C:\VERP\scripts\sync-inventory.ps1"
+#     Starten in: C:\VERP\scripts
+#     Trigger:  Täglich um 02:00
+#     Konto:   ein echtes Benutzerkonto, das auf das Lager-Laufwerk
+#              zugreifen darf (NICHT "SYSTEM" - siehe Hinweis unten).
+#
+#     Warum -NoProfile behalten, auch wenn das Backup-Skript ohne läuft:
+#       Der Task läuft als anderes Benutzerkonto. Dessen PowerShell-Profil
+#       ist unbekannt. Ein Profil-Skript mit gesetzter $ErrorActionPreference,
+#       umgebogenem $env:PATH oder Set-Location wuerde den Import still
+#       beschaedigen - der Job meldet Erfolg, macht aber nichts.
+#       -ExecutionPolicy Bypass ist wichtiger als -NoProfile, weil Skripte
+#       Standardmaessig "RemoteSigned" ausfuehren und sonst blockiert werden.
+#
+#     Warum KEIN -ExcelPath beim Task:
+#       Der Parameter wuerde den Pfad aus .env (INVENTORY_EXCEL_DIR)
+#       ueberschreiben. Deshalb leest sync-inventory.ps1 den Pfad aus .env.
+#
+# Schritt 7 - Testweise starten (DRINGEND empfohlen):
 #     Start-ScheduledTask -TaskName "VERP-Inventory-Sync"
 #     Get-ScheduledTaskInfo -TaskName "VERP-Inventory-Sync" |
 #         Select-Object LastRunTime, LastTaskResult
+#     Get-Content C:\VERP\logs\sync-inventory_*.log -Tail 25
+#
+#     LastTaskResult 0 heisst nur: der Task selbst lief durch. Entscheidend
+#     ist das LOG - dort steht, ob der Netzwerkpfad wirklich gefunden wurde.
+#     Ein erfolgreicher Task mit "Verzeichnis nicht gefunden" im Log ist
+#     der Fehlerfall, den man sonst erst am Folgetag bemerkt.
 
 # 8) Umgang mit gesperrten Excel-Dateien
 #

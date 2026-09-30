@@ -84,7 +84,17 @@ try {
         Get-Content $StdOutFile | ForEach-Object { Write-Log "$_" }
     }
     if ((Test-Path $StdErrFile) -and (Get-Item $StdErrFile).Length -gt 0) {
-        Get-Content $StdErrFile | ForEach-Object { Write-Log "FEHLER: $_" }
+        # Der console-Handler aus backend/verp/settings.py schreibt Log-Zeilen (INFO/WARNING)
+        # nach stderr. Diese sind keine Fehler und duerfen nicht als "FEHLER:" markiert werden,
+        # sonst sieht jeder erfolgreiche Lauf im Log wie ein Fehlschlag aus.
+        Get-Content $StdErrFile | ForEach-Object {
+            $line = $_
+            if ($line -match ' ERROR | CRITICAL |Traceback \(most recent call last\)|^\s*\w+Error:|CommandError') {
+                Write-Log "FEHLER: $line"
+            } else {
+                Write-Log $line
+            }
+        }
     }
 }
 finally {
