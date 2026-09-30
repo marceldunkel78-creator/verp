@@ -2,29 +2,66 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def drop_old_employee_fk(apps, schema_editor):
+    """
+    MUSS vor dem Umschreiben laufen.
+
+    In der Through-Tabelle liegt noch ein Fremdschluessel
+    loans_loan_observers_employee_id -> users_employee.id. Sobald dort
+    eine User-ID steht, verletzt diese Zeile den Constraint und Django
+    bricht mit folgendem Fehler ab:
+
+      Key (employee_id)=(6) is not present in table "users_employee"
+
+    Genau das ist in der Produktion nach dem Umschreiben passiert: das
+    Umschreiben selbst war korrekt, aber der alte Constraint hat die
+    neuen Werte abgewiesen.
+
+    Deshalb wird der Constraint hier zuerst entfernt. Das AlterField
+    legt danach den passenden Constraint auf users_user an - es ist also
+    am Ende wieder alles sauber referenziert.
+    """
+    db_alias = schema_editor.connection.alias
+
+    # Alle Fremdschluessel der Through-Tabelle, die auf users_employee
+    # zeigen. Name und Ziel werden nicht hart verdrahtet, weil Postgres
+    # den Suffix aus Tabellennamen bildet.
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT con.conname, rel.relname "
+            "FROM pg_constraint con "
+            "JOIN pg_class rel ON rel.oid = con.conrelid "
+            "JOIN pg_class tgt ON tgt.oid = con.confrelid "
+            "WHERE rel.relname = %s AND con.contype = 'f' "
+            "AND tgt.relname = %s",
+            ['loans_loan_observers', 'users_employee'],
+        )
+        constraints = cursor.fetchall()
+
+    for name, _target in constraints:
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(
+                f'ALTER TABLE loans_loan_observers DROP CONSTRAINT "{name}"'
+            )
+        print(f'loans.0005: Fremdschluessel {name} entfernt '
+              '(zeigt noch auf users_employee)')
+
+
 def remap_employee_ids_to_user_ids(apps, schema_editor):
     """
-    MUSS vor dem AlterField laufen - hier passiert die eigentliche
-    Umwandlung, nicht erst danach.
+    Hier passiert die eigentliche Umwandlung - solange die Spalte noch
+    employee_id heisst.
 
     Das AlterField benennt nur die Spalte um (employee_id -> user_id); die
     Zahlen bleiben unveraendert stehen. Postgres prueft den Fremdschluessel
-    dann sofort gegen users_user.id und lehnt ab, sobald eine Zahl dort
-    nicht existiert.
+    dann sofort. Deshalb werden die IDs vorher auf echte User-IDs
+    umgeschrieben - das AlterField kann danach nicht mehr scheitern.
 
-    Genau das ist in der Produktion passiert - und zwar bei einem
-    gueltigen Beobachter:
-      employees-Zeile 13 = Andreas Babaryka, sein User hat aber die ID 24
-      in users_user gibt es keine ID 13 (die Zaehler sind durch geloeschte
-      Konten uebersprungen)
-    Beobachter employee_id=13 wird also zu user_id=13 - und genau daran
-    scheitert der Fremdschluessel. Das ist KEIN Mitarbeiter ohne Login,
-    er hat einen; zwei vorherige Versuche, angebliche "Verwaiste" zu
-    loeschen, konnten es deshalb nicht beheben.
-
-    Die IDs werden hier, solange die Spalte noch employee_id heisst, auf
-    echte User-IDs umgeschrieben. Danach kann das Umbenennen nicht mehr
-    scheitern, weil jede Zahl dann einem realen User entspricht.
+    Warum das nicht vorher funktioniert hat: Mitarbeiter-IDs und
+    User-IDs sind unabhaengige Autoincrement-Zaehler. Andreas Babaryka
+    ist Mitarbeiter 13, sein User ist aber 24, und eine User-ID 13 gibt
+    es in der Produktion gar nicht. Ein Beobachter employee_id=13 wurde
+    beim blossen Umbenennen zu user_id=13 - und der FK lehnte ab.
 
     Verworfen wird nur, was ohnehin tot ist: ein Mitarbeiter ohne
     aktiven Login kann nie benachrichtigt werden.
@@ -38,6 +75,7 @@ def remap_employee_ids_to_user_ids(apps, schema_editor):
         rows = cursor.fetchall()
 
     if not rows:
+        print('loans.0005: keine Beobachter vorhanden, nichts zu tun.')
         return
 
     employee_ids = {r[1] for r in rows}
@@ -103,6 +141,49 @@ def remap_employee_ids_to_user_ids(apps, schema_editor):
         print('loans.0005 - verworfen: ' + '; '.join(detail))
     print(f'loans.0005: {kept} Beobachter auf User-IDs umgeschrieben, '
           f'{dropped} Zeilen entfernt.')
+
+
+def recreate_constraints(apps, schema_editor):
+    """
+    Nach dem AlterField wiederherstellen.
+
+    Django entfernt beim Aendern eines M2M-Feldes die Fremdschluessel der
+    Through-Tabelle. Im Test liess es beide weg - auch den auf loans_loan,
+    der gar nichts mit dieser Aenderung zu tun hat. Ohne FK kann eine
+    Beobachter-Zeile auf einen geloeschten Loan oder User zeigen.
+
+    Deshalb werden beide Constraints hier ausdruecklich gesetzt, falls sie
+    fehlen. Idempotent: existieren sie schon, wird nichts getan.
+    """
+    db_alias = schema_editor.connection.alias
+
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT conname, tgt.relname "
+            "FROM pg_constraint con "
+            "JOIN pg_class rel ON rel.oid = con.conrelid "
+            "JOIN pg_class tgt ON tgt.oid = con.confrelid "
+            "WHERE rel.relname = 'loans_loan_observers' AND con.contype = 'f'",
+        )
+        existing = {t for _n, t in cursor.fetchall()}
+
+    if 'loans_loan' not in existing:
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(
+                'ALTER TABLE loans_loan_observers '
+                'ADD CONSTRAINT loans_loan_observers_loan_id_fk '
+                'FOREIGN KEY (loan_id) REFERENCES loans_loan(id) ON DELETE CASCADE'
+            )
+        print('loans.0005: Fremdschluessel auf loans_loan wiederhergestellt')
+
+    if 'users_user' not in existing:
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(
+                'ALTER TABLE loans_loan_observers '
+                'ADD CONSTRAINT loans_loan_observers_user_id_fk '
+                'FOREIGN KEY (user_id) REFERENCES users_user(id) ON DELETE CASCADE'
+            )
+        print('loans.0005: Fremdschluessel auf users_user wiederhergestellt')
 
 
 def copy_employee_observers_to_users(apps, schema_editor):
@@ -177,6 +258,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(drop_old_employee_fk, migrations.RunPython.noop),
         migrations.RunPython(remap_employee_ids_to_user_ids, migrations.RunPython.noop),
         migrations.AlterField(
             model_name='loan',
@@ -189,4 +271,5 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunPython(copy_employee_observers_to_users, clear_observers),
+        migrations.RunPython(recreate_constraints, migrations.RunPython.noop),
     ]
