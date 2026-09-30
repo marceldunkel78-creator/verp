@@ -8,55 +8,75 @@ def drop_orphan_observers(apps, schema_editor):
 
     Das AlterField benennt in der Through-Tabelle nur die Spalte um
     (employee_id -> user_id); die Integer-IDs bleiben unveraendert. Postgres
-    prueft den Fremdschluessel aber sofort, wenn die Spalte umbenannt wird -
-    also bricht die Migration ab, sobald eine Mitarbeiter-ID ohne
-    passende users_user-Zeile in der Tabelle steht (Produktion: user_id=13).
+    prueft den Fremdschluessel sofort, also bricht die Migration ab,
+    sobald eine ID in der Tabelle steht, die es in users_user nicht gibt
+    (Produktion: 13).
 
-    Deshalb werden verwaiste Zeilen VOR dem Umbenennen entfernt. Sie sind
-    ohnehin wertlos: ein Mitarbeiter ohne VERP-Login kann nicht
-    benachrichtigt werden, genau das war das Problem hinter der Aenderung.
+    Zwei verschiedene ID-Raeume muessen sauber getrennt werden:
+      - loans_loan_observers.employee_id verweist auf users_employee.id
+      - loans_loan_observers.user_id    verweist auf users_user.id
+
+    Nach dem Rename wird employee_id als user_id gelesen. Verwaist ist
+    deshalb eine Mitarbeiter-ID, fuer die es KEINEN aktiven User gibt -
+    nicht eine ID, die es nicht in users_employee gibt (der Mitarbeiter
+    existiert sehr wohl) und nicht eine, die es nicht in users_user.id
+    gibt (User-IDs und Mitarbeiter-IDs sind unabhaengige Zaehler).
+
+    Verwaiste Zeilen sind wertlos: ohne VERP-Login kann niemand
+    benachrichtigt werden, das war ja das Problem hinter der Aenderung.
     """
-    Loan = apps.get_model('loans', 'Loan')
     Employee = apps.get_model('users', 'Employee')
+    User = apps.get_model(settings.AUTH_USER_MODEL)
     db_alias = schema_editor.connection.alias
 
-    loan_ids = list(Loan.objects.using(db_alias).values_list('id', flat=True))
-    if not loan_ids:
-        return
-
-    # Mitarbeiter-IDs, die es in users_employee ueberhaupt gibt
-    used_employee_ids = set(
-        Employee.objects.using(db_alias).values_list('id', flat=True)
-    )
-
-    # ... und die tatsaechlich in der Through-Tabelle referenziert werden
-    loan_ph = ', '.join(['%s'] * len(loan_ids))
+    # Mitarbeiter-IDs, die in der Through-Tabelle referenziert werden
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute(
-            f'SELECT DISTINCT employee_id FROM loans_loan_observers '
-            f'WHERE loan_id IN ({loan_ph})',
-            loan_ids,
-        )
+        cursor.execute('SELECT DISTINCT employee_id FROM loans_loan_observers')
         referenced = {row[0] for row in cursor.fetchall()}
 
-    orphaned = referenced - used_employee_ids
+    if not referenced:
+        return
+
+    employees = Employee.objects.using(db_alias).filter(id__in=referenced)
+    # Mitarbeiter, fuer die es mindestens einen aktiven Login gibt
+    usable = set(
+        User.objects.using(db_alias)
+        .filter(employee_id__in=employees, is_active=True)
+        .values_list('employee_id', flat=True)
+    )
+    # Mitarbeiter existieren, haben aber keinen aktiven Login
+    existing = set(employees.values_list('id', flat=True))
+    orphans_known = existing - usable
+    orphans_unknown = referenced - existing
+
+    orphaned = orphans_known | orphans_unknown
     if not orphaned:
         return
 
     orphan_ph = ', '.join(['%s'] * len(orphaned))
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(
-            f'DELETE FROM loans_loan_observers '
-            f'WHERE employee_id IN ({orphan_ph}) AND loan_id IN ({loan_ph})',
-            [*sorted(orphaned), *loan_ids],
+            f'DELETE FROM loans_loan_observers WHERE employee_id IN ({orphan_ph})',
+            sorted(orphaned),
         )
         deleted = cursor.rowcount
 
+    detail = []
+    if orphans_unknown:
+        detail.append(f'{len(orphans_unknown)} unbekannte Mitarbeiter-ID(s)')
+    if orphans_known:
+        names = list(
+            Employee.objects.using(db_alias)
+            .filter(id__in=orphans_known)
+            .values_list('id', 'first_name', 'last_name')[:20]
+        )
+        rendered = ', '.join(f'{i} {f} {l}'.strip() for i, f, l in names)
+        detail.append(f'{len(orphans_known)} ohne aktiven Login ({rendered})')
+
     print(
-        f'loans.0005: {deleted} verwaiste Beobachter-Zeilen entfernt '
-        f'(Mitarbeiter-IDs ohne User: {sorted(orphaned)}). '
-        'Diese Mitarbeiter haben keinen VERP-Login und konnten nie '
-        'benachrichtigt werden.'
+        f'loans.0005: {deleted} verwaiste Beobachter-Zeilen entfernt: '
+        + '; '.join(detail)
+        + '. Diese Mitarbeiter koennen nie benachrichtigt werden.'
     )
 
 
