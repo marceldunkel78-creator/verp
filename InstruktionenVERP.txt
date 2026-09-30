@@ -374,6 +374,24 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #
 #    Logs: C:\VERP\logs\sync-inventory_JJJJ-MM-TT.log
 #           C:\VERP\backend\logs\verp.log
+#
+#    Log-Aufraeumen (automatisch bei jedem echten Lauf):
+#      sync-inventory_JJJJ-MM-TT.log(.old)        30 Tage
+#      sync-inventory_out_JJJJMMTT_HHMMSS.log     30 Tage
+#      inventory_sync_JJJJMMTT_HHMMSS.csv        180 Tage
+#    Geraeumt wird ausschliesslich anhand des Dateisystem-Zeitstempels,
+#    nicht anhand des Datums im Dateinamen. Logs anderer Skripte
+#    (verp.log, backup-verp_*.log) werden nicht angefasst.
+#    Verzeichnis selbst wird nie geloescht.
+#    Ein Dry-Run raeumt NIE auf. Mit -KeepLogs wird nichts geloescht.
+#    Eine gesperrte Logdatei bricht den Import nicht ab, sie wird beim
+#    naechsten Lauf erneut versucht.
+#    Aufbewahrung anpassen:
+#        .\sync-inventory.ps1 -LogRetentionDays 60 -ReportRetentionDays 365
+#
+#    Achtung bei der Groesse: der Report (CSV) entsteht pro LAUF, nicht pro
+#    Tag. Bei mehreren manuellen Testlaeufen an einem Tag liegen dann mehrere
+#    Reports im Verzeichnis.
 
 # 7) Erste Inbetriebnahme auf dem Produktionsserver
 #
@@ -453,6 +471,9 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #   - Exit-Code bleibt 0
 #   - beim naechsten Lauf wird sie automatisch nachgeholt
 # Empfehlung: Zeitfenster waehlen, in dem nicht bearbeitet wird (z.B. nachts).
+#
+# Das gilt fuer Excel UND fuer das Log-Verzeichnis: eine gesperrte Logdatei
+# wird beim naechsten Lauf automatisch nachgeraeumt.
 
 # 9) Referenzmessung (Entwicklungsserver, 35 Lagerlisten)
 #

@@ -19,7 +19,10 @@ param(
     [string]$ExcelPath = "",
     [string]$Pattern = "",
     [switch]$DryRun,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [int]$LogRetentionDays = 30,
+    [int]$ReportRetentionDays = 180,
+    [switch]$KeepLogs
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +36,56 @@ if (-not (Test-Path $LogDir)) {
 }
 $LogFile = Join-Path $LogDir "sync-inventory_$(Get-Date -Format 'yyyy-MM-dd').log"
 
+# ---------------------------------------------------------------------------
+# Log-Aufraeumen
+#
+# Es entstehen drei Dateiarten, die alle unbegrenzt wuerden:
+#   sync-inventory_JJJJ-MM-TT.log(.old)  eine Datei pro Tag
+#   inventory_sync_JJJJMMTT_HHMMSS.csv    eine Datei pro Lauf (Report)
+#   sync-inventory_out_JJJJMMTT_HHMMSS.log(.err)  stdout/stderr-Zwischenkopien
+#
+# Aufraeumen passiert bewusst VOR dem Anlegen der heutigen Logdatei und
+# benutzt ausschliesslich den Dateisystem-Zeitstempel, nicht das Datum im
+# Dateinamen. Sonst wuerde ein nachtraeglich umbenanntes oder kopiertes
+# Log (mtime = heute) ewig aufbewahrt.
+# ---------------------------------------------------------------------------
+if (-not $KeepLogs -and -not $DryRun) {
+    $Cleanup = @(
+        @{ Pattern = "sync-inventory_*.log*";     Days = $LogRetentionDays;     ExcludeOut = $true }
+        @{ Pattern = "inventory_sync_*.csv";      Days = $ReportRetentionDays;  ExcludeOut = $false }
+        @{ Pattern = "sync-inventory_out_*.log*"; Days = $LogRetentionDays;     ExcludeOut = $false }
+    )
+    $Removed = 0
+    foreach ($Rule in $Cleanup) {
+        Get-ChildItem -Path $LogDir -Filter $Rule.Pattern -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                # "sync-inventory_*.log*" trifft auch die "_out_"-Dateien.
+                # Ohne diesen Ausschluss wuerde jede davon zweimal angefasst.
+                # Der Ausschluss gilt nur fuer diese Regel - fuer die
+                # "_out_"-Regel muss er ausdruecklich abgeschaltet sein,
+                # sonst wuerden die Zwischenkopien NIE geloescht.
+                (-not $Rule.ExcludeOut -or $_.Name -notlike "*_out_*") -and
+                ($_.LastWriteTime -lt (Get-Date).AddDays(-1 * $Rule.Days))
+            } |
+            ForEach-Object {
+                try {
+                    Remove-Item $_.FullName -Force -ErrorAction Stop
+                    $Removed++
+                }
+                catch {
+                    # Kein Abbruch: eine gesperrte Logdatei darf den Import
+                    # niemals verhindern. Wird beim naechsten Lauf versucht.
+                    if (-not $Quiet) {
+                        Write-Host "Hinweis: Logdatei nicht loeschbar ($($_.Exception.Message))"
+                    }
+                }
+            }
+    }
+    if ($Removed -gt 0 -and -not $Quiet) {
+        Write-Host "Log-Aufraeumen: $Removed Datei(en) entfernt."
+    }
+}
+
 function Write-Log {
     param([string]$Message)
     $entry = "$(Get-Date -Format 'HH:mm:ss') - $Message"
@@ -40,9 +93,11 @@ function Write-Log {
     if (-not $Quiet) { Write-Host $entry }
 }
 
-# Log auf 5 MB begrenzen
+# Log auf 5 MB begrenzen. Der alte Dateiname wird NICHT einfach ueberschrieben,
+# sonst geht bei mehreren Rotationen am selben Tag der vorherige Stand verloren.
 if ((Test-Path $LogFile) -and ((Get-Item $LogFile).Length -gt 5MB)) {
-    Move-Item -Path $LogFile -Destination "$LogFile.old" -Force
+    $Stamp = Get-Date -Format 'HHmmss'
+    Move-Item -Path $LogFile -Destination "$LogFile.$Stamp.old" -Force
 }
 
 Write-Log "========================================="
