@@ -278,10 +278,15 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #    Pfad pruefen:
 #    cd C:\VERP\backend
 #    .\venv\Scripts\Activate
-#    python manage.py shell -c "import os; p=os.environ.get('INVENTORY_EXCEL_DIR'); print(repr(p)); print('ok' if p and os.path.isdir(p) else 'FALSCH')"
+#    python manage.py shell -c "from inventory.management.commands.sync_inventory_from_excel import get_setting; import os; p=get_setting('INVENTORY_EXCEL_DIR'); print(repr(p)); print('OK' if p and os.path.isdir(p) else 'FALSCH')"
+#
+#    WICHTIG: Nicht os.environ.get verwenden! In diesem Projekt liest Django
+#    die .env ueber python-decouple, das schreibt aber NICHTS in
+#    os.environ. Ein Test mit os.environ.get liefert daher IMMER None,
+#    auch wenn die .env korrekt ist. Immer get_setting() nutzen.
 #
 #    Zaehlung, was gefunden wird:
-#    python manage.py shell -c "import os,glob; p=os.environ.get('INVENTORY_EXCEL_DIR') or r'..\Datenvorlagen'; f=glob.glob(os.path.join(p,'*.xls*')); print(len(f),'Dateien')"
+#    python manage.py shell -c "from inventory.management.commands.sync_inventory_from_excel import get_setting; from pathlib import Path; import glob; p=get_setting('INVENTORY_EXCEL_DIR'); f=glob.glob(str(Path(p)/'*.xls*')) if p else []; print(len(f),'Dateien in',p)"
 
 # 2) Spalten-Mapping anpassen, falls sich Header aendern
 #
@@ -511,3 +516,62 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #
 # Hinweis: "Firmware" und "Firmware Version" werden auf firmware_version
 # gemappt und stehen damit im Feld "Firmware-Version", nicht im Text.
+
+# 13) Netzwerkpfad (UNC) - die drei häufigsten Fehler
+#
+# 1) FALSCHE DIAGNOSE MIT os.environ
+#    Der Befehl
+#        python manage.py shell -c "import os; print(os.environ.get('INVENTORY_EXCEL_DIR'))"
+#    liefert IMMER None, auch wenn die .env korrekt ist.
+#    Grund: Django liest die .env ueber python-decouple (verp/settings.py).
+#    decouple schreibt die Werte aber nicht in os.environ.
+#    RICHTIG:
+#        python manage.py shell -c "from inventory.management.commands.sync_inventory_from_excel import get_setting; import os; p=get_setting('INVENTORY_EXCEL_DIR'); print(repr(p)); print('OK' if p and os.path.isdir(p) else 'FALSCH')"
+#
+# 2) BACKSLASHES IN DER .env
+#    decouple interpretiert KEINE Escape-Sequenzen. Deshalb gilt:
+#        FALSCH:  INVENTORY_EXCEL_DIR=\\\\server\\Text\\Company\\Lager
+#        FALSCH:  INVENTORY_EXCEL_DIR=\\server\\Text\\Company\\Lager   (nur 1 vorn)
+#        RICHTIG: INVENTORY_EXCEL_DIR=\\server\\Text\\Company\\Lager    (2 vorn, 1 hinten)
+#        RICHTIG: INVENTORY_EXCEL_DIR=//server/Text/Company/Lager     (Forward slashes)
+#    Die ersten beiden sind in der .env IDENTISCH - man kann also gar nicht
+#    an der Schreibweise unterscheiden. Nutze Forward slashes, dann ist es
+#    eindeutig. Der Import normalisiert falsch escapte Pfade inzwischen
+#    selbst und warnt, falls der Ordner nicht erreichbar ist.
+#
+# 3) KEIN LAUFWERKSBUCHSTABE NÖTIG
+#    Der Explorer-Fehler "Dieser Unterordner kann nicht zugeordnet werden"
+#    ist normal und unproblematisch. Ein Netzlaufwerk laesst sich nur auf
+#    einen FREIGABE-ROOT mappen, nicht auf einen Unterordner.
+#    Du brauchst es aber gar nicht: der Import funktioniert direkt mit
+#    \\server\Text\Company\Lager. Es ist keine Freigabe noetig.
+#    Pruefen (muss JA ergeben):
+#        Test-Path "\\server\Text\Company\Lager"
+#    Laeuft der Task als SYSTEM, dann SYSTEM sieht die Freigabe nur ueber
+#    das Computerkonto. Zwei Loesungen:
+#        a) Laufwerk mappen (benoetigt Freigabe-Root):
+#               net use Z: \\server\Text /persistent:yes
+#               INVENTORY_EXCEL_DIR=Z:\Company\Lager
+#        b) Aufgabe mit einem echten Benutzerkonto registrieren, der auf die
+#           Freigabe zugreifen darf.
+#
+# ---------------------------------------------------------------------------
+#
+# Empfohlene Einstellung fuer die aktuelle Ordnerstruktur:
+#
+#     INVENTORY_EXCEL_DIR=//server/Text/Company/Lager
+#     INVENTORY_EXCEL_PATTERN=*.xls*
+#     INVENTORY_EXCEL_EXCLUDE_DIRS=alte Lagerlisten,Backup
+#
+# Referenzmessung auf diesem Pfad (Entwicklungsserver, 2026-09-30):
+#     alle Ordner rekursiv              : 141 Dateien
+#     mit INVENTORY_EXCEL_EXCLUDE_DIRS   :  97 Dateien (-44 Archive)
+#     nur oberste Ebene (--no-recursive):  74 Dateien
+#
+# Hinweis zu PowerShell beim Zaehlen:
+#     Get-ChildItem <pfad> -File -Include *.xls   liefert 0 Treffer!
+#     -Include greift nur, wenn der Pfad selbst ein Wildcard enthaelt.
+#     Richtig sind:
+#         Get-ChildItem <pfad> -File -Filter *.xls
+#         Get-ChildItem <pfad> -Recurse -Include *.xls
+#     Der Import selbst ist davon nicht betroffen (Django glob/rglob).

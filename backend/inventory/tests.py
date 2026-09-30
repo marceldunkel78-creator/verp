@@ -9,6 +9,7 @@ Abgedeckt:
 - Dubletten werden gemeldet, nicht zusammengefuehrt
 - Dry-Run veraendert die Datenbank nicht
 """
+import os
 import tempfile
 from decimal import Decimal
 from pathlib import Path
@@ -161,6 +162,58 @@ class HeaderDetectionTests(SimpleTestCase):
         row = ['Geraet X', 'SN-1', 'Kunde', 'Lieferant', '']
         record = extract_record(sheet, row, 'f.csv', 2)
         self.assertEqual(record['extra_info'], {})
+
+
+class ConfigurationTests(SimpleTestCase):
+    """Pfad-/Konfigurationslesen - haeufigste Fehlerquelle im Betrieb."""
+
+    def test_unc_paths_are_normalised(self):
+        from inventory.management.commands.sync_inventory_from_excel import (
+            normalize_share_path,
+        )
+        # Alle drei Schreibweisen muessen auf denselben Pfad fuehren
+        expected = '\\\\server\\Text\\Company\\Lager'
+        for raw in (
+            '\\\\\\\\server\\\\Text\\\\Company\\\\Lager',  # 4 BS, falsch escaped
+            '\\\\server\\Text\\Company\\Lager',           # korrekt
+            '//server/Text/Company/Lager',              # Forward slashes
+        ):
+            self.assertEqual(normalize_share_path(raw), expected, raw)
+
+    def test_drive_letters_are_left_untouched(self):
+        from inventory.management.commands.sync_inventory_from_excel import (
+            normalize_share_path,
+        )
+        # Laufwerkspfade duerfen NICHT zu UNC umgedeutet werden
+        for raw in ('C:/VERP/Datenvorlagen', 'C:\\VERP\\Datenvorlagen',
+                    'Z:\\Warenlager'):
+            self.assertEqual(normalize_share_path(raw), raw)
+
+    def test_get_setting_prefers_decouple_over_os_environ(self):
+        # Regression: os.environ.get lieferte immer None, weil decouple
+        # die .env nicht in die Umgebung schreibt.
+        from inventory.management.commands.sync_inventory_from_excel import (
+            get_setting,
+        )
+        with mock.patch.dict(os.environ, {'VERP_TEST_VAR': 'aus_env'}):
+            with mock.patch(
+                'inventory.management.commands.sync_inventory_from_excel.config',
+                return_value='aus_decouple',
+            ):
+                self.assertEqual(
+                    get_setting('VERP_TEST_VAR'), 'aus_decouple'
+                )
+            with mock.patch(
+                'inventory.management.commands.sync_inventory_from_excel.config',
+                return_value=None,
+            ):
+                self.assertEqual(get_setting('VERP_TEST_VAR'), 'aus_env')
+            with mock.patch(
+                'inventory.management.commands.sync_inventory_from_excel.config',
+                return_value=None,
+            ):
+                os.environ.pop('VERP_TEST_VAR', None)
+                self.assertEqual(get_setting('VERP_TEST_VAR', 'default'), 'default')
 
 
 class DirectoryExclusionTests(SimpleTestCase):

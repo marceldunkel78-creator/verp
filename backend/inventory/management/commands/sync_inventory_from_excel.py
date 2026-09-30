@@ -24,6 +24,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 
+from decouple import UndefinedValueError, config
+
 from customers.models import Customer
 from inventory.excel_sync import (
     SourceFileLocked,
@@ -77,6 +79,64 @@ for _aliases in (_MAPPING.get('header_aliases') or {}).values():
         _normalize_header(alias) for alias in _aliases
     )
 NORMALIZED_FIELD_TOKENS_ALL |= NORMALIZED_FIELD_TOKENS
+
+
+# =====================
+# Konfigurationszugriff
+# =====================
+
+def normalize_share_path(value):
+    """Macht einen Freigabepfad robust gegen Fehl-Escaping in der .env.
+
+    Problem: In einer .env-Datei wird ein UNC-Pfad leicht falsch notiert.
+    Python-decouple interpretiert keine Backslash-Escapes, d.h.
+        INVENTORY_EXCEL_DIR=\\\\server\\Lager
+    liefert 4 Backslashes vorn und 2 hinten -> der Pfad existiert nicht.
+    Erwartet wird
+        INVENTORY_EXCEL_DIR=\\server\\Lager      (2 vorn, 2 hinten)
+    oder, noch einfacher und eindeutiger
+        INVENTORY_EXCEL_DIR=//server/Lager
+
+    Diese Funktion normalisiert beide Schreibweisen, damit der Import
+    nicht an einem Tippfehler in der Konfiguration scheitert.
+    """
+    if not value:
+        return value
+    text = str(value).strip().strip('"').strip("'")
+
+    # Laufwerkspfade (C:\..., Z:/...) unveraendert lassen - dort ist ein
+    # einfacher Backslash bzw. ein Slash korrekt.
+    if re.match(r'^[A-Za-z]:[\\/]', text):
+        return text
+
+    # UNC-Pfad mit Forward-Slashes vereinheitlichen
+    if text.startswith('//'):
+        text = text.replace('/', '\\')
+    # Auf genau 2 fuehrende Backslashes reduzieren (UNC-Notation)
+    if text.startswith('\\'):
+        rest = re.sub(r'\\{2,}', r'\\', text.lstrip('\\'))
+        return '\\\\' + rest
+    return text
+
+
+def get_setting(name, default=None):
+    """Liest eine Konfiguration aus .env (decouple) oder Umgebungsvariablen.
+
+    WICHTIG: In diesem Projekt liest Django die .env ueber python-decouple
+    (siehe verp/settings.py). decouple schreibt dabei aber NICHTS in
+    os.environ. Ein reines os.environ.get wuerde daher auf einem
+    Produktionsserver immer None liefern, obwohl die .env korrekt ist.
+    Deshalb zuerst decouple, dann os.environ als Fallback.
+    """
+    try:
+        value = config(name, default=None)
+    except Exception:
+        value = None
+    if value is None or value == '':
+        value = os.environ.get(name)
+    if value is None or value == '':
+        return default
+    return value
 
 
 class Command(BaseCommand):
@@ -133,7 +193,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--exclude-dirs',
             type=str,
-            default=os.environ.get('INVENTORY_EXCEL_EXCLUDE_DIRS', ''),
+            default=get_setting('INVENTORY_EXCEL_EXCLUDE_DIRS', ''),
             help='Kommaseparierte Ordnernamen, die ausgeschlossen werden '
                  '(auch als Zwischenordner). Default aus INVENTORY_EXCEL_EXCLUDE_DIRS',
         )
@@ -165,9 +225,28 @@ class Command(BaseCommand):
         return text.encode('utf-8', errors='replace').decode('utf-8')
 
     def _resolve_path(self, option_value):
-        configured = option_value or os.environ.get('INVENTORY_EXCEL_DIR')
+        configured = option_value or get_setting('INVENTORY_EXCEL_DIR', '')
         if configured:
-            return Path(configured)
+            raw = configured
+            path = Path(normalize_share_path(raw))
+            if not path.exists():
+                # Kein Abbruch: der Lauf meldet die Alternativen und macht
+                # mit dem lokalen Default weiter. Sonst waere ein Tippfehler
+                # in der .env ein stiller Totalausfall im Scheduler.
+                self.stderr.write(self.style.WARNING(
+                    f'INVENTORY_EXCEL_DIR="{raw}" ist nicht erreichbar.\n'
+                    f'  -> interpretiert als: {path}\n'
+                    '  -> In der .env muss der Pfad so aussehen:\n'
+                    '         INVENTORY_EXCEL_DIR=\\\\server\\Lager\n'
+                    '     oder noch einfacher:\n'
+                    '         INVENTORY_EXCEL_DIR=//server/Lager\n'
+                    '  -> Netzwerkpfad pruefen: Test-Path "\\\\server\\Lager"'
+                ))
+                logger.warning(
+                    'inventory_sync: INVENTORY_EXCEL_DIR=%r nicht erreichbar '
+                    '(interpretiert als %s)', raw, path,
+                )
+            return path
         candidates = [
             Path(settings.BASE_DIR).parent / 'Datenvorlagen',
             Path(settings.BASE_DIR) / 'Datenvorlagen',
@@ -178,7 +257,7 @@ class Command(BaseCommand):
         return candidates[0]
 
     def _resolve_pattern(self, option_value):
-        return option_value or os.environ.get('INVENTORY_EXCEL_PATTERN') or '*.xlsx'
+        return option_value or get_setting('INVENTORY_EXCEL_PATTERN', '') or '*.xlsx'
 
     def _resolve_report_path(self, option_value):
         if option_value:
