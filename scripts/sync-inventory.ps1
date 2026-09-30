@@ -105,13 +105,43 @@ Write-Log "Excel-Lagerabgleich gestartet ($(if ($DryRun) { 'DRY-RUN' } else { 'L
 Write-Log "========================================="
 
 $BackendDir = Join-Path $VerpRoot "backend"
-$PythonExe  = Join-Path $VerpRoot "venv\Scripts\python.exe"
-if (-not (Test-Path $PythonExe)) {
-    $PythonExe = Join-Path $VerpRoot ".venv\Scripts\python.exe"
+
+# Python-Interpreter suchen.
+#
+# WICHTIG: update-verp.ps1 legt das venv unter $VerpRoot\backend\venv an
+# (dort wird es erstellt und aktiviert). Die zuerst geprueften Pfade
+# $VerpRoot\venv und $VerpRoot\.venv gab es frueher, sind aber im Normalfall
+# NICHT vorhanden. Deshalb wird hier bewusst ueber mehrere Kandidaten
+# gesucht statt ueber einen festen Pfad - der Produktivserver legt das venv
+# nach update-verp.ps1 in backend\, nicht in den Wurzelordner.
+$Candidates = @(
+    (Join-Path $VerpRoot "backend\venv\Scripts\python.exe"),
+    (Join-Path $VerpRoot "backend\.venv\Scripts\python.exe"),
+    (Join-Path $VerpRoot "venv\Scripts\python.exe"),
+    (Join-Path $VerpRoot ".venv\Scripts\python.exe")
+)
+$PythonExe = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $PythonExe) {
+    # Letzte Chance: python aus dem PATH. Beim Task-Start ist der PATH des
+    # Benutzerkontos zwar begrenzt, aber das ist besser als ein Abbruch.
+    $OnPath = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($OnPath) {
+        $PythonExe = $OnPath.Source
+        Write-Log "WARNUNG: Kein venv unter $VerpRoot gefunden, verwende python aus PATH: $PythonExe"
+    }
 }
-if (-not (Test-Path $PythonExe)) {
-    Write-Log "FEHLER: Python-Interpreter nicht gefunden ($PythonExe)"
+
+if (-not $PythonExe) {
+    Write-Log "FEHLER: Python-Interpreter nicht gefunden."
+    Write-Log "       Gesucht wurde in:"
+    foreach ($c in $Candidates) { Write-Log "         $c" }
+    Write-Log "       Das venv wird von update-verp.ps1 unter $VerpRoot\backend\venv angelegt."
+    Write-Log "       Abhilfe: cd $BackendDir; python -m venv venv; .\venv\Scripts\Activate; pip install -r requirements.txt"
     exit 1
+}
+elseif ($PythonExe -notlike "*\venv\Scripts\python.exe" -and $PythonExe -notlike "*\.venv\Scripts\python.exe") {
+    Write-Log "WARNUNG: Interpretersehr ungewoehnlich: $PythonExe"
 }
 
 # Parameterliste fuer den Management-Command zusammenbauen.
