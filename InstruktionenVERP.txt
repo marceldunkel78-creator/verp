@@ -518,11 +518,31 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     - LastTaskResult 0        = der Lauf war erfolgreich
 #     - NextRunTime liegt in der Zukunft = der Task wartet planmaessig
 #
+#     LastTaskResult ist die haeufigste Fehldiagnose. Der Wert AENDERT
+#     SICH WAEHREND DES LAUFS NICHT. Er bleibt solange auf
+#         267009  = 0x41301 = SCHED_S_TASK_RUNNING
+#     und springt erst beim Beenden auf 0. Man kann also nicht an einem
+#     Zwischenstand erkennen, ob der Lauf vorangeht - man muss warten,
+#     bis die Zahl wechselt.
+#
+#     LastRunTime existiert nur in Get-ScheduledTaskInfo, NICHT in
+#     Get-ScheduledTask. Deshalb bleibt diese Spalte bei
+#         Get-ScheduledTask | Select-Object State, LastRunTime
+#     immer leer. Das ist kein Fehler, sondern die falsche Abfrage.
+#     Vor dem ERSTEN Start ist LastRunTime ebenfalls noch leer.
+#
 #     ECHTER Haenger - nur dann ist wirklich etwas falsch. Ein echter
 #     Haenger hat laufende python-Prozesse:
 #       Get-Process python -ErrorAction SilentlyContinue
 #     Laufen welche, obwohl der Report schon geschrieben ist, dann haengt
 #     tatsaechlich etwas. Laeuft keiner, war die Anzeige nur veraltet.
+#
+#     Zum 1-Stunden-Abbruch (ExecutionTimeLimit): der Scheduler bricht
+#     den Task nach Ablauf der Zeit ab, auch wenn das Skript noch
+#     laeuft. Bei 74 Dateien / 20.000 Zeilen dauert ein Lauf ca. 90
+#     Sekunden, das Limit ist also unkritisch. Sollte es je anschlagen,
+#     fehlt im Log die Abschlussmeldung "Abgleich erfolgreich
+#     abgeschlossen" und der Report bleibt unvollstaendig.
 #
 # Schritt 8 - Wenn der Task nicht endet oder die Report-CSV fehlt:
 #     cd C:\VERP\scripts
