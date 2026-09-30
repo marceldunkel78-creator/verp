@@ -296,6 +296,9 @@ const DemoSystemEdit = () => {
       end_date: form.end_date,
       notes: form.notes,
       is_cancelled: form.is_cancelled,
+      // Reservierer frei wählbar; null = kein Benutzer hinterlegt.
+      // Backend fällt auf den angemeldeten User zurück, wenn nichts kommt.
+      reserved_by: form.reserved_by || null,
     };
     try {
       if (bookingId) {
@@ -670,6 +673,7 @@ const DemoSystemEdit = () => {
               onSaveBooking={handleSaveBooking}
               onDeleteBooking={handleDeleteBooking}
               readOnly={!canWrite}
+              currentUser={user}
             />
           )}
 

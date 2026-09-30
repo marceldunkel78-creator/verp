@@ -105,7 +105,9 @@ const ServiceTicketEdit = () => {
   const fetchData = useCallback(async () => {
     try {
       const [usersRes, rmaRes] = await Promise.all([
-        api.get('/users/'),
+        // /users/lookup/: nur aktive User und keine Berechtigungs-Flags.
+        // Watcher sind auth.User.
+        api.get('/users/lookup/'),
         api.get('/service/rma/?page_size=1000')
       ]);
       

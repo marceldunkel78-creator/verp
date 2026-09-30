@@ -22,31 +22,36 @@ from .pdf_generator import generate_return_note_pdf
 from users.models import Notification, Reminder
 
 
-def create_loan_notifications(loan, is_new=False):
-    """Erstellt Benachrichtigungen für zuständigen Mitarbeiter und Beobachter"""
+def create_loan_notifications(loan, is_new=False, actor=None):
+    """
+    Erstellt Benachrichtigungen fuer zustaendigen Mitarbeiter und Beobachter.
+
+    actor: der ausfuehrende User. Er bekommt keine Benachrichtigung ueber
+    seine eigene Aenderung - sonst entstehen bei jeder Bearbeitung
+    Benachrichtigungen, die niemand lesen kann.
+    """
     action_text = "erstellt" if is_new else "aktualisiert"
     # use existing notification type values defined in users.models.Notification.NOTIFICATION_TYPES
     notification_type = 'loan'
-    
+
     # Sammle alle zu benachrichtigenden User
     users_to_notify = set()
-    
-    # Zuständiger Mitarbeiter
+
+    # Zustaendiger Mitarbeiter (weiterhin ueber Employee verknuepft)
     if loan.responsible_employee:
-        # User ist über das reverse-relationship `users` auf `Employee` erreichbar
+        # User ist ueber das reverse-relationship `users` auf `Employee` erreichbar
         rep_user = loan.responsible_employee.users.filter(is_active=True).first()
         if rep_user:
             users_to_notify.add(rep_user)
     
-    # Beobachter
+    # Beobachter (direkte User, kein Employee-Aufloesen mehr noetig)
     for observer in loan.observers.all():
-        # Jeder Beobachter kann 0..n User haben; benachrichtige alle aktiven
-        for u in observer.users.filter(is_active=True):
-            users_to_notify.add(u)
-    
+        if observer.is_active and observer != actor:
+            users_to_notify.add(observer)
+
     # Erstelle Benachrichtigungen
     for user in users_to_notify:
-            Notification.objects.create(
+        Notification.objects.create(
             user=user,
             title=f"Leihung {loan.loan_number} {action_text}",
             message=f"Leihung {loan.loan_number} von {loan.supplier.company_name if loan.supplier else 'Unbekannt'} wurde {action_text}.",
@@ -147,13 +152,13 @@ class LoanViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         loan = serializer.save(created_by=self.request.user, updated_by=self.request.user)
         # Benachrichtigungen und Erinnerungen erstellen
-        create_loan_notifications(loan, is_new=True)
+        create_loan_notifications(loan, is_new=True, actor=self.request.user)
         create_loan_reminder(loan)
-    
+
     def perform_update(self, serializer):
         loan = serializer.save(updated_by=self.request.user)
         # Benachrichtigungen und Erinnerungen aktualisieren
-        create_loan_notifications(loan, is_new=False)
+        create_loan_notifications(loan, is_new=False, actor=self.request.user)
         create_loan_reminder(loan)
     
     @action(detail=True, methods=['get'])

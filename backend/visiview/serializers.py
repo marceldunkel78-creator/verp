@@ -574,6 +574,14 @@ class VisiViewTicketDetailSerializer(serializers.ModelSerializer):
 class VisiViewTicketCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Erstellen/Aktualisieren von VisiView Tickets"""
     attachments = VisiViewTicketAttachmentSerializer(many=True, read_only=True)
+    # Beobachter sind VERP-Benutzer. Ohne is_active-Filter liessen sich
+    # deaktivierte Konten in die Auswahl schreiben, die dann nie
+    # benachrichtigt werden.
+    watchers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+    )
     
     class Meta:
         model = VisiViewTicket

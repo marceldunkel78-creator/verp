@@ -314,6 +314,12 @@ class ProductionOrderInboxSerializer(serializers.ModelSerializer):
 
 class ProductionOrderSerializer(serializers.ModelSerializer):
     """Serializer für Fertigungsaufträge"""
+    # Beobachter sind VERP-Benutzer; deaktivierte Konten werden ausgeschlossen.
+    observers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+    )
     vs_hardware_name = serializers.CharField(source='vs_hardware.name', read_only=True)
     vs_hardware_part_number = serializers.CharField(source='vs_hardware.part_number', read_only=True)
     vs_hardware_description = serializers.CharField(source='vs_hardware.description', read_only=True)
@@ -374,6 +380,11 @@ class ProductionOrderSerializer(serializers.ModelSerializer):
 
 class ProductionOrderDetailSerializer(serializers.ModelSerializer):
     """Detaillierter Serializer für Fertigungsauftrag mit Material-Informationen"""
+    observers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+    )
     vs_hardware_name = serializers.CharField(source='vs_hardware.name', read_only=True)
     vs_hardware_part_number = serializers.CharField(source='vs_hardware.part_number', read_only=True)
     vs_hardware_description = serializers.CharField(source='vs_hardware.description', read_only=True)

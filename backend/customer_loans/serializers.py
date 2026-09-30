@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import CustomerLoan, CustomerLoanItem
+from users.models import Employee
 from users.serializers import EmployeeSerializer
 
 
@@ -128,6 +129,12 @@ class CustomerLoanDetailSerializer(serializers.ModelSerializer):
 class CustomerLoanCreateUpdateSerializer(serializers.ModelSerializer):
     items = CustomerLoanItemNestedSerializer(many=True, required=False)
     return_deadline = serializers.DateField(required=False, allow_null=True)
+    # Zuständiger Mitarbeiter: nur Mitarbeiter mit aktivem VERP-Login sind wählbar.
+    # Legacy-Mitarbeiter ohne Zugang würden nie benachrichtigt und sind hier nutzlos.
+    responsible_employee = serializers.PrimaryKeyRelatedField(
+        queryset=Employee.objects.filter(users__is_active=True).distinct(),
+        required=False, allow_null=True
+    )
 
     class Meta:
         model = CustomerLoan

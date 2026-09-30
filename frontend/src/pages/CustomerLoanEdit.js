@@ -88,7 +88,9 @@ function CustomerLoanEdit() {
     const loadEmployees = async () => {
         try {
             const [employeeResponse, contactResponse, dealerEmployeeResponse] = await Promise.all([
-                api.get('/users/employees/?is_active=true&page_size=500'),
+                // lookup statt /employees/: braucht keine HR-Leseberechtigung.
+                // users_only=true: nur Mitarbeiter mit aktivem VERP-Login.
+                api.get('/users/employees/lookup/?users_only=true'),
                 api.get('/suppliers/contacts/?is_active=true&page_size=500'),
                 api.get('/dealers/dealer-employees/?is_active=true&page_size=500'),
             ]);
@@ -582,7 +584,10 @@ function CustomerLoanEdit() {
                         >
                             <option value="">-- Nicht zugewiesen --</option>
                             {employees.map(emp => (
-                                <option key={emp.id} value={emp.id}>{emp.full_name || `${emp.first_name} ${emp.last_name}`}</option>
+                                <option key={emp.id} value={emp.id}>
+                                    {emp.first_name} {emp.last_name}
+                                    {emp.job_title ? ` — ${emp.job_title}` : ''}
+                                </option>
                             ))}
                         </select>
                     </div>

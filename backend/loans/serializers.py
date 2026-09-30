@@ -1,10 +1,34 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 from .models import (
     Loan, LoanItem, LoanReceipt, LoanItemReceipt, 
     LoanItemPhoto, LoanReturn, LoanReturnItem
 )
 from suppliers.models import Supplier
+from users.models import Employee
 from users.serializers import EmployeeSerializer
+
+User = get_user_model()
+
+
+class ObserverSerializer(serializers.ModelSerializer):
+    """
+    Schlanker Serializer fuer Beobachter. UserSerializer waere hier
+    unbrauchbar, weil er alle Berechtigungs-Flags mitschickt.
+    """
+    name = serializers.SerializerMethodField()
+    employee_number = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'first_name', 'last_name', 'name', 'employee_number']
+        read_only_fields = fields
+
+    def get_name(self, obj):
+        return obj.get_full_name() or obj.username
+
+    def get_employee_number(self, obj):
+        return obj.employee.employee_id if obj.employee else None
 
 
 class LoanItemPhotoSerializer(serializers.ModelSerializer):
@@ -140,7 +164,7 @@ class LoanListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
     responsible_employee_display = serializers.CharField(
-        source='responsible_employee.full_name', read_only=True, allow_null=True
+        source='responsible_employee.get_full_name', read_only=True, allow_null=True
     )
     
     class Meta:
@@ -165,7 +189,7 @@ class LoanDetailSerializer(serializers.ModelSerializer):
     created_by_display = serializers.CharField(source='created_by.get_full_name', read_only=True)
     updated_by_display = serializers.CharField(source='updated_by.get_full_name', read_only=True)
     responsible_employee_detail = EmployeeSerializer(source='responsible_employee', read_only=True)
-    observers_detail = EmployeeSerializer(source='observers', many=True, read_only=True)
+    observers_detail = ObserverSerializer(source='observers', many=True, read_only=True)
     
     class Meta:
         model = Loan
@@ -202,16 +226,21 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
     items = LoanItemNestedSerializer(many=True, required=False)
     # make return_deadline optional at serializer level
     return_deadline = serializers.DateField(required=False, allow_null=True)
-    # observers als Liste von IDs
-    from django.db.models import Q
-    from users.models import Employee  # lokal import, App ist geladen
-    # Employee considered active if HR status is 'aktiv' or linked User is active
+    # Beobachter als Liste von User-IDs. Bewusst User statt Employee:
+    # Beobachter werden direkt per Notification adressiert, ein Mitarbeiter
+    # ohne Login kann keine Benachrichtigung empfangen.
     observers = serializers.PrimaryKeyRelatedField(
         many=True,
-        queryset=Employee.objects.filter(Q(employment_status='aktiv') | Q(users__is_active=True)).distinct(),
+        queryset=User.objects.filter(is_active=True),
         required=False
     )
-    
+    # Zuständiger Mitarbeiter: nur Mitarbeiter mit aktivem VERP-Login sind wählbar.
+    # Ohne diese Einschränkung könnte ein Legacy-Mitarbeiter ohne Zugang
+    # eingetragen werden - er kann weder benachrichtigt noch buchen.
+    responsible_employee = serializers.PrimaryKeyRelatedField(
+        queryset=Employee.objects.filter(users__is_active=True).distinct(),
+        required=False, allow_null=True
+    )
     class Meta:
         model = Loan
         fields = [

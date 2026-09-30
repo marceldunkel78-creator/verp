@@ -708,7 +708,7 @@ class SalesTicketCreateUpdateSerializer(serializers.ModelSerializer):
     ticket_number = serializers.CharField(read_only=True)
     watchers = serializers.PrimaryKeyRelatedField(
         many=True,
-        queryset=User.objects.all(),
+        queryset=User.objects.filter(is_active=True),
         required=False
     )
     

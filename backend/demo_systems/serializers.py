@@ -1,3 +1,5 @@
+from django.contrib.auth import get_user_model
+
 from rest_framework import serializers
 from .models import (
     DemoSystem,
@@ -8,6 +10,8 @@ from .models import (
     DemoBooking,
     DemoConfigTemplate,
 )
+
+User = get_user_model()
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +130,14 @@ class DemoBookingSerializer(serializers.ModelSerializer):
     reserved_by_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
 
+    # Wer den Termin reserviert hat. Nicht zwingend der angemeldete User -
+    # häufig reserviert eine Person im Auftrag einer anderen. Wird beim Anlegen
+    # automatisch vorbelegt (siehe DemoBookingViewSet.perform_create).
+    reserved_by = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.filter(is_active=True),
+        required=False, allow_null=True,
+    )
+
     class Meta:
         model = DemoBooking
         fields = [
@@ -141,10 +153,14 @@ class DemoBookingSerializer(serializers.ModelSerializer):
         return str(obj.customer) if obj.customer else None
 
     def get_reserved_by_name(self, obj):
-        return str(obj.reserved_by) if obj.reserved_by else None
+        if not obj.reserved_by:
+            return None
+        return obj.reserved_by.get_full_name() or obj.reserved_by.username
 
     def get_created_by_name(self, obj):
-        return str(obj.created_by) if obj.created_by else None
+        if not obj.created_by:
+            return None
+        return obj.created_by.get_full_name() or obj.created_by.username
 
 
 # ---------------------------------------------------------------------------

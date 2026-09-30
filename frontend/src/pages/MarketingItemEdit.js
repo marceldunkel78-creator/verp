@@ -83,7 +83,9 @@ const MarketingItemEdit = () => {
 
   const fetchEmployees = async () => {
     try {
-      const response = await api.get('/users/employees/?is_active=true&page_size=100');
+      // lookup statt /employees/: braucht keine HR-Leseberechtigung.
+      // users_only=true: nur Mitarbeiter mit aktivem VERP-Login.
+      const response = await api.get('/users/employees/lookup/?users_only=true');
       setEmployees(response.data.results || response.data || []);
     } catch (error) {
       console.error('Fehler beim Laden der Mitarbeiter:', error);

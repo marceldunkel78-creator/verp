@@ -92,7 +92,10 @@ const ProjectEdit = () => {
 
   const fetchEmployees = useCallback(async () => {
     try {
-      const response = await api.get('/users/employees/');
+      // lookup statt /employees/: braucht keine HR-Leseberechtigung.
+      // users_only=true: nur Mitarbeiter mit aktivem VERP-Login, damit
+      // keine unnutzbaren Legacy-Einträge im Dropdown landen.
+      const response = await api.get('/users/employees/lookup/?users_only=true');
       const data = response.data.results || response.data || [];
       setEmployees(Array.isArray(data) ? data : []);
     } catch (error) {

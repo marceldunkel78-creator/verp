@@ -1,9 +1,12 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
                      ServiceTicketAttachment, TroubleshootingAttachment, ServiceTicketTimeEntry,
                      RMACaseTimeEntry, RMAItem, RMAItemPhoto, RMAReceipt, RMAReturn, RMAReturnItem,
                      RMAAttachment, RMACostLineItem, RMAManufacturerReturn, RMAManufacturerReturnItem)
+
+User = get_user_model()
 
 
 class VSServicePriceSerializer(serializers.ModelSerializer):
@@ -284,7 +287,15 @@ class ServiceTicketDetailSerializer(serializers.ModelSerializer):
 
 class ServiceTicketCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer für Erstellen/Aktualisieren von Service Tickets"""
-    
+    # Beobachter sind VERP-Benutzer. Ohne is_active-Filter liessen sich
+    # deaktivierte Konten in die Auswahl schreiben, die dann nie
+    # benachrichtigt werden.
+    watchers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+    )
+
     class Meta:
         model = ServiceTicket
         fields = [

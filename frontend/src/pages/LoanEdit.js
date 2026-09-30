@@ -14,6 +14,7 @@ function LoanEdit() {
     const [saving, setSaving] = useState(false);
     const [suppliers, setSuppliers] = useState([]);
     const [employees, setEmployees] = useState([]);
+    const [observers, setObservers] = useState([]);
     
     const [loan, setLoan] = useState({
         supplier: '',
@@ -57,6 +58,7 @@ function LoanEdit() {
     useEffect(() => {
         loadSuppliers();
         loadEmployees();
+        loadObservers();
         // Only load loan when a valid id is present and it's not the 'new' route
         if (id && id !== 'new') {
             loadLoan();
@@ -76,11 +78,28 @@ function LoanEdit() {
 
     const loadEmployees = async () => {
         try {
-            const response = await api.get('/users/employees/?is_active=true&page_size=500');
+            // lookup statt /employees/: braucht keine HR-Leseberechtigung.
+            // users_only=true: nur Mitarbeiter mit aktivem VERP-Login, damit
+            // keine unnutzbaren Legacy-Einträge im Dropdown landen.
+            // Fuer den zustaendigen Mitarbeiter (FK auf Employee).
+            const response = await api.get('/users/employees/lookup/?users_only=true');
             const data = response.data && (response.data.results || response.data);
             setEmployees(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error loading employees:', error);
+        }
+    };
+
+    const loadObservers = async () => {
+        try {
+            // Beobachter sind inzwischen VERP-Benutzer (kein Employee).
+            // /users/lookup/ liefert nur id, Name, username, employee_id -
+            // ohne die riesige Liste der Berechtigungs-Flags.
+            const response = await api.get('/users/lookup/');
+            const data = response.data && (response.data.results || response.data);
+            setObservers(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Error loading observers:', error);
         }
     };
 
@@ -549,6 +568,7 @@ function LoanEdit() {
                                         {employees.map(emp => (
                                             <option key={emp.id} value={emp.id}>
                                                 {emp.first_name} {emp.last_name}
+                                                {emp.job_title ? ` — ${emp.job_title}` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -726,10 +746,11 @@ function LoanEdit() {
                                     Beobachter (werden bei Änderungen benachrichtigt)
                                 </label>
                                 <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
-                                    {employees.map(emp => {
-                                        const isSelected = Array.isArray(loan.observers) && loan.observers.includes(emp.id);
+                                    {observers.map(usr => {
+                                        const isSelected = Array.isArray(loan.observers) && loan.observers.includes(usr.id);
+                                        const displayName = `${usr.first_name || ''} ${usr.last_name || ''}`.trim() || usr.username;
                                         return (
-                                            <label key={emp.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                            <label key={usr.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
                                                 <input
                                                     type="checkbox"
                                                     checked={isSelected}
@@ -737,20 +758,23 @@ function LoanEdit() {
                                                         setLoan(prev => {
                                                             const currentObservers = Array.isArray(prev.observers) ? prev.observers : [];
                                                             if (e.target.checked) {
-                                                                return { ...prev, observers: [...currentObservers, emp.id] };
+                                                                return { ...prev, observers: [...currentObservers, usr.id] };
                                                             } else {
-                                                                return { ...prev, observers: currentObservers.filter(id => id !== emp.id) };
+                                                                return { ...prev, observers: currentObservers.filter(id => id !== usr.id) };
                                                             }
                                                         });
                                                     }}
                                                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                                 />
-                                                <span className="text-sm text-gray-700">{emp.first_name} {emp.last_name}</span>
+                                                <span className="text-sm text-gray-700">
+                                                    {displayName}
+                                                    {usr.employee_id && <span className="text-gray-400 text-xs ml-1">({usr.employee_id})</span>}
+                                                </span>
                                             </label>
                                         );
                                     })}
-                                    {employees.length === 0 && (
-                                        <p className="text-sm text-gray-500 italic">Keine Mitarbeiter verfügbar</p>
+                                    {observers.length === 0 && (
+                                        <p className="text-sm text-gray-500 italic">Keine Benutzer verfügbar</p>
                                     )}
                                 </div>
                                 {Array.isArray(loan.observers) && loan.observers.length > 0 && (

@@ -92,7 +92,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 Q(first_name__icontains=search) | Q(last_name__icontains=search)
             )
         data = list(queryset.values(
-            'id', 'first_name', 'last_name', 'department', 'employee__employee_id'
+            'id', 'username', 'first_name', 'last_name', 'department', 'employee__employee_id'
         ).order_by('last_name', 'first_name'))
         for item in data:
             item['employee_id'] = item.pop('employee__employee_id')
@@ -146,8 +146,24 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         Lightweight employee lookup - keine HR-Berechtigung nötig.
         Gibt nur id, first_name, last_name, department, department_display, job_title zurück.
         Wird z.B. für Mitarbeiter-Dropdowns in Systemen verwendet.
+
+        Optionale Parameter:
+          ?users_only=true  -> nur Mitarbeiter, die mit einem AKTIVEN
+                              VERP-Benutzer verknüpft sind. Für Dropdowns
+                              (Leihungen, Verleihungen), bei denen nur
+                              registrierte VERP-User sinnvoll sind.
+          ?department=...   -> Einschränkung auf Abteilungen
+          ?search=...       -> Volltextsuche
         """
-        queryset = Employee.objects.filter(employment_status='aktiv')
+        users_only = str(request.query_params.get('users_only', '')).lower() in ('1', 'true', 'yes')
+        if users_only:
+            # Mitarbeiter mit verknüpftem, aktivem VERP-User.
+            # Der Beschäftigungsstatus wird bewusst NICHT gefiltert:
+            # Legacy-Mitarbeiter ohne HR-Pflege sind oft nicht 'aktiv',
+            # sollen aber wählbar sein, solange sie einen Login haben.
+            queryset = Employee.objects.filter(users__is_active=True)
+        else:
+            queryset = Employee.objects.filter(employment_status='aktiv')
         department = request.query_params.get('department')
         if department:
             departments = [d.strip() for d in department.split(',')]
@@ -158,7 +174,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(first_name__icontains=search) | Q(last_name__icontains=search)
             )
-        data = list(queryset.values(
+        data = list(queryset.distinct().values(
             'id', 'first_name', 'last_name', 'department', 'job_title'
         ).order_by('last_name', 'first_name'))
         # department_display hinzufügen

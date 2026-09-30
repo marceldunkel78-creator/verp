@@ -65,15 +65,25 @@ const SalesTicketEdit = () => {
 
   const loadUsers = async () => {
     try {
-      const response = await api.get('/users/employees/');
+      // /users/lookup/ statt /users/employees/:
+      // Watcher sind auth.User, kein Employee. Der alte Weg lud die
+      // HR-geschuetzte Employee-Liste (403 ohne can_read_hr) und
+      // remappte die IDs clientseitig - ohne User verlinkte Employees
+      // fielen dabei stillschweigend weg.
+      // lookup liefert aktive User direkt mit ihrer User-ID.
+      const response = await api.get('/users/lookup/');
       const data = response.data.results || response.data || [];
-      // Map Employees to actual User IDs when available (EmployeeSerializer provides `user_id`)
-      const mapped = (data || [])
-        .filter((e) => e && (e.user_id || e.user_id === 0 || e.user_id === '0'))
-        .map((e) => ({ id: e.user_id, first_name: e.first_name, last_name: e.last_name }));
-      setUsers(mapped);
+      setUsers(
+        (data || [])
+          .filter((u) => u && u.id != null)
+          .map((u) => ({
+            id: u.id,
+            first_name: u.first_name || '',
+            last_name: u.last_name || '',
+          }))
+      );
     } catch (error) {
-      console.error('Fehler beim Laden der Mitarbeiter:', error);
+      console.error('Fehler beim Laden der Beobachter:', error);
     }
   };
 

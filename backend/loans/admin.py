@@ -24,11 +24,12 @@ class LoanReturnInline(admin.TabularInline):
 
 @admin.register(Loan)
 class LoanAdmin(admin.ModelAdmin):
-    list_display = ['loan_number', 'supplier', 'status', 'request_date', 'return_deadline', 'created_at']
+    list_display = ['loan_number', 'supplier', 'status', 'request_date', 'return_deadline', 'responsible_employee', 'created_at']
     list_filter = ['status', 'supplier', 'created_at']
     search_fields = ['loan_number', 'supplier__company_name', 'supplier_reference']
     readonly_fields = ['loan_number', 'created_at', 'updated_at', 'created_by', 'updated_by']
     inlines = [LoanItemInline, LoanReceiptInline, LoanReturnInline]
+    filter_horizontal = ['observers']
     
     fieldsets = (
         ('Allgemein', {
@@ -39,6 +40,9 @@ class LoanAdmin(admin.ModelAdmin):
                 'return_address_name', 'return_address_street', 'return_address_house_number',
                 'return_address_postal_code', 'return_address_city', 'return_address_country'
             )
+        }),
+        ('Zuständigkeit', {
+            'fields': ('responsible_employee', 'observers')
         }),
         ('Bemerkungen', {
             'fields': ('notes',)

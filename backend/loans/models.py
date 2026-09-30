@@ -132,9 +132,12 @@ class Loan(models.Model):
         verbose_name='Zuständiger Mitarbeiter'
     )
     
-    # Beobachter (mehrere Mitarbeiter)
+    # Beobachter (mehrere VERP-Benutzer)
+    # Bewusst FK auf User statt Employee: Beobachter werden per Notification
+    # direkt adressiert. Über Employee müsste man 0..n User auflösen, und
+    # Legacy-Mitarbeiter ohne Login wären nicht benachrichtigbar.
     observers = models.ManyToManyField(
-        'users.Employee',
+        User,
         blank=True,
         related_name='observed_loans',
         verbose_name='Beobachter'

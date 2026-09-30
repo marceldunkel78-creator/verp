@@ -600,7 +600,16 @@ class DemoBookingViewSet(viewsets.ModelViewSet):
         return DemoBookingSerializer
 
     def perform_create(self, serializer):
-        instance = serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        # Ohne explizite Auswahl gilt der angemeldete User als Reservierer.
+        # Das entspricht dem bisherigen Verhalten, ist aber überschreibbar -
+        # nicht immer ist der angemeldete User derjenige, der den Termin
+        # belegt/reserviert hat.
+        extra = {}
+        if not serializer.validated_data.get('reserved_by'):
+            extra['reserved_by'] = self.request.user
+        instance = serializer.save(
+            created_by=self.request.user, updated_by=self.request.user, **extra
+        )
         log_change(
             demo_system=instance.demo_system, entity_type='booking',
             entity_id=instance.id, entity_label=_entity_label(instance, 'booking'),

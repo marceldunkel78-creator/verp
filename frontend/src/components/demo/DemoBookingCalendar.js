@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import CustomerSearch from '../CustomerSearch';
+import api from '../../services/api';
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -40,7 +41,7 @@ const overlapsWith = (booking, all) =>
 // Buchungs-Modal
 // ---------------------------------------------------------------------------
 
-const BookingModal = ({ booking, onSave, onClose, onDelete }) => {
+const BookingModal = ({ booking, onSave, onClose, onDelete, currentUser }) => {
   const [form, setForm] = useState(() => ({
     title: '',
     customer: null,
@@ -49,7 +50,41 @@ const BookingModal = ({ booking, onSave, onClose, onDelete }) => {
     end_date: toKey(new Date()),
     notes: '',
     is_cancelled: false,
+    reserved_by: currentUser?.id || null,
   }));
+  const [users, setUsers] = useState([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+
+  // Aktive VERP-Benutzer laden (lookup braucht keine Sonderberechtigung).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api.get('/users/lookup/');
+        const data = res.data && (res.data.results || res.data);
+        if (!cancelled) setUsers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Fehler beim Laden der Benutzer:', err);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const selectedUser = users.find((u) => u.id === form.reserved_by);
+
+  const userResults = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    const name = (u) => `${u.first_name || ''} ${u.last_name || ''}`.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        name(u).includes(q) ||
+        (u.username || '').toLowerCase().includes(q) ||
+        (u.employee_id || '').toLowerCase().includes(q)
+    );
+  }, [users, userSearch]);
 
   React.useEffect(() => {
     if (booking) {
@@ -61,6 +96,7 @@ const BookingModal = ({ booking, onSave, onClose, onDelete }) => {
         end_date: booking.end_date || booking.start_date || toKey(new Date()),
         notes: booking.notes || '',
         is_cancelled: booking.is_cancelled || false,
+        reserved_by: booking.reserved_by || null,
       });
     }
   }, [booking]);
@@ -126,6 +162,56 @@ const BookingModal = ({ booking, onSave, onClose, onDelete }) => {
                   setForm({ ...form, customer: id, customer_display: display });
                 }}
               />
+            </div>
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reserviert für / von
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowUserDropdown((v) => !v)}
+                className="w-full px-3 py-2 border rounded-lg text-sm text-left bg-white"
+              >
+                {selectedUser
+                  ? `${selectedUser.first_name || ''} ${selectedUser.last_name || ''}`.trim() || selectedUser.username
+                  : (currentUser
+                      ? `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || currentUser.username
+                      : 'Kein Benutzer')}
+              </button>
+              {showUserDropdown && (
+                <div className="absolute z-10 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                  <div className="p-2 border-b">
+                    <input
+                      type="text"
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Name suchen..."
+                      className="w-full px-2 py-1 border rounded text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setForm({ ...form, reserved_by: null }); setShowUserDropdown(false); }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-500 hover:bg-gray-50"
+                  >
+                    -- Kein Benutzer --
+                  </button>
+                  {userResults.map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => { setForm({ ...form, reserved_by: u.id }); setShowUserDropdown(false); }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${form.reserved_by === u.id ? 'bg-blue-50 font-medium' : ''}`}
+                    >
+                      {`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username}
+                      {u.employee_id ? ` (${u.employee_id})` : ''}
+                    </button>
+                  ))}
+                  {userResults.length === 0 && (
+                    <p className="px-3 py-2 text-sm text-gray-500 italic">Keine Treffer</p>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Notizen</label>
@@ -193,7 +279,7 @@ const BookingModal = ({ booking, onSave, onClose, onDelete }) => {
 // Belegungskalender (Monatsansicht + Listenansicht)
 // ---------------------------------------------------------------------------
 
-const DemoBookingCalendar = ({ bookings, onSaveBooking, onDeleteBooking, readOnly = false }) => {
+const DemoBookingCalendar = ({ bookings, onSaveBooking, onDeleteBooking, readOnly = false, currentUser = null }) => {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -410,7 +496,7 @@ const DemoBookingCalendar = ({ bookings, onSaveBooking, onDeleteBooking, readOnl
                   <th className="py-2 pr-2">Zeitraum</th>
                   <th className="py-2 pr-2">Zweck/Titel</th>
                   <th className="py-2 pr-2">Kunde</th>
-                  <th className="py-2 pr-2">Angelegt von</th>
+                  <th className="py-2 pr-2">Reserviert von</th>
                   <th className="py-2 pr-2">Status</th>
                   {!readOnly && <th className="py-2" />}
                 </tr>
@@ -427,7 +513,7 @@ const DemoBookingCalendar = ({ bookings, onSaveBooking, onDeleteBooking, readOnl
                     <td className="py-2 pr-2">{b.title}</td>
                     <td className="py-2 pr-2">{b.customer_display || '–'}</td>
                     <td className="py-2 pr-2 text-xs text-gray-500">
-                      {b.created_by_name || b.reserved_by_name || '–'}
+                      {b.reserved_by_name || b.created_by_name || '–'}
                     </td>
                     <td className="py-2 pr-2">
                       {b.is_cancelled ? (
@@ -460,6 +546,7 @@ const DemoBookingCalendar = ({ bookings, onSaveBooking, onDeleteBooking, readOnl
       {editing && (
         <BookingModal
           booking={editing}
+          currentUser={currentUser}
           onSave={handleSave}
           onClose={() => setEditing(null)}
           onDelete={editing.id ? handleDelete : null}

@@ -132,7 +132,9 @@ const VisiViewTicketEdit = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const usersRes = await api.get('/users/');
+      // /users/lookup/: nur aktive User und keine Berechtigungs-Flags.
+      // Watcher sind auth.User.
+      const usersRes = await api.get('/users/lookup/');
       
       const normalizeArray = (respData) => {
         const data = respData && (respData.results || respData);
