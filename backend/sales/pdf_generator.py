@@ -1,12 +1,15 @@
 """
 PDF Generator für Angebote
-Professionelles DIN A4 Layout mit:
-- Header auf jeder Seite
-- Einzeilige Firmenadresse über Kundenadresse
-- Anrede mit Titel und Nachname
-- Positionstabelle mit Beschreibung
-- 4-Spalten Footer mit Firmeninfos auf jeder Seite
+
+Layout folgt 1:1 der Vorlage Datenvorlagen/Q-373Du-0826.pdf:
+- Briefkopf mit Logo und Unterzeile, Trennlinie darunter
+- Empfängerblock links, Dokumentbox rechts (unten ausgerichtet)
+- Datum darunter rechts
+- Positionstabelle in vier-spaltiger Aufteilung, schwarz/weiß
+- Fußzeile mit vier Spalten (Firma, Kontakt, Register, Bank) auf jeder Seite
 - Grußformel mit Unterschrift
+
+Briefkopf, Empfängerblock und Fußzeile kommen aus core.pdf_base.
 """
 from io import BytesIO
 from reportlab.lib.pagesizes import A4
@@ -20,8 +23,44 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
+from core.pdf_base import (
+    FONT_BOLD,
+    FONT_REGULAR,
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    build_totals_table,
+    get_company_styles,
+)
 from django.conf import settings
 import os
+
+
+def _split_description(text, max_chars=260):
+    """
+    Teilt eine Beschreibung an Wortgrenzen in Blöcke von hoechstens
+    max_chars Zeichen.
+
+    Noetig, weil eine einzelne Tabellenzelle nicht hoeher als der Rahmen
+    werden darf - sonst schlaegt der Seitenumbruch fehl. Die Blöcke
+    werden hintereinander in der Bezeichnungsspalte ausgegeben, sehen
+    also wie ein fortlaufender Text aus.
+    """
+    if not text:
+        return []
+    words = text.split()
+    chunks = []
+    current = ''
+    for word in words:
+        candidate = f'{current} {word}'.strip()
+        if len(candidate) > max_chars and current:
+            chunks.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _product_display_name(product, lang='DE'):
@@ -99,107 +138,24 @@ def _wrap_text(text, max_length=35):
     return lines
 
 
-class QuotationDocTemplate(BaseDocTemplate):
+class QuotationDocTemplate(VerpDocTemplate):
     """
-    Custom DocTemplate für Angebote mit Header und Footer auf jeder Seite
+    Angebot im Visitron-Standard-Layout.
+
+    Briefkopf, Empfängerblock und Fußzeile kommen aus core.pdf_base;
+    hier wird nur die Kopfzeile auf Folgeseiten festgelegt.
     """
     def __init__(self, filename, company=None, quotation=None, **kwargs):
-        self.company = company
         self.quotation = quotation
-        BaseDocTemplate.__init__(self, filename, **kwargs)
-        
-        # Frame für den Hauptinhalt
-        frame = Frame(
-            self.leftMargin, 
-            self.bottomMargin, 
-            self.width, 
-            self.height,
-            id='normal'
-        )
-        
-        # PageTemplate mit unseren Callbacks
-        template = PageTemplate(
-            id='quotation',
-            frames=frame,
-            onPage=self._add_header_footer
-        )
-        self.addPageTemplates([template])
-    
-    def _add_header_footer(self, canvas, doc):
-        """Fügt Header und Footer zu jeder Seite hinzu"""
-        canvas.saveState()
-        
-        width, height = A4
-        company = self.company
-        quotation = self.quotation
-        
-        # === HEADER ===
-        page_num = canvas.getPageNumber()
-        
-        # Logo (nur auf Seite 1, rechts oben)
-        if page_num == 1 and company and company.document_header:
+        continuation = ''
+        if quotation is not None:
             try:
-                logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
-                if os.path.exists(logo_path):
-                    # Logo rechts oben, kleinere Größe: 5cm breit, 1.5cm hoch
-                    logo_x = width - 7*cm  # 2cm Rand rechts
-                    logo_y = height - 2.5*cm
-                    # Use ImageReader and mask='auto' to preserve PNG transparency
-                    try:
-                        img = ImageReader(logo_path)
-                        canvas.drawImage(img, logo_x, logo_y, width=5*cm, height=1.5*cm, preserveAspectRatio=True, anchor='nw', mask='auto')
-                    except Exception:
-                        # Fallback to direct path if ImageReader fails
-                        canvas.drawImage(logo_path, logo_x, logo_y, width=5*cm, height=1.5*cm, preserveAspectRatio=True, anchor='nw')
-            except Exception as e:
-                print(f"Error loading header logo: {e}")
-        
-        # Seitenzahl und Angebotsnummer (ab Seite 2)
-        if page_num > 1:
-            canvas.setFont('Helvetica', 8)
-            canvas.setFillColor(colors.grey)
-            header_text = f"Seite {page_num}, Angebot {quotation.quotation_number} vom {quotation.date.strftime('%d.%m.%Y')}"
-            canvas.drawString(2*cm, height - 3.2*cm, header_text)
-            # Unterstrich
-            canvas.setStrokeColor(colors.grey)
-            canvas.line(2*cm, height - 3.4*cm, width - 2*cm, height - 3.4*cm)
-        
-        # === FOOTER ===
-        footer_y = 1.2*cm
-        
-        # Trennlinie über dem Footer
-        canvas.setStrokeColor(colors.grey)
-        canvas.line(2*cm, footer_y + 1.8*cm, width - 2*cm, footer_y + 1.8*cm)
-        
-        canvas.setFont('Helvetica', 6.5)
-        canvas.setFillColor(colors.HexColor('#333333'))
-        
-        if company:
-            # Block 1: Firmenadresse
-            col1_x = 2*cm
-            canvas.drawString(col1_x, footer_y + 1.4*cm, company.company_name or 'Visitron Systems GmbH')
-            canvas.drawString(col1_x, footer_y + 0.9*cm, f"{company.street or ''} {company.house_number or ''}")
-            canvas.drawString(col1_x, footer_y + 0.4*cm, f"D-{company.postal_code or ''} {company.city or ''}")
-            
-            # Block 2: Kontakt
-            col2_x = 6.5*cm
-            canvas.drawString(col2_x, footer_y + 1.4*cm, f"Tel. {company.phone or ''}")
-            canvas.drawString(col2_x, footer_y + 0.9*cm, company.email or '')
-            canvas.drawString(col2_x, footer_y + 0.4*cm, (company.website or '').replace('https://', '').replace('http://', ''))
-            
-            # Block 3: Handelsregister
-            col3_x = 10.5*cm
-            canvas.drawString(col3_x, footer_y + 1.4*cm, f"{company.register_court or 'Amtsgericht München'}, {company.commercial_register or ''}")
-            canvas.drawString(col3_x, footer_y + 0.9*cm, "Geschäftsführer:")
-            canvas.drawString(col3_x, footer_y + 0.4*cm, company.managing_director or '')
-            
-            # Block 4: Bank
-            col4_x = 15*cm
-            canvas.drawString(col4_x, footer_y + 1.4*cm, company.bank_name or '')
-            canvas.drawString(col4_x, footer_y + 0.9*cm, f"BIC: {company.bic or ''}")
-            canvas.drawString(col4_x, footer_y + 0.4*cm, f"IBAN: {company.iban or ''}")
-        
-        canvas.restoreState()
+                d = quotation.date.strftime('%d.%m.%Y')
+                continuation = f'Angebot {quotation.quotation_number} vom {d}'
+            except Exception:
+                continuation = ''
+        kwargs.setdefault('continuation_text', continuation)
+        super().__init__(filename, company=company, **kwargs)
 
 
 def generate_quotation_pdf(quotation):
@@ -218,14 +174,11 @@ def generate_quotation_pdf(quotation):
     
     # Erstelle Dokument mit benutzerdefinierten Seiten-Callbacks
     doc = QuotationDocTemplate(
-        buffer, 
-        pagesize=A4,
-        topMargin=3.5*cm,  # Platz für Header
-        bottomMargin=3.5*cm,  # Platz für Footer
-        leftMargin=2*cm, 
-        rightMargin=2*cm,
+        buffer,
         company=company,
-        quotation=quotation
+        quotation=quotation,
+        title=f"Angebot {quotation.quotation_number}",
+        author=company.company_name if company else 'Visitron Systems GmbH',
     )
     
     # Elemente für das PDF
@@ -233,44 +186,12 @@ def generate_quotation_pdf(quotation):
     styles = getSampleStyleSheet()
     
     # Eigene Styles
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        textColor=colors.HexColor('#ff0099'),
-        spaceAfter=10,
-        spaceBefore=10,
-    )
-    
-    heading_style = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
-        fontSize=11,
-        textColor=colors.HexColor('#b30066'),
-        spaceAfter=8,
-    )
-    
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=9,
-        leading=12,
-    )
-    
-    small_style = ParagraphStyle(
-        'CustomSmall',
-        parent=styles['Normal'],
-        fontSize=8,
-        leading=10,
-    )
-    
-    tiny_style = ParagraphStyle(
-        'CustomTiny',
-        parent=styles['Normal'],
-        fontSize=7,
-        leading=9,
-        textColor=colors.grey,
-    )
+    # Styles aus dem Vorlagen-Layout (core.pdf_base)
+    vs = get_company_styles()
+    normal_style = vs['VerpBody']
+    small_style = vs['VerpSmall']
+    tiny_style = vs['VerpTiny']
+    heading_style = vs['VerpHeading']
     
     # Sprachabhängige Labels
     lang = quotation.language
@@ -316,22 +237,6 @@ def generate_quotation_pdf(quotation):
     }
     L = labels[lang]
     
-    # === EINZEILIGE FIRMENADRESSE (über Kundenadresse) ===
-    company_line = f"{company.company_name} • {company.street} {company.house_number or ''} • {company.postal_code} {company.city}"
-    elements.append(Paragraph(company_line, tiny_style))
-    elements.append(Spacer(1, 0.1*cm))
-    
-    # Trennlinie
-    line_table = Table([['_' * 80]], colWidths=[17*cm])
-    line_table.setStyle(TableStyle([
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.grey),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (-1,-1), 0),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-    ]))
-    elements.append(line_table)
-    elements.append(Spacer(1, 0.3*cm))
-    
     # === KUNDENADRESSE ===
     recipient_lines = []
     if quotation.recipient_company:
@@ -359,33 +264,32 @@ def generate_quotation_pdf(quotation):
     if quotation.recipient_country and quotation.recipient_country != 'DE':
         recipient_lines.append(quotation.recipient_country)
     
-    recipient_text = '<br/>'.join(recipient_lines) if recipient_lines else '-'
-    elements.append(Paragraph(recipient_text, normal_style))
-    elements.append(Spacer(1, 0.8*cm))
-    
-    # === ANGEBOTS-METADATEN (rechts) + TITEL ===
-    meta_info_lines = [
-        f"<b>{L['quotation_number']}</b> {quotation.quotation_number}",
-        f"<b>{L['date']}</b> {quotation.date.strftime('%d.%m.%Y')}",
+    # === DOKUMENTBOX (rechts) wie in der Vorlage ===
+    # Das Datum steht NICHT in der Box, sondern in der Datumzeile darunter -
+    # sonst stuende es doppelt.
+    doc_box_lines = [
+        (L['quotation'], True),
+        (quotation.quotation_number, False),
     ]
-    
     if quotation.reference:
-        meta_info_lines.append(f"<b>{L['reference']}</b> {quotation.reference}")
+        doc_box_lines.append((f"{L['reference']} {quotation.reference}", False))
+    if quotation.valid_until:
+        doc_box_lines.append(
+            (f"{L['valid_until']} {quotation.valid_until.strftime('%d.%m.%Y')}", False))
     
-    meta_info_text = '<br/>'.join(meta_info_lines)
+    date_value = quotation.date.strftime('%d.%m.%Y')
+    author_suffix = ''
+    if quotation.created_by:
+        author_suffix = '/' + (quotation.created_by.username or '')
     
-    # Zwei-Spalten Layout: Titel links, Meta rechts
-    title_para = Paragraph(f"<b>{L['quotation']}</b>", title_style)
-    meta_para = Paragraph(meta_info_text, small_style)
+    elements.append(build_address_and_doc_row(
+        recipient_lines, build_document_box(doc_box_lines), company,
+        date_text=date_value + author_suffix,
+    ))
+    elements.append(Spacer(1, 0.5 * cm))
     
-    header_table = Table([[title_para, meta_para]], colWidths=[10*cm, 7*cm])
-    header_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('ALIGN', (0,0), (0,0), 'LEFT'),
-        ('ALIGN', (1,0), (1,0), 'RIGHT'),
-    ]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 0.5*cm))
+    # === TITEL ===
+    elements.append(Paragraph(f"<b>{L['quotation']}</b>", vs['VerpTitle']))
     
     # === ANREDE ===
     salutation_text = ""
@@ -502,11 +406,15 @@ def generate_quotation_pdf(quotation):
                 discount_str = f"{item.discount_percent:.1f}%" if item.discount_percent > 0 else '-'
                 subtotal_str = f"€ {item.subtotal:,.2f}"
         
-        # Zeile 1: Positionsdaten (ohne Beschreibung)
+        # Bezeichnung: Name fett, Beschreibung darunter eingerückt.
+        # In der Vorlage stehen die Details als Aufzaehlung unter der
+        # Bezeichnung in derselben Spalte.
+        name_cell = Paragraph(f"<b>{item_name}</b>", normal_style)
+        
         table_data.append([
             position_str,
             article_number[:20] if article_number else '',
-            Paragraph(item_name, small_style),
+            name_cell,
             quantity_str,
             unit_price_str,
             discount_str,
@@ -514,63 +422,65 @@ def generate_quotation_pdf(quotation):
         ])
         row_index += 1
         
-        # Zeile 2: Beschreibung (volle Breite über alle Spalten)
+        # Lange Beschreibungen auf mehrere Zeilen aufteilen.
+        # Eine einzelne Zelle darf nicht hoger als der Rahmen werden,
+        # sonst bricht der Seitenumbruch ("too large on page") ab.
         if description:
-            # Beschreibung als Paragraph mit voller Breite
-            desc_paragraph = Paragraph(description, small_style)
-            table_data.append([desc_paragraph, '', '', '', '', '', ''])
-            description_rows.append(row_index)
-            row_index += 1
+            for chunk in _split_description(description, max_chars=260):
+                table_data.append([
+                    '', '', Paragraph(chunk, small_style), '', '', '', ''
+                ])
+                description_rows.append(row_index)
+                row_index += 1
     
-    # Tabelle erstellen - 7 Spalten ohne Beschreibungsspalte
-    col_widths = [1*cm, 2.5*cm, 5*cm, 1.5*cm, 2*cm, 1.5*cm, 2.5*cm]
+    # Tabelle erstellen - 7 Spalten ohne Beschreibungsspalte.
+    # Spaltenbreiten summieren sich auf die Inhaltsbreite (17,4 cm).
+    col_widths = [1.0 * cm, 2.0 * cm, 5.5 * cm, 1.4 * cm, 2.2 * cm, 1.4 * cm, 2.5 * cm]
     items_table = Table(table_data, colWidths=col_widths, repeatRows=1)
     
-    # Basis-Style
+    # Basis-Style im Vorlagen-Look: schwarz/weiß, feine Linien,
+    # keine Akzentfarbe, keine Zebrastreifen.
     table_style = [
-        # Header
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ff0099')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,0), 'CENTER'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 8),
-        ('BOTTOMPADDING', (0,0), (-1,0), 6),
-        ('TOPPADDING', (0,0), (-1,0), 6),
+        # Kopfzeile: weiss, 9 pt, zentriert, feine Linie darunter
+        ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), FONT_REGULAR),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('LEADING', (0, 0), (-1, 0), 11),
+        ('VALIGN', (0, 0), (-1, 0), 'BOTTOM'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('TOPPADDING', (0, 0), (-1, 0), 4),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.375, colors.black),
+        ('LINEABOVE', (0, 0), (-1, 0), 0.375, colors.black),
         
         # Daten
-        ('FONTNAME', (0,1), (-1,-1), 'Helvetica'),
-        ('FONTSIZE', (0,1), (-1,-1), 7),
-        ('ALIGN', (0,1), (0,-1), 'CENTER'),
-        ('ALIGN', (3,1), (3,-1), 'RIGHT'),
-        ('ALIGN', (4,1), (4,-1), 'RIGHT'),
-        ('ALIGN', (5,1), (5,-1), 'CENTER'),
-        ('ALIGN', (6,1), (6,-1), 'RIGHT'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('FONTNAME', (0, 1), (-1, -1), FONT_REGULAR),
+        ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
+        ('ALIGN', (3, 1), (4, -1), 'RIGHT'),
+        ('ALIGN', (5, 1), (5, -1), 'CENTER'),
+        ('ALIGN', (6, 1), (6, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEADING', (0, 1), (-1, -1), 11.5),
         
-        # Grid
-        ('GRID', (0,0), (-1,0), 0.5, colors.grey),  # Header grid
+        # Nur senkrechte Spaltenlinien, wie in der Vorlage
+        ('LINEBEFORE', (0, 0), (-1, -1), 0.375, colors.black),
+        ('LINEAFTER', (-1, 0), (-1, -1), 0.375, colors.black),
         
         # Padding
-        ('LEFTPADDING', (0,0), (-1,-1), 4),
-        ('RIGHTPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,1), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,1), (-1,-1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 1), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
     ]
     
-    # Beschreibungszeilen: Zellen zusammenführen (volle Breite)
+    # Beschreibungszeilen: nur die Bezeichnungsspalte nutzen
     for desc_row in description_rows:
-        table_style.append(('SPAN', (0, desc_row), (-1, desc_row)))
-        table_style.append(('BACKGROUND', (0, desc_row), (-1, desc_row), colors.HexColor('#f0f0f0')))
-        table_style.append(('LEFTPADDING', (0, desc_row), (-1, desc_row), 12))
-        table_style.append(('TOPPADDING', (0, desc_row), (-1, desc_row), 2))
-        table_style.append(('BOTTOMPADDING', (0, desc_row), (-1, desc_row), 4))
-    
-    # Datenzeilen (nicht-Beschreibung) mit seitlichem Rahmen
-    for i in range(1, row_index):
-        if i not in description_rows:
-            table_style.append(('BOX', (0, i), (-1, i), 0.5, colors.grey))
-            # Leichte Trennlinien zwischen Spalten
-            table_style.append(('LINEAFTER', (0, i), (-2, i), 0.25, colors.lightgrey))
+        table_style.append(('SPAN', (2, desc_row), (2, desc_row)))
+        table_style.append(('LEFTPADDING', (2, desc_row), (2, desc_row), 8))
+        table_style.append(('TOPPADDING', (2, desc_row), (2, desc_row), 1))
+        table_style.append(('BOTTOMPADDING', (2, desc_row), (2, desc_row), 1))
     
     items_table.setStyle(TableStyle(table_style))
     
@@ -642,32 +552,23 @@ def generate_quotation_pdf(quotation):
         'EN': ['Total purchase cost:', 'System price:', 'Sum of other items', 'Subtotal (net):', 'Margin (abs):', 'Margin (%):', 'Delivery cost:', 'Total (net):', 'VAT:', 'Total (gross):']
     }
 
-    # Build rows for the offer PDF (do not show EK and margins in the offer)
-    rows = []
-    # If system price is present, show it
+    # Summenblock im Vorlagen-Look (schwarz, feine Abschlusslinie)
+    sum_rows = []
     if uses_system:
-        rows.append(['', sum_labels[lang][1], f"€ {system_price_value:,.2f}"])
+        sum_rows.append((sum_labels[lang][1], f"€ {system_price_value:,.2f}"))
+    sum_rows.append((sum_labels[lang][2], f"€ {other_total_vk:,.2f}"))
+    sum_rows.append((sum_labels[lang][3], f"€ {total_net:,.2f}"))
+    sum_rows.append((sum_labels[lang][6], f"€ {delivery_cost:,.2f}"))
+    sum_rows.append((sum_labels[lang][7], f"€ {subtotal_before_tax:,.2f}"))
+    sum_rows.append((sum_labels[lang][8], f"€ {total_tax:,.2f}"))
+    sum_rows.append((sum_labels[lang][9], f"€ {total_gross:,.2f}"))
 
-    # Sum of other positions
-    rows.append(['', sum_labels[lang][2], f"€ {other_total_vk:,.2f}"])
-
-    # Zwischensumme (netto)
-    rows.append(['', sum_labels[lang][3], f"€ {total_net:,.2f}"])
-
-    # Delivery, subtotal, tax, total (with renamed labels)
-    rows.append(['', sum_labels[lang][6], f"€ {delivery_cost:,.2f}"])
-    rows.append(['', sum_labels[lang][7], f"€ {subtotal_before_tax:,.2f}"])
-    rows.append(['', sum_labels[lang][8], f"€ {total_tax:,.2f}"])
-    rows.append(['', sum_labels[lang][9], f"€ {total_gross:,.2f}"])
-
-    sum_table = Table(rows, colWidths=[11*cm, 3.5*cm, 2.5*cm])
+    sum_table = build_totals_table(sum_rows)
     sum_table.setStyle(TableStyle([
-        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-        ('ALIGN', (2,0), (2,-1), 'RIGHT'),
-        ('FONTNAME', (1,0), (2,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (1,0), (2,-1), 9),
-        ('LINEABOVE', (1,-1), (2,-1), 2, colors.HexColor('#ff0099')),
-        ('TOPPADDING', (0,-1), (-1,-1), 6),
+        # Abschlusslinie über der Gesamtsumme, wie in der Vorlage
+        ('LINEABOVE', (0, -1), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, -1), (-1, -1), FONT_BOLD),
+        ('TOPPADDING', (0, -1), (-1, -1), 5),
     ]))
 
     elements.append(sum_table)

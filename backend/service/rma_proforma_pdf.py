@@ -8,13 +8,18 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
-    Frame, PageTemplate, BaseDocTemplate
+    Table, TableStyle, Paragraph, Spacer,
 )
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
-from django.conf import settings
+from core.pdf_base import (
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    build_positions_table,
+    build_totals_table,
+    format_amount,
+    get_company_styles,
+)
 import os
 
 from .notizen_utils import sanitize_for_pdf
@@ -45,99 +50,19 @@ PROFORMA_TRANSLATIONS = {
 }
 
 
-class ProformaInvoiceDocTemplate(BaseDocTemplate):
+class ProformaInvoiceDocTemplate(VerpDocTemplate):
     """
-    Custom DocTemplate für Proforma-Invoices mit Header und Footer
+    Custom DocTemplate. Briefkopf, Fusszeile, Rand und
+    Schriftgroessen kommen aus core.pdf_base und entsprechen damit
+    der Corporate-Design-Vorlage.
     """
     def __init__(self, filename, company=None, manufacturer_return=None, **kwargs):
-        self.company = company
         self.manufacturer_return = manufacturer_return
-        BaseDocTemplate.__init__(self, filename, **kwargs)
-        # Eigener Attributname (nicht 'lang'), da reportlab 'lang' intern für PDF-Sprache nutzt
-        self.translations = PROFORMA_TRANSLATIONS
+        self.translations = None
+        VerpDocTemplate.__init__(
+            self, filename, company=company,
+            **kwargs)
 
-        frame = Frame(
-            self.leftMargin,
-            self.bottomMargin,
-            self.width,
-            self.height,
-            id='normal'
-        )
-
-        template = PageTemplate(
-            id='proforma_invoice',
-            frames=frame,
-            onPage=self._add_header_footer
-        )
-        self.addPageTemplates([template])
-
-    def _add_header_footer(self, canvas, doc):
-        """Fügt Header und Footer zu jeder Seite hinzu"""
-        canvas.saveState()
-
-        width, height = A4
-        company = self.company
-        manufacturer_return = self.manufacturer_return
-        lang = self.translations
-
-        # === HEADER ===
-        page_num = canvas.getPageNumber()
-
-        if page_num == 1 and company and company.document_header:
-            try:
-                logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
-                if os.path.exists(logo_path):
-                    logo_x = width - 7 * cm
-                    logo_y = height - 2.5 * cm
-                    try:
-                        img = ImageReader(logo_path)
-                        canvas.drawImage(img, logo_x, logo_y, width=5 * cm, height=1.5 * cm,
-                                        preserveAspectRatio=True, anchor='nw', mask='auto')
-                    except Exception:
-                        canvas.drawImage(logo_path, logo_x, logo_y, width=5 * cm, height=1.5 * cm,
-                                        preserveAspectRatio=True, anchor='nw')
-            except Exception as e:
-                print(f"Error loading header logo: {e}")
-
-        if page_num > 1:
-            canvas.setFont('Helvetica', 8)
-            canvas.setFillColor(colors.grey)
-            header_text = f"{lang['page']} {page_num} - {lang['title']} {manufacturer_return.return_number}"
-            canvas.drawString(2 * cm, height - 3.2 * cm, header_text)
-            canvas.setStrokeColor(colors.grey)
-            canvas.line(2 * cm, height - 3.4 * cm, width - 2 * cm, height - 3.4 * cm)
-
-        # === FOOTER ===
-        footer_y = 1.2 * cm
-
-        canvas.setStrokeColor(colors.grey)
-        canvas.line(2 * cm, footer_y + 1.8 * cm, width - 2 * cm, footer_y + 1.8 * cm)
-
-        canvas.setFont('Helvetica', 6.5)
-        canvas.setFillColor(colors.HexColor('#333333'))
-
-        if company:
-            col1_x = 2 * cm
-            canvas.drawString(col1_x, footer_y + 1.4 * cm, company.company_name or '')
-            canvas.drawString(col1_x, footer_y + 0.9 * cm, f"{company.street or ''} {company.house_number or ''}")
-            canvas.drawString(col1_x, footer_y + 0.4 * cm, f"D-{company.postal_code or ''} {company.city or ''}")
-
-            col2_x = 6.5 * cm
-            canvas.drawString(col2_x, footer_y + 1.4 * cm, f"Tel. {company.phone or ''}")
-            canvas.drawString(col2_x, footer_y + 0.9 * cm, company.email or '')
-            canvas.drawString(col2_x, footer_y + 0.4 * cm, (company.website or '').replace('https://', '').replace('http://', ''))
-
-            col3_x = 10.5 * cm
-            canvas.drawString(col3_x, footer_y + 1.4 * cm, f"{company.register_court or ''}, {company.commercial_register or ''}")
-            canvas.drawString(col3_x, footer_y + 0.9 * cm, "Geschäftsführer:")
-            canvas.drawString(col3_x, footer_y + 0.4 * cm, company.managing_director or '')
-
-            col4_x = 15 * cm
-            canvas.drawString(col4_x, footer_y + 1.4 * cm, company.bank_name or '')
-            canvas.drawString(col4_x, footer_y + 0.9 * cm, f"BIC: {company.bic or ''}")
-            canvas.drawString(col4_x, footer_y + 0.4 * cm, f"IBAN: {company.iban or ''}")
-
-        canvas.restoreState()
 
 
 def _get_proforma_recipient(manufacturer_return):
@@ -174,75 +99,55 @@ def generate_proforma_invoice_pdf(document):
     doc = ProformaInvoiceDocTemplate(
         buffer,
         pagesize=A4,
-        topMargin=3.5 * cm,
-        bottomMargin=3.5 * cm,
-        leftMargin=2 * cm,
-        rightMargin=2 * cm,
         company=company,
         manufacturer_return=document
     )
 
     elements = []
-    styles = getSampleStyleSheet()
+    vs = get_company_styles()
+    style_title = vs['VerpTitle']
+    style_normal = vs['VerpBody']
+    style_small = vs['VerpSmall']
+    style_heading = vs['VerpHeading']
 
-    style_title = ParagraphStyle(
-        'Title',
-        parent=styles['Heading1'],
-        fontSize=16,
-        textColor=colors.HexColor('#cc0066'),
-        spaceAfter=6
-    )
+    # === EMPFÄNGER (Proforma-Adresse) und Dokumentbox wie in der Vorlage ===
+    address_lines = [
+        l for l in _get_proforma_recipient(document).split('\n') if l.strip()
+    ]
 
-    style_subtitle = ParagraphStyle(
-        'Subtitle',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=colors.HexColor('#666666'),
-        spaceAfter=20
-    )
-
-    style_normal = styles['Normal']
-    style_small = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8)
-
-    # === ABSENDER (einzeilig) ===
-    elements.append(Spacer(1, 0.5 * cm))
-    if company:
-        sender_line = f"{company.company_name} • {company.street} {company.house_number} • {company.postal_code} {company.city}"
-        elements.append(Paragraph(sender_line, style_small))
-        elements.append(Spacer(1, 0.3 * cm))
-
-    # === EMPFÄNGER (Proforma-Adresse) ===
-    recipient_address = _get_proforma_recipient(document).replace('\n', '<br/>')
-    elements.append(Paragraph(f"<b>{recipient_address}</b>", style_normal))
-    elements.append(Spacer(1, 1 * cm))
-
-    # === DOKUMENT-METADATEN ===
-    meta_text = f"""<para align=right>
-    <b>{t['invoice_number']}:</b> {document.return_number}<br/>
-    <b>{t['rma_number']}:</b> {rma_case.rma_number}<br/>
-    """
+    doc_box_lines = [
+        (document.proforma_title or t['title'], True),
+        (document.return_number, False),
+        (f"{t['rma_number']} {rma_case.rma_number}", False),
+    ]
     if getattr(rma_case, 'manufacturer_rma_number', None):
-        meta_text += f"<b>{t['manufacturer_rma']}:</b> {rma_case.manufacturer_rma_number}<br/>"
-    meta_text += f"""<b>{t['date']}:</b> {document.return_date.strftime('%d.%m.%Y')}<br/>
-    </para>"""
-    elements.append(Paragraph(meta_text, style_normal))
-    elements.append(Spacer(1, 0.8 * cm))
+        doc_box_lines.append(
+            (f"{t['manufacturer_rma']} {rma_case.manufacturer_rma_number}", False))
+
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=document.return_date.strftime('%d.%m.%Y'),
+    ))
+    elements.append(Spacer(1, 0.4 * cm))
 
     # === TITEL (editierbar) ===
     title_text = document.proforma_title or t['title']
-    elements.append(Paragraph(f"<b>{sanitize_for_pdf(title_text)}</b>", style_title))
+    elements.append(Paragraph(sanitize_for_pdf(title_text), style_title))
     subtitle = getattr(document, 'proforma_subtitle', '') or t['subtitle']
-    elements.append(Paragraph(sanitize_for_pdf(subtitle), style_subtitle))
+    elements.append(Spacer(1, 0.2 * cm))
+    elements.append(Paragraph(sanitize_for_pdf(subtitle), style_small))
+    elements.append(Spacer(1, 0.5 * cm))
 
     # === POSITIONS-TABELLE ===
-    table_data = [[
+    headers = [
         t['pos'], t['description'], t['serial'], t['quantity'],
         t['weight'], t['hs_code'], t['value'], t['origin']
-    ]]
+    ]
 
     total_weight = 0
     total_value = 0
 
+    rows = []
     for idx, item in enumerate(document.items.all().select_related('rma_item'), 1):
         rma_item = item.rma_item
         desc = item.proforma_description or (rma_item.product_name if rma_item else item.custom_product_name or 'Eigene Position')
@@ -252,7 +157,7 @@ def generate_proforma_invoice_pdf(document):
         total_weight += weight
         total_value += value
 
-        table_data.append([
+        rows.append([
             str(idx),
             Paragraph(sanitize_for_pdf(desc), style_small),
             Paragraph(serial, style_small),
@@ -260,60 +165,28 @@ def generate_proforma_invoice_pdf(document):
             f"{weight:g}",
             Paragraph(item.proforma_hs_code or '—', style_small),
             f"{value:.2f}",
-            Paragraph(item.proforma_origin_country or '—', style_small)
+            Paragraph(item.proforma_origin_country or '—', style_small),
         ])
 
-    table = Table(table_data, colWidths=[1 * cm, 4.5 * cm, 2.5 * cm, 1.5 * cm, 1.8 * cm, 2 * cm, 2 * cm, 2.2 * cm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#cc0066')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 7),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 0), (-1, 0), 8),
-
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),
-        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
-        ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
-        ('ALIGN', (4, 1), (4, -1), 'RIGHT'),
-        ('ALIGN', (6, 1), (6, -1), 'RIGHT'),
-        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
-
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dddddd')),
-        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#cc0066')),
-    ]))
-
-    elements.append(table)
+    col_widths = [0.9 * cm, 4.0 * cm, 2.3 * cm, 1.4 * cm, 1.6 * cm, 1.8 * cm, 1.8 * cm, 2.0 * cm]
+    elements.extend(build_positions_table(
+        headers, rows, col_widths=col_widths, align_right=[4, 6]))
     elements.append(Spacer(1, 0.5 * cm))
 
     # === SUMMEN ===
-    summary_data = [
-        [t['total_weight'], f"{total_weight:g} kg"],
-        [t['total_value'], f"{total_value:.2f}"],
-    ]
-    summary_table = Table(summary_data, colWidths=[8 * cm, 8 * cm])
-    summary_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dddddd')),
+    elements.append(build_totals_table([
+        (t['total_weight'], f"{total_weight:g} kg"),
+        (t['total_value'], f"{total_value:.2f}"),
     ]))
-    elements.append(summary_table)
     elements.append(Spacer(1, 0.8 * cm))
 
     # === KOMMENTAR (unterhalb der Positionen) ===
     if document.proforma_comment:
-        elements.append(Paragraph(f"<b>{t['comment']}</b>", style_normal))
-        elements.append(Paragraph(sanitize_for_pdf(document.proforma_comment).replace('\n', '<br/>'), style_small))
+        elements.append(Paragraph(t['comment'], style_heading))
+        elements.append(Spacer(1, 0.2 * cm))
+        elements.append(Paragraph(
+            sanitize_for_pdf(document.proforma_comment).replace('\n', '<br/>'),
+            style_small))
         elements.append(Spacer(1, 0.5 * cm))
 
     # === SCHLUSSTEXT ===

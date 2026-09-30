@@ -21,111 +21,33 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
+from core.pdf_base import (
+    FONT_BOLD,
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    get_company_styles,
+)
 from django.conf import settings
 import os
 from decimal import Decimal
 
 
-class MaintenanceInvoiceDocTemplate(BaseDocTemplate):
+class MaintenanceInvoiceDocTemplate(VerpDocTemplate):
     """
-    Custom DocTemplate with header and footer on each page
+    Custom DocTemplate.
+
+    Briefkopf, Fusszeile, Rand und Schriftgroessen kommen aus
+    core.pdf_base und entsprechen damit der Corporate-Design-Vorlage.
     """
     def __init__(self, filename, company=None, license=None, **kwargs):
-        self.company = company
         self.license = license
-        BaseDocTemplate.__init__(self, filename, **kwargs)
-        
-        # Frame for main content
-        frame = Frame(
-            self.leftMargin, 
-            self.bottomMargin, 
-            self.width, 
-            self.height,
-            id='normal'
-        )
-        
-        # PageTemplate with callbacks
-        template = PageTemplate(
-            id='invoice',
-            frames=frame,
-            onPage=self._add_header_footer
-        )
-        self.addPageTemplates([template])
-    
-    def _add_header_footer(self, canvas, doc):
-        """Add header and footer to each page"""
-        canvas.saveState()
-        
-        width, height = A4
-        company = self.company
-        license_obj = self.license
-        
-        # === HEADER ===
-        page_num = canvas.getPageNumber()
-        
-        # Logo (only on page 1, top right)
-        if page_num == 1 and company and company.document_header:
-            try:
-                logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
-                if os.path.exists(logo_path):
-                    logo_x = width - 7*cm
-                    logo_y = height - 2.5*cm
-                    try:
-                        img = ImageReader(logo_path)
-                        canvas.drawImage(img, logo_x, logo_y, width=5*cm, height=1.5*cm, 
-                                       preserveAspectRatio=True, anchor='nw', mask='auto')
-                    except Exception:
-                        canvas.drawImage(logo_path, logo_x, logo_y, width=5*cm, height=1.5*cm, 
-                                       preserveAspectRatio=True, anchor='nw')
-            except Exception as e:
-                print(f"Error loading header logo: {e}")
-        
-        # Page number and invoice number (from page 2 onwards)
-        if page_num > 1:
-            canvas.setFont('Helvetica', 8)
-            canvas.setFillColor(colors.grey)
-            header_text = f"Seite {page_num}, Maintenance-Abrechnung {license_obj.license_number}"
-            canvas.drawString(2*cm, height - 3.2*cm, header_text)
-            # Underline
-            canvas.setStrokeColor(colors.grey)
-            canvas.line(2*cm, height - 3.4*cm, width - 2*cm, height - 3.4*cm)
-        
-        # === FOOTER ===
-        footer_y = 1.2*cm
-        
-        # Separator line above footer
-        canvas.setStrokeColor(colors.grey)
-        canvas.line(2*cm, footer_y + 1.8*cm, width - 2*cm, footer_y + 1.8*cm)
-        
-        canvas.setFont('Helvetica', 6.5)
-        canvas.setFillColor(colors.HexColor('#333333'))
-        
-        if company:
-            # Block 1: Company address
-            col1_x = 2*cm
-            canvas.drawString(col1_x, footer_y + 1.4*cm, company.company_name or 'Visitron Systems GmbH')
-            canvas.drawString(col1_x, footer_y + 0.9*cm, f"{company.street or ''} {company.house_number or ''}")
-            canvas.drawString(col1_x, footer_y + 0.4*cm, f"D-{company.postal_code or ''} {company.city or ''}")
-            
-            # Block 2: Contact
-            col2_x = 6.5*cm
-            canvas.drawString(col2_x, footer_y + 1.4*cm, f"Tel. {company.phone or ''}")
-            canvas.drawString(col2_x, footer_y + 0.9*cm, company.email or '')
-            canvas.drawString(col2_x, footer_y + 0.4*cm, (company.website or '').replace('https://', '').replace('http://', ''))
-            
-            # Block 3: Register
-            col3_x = 10.5*cm
-            canvas.drawString(col3_x, footer_y + 1.4*cm, f"{company.register_court or 'Amtsgericht München'}, {company.commercial_register or ''}")
-            canvas.drawString(col3_x, footer_y + 0.9*cm, "Geschäftsführer:")
-            canvas.drawString(col3_x, footer_y + 0.4*cm, company.managing_director or '')
-            
-            # Block 4: Bank
-            col4_x = 15*cm
-            canvas.drawString(col4_x, footer_y + 1.4*cm, company.bank_name or '')
-            canvas.drawString(col4_x, footer_y + 0.9*cm, f"BIC: {company.bic or ''}")
-            canvas.drawString(col4_x, footer_y + 0.4*cm, f"IBAN: {company.iban or ''}")
-        
-        canvas.restoreState()
+        license_number = getattr(license, 'license_number', None) or '---'
+        kwargs.setdefault('title', 'Maintenance-Abrechnung')
+        VerpDocTemplate.__init__(
+            self, filename, company=company,
+            continuation_text=f'Maintenance-Abrechnung {license_number}',
+            **kwargs)
 
 
 def generate_maintenance_invoice_pdf(license, start_date=None, end_date=None):
@@ -149,10 +71,6 @@ def generate_maintenance_invoice_pdf(license, start_date=None, end_date=None):
     doc = MaintenanceInvoiceDocTemplate(
         buffer, 
         pagesize=A4,
-        topMargin=3.5*cm,
-        bottomMargin=3.5*cm,
-        leftMargin=2*cm, 
-        rightMargin=2*cm,
         company=company,
         license=license
     )
@@ -160,44 +78,12 @@ def generate_maintenance_invoice_pdf(license, start_date=None, end_date=None):
     # Elements for PDF
     elements = []
     styles = getSampleStyleSheet()
+    vs = get_company_styles()
     
     # Custom styles
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        textColor=colors.HexColor('#1a1a1a'),
-        spaceAfter=12,
-        alignment=TA_LEFT
-    )
-    
-    heading_style = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
-        fontSize=12,
-        textColor=colors.HexColor('#333333'),
-        spaceAfter=8,
-        spaceBefore=12
-    )
-    
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=10,
-        leading=14
-    )
-    
-    # === Company address (single line) ===
-    if company:
-        company_line = f"{company.company_name or 'Visitron Systems GmbH'} • {company.street or ''} {company.house_number or ''} • D-{company.postal_code or ''} {company.city or ''}"
-        company_para = Paragraph(company_line, ParagraphStyle(
-            'CompanyLine',
-            parent=styles['Normal'],
-            fontSize=8,
-            textColor=colors.grey
-        ))
-        elements.append(company_para)
-        elements.append(Spacer(1, 0.3*cm))
+    title_style = vs['VerpTitle']
+    heading_style = vs['VerpHeading']
+    normal_style = vs['VerpBody']
     
     # === Customer address ===
     customer_address = []
@@ -241,13 +127,28 @@ def generate_maintenance_invoice_pdf(license, start_date=None, end_date=None):
         if license.customer_address_legacy:
             customer_address.append(license.customer_address_legacy)
     
-    if customer_address:
-        for line in customer_address:
-            elements.append(Paragraph(line, normal_style))
-        elements.append(Spacer(1, 1*cm))
+    # === DOKUMENTBOX (rechts) wie in der Vorlage ===
+    doc_box_lines = [
+        ('Maintenance-Abrechnung', True),
+        (license.license_number, False),
+    ]
+    if license.serial_number:
+        doc_box_lines.append((f"Seriennummer {license.serial_number}", False))
+    if start_date and end_date:
+        doc_box_lines.append((
+            f"Zeitraum {start_date.strftime('%d.%m.%Y')} - "
+            f"{end_date.strftime('%d.%m.%Y')}", False))
+    
+    elements.append(build_address_and_doc_row(
+        customer_address, build_document_box(doc_box_lines), company,
+        date_text=end_date.strftime('%d.%m.%Y') if end_date else '',
+    ))
+    elements.append(Spacer(1, 0.4*cm))
     
     # === Title ===
-    elements.append(Paragraph(f"Maintenance-Abrechnung<br/>Lizenz {license.license_number}", title_style))
+    elements.append(Paragraph('Maintenance-Abrechnung', title_style))
+    elements.append(Spacer(1, 0.2*cm))
+    elements.append(Paragraph(f"Lizenz {license.license_number}", vs['VerpSmall']))
     elements.append(Spacer(1, 0.5*cm))
     
     # === License details ===
@@ -258,12 +159,14 @@ def generate_maintenance_invoice_pdf(license, start_date=None, end_date=None):
     if start_date and end_date:
         license_data.append(['Zeitraum:', f"{start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}"])
     
-    license_table = Table(license_data, colWidths=[4.5*cm, 12*cm])
+    license_table = Table(license_data, colWidths=[4.5*cm, 11.5*cm])
     license_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 0), (0, -1), FONT_BOLD),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.375, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
     elements.append(license_table)
     elements.append(Spacer(1, 0.8*cm))

@@ -24,6 +24,17 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
+from core.pdf_base import (
+    CONTENT_W,
+    FONT_BOLD,
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    build_positions_table,
+    build_totals_table,
+    format_amount,
+    get_company_styles,
+)
 from django.conf import settings
 from django.utils import timezone
 import os
@@ -32,6 +43,31 @@ import os
 # =============================================================================
 # Helper Functions for Customer Data
 # =============================================================================
+
+def _escape(text):
+    """
+    Maskiert Sonderzeichen fuer ReportLabs Mini-XML.
+
+    Artikelbeschreibungen kommen aus dem Produktstamm und enthalten
+    haeufig &, < oder >. Ohne Maskierung bricht der Absatz.
+    """
+    if not text:
+        return ''
+    return (str(text)
+            .replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;'))
+
+
+def _clip(text, max_chars):
+    """Kuerzt einen Text auf max_chars und haengt ein Auslassungszeichen an."""
+    if not text:
+        return ''
+    text = str(text)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + '...'
+
 
 def get_customer_display_name(customer):
     """
@@ -192,129 +228,37 @@ def get_customer_salutation(customer, language='DE'):
 # =============================================================================
 
 
-class OrderDocumentTemplate(BaseDocTemplate):
+class OrderDocumentTemplate(VerpDocTemplate):
     """
-    Basis DocTemplate für alle Auftragsdokumente mit Header und Footer auf jeder Seite
+    Basis DocTemplate für alle Auftragsdokumente.
+
+    Briefkopf, Fusszeile, Rand und Schriftgroessen kommen aus
+    core.pdf_base und entsprechen damit der Corporate-Design-Vorlage.
+    Nur die Dokumentart bestimmt den Fortsetzungstext auf Folgeseiten.
     """
-    def __init__(self, filename, company=None, document=None, document_type='order', **kwargs):
-        self.company = company
+    DOCUMENT_LABELS = {
+        'order': ('Auftragsbestätigung', 'order_number', 'confirmation_date'),
+        'delivery_note': ('Lieferschein', 'delivery_note_number', 'delivery_date'),
+        'invoice': ('Rechnung', 'invoice_number', 'invoice_date'),
+    }
+
+    def __init__(self, filename, company=None, document=None,
+                 document_type='order', **kwargs):
         self.document = document
-        self.document_type = document_type  # 'order', 'delivery_note', 'invoice'
-        BaseDocTemplate.__init__(self, filename, **kwargs)
-        
-        # Frame für den Hauptinhalt
-        frame = Frame(
-            self.leftMargin, 
-            self.bottomMargin, 
-            self.width, 
-            self.height,
-            id='normal'
-        )
-        
-        # PageTemplate mit unseren Callbacks
-        template = PageTemplate(
-            id='document',
-            frames=frame,
-            onPage=self._add_header_footer
-        )
-        self.addPageTemplates([template])
-    
-    def _add_header_footer(self, canvas, doc):
-        """Fügt Header und Footer zu jeder Seite hinzu"""
-        canvas.saveState()
-        
-        width, height = A4
-        company = self.company
-        document = self.document
-        
-        # === HEADER ===
-        page_num = canvas.getPageNumber()
-        
-        # Logo (nur auf Seite 1, rechts oben)
-        if page_num == 1 and company and company.document_header:
-            try:
-                logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
-                if os.path.exists(logo_path):
-                    # Logo rechts oben, kleinere Größe: 5cm breit, 1.5cm hoch
-                    logo_x = width - 7*cm
-                    logo_y = height - 2.5*cm
-                    try:
-                        img = ImageReader(logo_path)
-                        canvas.drawImage(img, logo_x, logo_y, width=5*cm, height=1.5*cm, 
-                                       preserveAspectRatio=True, anchor='nw', mask='auto')
-                    except Exception:
-                        canvas.drawImage(logo_path, logo_x, logo_y, width=5*cm, height=1.5*cm, 
-                                       preserveAspectRatio=True, anchor='nw')
-            except Exception as e:
-                print(f"Error loading header logo: {e}")
-        
-        # Seitenzahl und Dokumentnummer (ab Seite 2)
-        if page_num > 1:
-            canvas.setFont('Helvetica', 8)
-            canvas.setFillColor(colors.grey)
-            
-            # Dokumentspezifische Header-Zeile
-            if self.document_type == 'order':
-                doc_number = document.order_number or '---'
-                doc_date = document.confirmation_date or document.order_date
-                header_text = f"Seite {page_num}, Auftragsbestätigung {doc_number}"
-            elif self.document_type == 'delivery_note':
-                doc_number = document.delivery_note_number
-                doc_date = document.delivery_date
-                header_text = f"Seite {page_num}, Lieferschein {doc_number}"
-            elif self.document_type == 'invoice':
-                doc_number = document.invoice_number
-                doc_date = document.invoice_date
-                header_text = f"Seite {page_num}, Rechnung {doc_number}"
-            else:
-                doc_number = ''
-                doc_date = timezone.now().date()
-                header_text = f"Seite {page_num}"
-            
-            if doc_date:
-                header_text += f" vom {doc_date.strftime('%d.%m.%Y')}"
-            
-            canvas.drawString(2*cm, height - 3.2*cm, header_text)
-            # Unterstrich
-            canvas.setStrokeColor(colors.grey)
-            canvas.line(2*cm, height - 3.4*cm, width - 2*cm, height - 3.4*cm)
-        
-        # === FOOTER ===
-        footer_y = 1.2*cm
-        
-        # Trennlinie über dem Footer
-        canvas.setStrokeColor(colors.grey)
-        canvas.line(2*cm, footer_y + 1.8*cm, width - 2*cm, footer_y + 1.8*cm)
-        
-        canvas.setFont('Helvetica', 6.5)
-        canvas.setFillColor(colors.HexColor('#333333'))
-        
-        if company:
-            # Block 1: Firmenadresse
-            col1_x = 2*cm
-            canvas.drawString(col1_x, footer_y + 1.4*cm, company.company_name or 'Visitron Systems GmbH')
-            canvas.drawString(col1_x, footer_y + 0.9*cm, f"{company.street or ''} {company.house_number or ''}")
-            canvas.drawString(col1_x, footer_y + 0.4*cm, f"D-{company.postal_code or ''} {company.city or ''}")
-            
-            # Block 2: Kontakt
-            col2_x = 6.5*cm
-            canvas.drawString(col2_x, footer_y + 1.4*cm, f"Tel. {company.phone or ''}")
-            canvas.drawString(col2_x, footer_y + 0.9*cm, company.email or '')
-            canvas.drawString(col2_x, footer_y + 0.4*cm, (company.website or '').replace('https://', '').replace('http://', ''))
-            
-            # Block 3: Handelsregister
-            col3_x = 10.5*cm
-            canvas.drawString(col3_x, footer_y + 1.4*cm, f"{company.register_court or 'Amtsgericht München'}, {company.commercial_register or ''}")
-            canvas.drawString(col3_x, footer_y + 0.9*cm, "Geschäftsführer:")
-            canvas.drawString(col3_x, footer_y + 0.4*cm, company.managing_director or '')
-            
-            # Block 4: Bank
-            col4_x = 15*cm
-            canvas.drawString(col4_x, footer_y + 1.4*cm, company.bank_name or '')
-            canvas.drawString(col4_x, footer_y + 0.9*cm, f"BIC: {company.bic or ''}")
-            canvas.drawString(col4_x, footer_y + 0.4*cm, f"IBAN: {company.iban or ''}")
-        
-        canvas.restoreState()
+        self.document_type = document_type
+
+        label, number_field, date_field = self.DOCUMENT_LABELS.get(
+            document_type, ('Dokument', 'id', None))
+        doc_number = getattr(document, number_field, None) or '---'
+        doc_date = getattr(document, date_field, None) if date_field else None
+        continuation = f'{label} {doc_number}'
+        if doc_date:
+            continuation += f' vom {doc_date.strftime("%d.%m.%Y")}'
+
+        kwargs.setdefault('title', label)
+        VerpDocTemplate.__init__(
+            self, filename, company=company,
+            continuation_text=continuation, **kwargs)
 
 
 # =============================================================================
@@ -322,71 +266,25 @@ class OrderDocumentTemplate(BaseDocTemplate):
 # =============================================================================
 
 def get_document_styles():
-    """Gibt die Standard-Styles für Dokumente zurück"""
-    styles = getSampleStyleSheet()
-    
+    """
+    Styles im Corporate Design.
+
+    Thin wrapper um core.pdf_base, damit die Aufrufer in diesem Modul
+    weiterhin ueber get_document_styles() arbeiten koennen.
+    """
+    vs = get_company_styles()
     return {
-        'title': ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=16,
-            textColor=colors.HexColor('#ff0099'),
-            spaceAfter=10,
-            spaceBefore=10,
-        ),
-        'heading': ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
-            fontSize=11,
-            textColor=colors.HexColor('#b30066'),
-            spaceAfter=8,
-        ),
-        'normal': ParagraphStyle(
-            'CustomNormal',
-            parent=styles['Normal'],
-            fontSize=9,
-            leading=12,
-        ),
-        'small': ParagraphStyle(
-            'CustomSmall',
-            parent=styles['Normal'],
-            fontSize=8,
-            leading=10,
-        ),
-        'tiny': ParagraphStyle(
-            'CustomTiny',
-            parent=styles['Normal'],
-            fontSize=7,
-            leading=9,
-            textColor=colors.grey,
-        ),
-        'right': ParagraphStyle(
-            'RightAlign',
-            parent=styles['Normal'],
-            fontSize=9,
-            leading=12,
-            alignment=TA_RIGHT,
-        ),
-        'bold': ParagraphStyle(
-            'BoldStyle',
-            parent=styles['Normal'],
-            fontSize=9,
-            leading=12,
-            fontName='Helvetica-Bold',
-        ),
-        'table_header': ParagraphStyle(
-            'TableHeader',
-            parent=styles['Normal'],
-            fontSize=8,
-            fontName='Helvetica-Bold',
-            textColor=colors.white,
-        ),
-        'table_cell': ParagraphStyle(
-            'TableCell',
-            parent=styles['Normal'],
-            fontSize=8,
-            leading=10,
-        ),
+        'title': vs['VerpTitle'],
+        'heading': vs['VerpHeading'],
+        'normal': vs['VerpBody'],
+        'small': vs['VerpSmall'],
+        'tiny': vs['VerpTiny'],
+        'right': vs['VerpTableCellRight'],
+        'bold': vs['VerpBodyBold'],
+        'justified': vs['VerpJustified'],
+        'clause': vs['VerpClause'],
+        'table_header': vs['VerpTableHead'],
+        'table_cell': vs['VerpTableCell'],
     }
 
 
@@ -529,84 +427,45 @@ def generate_order_confirmation_pdf(order, language='DE'):
     doc = OrderDocumentTemplate(
         buffer,
         pagesize=A4,
-        topMargin=3.5*cm,
-        bottomMargin=3.5*cm,
-        leftMargin=2*cm,
-        rightMargin=2*cm,
         company=company,
         document=order,
         document_type='order'
     )
     
     elements = []
-    
-    # === EINZEILIGE FIRMENADRESSE ===
-    company_line = f"{company.company_name} • {company.street} {company.house_number or ''} • {company.postal_code} {company.city}"
-    elements.append(Paragraph(company_line, styles['tiny']))
-    elements.append(Spacer(1, 0.1*cm))
-    
-    # Trennlinie
-    line_table = Table([['_' * 80]], colWidths=[17*cm])
-    line_table.setStyle(TableStyle([
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.grey),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-        ('TOPPADDING', (0,0), (-1,-1), 0),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-    ]))
-    elements.append(line_table)
-    elements.append(Spacer(1, 0.3*cm))
-    
-    # === KUNDENADRESSE ===
     customer = order.customer
     address_lines = get_customer_address_lines(customer)
     
-    for line in address_lines:
-        if line:
-            # Wrap long lines to max 35 characters
-            wrapped_lines = _wrap_text(line, max_length=35)
-            for wrapped in wrapped_lines:
-                elements.append(Paragraph(wrapped, styles['normal']))
-    elements.append(Spacer(1, 1*cm))
-    
-    # === DOKUMENTTITEL UND METADATEN ===
-    # 2-spaltige Tabelle: Links Titel, rechts Metadaten
-    meta_data = []
-    meta_data.append([L['order_number'], order.order_number or '---'])
-    # Angebotsreferenz und Kundenbestellnummer hinzufügen
+    # === DOKUMENTBOX (rechts) wie in der Vorlage ===
+    doc_box_lines = [
+        (L['order_confirmation'], True),
+        (order.order_number or '---', False),
+    ]
     if order.quotation:
-        quotation_ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
-        meta_data.append(['Angebot' if language == 'DE' else 'Quotation', quotation_ref])
+        ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
+        doc_box_lines.append((
+            f"{'Angebot' if language == 'DE' else 'Quotation'} {ref}", False))
     if order.customer_document:
-        meta_data.append(['Bestellnummer' if language == 'DE' else 'PO Number', order.customer_document])
-    meta_data.append([L['date'], (order.confirmation_date or order.order_date or timezone.now().date()).strftime('%d.%m.%Y')])
+        doc_box_lines.append((
+            f"{'Bestellnummer' if language == 'DE' else 'PO'} {order.customer_document}",
+            False))
     if order.customer_order_number:
-        meta_data.append([L['customer_order'], order.customer_order_number])
-    if order.project_reference:
-        meta_data.append([L['your_reference'], order.project_reference])
+        doc_box_lines.append((f"{L['customer_order']} {order.customer_order_number}", False))
     if order.delivery_date:
-        meta_data.append([L['delivery_date'], order.delivery_date.strftime('%d.%m.%Y')])
+        doc_box_lines.append((
+            f"{L['delivery_date']} {order.delivery_date.strftime('%d.%m.%Y')}", False))
     
-    # Titel links
-    title = Paragraph(L['order_confirmation'], styles['title'])
+    conf_date = (order.confirmation_date or order.order_date
+                 or timezone.now().date())
     
-    # Meta-Tabelle rechts
-    meta_table = Table(meta_data, colWidths=[4*cm, 4*cm])
-    meta_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('ALIGN', (0,0), (0,-1), 'RIGHT'),
-        ('ALIGN', (1,0), (1,-1), 'LEFT'),
-        ('LEFTPADDING', (0,0), (-1,-1), 3),
-        ('RIGHTPADDING', (0,0), (-1,-1), 3),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-    ]))
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=conf_date.strftime('%d.%m.%Y'),
+    ))
+    elements.append(Spacer(1, 0.4*cm))
     
-    header_table = Table([[title, meta_table]], colWidths=[9*cm, 8*cm])
-    header_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 0.5*cm))
+    elements.append(Paragraph(L['order_confirmation'], styles['title']))
+    elements.append(Spacer(1, 0.3*cm))
     
     # === ANSCHREIBEN ===
     contact_name = ''
@@ -630,67 +489,34 @@ def generate_order_confirmation_pdf(order, language='DE'):
     elements.append(Spacer(1, 0.5*cm))
     
     # === POSITIONSTABELLE ===
-    elements.append(Paragraph("Positionen", styles['heading']))
-    
-    # Header
-    table_header = [
-        Paragraph(L['position'], styles['table_header']),
-        Paragraph(L['article'], styles['table_header']),
-        Paragraph(L['description'], styles['table_header']),
-        Paragraph(L['quantity'], styles['table_header']),
-        Paragraph(L['unit_price'], styles['table_header']),
-        Paragraph(L['total'], styles['table_header']),
+    headers = [
+        L['position'], L['article'], L['description'],
+        L['quantity'], L['unit_price'], L['total'],
     ]
     
-    table_data = [table_header]
-    
-    # Positionen
-    items = order.items.all().order_by('position')
-    for item in items:
-        # Beschreibung mit Name
-        desc = item.name or ''
-        if item.description:
-            desc += f"<br/><font size='7' color='grey'>{item.description[:100]}{'...' if len(item.description) > 100 else ''}</font>"
-        
+    rows = []
+    for item in order.items.all().order_by('position'):
+        name = item.name or ''
         total = (item.final_price or item.list_price or 0) * (item.quantity or 1)
-        
-        table_data.append([
+        rows.append([
             Paragraph(str(item.position), styles['table_cell']),
             Paragraph(item.article_number or '', styles['table_cell']),
-            Paragraph(desc, styles['table_cell']),
+            Paragraph(_escape(name), styles['table_cell']),
             Paragraph(f"{item.quantity or 1} {item.unit or 'Stk'}", styles['table_cell']),
-            Paragraph(f"{item.final_price or item.list_price or 0:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.'), styles['table_cell']),
-            Paragraph(f"{total:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.'), styles['table_cell']),
+            Paragraph(format_amount(item.final_price or item.list_price), styles['table_cell']),
+            Paragraph(format_amount(total), styles['table_cell']),
         ])
+        # Beschreibung als eigene Zeile unter der Bezeichnung
+        if item.description:
+            rows.append([
+                '', '',
+                Paragraph(_escape(_clip(item.description, 400)), styles['small']),
+                '', '', '',
+            ])
     
-    # Tabelle erstellen
-    pos_table = Table(table_data, colWidths=[1*cm, 2.5*cm, 7*cm, 2*cm, 2.25*cm, 2.25*cm])
-    pos_table.setStyle(TableStyle([
-        # Header
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ff0099')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 8),
-        ('ALIGN', (0,0), (-1,0), 'CENTER'),
-        
-        # Body
-        ('FONTSIZE', (0,1), (-1,-1), 8),
-        ('ALIGN', (0,1), (0,-1), 'CENTER'),
-        ('ALIGN', (3,1), (3,-1), 'CENTER'),
-        ('ALIGN', (4,1), (5,-1), 'RIGHT'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        
-        # Grid
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f5f5f5')]),
-        
-        # Padding
-        ('LEFTPADDING', (0,0), (-1,-1), 4),
-        ('RIGHTPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-    ]))
-    elements.append(pos_table)
+    col_widths = [1.0*cm, 2.2*cm, 5.4*cm, 1.5*cm, 2.4*cm, 2.5*cm]
+    elements.extend(build_positions_table(
+        headers, rows, col_widths=col_widths, align_right=[4, 5]))
     elements.append(Spacer(1, 0.5*cm))
     
     # === SUMMEN ===
@@ -699,27 +525,16 @@ def generate_order_confirmation_pdf(order, language='DE'):
     tax_amount = net_total * tax_rate / Decimal('100')
     gross_total = net_total + tax_amount
     
-    sum_data = [
-        ['', L['net_total'], f"{net_total:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.')],
-        ['', f"{L['vat']} ({tax_rate}%):", f"{tax_amount:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.')],
-        ['', L['gross_total'], f"{gross_total:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.')],
-    ]
-    
-    sum_table = Table(sum_data, colWidths=[11*cm, 3*cm, 3*cm])
-    sum_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-        ('ALIGN', (2,0), (2,-1), 'RIGHT'),
-        ('FONTNAME', (1,-1), (-1,-1), 'Helvetica-Bold'),
-        ('LINEABOVE', (1,-1), (-1,-1), 1, colors.black),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+    elements.append(build_totals_table([
+        (L['net_total'], format_amount(net_total)),
+        (L['vat'], format_amount(tax_amount)),
+        (L['gross_total'], format_amount(gross_total)),
     ]))
-    elements.append(sum_table)
     elements.append(Spacer(1, 1*cm))
     
     # === KONDITIONEN ===
     elements.append(Paragraph(L['conditions'], styles['heading']))
+    elements.append(Spacer(1, 0.2*cm))
     
     cond_data = []
     if order.payment_term:
@@ -730,10 +545,11 @@ def generate_order_confirmation_pdf(order, language='DE'):
         cond_data.append([L['warranty'], order.warranty_term.name])
     
     if cond_data:
-        cond_table = Table(cond_data, colWidths=[4*cm, 13*cm])
+        cond_table = Table(cond_data, colWidths=[4*cm, 10*cm])
         cond_table.setStyle(TableStyle([
-            ('FONTSIZE', (0,0), (-1,-1), 8),
-            ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('FONTNAME', (0,0), (0,-1), FONT_BOLD),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('TOPPADDING', (0,0), (-1,-1), 2),
             ('BOTTOMPADDING', (0,0), (-1,-1), 2),
         ]))
@@ -742,8 +558,11 @@ def generate_order_confirmation_pdf(order, language='DE'):
     
     # === NOTIZEN ===
     if order.order_notes:
-        elements.append(Paragraph("Hinweise:", styles['heading']))
-        elements.append(Paragraph(order.order_notes.replace('\n', '<br/>'), styles['small']))
+        elements.append(Paragraph(
+            "Hinweise:" if language == 'DE' else "Notes:", styles['heading']))
+        elements.append(Spacer(1, 0.2*cm))
+        elements.append(Paragraph(
+            _escape(order.order_notes).replace('\n', '<br/>'), styles['small']))
         elements.append(Spacer(1, 0.5*cm))
     
     # === GRUßFORMEL ===
@@ -829,84 +648,55 @@ def generate_delivery_note_pdf(delivery_note, language='DE'):
     doc = OrderDocumentTemplate(
         buffer,
         pagesize=A4,
-        topMargin=3.5*cm,
-        bottomMargin=3.5*cm,
-        leftMargin=2*cm,
-        rightMargin=2*cm,
         company=company,
         document=delivery_note,
         document_type='delivery_note'
     )
     
     elements = []
-    
-    # === EINZEILIGE FIRMENADRESSE ===
-    company_line = f"{company.company_name} • {company.street} {company.house_number or ''} • {company.postal_code} {company.city}"
-    elements.append(Paragraph(company_line, styles['tiny']))
-    elements.append(Spacer(1, 0.1*cm))
-    
-    # Trennlinie
-    line_table = Table([['_' * 80]], colWidths=[17*cm])
-    line_table.setStyle(TableStyle([
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.grey),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-    ]))
-    elements.append(line_table)
-    elements.append(Spacer(1, 0.3*cm))
+    order = delivery_note.order
     
     # === LIEFERADRESSE ===
     # Verwende Lieferadresse des Lieferscheins oder des Auftrags
     shipping_addr = delivery_note.shipping_address or order.shipping_address
     if shipping_addr:
-        for line in shipping_addr.split('\n'):
-            # Wrap long lines to max 35 characters
-            wrapped_lines = _wrap_text(line, max_length=35)
-            for wrapped in wrapped_lines:
-                elements.append(Paragraph(wrapped, styles['normal']))
-    elif order.customer:
-        customer = order.customer
-        for line in get_customer_address_lines(customer):
-            # Wrap long lines to max 35 characters
-            wrapped_lines = _wrap_text(line, max_length=35)
-            for wrapped in wrapped_lines:
-                elements.append(Paragraph(wrapped, styles['normal']))
-    elements.append(Spacer(1, 1*cm))
+        address_lines = [l for l in shipping_addr.split('\n') if l.strip()]
+    else:
+        address_lines = get_customer_address_lines(order.customer)
     
-    # === DOKUMENTTITEL UND METADATEN ===
-    meta_data = []
-    meta_data.append([L['delivery_note_number'], delivery_note.delivery_note_number])
-    meta_data.append([L['order_number'], order.order_number or '---'])
-    # Angebotsreferenz und Kundenbestellnummer hinzufügen
+    # === DOKUMENTBOX (rechts) wie in der Vorlage ===
+    doc_box_lines = [
+        (L['delivery_note'], True),
+        (delivery_note.delivery_note_number, False),
+        (f"{L['order_number']} {order.order_number or '---'}", False),
+    ]
     if order.quotation:
-        quotation_ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
-        meta_data.append(['Angebot' if language == 'DE' else 'Quotation', quotation_ref])
+        ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
+        doc_box_lines.append((
+            f"{'Angebot' if language == 'DE' else 'Quotation'} {ref}", False))
     if order.customer_document:
-        meta_data.append(['Bestellnummer' if language == 'DE' else 'PO Number', order.customer_document])
-    meta_data.append([L['date'], delivery_note.delivery_date.strftime('%d.%m.%Y') if getattr(delivery_note, 'delivery_date', None) else '---'])
+        doc_box_lines.append((
+            f"{'Bestellnummer' if language == 'DE' else 'PO'} {order.customer_document}",
+            False))
     sd = getattr(delivery_note, 'shipping_date', None)
     if sd:
-        meta_data.append([L['shipping_date'], sd.strftime('%d.%m.%Y')])
+        doc_box_lines.append((f"{L['shipping_date']} {sd.strftime('%d.%m.%Y')}", False))
     if getattr(delivery_note, 'tracking_number', None):
-        meta_data.append([L['tracking'], delivery_note.tracking_number])
+        doc_box_lines.append((f"{L['tracking']} {delivery_note.tracking_number}", False))
     pkg = getattr(delivery_note, 'package_count', None)
     if pkg:
-        meta_data.append([L['packages'], str(pkg)])
+        doc_box_lines.append((f"{L['packages']} {pkg}", False))
     
-    title = Paragraph(L['delivery_note'], styles['title'])
+    dn_date = getattr(delivery_note, 'delivery_date', None)
     
-    meta_table = Table(meta_data, colWidths=[4.5*cm, 3.5*cm])
-    meta_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('ALIGN', (0,0), (0,-1), 'RIGHT'),
-        ('ALIGN', (1,0), (1,-1), 'LEFT'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-    ]))
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=dn_date.strftime('%d.%m.%Y') if dn_date else '',
+    ))
+    elements.append(Spacer(1, 0.4*cm))
     
-    header_table = Table([[title, meta_table]], colWidths=[9*cm, 8*cm])
-    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph(L['delivery_note'], styles['title']))
+    elements.append(Spacer(1, 0.3*cm))
     
     # === POSITIONSTABELLE ===
     from .models import CustomerOrderItem
@@ -918,52 +708,39 @@ def generate_delivery_note_pdf(delivery_note, language='DE'):
         delivery_note_number=delivery_note.sequence_number
     ).order_by('position')
     
-    table_header = [
-        Paragraph(L['position'], styles['table_header']),
-        Paragraph(L['article'], styles['table_header']),
-        Paragraph(L['description'], styles['table_header']),
-        Paragraph(L['quantity'], styles['table_header']),
-        Paragraph(L['serial'], styles['table_header']),
+    headers = [
+        L['position'], L['article'], L['description'],
+        L['quantity'], L['serial'],
     ]
     
-    table_data = [table_header]
-    
+    rows = []
     for item in items:
-        desc = item.name or ''
-        if item.description:
-            desc += f"<br/><font size='7' color='grey'>{item.description[:80]}{'...' if len(item.description) > 80 else ''}</font>"
-        
-        table_data.append([
+        rows.append([
             Paragraph(str(item.position), styles['table_cell']),
             Paragraph(item.article_number or '', styles['table_cell']),
-            Paragraph(desc, styles['table_cell']),
+            Paragraph(_escape(item.name or ''), styles['table_cell']),
             Paragraph(f"{item.quantity or 1} {item.unit or 'Stk'}", styles['table_cell']),
             Paragraph(item.serial_number or '-', styles['table_cell']),
         ])
+        if item.description:
+            rows.append([
+                '', '',
+                Paragraph(_escape(_clip(item.description, 300)), styles['small']),
+                '', '',
+            ])
     
-    pos_table = Table(table_data, colWidths=[1*cm, 2.5*cm, 8*cm, 2.5*cm, 3*cm])
-    pos_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ff0099')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,1), (-1,-1), 8),
-        ('ALIGN', (0,1), (0,-1), 'CENTER'),
-        ('ALIGN', (3,1), (3,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ('LEFTPADDING', (0,0), (-1,-1), 4),
-        ('RIGHTPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-    ]))
-    elements.append(pos_table)
+    col_widths = [1.0*cm, 2.2*cm, 6.4*cm, 1.8*cm, 4.6*cm]
+    elements.extend(build_positions_table(
+        headers, rows, col_widths=col_widths, align_right=[]))
     elements.append(Spacer(1, 1*cm))
     
     # === NOTIZEN ===
     if delivery_note.notes:
-        elements.append(Paragraph("Hinweise:", styles['heading']))
-        elements.append(Paragraph(delivery_note.notes.replace('\n', '<br/>'), styles['small']))
+        elements.append(Paragraph(
+            "Hinweise:" if language == 'DE' else "Notes:", styles['heading']))
+        elements.append(Spacer(1, 0.2*cm))
+        elements.append(Paragraph(
+            _escape(delivery_note.notes).replace('\n', '<br/>'), styles['small']))
         elements.append(Spacer(1, 0.5*cm))
     
     # === HINWEIS ===
@@ -1019,78 +796,49 @@ def generate_invoice_pdf(invoice, language='DE'):
     doc = OrderDocumentTemplate(
         buffer,
         pagesize=A4,
-        topMargin=3.5*cm,
-        bottomMargin=3.5*cm,
-        leftMargin=2*cm,
-        rightMargin=2*cm,
         company=company,
         document=invoice,
         document_type='invoice'
     )
     
     elements = []
-    
-    # === EINZEILIGE FIRMENADRESSE ===
-    company_line = f"{company.company_name} • {company.street} {company.house_number or ''} • {company.postal_code} {company.city}"
-    elements.append(Paragraph(company_line, styles['tiny']))
-    elements.append(Spacer(1, 0.1*cm))
-    
-    # Trennlinie
-    line_table = Table([['_' * 80]], colWidths=[17*cm])
-    line_table.setStyle(TableStyle([
-        ('TEXTCOLOR', (0,0), (-1,-1), colors.grey),
-        ('FONTSIZE', (0,0), (-1,-1), 6),
-    ]))
-    elements.append(line_table)
-    elements.append(Spacer(1, 0.3*cm))
+    order = invoice.order
     
     # === RECHNUNGSADRESSE ===
     billing_addr = invoice.billing_address or order.billing_address
     if billing_addr:
-        for line in billing_addr.split('\n'):
-            # Wrap long lines to max 35 characters
-            wrapped_lines = _wrap_text(line, max_length=35)
-            for wrapped in wrapped_lines:
-                elements.append(Paragraph(wrapped, styles['normal']))
-    elif order.customer:
-        customer = order.customer
-        for line in get_customer_address_lines(customer):
-            # Wrap long lines to max 35 characters
-            wrapped_lines = _wrap_text(line, max_length=35)
-            for wrapped in wrapped_lines:
-                elements.append(Paragraph(wrapped, styles['normal']))
-    elements.append(Spacer(1, 1*cm))
+        address_lines = [l for l in billing_addr.split('\n') if l.strip()]
+    else:
+        address_lines = get_customer_address_lines(order.customer)
     
-    # === DOKUMENTTITEL UND METADATEN ===
-    meta_data = []
-    meta_data.append([L['invoice_number'], invoice.invoice_number])
-    meta_data.append([L['order_number'], order.order_number or '---'])
-    # Angebotsreferenz und Kundenbestellnummer hinzufügen
+    # === DOKUMENTBOX (rechts) wie in der Vorlage ===
+    doc_box_lines = [
+        (L['invoice'], True),
+        (invoice.invoice_number, False),
+        (f"{L['order_number']} {order.order_number or '---'}", False),
+    ]
     if order.quotation:
-        quotation_ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
-        meta_data.append(['Angebot' if language == 'DE' else 'Quotation', quotation_ref])
+        ref = getattr(order.quotation, 'quotation_number', None) or str(order.quotation.id)
+        doc_box_lines.append((
+            f"{'Angebot' if language == 'DE' else 'Quotation'} {ref}", False))
     if order.customer_document:
-        meta_data.append(['Bestellnummer' if language == 'DE' else 'PO Number', order.customer_document])
-    meta_data.append([L['invoice_date'], invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '---'])
-    meta_data.append([L['due_date'], invoice.due_date.strftime('%d.%m.%Y') if invoice.due_date else '---'])
+        doc_box_lines.append((
+            f"{'Bestellnummer' if language == 'DE' else 'PO'} {order.customer_document}",
+            False))
+    if invoice.due_date:
+        doc_box_lines.append(
+            (f"{L['due_date']} {invoice.due_date.strftime('%d.%m.%Y')}", False))
     if getattr(order, 'customer_vat_id', None):
-        meta_data.append([L['vat_id'], order.customer_vat_id])
+        doc_box_lines.append((f"{L['vat_id']} {order.customer_vat_id}", False))
     
-    title = Paragraph(L['invoice'], styles['title'])
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '',
+    ))
+    elements.append(Spacer(1, 0.4*cm))
     
-    meta_table = Table(meta_data, colWidths=[4*cm, 4*cm])
-    meta_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 8),
-        ('ALIGN', (0,0), (0,-1), 'RIGHT'),
-        ('ALIGN', (1,0), (1,-1), 'LEFT'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-    ]))
-    
-    header_table = Table([[title, meta_table]], colWidths=[9*cm, 8*cm])
-    header_table.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 1*cm))
+    elements.append(Paragraph(L['invoice'], styles['title']))
+    elements.append(Spacer(1, 0.3*cm))
     
     # === POSITIONSTABELLE ===
     from .models import CustomerOrderItem
@@ -1102,51 +850,32 @@ def generate_invoice_pdf(invoice, language='DE'):
         invoice_number=invoice.sequence_number
     ).order_by('position')
     
-    table_header = [
-        Paragraph(L['position'], styles['table_header']),
-        Paragraph(L['article'], styles['table_header']),
-        Paragraph(L['description'], styles['table_header']),
-        Paragraph(L['quantity'], styles['table_header']),
-        Paragraph(L['unit_price'], styles['table_header']),
-        Paragraph(L['total'], styles['table_header']),
+    headers = [
+        L['position'], L['article'], L['description'],
+        L['quantity'], L['unit_price'], L['total'],
     ]
     
-    table_data = [table_header]
-    
+    rows = []
     for item in items:
-        desc = item.name or ''
-        if item.description:
-            desc += f"<br/><font size='7' color='grey'>{item.description[:80]}{'...' if len(item.description) > 80 else ''}</font>"
-        
         total = (item.final_price or item.list_price or 0) * (item.quantity or 1)
-        
-        table_data.append([
+        rows.append([
             Paragraph(str(item.position), styles['table_cell']),
             Paragraph(item.article_number or '', styles['table_cell']),
-            Paragraph(desc, styles['table_cell']),
+            Paragraph(_escape(item.name or ''), styles['table_cell']),
             Paragraph(f"{item.quantity or 1} {item.unit or 'Stk'}", styles['table_cell']),
-            Paragraph(f"{item.final_price or item.list_price or 0:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.'), styles['table_cell']),
-            Paragraph(f"{total:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.'), styles['table_cell']),
+            Paragraph(format_amount(item.final_price or item.list_price), styles['table_cell']),
+            Paragraph(format_amount(total), styles['table_cell']),
         ])
+        if item.description:
+            rows.append([
+                '', '',
+                Paragraph(_escape(_clip(item.description, 300)), styles['small']),
+                '', '', '',
+            ])
     
-    pos_table = Table(table_data, colWidths=[1*cm, 2.5*cm, 7*cm, 2*cm, 2.25*cm, 2.25*cm])
-    pos_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#ff0099')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,1), (-1,-1), 8),
-        ('ALIGN', (0,1), (0,-1), 'CENTER'),
-        ('ALIGN', (3,1), (3,-1), 'CENTER'),
-        ('ALIGN', (4,1), (5,-1), 'RIGHT'),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ('LEFTPADDING', (0,0), (-1,-1), 4),
-        ('RIGHTPADDING', (0,0), (-1,-1), 4),
-        ('TOPPADDING', (0,0), (-1,-1), 4),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
-    ]))
-    elements.append(pos_table)
+    col_widths = [1.0*cm, 2.2*cm, 5.4*cm, 1.5*cm, 2.4*cm, 2.5*cm]
+    elements.extend(build_positions_table(
+        headers, rows, col_widths=col_widths, align_right=[4, 5]))
     elements.append(Spacer(1, 0.5*cm))
     
     # === SUMMEN ===
@@ -1154,23 +883,11 @@ def generate_invoice_pdf(invoice, language='DE'):
     tax = invoice.tax_amount or Decimal('0')
     gross = invoice.gross_amount or (net + tax)
     
-    sum_data = [
-        ['', L['net_total'], f"{net:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.')],
-        ['', L['vat'], f"{tax:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.')],
-        ['', L['gross_total'], f"{gross:,.2f} €".replace(',', 'X').replace('.', ',').replace('X', '.')],
-    ]
-    
-    sum_table = Table(sum_data, colWidths=[11*cm, 3*cm, 3*cm])
-    sum_table.setStyle(TableStyle([
-        ('FONTSIZE', (0,0), (-1,-1), 9),
-        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-        ('ALIGN', (2,0), (2,-1), 'RIGHT'),
-        ('FONTNAME', (1,-1), (-1,-1), 'Helvetica-Bold'),
-        ('LINEABOVE', (1,-1), (-1,-1), 1, colors.black),
-        ('TOPPADDING', (0,0), (-1,-1), 3),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+    elements.append(build_totals_table([
+        (L['net_total'], format_amount(net)),
+        (L['vat'], format_amount(tax)),
+        (L['gross_total'], format_amount(gross)),
     ]))
-    elements.append(sum_table)
     elements.append(Spacer(1, 1*cm))
     
     # === ZAHLUNGSHINWEIS ===
@@ -1179,10 +896,11 @@ def generate_invoice_pdf(invoice, language='DE'):
     
     # Bankdaten
     if company:
-        bank_info = f"<b>Bank:</b> {company.bank_name or ''}<br/>"
+        bank_info = f"<b>{'Bank' if language == 'DE' else 'Bank'}:</b> {company.bank_name or ''}<br/>"
         bank_info += f"<b>IBAN:</b> {company.iban or ''}<br/>"
         bank_info += f"<b>BIC:</b> {company.bic or ''}<br/>"
-        bank_info += f"<b>Verwendungszweck:</b> {invoice.invoice_number}"
+        bank_info += (f"<b>{'Verwendungszweck' if language == 'DE' else 'Reference'}:</b> "
+                      f"{invoice.invoice_number}")
         elements.append(Paragraph(bank_info, styles['small']))
     
     elements.append(Spacer(1, 1*cm))

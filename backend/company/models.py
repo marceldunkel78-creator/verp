@@ -73,6 +73,16 @@ class CompanySettings(models.Model):
         help_text='Logo/Header für Bestelldokumente (empfohlen: PNG, ca. 800x150px)'
     )
     
+    # Unterzeile unter dem Logo im Briefkopf.
+    # In der Vorlage: "Bildverarbeitung · Mikroskopie"
+    tagline = models.CharField(
+        max_length=200,
+        default='Bildverarbeitung · Mikroskopie',
+        blank=True,
+        verbose_name='Briefkopf-Unterzeile',
+        help_text='Kleine Zeile rechts unter dem Logo, z.B. "Bildverarbeitung · Mikroskopie"'
+    )
+    
     # Geschäftsjahr Einstellungen
     fiscal_year_start_month = models.PositiveIntegerField(
         default=4,

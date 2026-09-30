@@ -20,6 +20,14 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
+from core.pdf_base import (
+    FONT_BOLD,
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    build_positions_table,
+    get_company_styles,
+)
 from django.conf import settings
 from django.utils import timezone
 from PyPDF2 import PdfMerger, PdfReader
@@ -48,70 +56,28 @@ def generate_travel_expense_pdf(report):
     """
     buffer = BytesIO()
     
-    # Seiteneinstellungen
-    page_width, page_height = A4
-    margin_left = 2.5 * cm
-    margin_right = 2 * cm
-    margin_top = 2 * cm
-    margin_bottom = 2.5 * cm
+    company = get_company_settings()
     
-    doc = SimpleDocTemplate(
+    doc = VerpDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=margin_left,
-        rightMargin=margin_right,
-        topMargin=margin_top,
-        bottomMargin=margin_bottom
+        company=company,
+        title='Reisekostenabrechnung',
+        continuation_text=(
+            f"Reisekostenabrechnung KW {report.calendar_week}/{report.year}"),
     )
     
     # Styles
     styles = getSampleStyleSheet()
+    vs = get_company_styles()
     
-    title_style = ParagraphStyle(
-        'Title',
-        parent=styles['Heading1'],
-        fontSize=16,
-        spaceAfter=20,
-        alignment=TA_CENTER
-    )
-    
-    heading_style = ParagraphStyle(
-        'Heading',
-        parent=styles['Heading2'],
-        fontSize=12,
-        spaceBefore=15,
-        spaceAfter=10
-    )
-    
-    normal_style = ParagraphStyle(
-        'Normal',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceAfter=6
-    )
-    
-    small_style = ParagraphStyle(
-        'Small',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.grey
-    )
+    title_style = vs['VerpTitle']
+    heading_style = vs['VerpHeading']
+    normal_style = vs['VerpBody']
+    small_style = vs['VerpSmall']
     
     # Inhaltselemente
     elements = []
-    
-    # Firmen-Header
-    company = get_company_settings()
-    if company and company.document_header:
-        try:
-            header_path = company.document_header.path
-            if os.path.exists(header_path):
-                img = Image(header_path, width=17*cm, height=3*cm)
-                img.hAlign = 'CENTER'
-                elements.append(img)
-                elements.append(Spacer(1, 0.5*cm))
-        except Exception:
-            pass
     
     # Mitarbeiter-Daten
     user = report.user
@@ -119,15 +85,30 @@ def generate_travel_expense_pdf(report):
     employee_name = f"{employee.first_name} {employee.last_name}" if employee else user.get_full_name()
     employee_id = employee.employee_id if employee else "-"
     
+    # === EMPFÄNGER und Dokumentbox wie in der Vorlage ===
+    address_lines = [employee_name]
+    if employee and employee.department:
+        address_lines.insert(0, employee.department)
+    
+    doc_box_lines = [
+        ('Reisekostenabrechnung', True),
+        (f"KW {report.calendar_week}/{report.year}", False),
+        (f"Zeitraum {report.start_date.strftime('%d.%m.%Y')} - "
+         f"{report.end_date.strftime('%d.%m.%Y')}", False),
+        (f"Status {report.get_status_display()}", False),
+    ]
+    
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=report.end_date.strftime('%d.%m.%Y'),
+    ))
+    elements.append(Spacer(1, 0.4*cm))
+    
     # Titel
+    elements.append(Paragraph("Reisekostenabrechnung", title_style))
+    elements.append(Spacer(1, 0.2*cm))
     elements.append(Paragraph(
-        f"Reisekostenabrechnung",
-        title_style
-    ))
-    elements.append(Paragraph(
-        f"KW {report.calendar_week}/{report.year}",
-        ParagraphStyle('Subtitle', parent=styles['Heading2'], alignment=TA_CENTER, fontSize=14)
-    ))
+        f"KW {report.calendar_week}/{report.year}", vs['VerpHeading']))
     elements.append(Spacer(1, 0.5*cm))
     
     # Mitarbeiter-Info Box
@@ -141,10 +122,17 @@ def generate_travel_expense_pdf(report):
     info_table = Table(info_data, colWidths=[4*cm, 12*cm])
     info_table.setStyle(TableStyle([
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 0), (0, -1), FONT_BOLD),
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
         ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.375, colors.black),
+        ('LINEABOVE', (0, 0), (-1, 0), 0.375, colors.black),
+        ('LINEBELOW', (0, -1), (-1, -1), 0.375, colors.black),
+        ('LINEBEFORE', (0, 0), (0, -1), 0.375, colors.black),
+        ('LINEAFTER', (-1, 0), (-1, -1), 0.375, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
     elements.append(info_table)
     elements.append(Spacer(1, 0.5*cm))

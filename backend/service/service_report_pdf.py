@@ -21,6 +21,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
+from core.pdf_base import (
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    get_company_styles,
+)
 from django.conf import settings
 from .notizen_utils import sanitize_for_pdf, html_to_plain_text, html_to_pdf_blocks
 import os
@@ -80,118 +86,71 @@ def generate_service_report_pdf(report, language='de'):
     company = CompanySettings.objects.first()
     
     # Setup document
-    doc = SimpleDocTemplate(
+    doc = VerpDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
+        company=company,
+        title=t['service_report'],
+        continuation_text=(
+            f"{t['service_report']} {report.report_number}"
+            if getattr(report, 'report_number', None)
+            else t['service_report']),
     )
     
     # Setup styles
     styles = getSampleStyleSheet()
+    vs = get_company_styles()
     
-    title_style = ParagraphStyle(
-        'Title',
-        parent=styles['Heading1'],
-        fontSize=16,
-        spaceAfter=12,
-        alignment=TA_LEFT
-    )
-    
-    heading_style = ParagraphStyle(
-        'Heading',
-        parent=styles['Heading2'],
-        fontSize=12,
-        spaceBefore=12,
-        spaceAfter=6
-    )
-    
-    normal_style = ParagraphStyle(
-        'Normal',
-        parent=styles['Normal'],
-        fontSize=10,
-        spaceAfter=6
-    )
+    title_style = vs['VerpTitle']
+    heading_style = vs['VerpHeading']
+    normal_style = vs['VerpBody']
+    small_style = vs['VerpSmall']
+    list_style = vs['VerpBody']
+    address_style = vs['VerpAddress']
 
     h1_style = ParagraphStyle(
         'NotesH1',
         parent=styles['Heading1'],
-        fontSize=18,
+        fontSize=16,
         spaceBefore=10,
         spaceAfter=6,
-        textColor=colors.HexColor('#1F2937'),
+        textColor=colors.black,
     )
 
     h2_style = ParagraphStyle(
         'NotesH2',
         parent=styles['Heading2'],
-        fontSize=14,
+        fontSize=13,
         spaceBefore=8,
         spaceAfter=4,
-        textColor=colors.HexColor('#1F2937'),
+        textColor=colors.black,
     )
 
     h3_style = ParagraphStyle(
         'NotesH3',
         parent=styles['Heading3'],
-        fontSize=12,
+        fontSize=11,
         spaceBefore=6,
         spaceAfter=4,
-        textColor=colors.HexColor('#374151'),
+        textColor=colors.black,
     )
 
     list_style = ParagraphStyle(
         'NotesListItem',
-        parent=styles['Normal'],
+        parent=vs['VerpBody'],
         fontSize=10,
         leftIndent=14,
         bulletIndent=2,
         spaceAfter=3,
     )
     
-    small_style = ParagraphStyle(
-        'Small',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.gray
-    )
-    
-    address_style = ParagraphStyle(
-        'Address',
-        parent=styles['Normal'],
-        fontSize=10,
-        leading=14
-    )
-    
     # Build document elements
     elements = []
     
-    # === HEADER / LOGO ===
-    if company and company.document_header:
-        try:
-            logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
-            if os.path.exists(logo_path):
-                logo = Image(logo_path, width=6*cm, height=2*cm)
-                logo.hAlign = 'RIGHT'
-                elements.append(logo)
-                elements.append(Spacer(1, 0.5*cm))
-        except Exception as e:
-            print(f"Error loading logo: {e}")
-    
-    # === COMPANY SENDER LINE ===
-    if company:
-        sender_line = f"{company.company_name} · {company.street} {company.house_number} · {company.postal_code} {company.city}"
-        elements.append(Paragraph(sender_line, small_style))
-        elements.append(Spacer(1, 0.3*cm))
-    
-    # === CUSTOMER ADDRESS ===
+    # === EMPFÄNGER und Dokumentbox wie in der Vorlage ===
     customer = report.customer
+    address_lines = []
     if customer:
-        address_lines = []
-        
-        # Get primary address
         if hasattr(customer, 'addresses'):
             address = customer.addresses.filter(is_active=True).first()
             if address:
@@ -202,7 +161,6 @@ def generate_service_report_pdf(report, language='de'):
                 if address.department:
                     address_lines.append(address.department)
                 
-                # Contact name
                 contact_parts = []
                 if customer.salutation:
                     contact_parts.append(customer.salutation)
@@ -215,53 +173,47 @@ def generate_service_report_pdf(report, language='de'):
                 if contact_parts:
                     address_lines.append(' '.join(contact_parts))
                 
-                # Street
                 street_line = f"{address.street or ''} {address.house_number or ''}".strip()
                 if street_line:
                     address_lines.append(street_line)
                 if address.address_supplement:
                     address_lines.append(address.address_supplement)
                 
-                # City
                 city_line = f"{address.postal_code or ''} {address.city or ''}".strip()
                 if city_line:
                     address_lines.append(city_line)
                 
-                # Country (if not Germany)
                 if address.country and address.country not in ('DE', 'Deutschland', 'Germany'):
                     address_lines.append(address.country)
         
         if not address_lines:
-            # Fallback to customer name
             name = f"{customer.first_name or ''} {customer.last_name or ''}".strip()
             if name:
                 address_lines.append(name)
-        
-        for line in address_lines:
-            elements.append(Paragraph(line, address_style))
-        
-        elements.append(Spacer(1, 1*cm))
     
-    # === DATE AND LOCATION (right aligned) ===
+    # === DOKUMENTBOX (rechts) wie in der Vorlage ===
     date_text = report.date.strftime('%d.%m.%Y') if report.date else ''
-    location_text = f"{report.location}, {date_text}" if report.location else date_text
-    
-    date_style = ParagraphStyle(
-        'DateRight',
-        parent=styles['Normal'],
-        fontSize=10,
-        alignment=TA_RIGHT
-    )
-    elements.append(Paragraph(location_text, date_style))
-    elements.append(Spacer(1, 0.5*cm))
-    
-    # === SUBJECT LINE ===
-    order_number = ''
-    if report.linked_order:
-        order_number = report.linked_order.order_number
-    
+    order_number = report.linked_order.order_number if report.linked_order else ''
     subject = f"{t['service_report_order']} {order_number}" if order_number else t['service_report']
-    elements.append(Paragraph(f"<b>{t['subject_prefix']}: {subject}</b>", title_style))
+    
+    doc_box_lines = [
+        (t['service_report'], True),
+    ]
+    if getattr(report, 'report_number', None):
+        doc_box_lines.append((report.report_number, False))
+    if order_number:
+        doc_box_lines.append((f"{t['service_report_order']} {order_number}", False))
+    if report.location:
+        doc_box_lines.append((report.location, False))
+    
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=date_text,
+    ))
+    elements.append(Spacer(1, 0.4*cm))
+    
+    # === BETREFFZEILE ===
+    elements.append(Paragraph(f"{t['subject_prefix']}: {subject}", title_style))
     elements.append(Spacer(1, 0.5*cm))
     
     # === SYSTEM INFO ===

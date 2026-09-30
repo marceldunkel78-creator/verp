@@ -2,10 +2,20 @@ from django.http import HttpResponse
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import ParagraphStyle
 from company.models import CompanySettings
+from core.pdf_base import (
+    FONT_BOLD,
+    FONT_REGULAR,
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    build_positions_table,
+    build_totals_table,
+    format_amount,
+    get_company_styles,
+)
 from datetime import date
 import io
 
@@ -15,57 +25,52 @@ def render_order_pdf_bytes(order):
     company = CompanySettings.get_settings()
     total_amount = sum(item.total_price for item in order.items.all())
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-                           topMargin=2*cm, bottomMargin=3*cm,
-                           leftMargin=2*cm, rightMargin=2*cm)
-    elements = []
-    styles = getSampleStyleSheet()
-    style_heading = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading1'],
-        fontSize=14,
-        textColor=colors.HexColor('#0066cc'),
-        spaceAfter=12
+
+    order_number = order.order_number or '---'
+    doc = VerpDocTemplate(
+        buffer, pagesize=A4, company=company,
+        title='Bestellung',
+        continuation_text=(
+            f"Bestellung {order_number} vom "
+            f"{order.order_date.strftime('%d.%m.%Y')}"
+            if order.order_date else f"Bestellung {order_number}"),
     )
-    style_normal = styles['Normal']
-    style_small = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8)
+    elements = []
+    vs = get_company_styles()
+    style_heading = vs['VerpTitle']
+    style_normal = vs['VerpBody']
+    style_small = vs['VerpSmall']
 
-    if company.document_header:
-        try:
-            # Logo rechts oben (nur erste Seite), kleinere Größe: 5cm breit, 1.5cm hoch
-            img = Image(company.document_header.path, width=5*cm, height=1.5*cm, kind='proportional')
-            img.hAlign = 'RIGHT'
-            elements.append(img)
-            elements.append(Spacer(1, 0.5*cm))
-        except:
-            elements.append(Paragraph(f"<b>{company.company_name}</b>", style_heading))
-    else:
-        elements.append(Paragraph(f"<b>{company.company_name}</b>", style_heading))
+    # === EMPFÄNGER (Lieferant) und Dokumentbox wie in der Vorlage ===
+    supplier_address_lines = [
+        order.supplier.company_name,
+        f"{order.supplier.street} {order.supplier.house_number or ''}".strip(),
+        f"{order.supplier.postal_code} {order.supplier.city}",
+    ]
+    supplier_address_lines += [
+        l for l in [order.supplier.country] if l
+    ]
 
-    sender_line = f"{company.company_name} • {company.street} {company.house_number} • {company.postal_code} {company.city}"
-    elements.append(Paragraph(sender_line, style_small))
-    elements.append(Spacer(1, 0.3*cm))
-
-    supplier_address = f"""<b>{order.supplier.company_name}</b><br/>
-    {order.supplier.street} {order.supplier.house_number}<br/>
-    {order.supplier.postal_code} {order.supplier.city}<br/>
-    {order.supplier.country}"""
-    elements.append(Paragraph(supplier_address, style_normal))
-    elements.append(Spacer(1, 1*cm))
-
-    meta_text = f"""<para align=right>
-    <b>Bestellnummer:</b> {order.order_number}<br/>
-    <b>Bestelldatum:</b> {order.order_date.strftime('%d.%m.%Y') if order.order_date else '—'}<br/>
-    """
+    doc_box_lines = [
+        ('Bestellung', True),
+        (order_number, False),
+    ]
+    if order.order_date:
+        doc_box_lines.append(
+            (f"Bestelldatum {order.order_date.strftime('%d.%m.%Y')}", False))
     if order.offer_reference:
-        meta_text += f"<b>Ihre Angebots-Nr.:</b> {order.offer_reference}<br/>"
+        doc_box_lines.append((f"Ihre Angebots-Nr. {order.offer_reference}", False))
     if order.supplier.customer_number:
-        meta_text += f"<b>Unsere Kundennr.:</b> {order.supplier.customer_number}<br/>"
-    meta_text += "</para>"
-    elements.append(Paragraph(meta_text, style_normal))
-    elements.append(Spacer(1, 0.8*cm))
+        doc_box_lines.append(
+            (f"Unsere Kundennr. {order.supplier.customer_number}", False))
 
-    elements.append(Paragraph(f"<b>Bestellung {order.order_number}</b>", style_heading))
+    elements.append(build_address_and_doc_row(
+        supplier_address_lines, build_document_box(doc_box_lines), company,
+        date_text=order.order_date.strftime('%d.%m.%Y') if order.order_date else '',
+    ))
+    elements.append(Spacer(1, 0.4*cm))
+
+    elements.append(Paragraph('Bestellung', style_heading))
     elements.append(Spacer(1, 0.3*cm))
 
     elements.append(Paragraph("Sehr geehrte Damen und Herren,", style_normal))
@@ -79,45 +84,35 @@ def render_order_pdf_bytes(order):
         elements.append(Paragraph(order.custom_text.replace('\n', '<br/>'), custom_style))
         elements.append(Spacer(1, 0.5*cm))
 
-    table_data = [['Pos.', 'Art.-Nr.', 'Beschreibung', 'Menge', 'Einh.', 'EP', 'Rabatt', 'Gesamt']]
+    headers = ['Pos.', 'Art.-Nr.', 'Beschreibung', 'Menge', 'Einh.',
+               'EP', 'Rabatt', 'Gesamt']
+
+    rows = []
     for item in order.items.all().order_by('position'):
-        desc = item.name
+        name = item.name
         if item.description:
-            desc += f"\n{item.description}"
+            name += f"<br/>{item.description}"
         if item.customer_order_number:
-            desc += f"\nKA: {item.customer_order_number}"
-        table_data.append([
+            name += f"<br/>KA: {item.customer_order_number}"
+        rows.append([
             str(item.position),
             item.article_number or '—',
-            desc,
+            Paragraph(name, style_small),
             f"{item.quantity}",
             item.unit or 'Stk.',
-            f"{item.list_price:.2f} {item.currency}",
+            format_amount(item.list_price, item.currency),
             f"{item.discount_percent:.2f}%",
-            f"{item.total_price:.2f} {item.currency}"
+            format_amount(item.total_price, item.currency),
         ])
-    table_data.append(['', '', '', '', '', '', 'Gesamt:', f"{total_amount:.2f} EUR"])
-    table = Table(table_data, colWidths=[1.2*cm, 2.5*cm, 6*cm, 1.5*cm, 1.2*cm, 2*cm, 1.5*cm, 2.5*cm])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066cc')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -2), colors.white),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('ALIGN', (3, 1), (3, -1), 'RIGHT'),  # Menge
-        ('ALIGN', (5, 1), (-1, -1), 'RIGHT'),  # Preise
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('GRID', (0, 0), (-1, -2), 0.5, colors.grey),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f0f0f0')),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('LINEABOVE', (0, -1), (-1, -1), 2, colors.black),
+
+    col_widths = [0.9*cm, 2.0*cm, 4.3*cm, 1.2*cm, 1.1*cm, 1.9*cm, 1.4*cm, 2.2*cm]
+    elements.extend(build_positions_table(
+        headers, rows, col_widths=col_widths, align_right=[5, 6, 7]))
+    elements.append(Spacer(1, 0.5*cm))
+
+    elements.append(build_totals_table([
+        ('Gesamt', format_amount(total_amount, 'EUR')),
     ]))
-    elements.append(table)
     elements.append(Spacer(1, 0.8*cm))
 
     conditions = "<b>Liefer- und Zahlungsbedingungen:</b><br/>"
@@ -145,24 +140,7 @@ def render_order_pdf_bytes(order):
     Mit freundlichen Grüßen<br/>""" + company.company_name
     elements.append(Paragraph(closing, style_normal))
 
-    def add_footer(canvas, doc):
-        canvas.saveState()
-        footer_style = ParagraphStyle('Footer', fontSize=7, textColor=colors.grey)
-        footer_text = f"""
-        <b>{company.company_name}</b><br/>
-        {company.street} {company.house_number}, {company.postal_code} {company.city}<br/>
-        {"Tel: " + company.phone if company.phone else ""} {company.email if company.email else ""}<br/><br/>
-        <b>Bankverbindung:</b> {company.bank_name}, IBAN: {company.iban}, BIC: {company.bic}<br/>
-        <b>Geschäftsführer:</b> {company.managing_director}<br/>
-        {company.register_court} {company.commercial_register}
-        {"<br/>USt-IdNr.: " + company.vat_id if company.vat_id else ""}
-        """
-        p = Paragraph(footer_text, footer_style)
-        w, h = p.wrap(doc.width, doc.bottomMargin)
-        p.drawOn(canvas, doc.leftMargin, 2*cm - h)
-        canvas.restoreState()
-
-    doc.build(elements, onFirstPage=add_footer, onLaterPages=add_footer)
+    doc.build(elements)
 
     pdf = buffer.getvalue()
     buffer.close()

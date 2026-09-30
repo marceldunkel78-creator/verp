@@ -14,108 +14,36 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
 from reportlab.lib.utils import ImageReader
 from company.models import CompanySettings
-from django.conf import settings
+from core.pdf_base import (
+    FONT_REGULAR,
+    VerpDocTemplate,
+    build_address_and_doc_row,
+    build_document_box,
+    build_positions_table,
+    get_company_styles,
+)
 import os
 
 
-class LoanDeliveryNoteDocTemplate(BaseDocTemplate):
+class LoanDeliveryNoteDocTemplate(VerpDocTemplate):
     """
-    Custom DocTemplate für Leihlieferscheine mit Header und Footer
+    Custom DocTemplate für Leihlieferscheine.
+
+    Briefkopf, Fusszeile, Rand und Schriftgroessen kommen aus
+    core.pdf_base und entsprechen damit der Corporate-Design-Vorlage.
     """
-    def __init__(self, filename, company=None, customer_loan=None, language='de', **kwargs):
-        self.company = company
+    def __init__(self, filename, company=None, customer_loan=None,
+                 language='de', **kwargs):
         self.customer_loan = customer_loan
         self.language = language
-        BaseDocTemplate.__init__(self, filename, **kwargs)
 
-        frame = Frame(
-            self.leftMargin,
-            self.bottomMargin,
-            self.width,
-            self.height,
-            id='normal'
-        )
-
-        template = PageTemplate(
-            id='loan_delivery_note',
-            frames=frame,
-            onPage=self._add_header_footer
-        )
-        self.addPageTemplates([template])
-
-    def _add_header_footer(self, canvas, doc):
-        """Fügt Header und Footer zu jeder Seite hinzu"""
-        canvas.saveState()
-
-        width, height = A4
-        company = self.company
-        customer_loan = self.customer_loan
-
-        # === HEADER ===
-        page_num = canvas.getPageNumber()
-
-        # Logo (nur auf Seite 1, rechts oben)
-        if page_num == 1 and company and company.document_header:
-            try:
-                logo_path = os.path.join(settings.MEDIA_ROOT, company.document_header.name)
-                if os.path.exists(logo_path):
-                    logo_x = width - 7 * cm
-                    logo_y = height - 2.5 * cm
-                    try:
-                        img = ImageReader(logo_path)
-                        canvas.drawImage(img, logo_x, logo_y, width=5 * cm, height=1.5 * cm,
-                                         preserveAspectRatio=True, anchor='nw', mask='auto')
-                    except Exception:
-                        canvas.drawImage(logo_path, logo_x, logo_y, width=5 * cm, height=1.5 * cm,
-                                         preserveAspectRatio=True, anchor='nw')
-            except Exception as e:
-                print(f"Error loading header logo: {e}")
-
-        # Seitenzahl (ab Seite 2)
-        if page_num > 1:
-            canvas.setFont('Helvetica', 8)
-            canvas.setFillColor(colors.grey)
-            label = 'Loan Delivery Note' if self.language == 'en' else 'Leihlieferschein'
-            header_text = f"Seite {page_num} - {label} {customer_loan.loan_number}" if self.language == 'de' else f"Page {page_num} - {label} {customer_loan.loan_number}"
-            canvas.drawString(2 * cm, height - 3.2 * cm, header_text)
-            canvas.setStrokeColor(colors.grey)
-            canvas.line(2 * cm, height - 3.4 * cm, width - 2 * cm, height - 3.4 * cm)
-
-        # === FOOTER ===
-        footer_y = 1.2 * cm
-
-        canvas.setStrokeColor(colors.grey)
-        canvas.line(2 * cm, footer_y + 1.8 * cm, width - 2 * cm, footer_y + 1.8 * cm)
-
-        canvas.setFont('Helvetica', 6.5)
-        canvas.setFillColor(colors.HexColor('#333333'))
-
-        if company:
-            col1_x = 2 * cm
-            canvas.drawString(col1_x, footer_y + 1.4 * cm, company.company_name or '')
-            canvas.drawString(col1_x, footer_y + 0.9 * cm,
-                              f"{company.street or ''} {company.house_number or ''}")
-            canvas.drawString(col1_x, footer_y + 0.4 * cm,
-                              f"D-{company.postal_code or ''} {company.city or ''}")
-
-            col2_x = 6.5 * cm
-            canvas.drawString(col2_x, footer_y + 1.4 * cm, f"Tel. {company.phone or ''}")
-            canvas.drawString(col2_x, footer_y + 0.9 * cm, company.email or '')
-            canvas.drawString(col2_x, footer_y + 0.4 * cm,
-                              (company.website or '').replace('https://', '').replace('http://', ''))
-
-            col3_x = 10.5 * cm
-            canvas.drawString(col3_x, footer_y + 1.4 * cm,
-                              f"{company.register_court or ''}, {company.commercial_register or ''}")
-            canvas.drawString(col3_x, footer_y + 0.9 * cm, "Geschäftsführer:")
-            canvas.drawString(col3_x, footer_y + 0.4 * cm, company.managing_director or '')
-
-            col4_x = 15 * cm
-            canvas.drawString(col4_x, footer_y + 1.4 * cm, company.bank_name or '')
-            canvas.drawString(col4_x, footer_y + 0.9 * cm, f"BIC: {company.bic or ''}")
-            canvas.drawString(col4_x, footer_y + 0.4 * cm, f"IBAN: {company.iban or ''}")
-
-        canvas.restoreState()
+        label = 'Loan Delivery Note' if language == 'en' else 'Leihlieferschein'
+        loan_number = getattr(customer_loan, 'loan_number', None) or '---'
+        kwargs.setdefault('title', label)
+        VerpDocTemplate.__init__(
+            self, filename, company=company,
+            continuation_text=f'{label} {loan_number}',
+            **kwargs)
 
 
 def generate_loan_delivery_note_pdf(customer_loan, language='de'):
@@ -130,168 +58,101 @@ def generate_loan_delivery_note_pdf(customer_loan, language='de'):
     doc = LoanDeliveryNoteDocTemplate(
         buffer,
         pagesize=A4,
-        topMargin=3.5 * cm,
-        bottomMargin=3.5 * cm,
-        leftMargin=2 * cm,
-        rightMargin=2 * cm,
         company=company,
         customer_loan=customer_loan,
         language=language
     )
 
     elements = []
-    styles = getSampleStyleSheet()
+    vs = get_company_styles()
+    style_title = vs['VerpTitle']
+    style_normal = vs['VerpBody']
+    style_small = vs['VerpSmall']
+    style_heading = vs['VerpHeading']
+    style_clause = vs['VerpClause']
 
-    # Styles
-    style_title = ParagraphStyle(
-        'Title',
-        parent=styles['Heading1'],
-        fontSize=16,
-        textColor=colors.HexColor('#cc0066'),
-        spaceAfter=6
-    )
+    is_en = language == 'en'
 
-    style_subtitle = ParagraphStyle(
-        'Subtitle',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=colors.HexColor('#666666'),
-        spaceAfter=20
-    )
+    # === EMPFÄNGER (Kundenadresse) und Dokumentbox wie in der Vorlage ===
+    address_lines = [
+        l for l in customer_loan.get_delivery_address_display().split('\n')
+        if l.strip()
+    ]
 
-    style_heading = ParagraphStyle(
-        'CustomHeading',
-        parent=styles['Heading2'],
-        fontSize=12,
-        textColor=colors.HexColor('#333333'),
-        spaceBefore=15,
-        spaceAfter=8
-    )
+    doc_box_lines = [
+        ('Loan Delivery Note' if is_en else 'Leihlieferschein', True),
+        (customer_loan.loan_number, False),
+        (
+            f"{'Loan date' if is_en else 'Verleihdatum'} "
+            f"{customer_loan.loan_date.strftime('%d.%m.%Y')}",
+            False,
+        ),
+    ]
+    if customer_loan.return_deadline:
+        doc_box_lines.append((
+            f"{'Return deadline' if is_en else 'Rückgabefrist'} "
+            f"{customer_loan.return_deadline.strftime('%d.%m.%Y')}",
+            False,
+        ))
 
-    style_normal = styles['Normal']
-    style_small = ParagraphStyle('Small', parent=styles['Normal'], fontSize=8)
-
-    style_clause = ParagraphStyle(
-        'Clause',
-        parent=styles['Normal'],
-        fontSize=9,
-        textColor=colors.HexColor('#333333'),
-        spaceBefore=10,
-        spaceAfter=10,
-        borderWidth=1,
-        borderColor=colors.HexColor('#cc0066'),
-        borderPadding=8,
-        backColor=colors.HexColor('#fff5f8')
-    )
-
-    # === ABSENDER (einzeilig) ===
-    elements.append(Spacer(1, 0.5 * cm))
-    if company:
-        sender_line = f"{company.company_name} • {company.street} {company.house_number} • {company.postal_code} {company.city}"
-        elements.append(Paragraph(sender_line, style_small))
-        elements.append(Spacer(1, 0.3 * cm))
-
-    # === EMPFÄNGER (Kundenadresse) ===
-    delivery_address = customer_loan.get_delivery_address_display().replace('\n', '<br/>')
-    elements.append(Paragraph(f"<b>{delivery_address}</b>", style_normal))
-    elements.append(Spacer(1, 1 * cm))
-
-    # === DOKUMENT-METADATEN ===
-    if language == 'en':
-        meta_text = f"""<para align=right>
-    <b>Loan Delivery Note No.:</b> {customer_loan.loan_number}<br/>
-    <b>Loan Date:</b> {customer_loan.loan_date.strftime('%d.%m.%Y')}<br/>
-    """
-        if customer_loan.return_deadline:
-            meta_text += f"<b>Return Deadline:</b> {customer_loan.return_deadline.strftime('%d.%m.%Y')}<br/>"
-    else:
-        meta_text = f"""<para align=right>
-    <b>Leihlieferschein-Nr.:</b> {customer_loan.loan_number}<br/>
-    <b>Verleihdatum:</b> {customer_loan.loan_date.strftime('%d.%m.%Y')}<br/>
-    """
-        if customer_loan.return_deadline:
-            meta_text += f"<b>Rückgabefrist:</b> {customer_loan.return_deadline.strftime('%d.%m.%Y')}<br/>"
-    meta_text += "</para>"
-    elements.append(Paragraph(meta_text, style_normal))
-    elements.append(Spacer(1, 0.8 * cm))
+    elements.append(build_address_and_doc_row(
+        address_lines, build_document_box(doc_box_lines), company,
+        date_text=customer_loan.loan_date.strftime('%d.%m.%Y'),
+    ))
+    elements.append(Spacer(1, 0.4 * cm))
 
     # === TITEL ===
-    doc_title = f"Loan Delivery Note {customer_loan.loan_number}" if language == 'en' else f"Leihlieferschein {customer_loan.loan_number}"
-    elements.append(Paragraph(f"<b>{doc_title}</b>", style_title))
+    elements.append(Paragraph(
+        'Loan Delivery Note' if is_en else 'Leihlieferschein', style_title))
+    elements.append(Spacer(1, 0.2 * cm))
     customer_display = customer_loan.get_recipient_display()
     elements.append(Paragraph(
-        f"Verleihung an {customer_display}" if language == 'de' else f"Loan to {customer_display}",
-        style_subtitle
+        f"Loan to {customer_display}" if is_en
+        else f"Verleihung an {customer_display}",
+        style_small,
     ))
+    elements.append(Spacer(1, 0.5 * cm))
 
     # === EINLEITUNG ===
-    intro_text = "We hereby hand over the following items on loan:" if language == 'en' else "Hiermit übergeben wir Ihnen folgende Waren leihweise:"
+    intro_text = "We hereby hand over the following items on loan:" if is_en else "Hiermit übergeben wir Ihnen folgende Waren leihweise:"
     elements.append(Paragraph(intro_text, style_normal))
     elements.append(Spacer(1, 0.5 * cm))
 
     # === POSITIONS-TABELLE ===
-    if language == 'en':
-        table_data = [['Pos.', 'Art. No.', 'Description', 'Qty', 'Unit']]
-    else:
-        table_data = [['Pos.', 'Art.-Nr.', 'Beschreibung', 'Menge', 'Einh.']]
+    headers = (['Pos.', 'Art. No.', 'Description', 'Qty', 'Unit'] if is_en
+               else ['Pos.', 'Art.-Nr.', 'Beschreibung', 'Menge', 'Einh.'])
 
+    rows = []
     for item in customer_loan.items.all():
         desc = item.product_name
         if item.serial_number:
-            desc += f"\nS/N: {item.serial_number}"
+            desc += f"<br/>S/N: {item.serial_number}"
 
-        table_data.append([
+        rows.append([
             str(item.position),
             Paragraph(item.article_number or '—', style_small),
             Paragraph(desc, style_small),
             f"{item.quantity:g}",
-            item.unit
+            item.unit,
         ])
 
-    table = Table(table_data, colWidths=[1.2 * cm, 2.5 * cm, 8 * cm, 1.8 * cm, 1.8 * cm])
-    table.setStyle(TableStyle([
-        # Header
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#cc0066')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 0), (-1, 0), 8),
-
-        # Datenzeilen
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('ALIGN', (0, 1), (0, -1), 'CENTER'),
-        ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
-        ('VALIGN', (0, 1), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-
-        # Zebra-Streifen
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
-
-        # Grid
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dddddd')),
-        ('LINEBELOW', (0, 0), (-1, 0), 1, colors.HexColor('#cc0066')),
-    ]))
-
-    elements.append(table)
+    col_widths = [1.0 * cm, 2.2 * cm, 7.0 * cm, 1.8 * cm, 2.0 * cm]
+    elements.extend(build_positions_table(
+        headers, rows, col_widths=col_widths, align_right=[]))
     elements.append(Spacer(1, 0.8 * cm))
 
     # === RÜCKGABEFRIST ===
     if customer_loan.return_deadline:
-        deadline_label = 'Return deadline:' if language == 'en' else 'Rückgabefrist:'
+        deadline_label = 'Return deadline' if is_en else 'Rückgabefrist'
         elements.append(Paragraph(
-            f"<b>{deadline_label}</b> {customer_loan.return_deadline.strftime('%d.%m.%Y')}",
-            style_heading
+            f"{deadline_label}: {customer_loan.return_deadline.strftime('%d.%m.%Y')}",
+            style_normal,
         ))
         elements.append(Spacer(1, 0.3 * cm))
 
     # === STANDARDKLAUSEL ===
     if customer_loan.standard_clause:
-        clause_label = 'Loan conditions:' if language == 'en' else 'Leihbedingungen:'
+        clause_label = 'Loan conditions' if is_en else 'Leihbedingungen'
         elements.append(Paragraph(
             f"<b>{clause_label}</b><br/>{customer_loan.standard_clause}",
             style_clause
@@ -300,15 +161,16 @@ def generate_loan_delivery_note_pdf(customer_loan, language='de'):
 
     # === NOTIZEN ===
     if customer_loan.notes:
-        notes_label = 'Remarks:' if language == 'en' else 'Bemerkungen:'
+        notes_label = 'Remarks' if is_en else 'Bemerkungen'
         elements.append(Paragraph(f"<b>{notes_label}</b>", style_normal))
-        elements.append(Paragraph(customer_loan.notes.replace('\n', '<br/>'), style_small))
+        elements.append(Paragraph(
+            customer_loan.notes.replace('\n', '<br/>'), style_small))
         elements.append(Spacer(1, 0.5 * cm))
 
     # === UNTERSCHRIFT ===
     elements.append(Spacer(1, 1.5 * cm))
 
-    if language == 'en':
+    if is_en:
         sig_data = [
             ['Handed over:', '', 'Received:'],
             ['', '', ''],
@@ -322,9 +184,9 @@ def generate_loan_delivery_note_pdf(customer_loan, language='de'):
             ['___________________________', '', '___________________________'],
             ['Datum, Unterschrift', '', 'Datum, Unterschrift Kunde'],
         ]
-    sig_table = Table(sig_data, colWidths=[6 * cm, 3 * cm, 6 * cm])
+    sig_table = Table(sig_data, colWidths=[6 * cm, 2 * cm, 6 * cm])
     sig_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTNAME', (0, 0), (-1, -1), FONT_REGULAR),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
