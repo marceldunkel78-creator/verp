@@ -556,6 +556,28 @@ class InventoryItem(models.Model):
         verbose_name='Aktualisiert am'
     )
     
+    # =====================
+    # Herkunft (Import-Herkunft)
+    # =====================
+    # Wird gesetzt, wenn der Artikel über den Excel-Lagerabgleich
+    # (sync_inventory_from_excel) angelegt wurde. Ermöglicht einen
+    # echten Inkrement-Import und die Nachverfolgung im Admin.
+    
+    source_file = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='Quelldatei',
+        help_text='Name der Excel-/CSV-Datei, aus der der Artikel importiert wurde'
+    )
+    
+    source_row = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Quellzeile',
+        help_text='Zeilennummer in der Quelldatei (inkl. Kopfzeile)'
+    )
+    
     class Meta:
         verbose_name = 'Lagerartikel'
         verbose_name_plural = 'Lagerartikel'

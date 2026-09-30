@@ -31,6 +31,10 @@ db.sqlite3-journal
 /staticfiles/
 /media/
 
+# Laufzeit-Logs und Import-Reports (lokal, nicht versionieren)
+logs/
+backend/logs/
+
 # Node
 node_modules/
 npm-debug.log*

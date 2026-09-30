@@ -1,0 +1,76 @@
+{
+  "_comment": "Spalten-Mapping fuer den Excel-Lagerabgleich (sync_inventory_from_excel). Pro logischer Spalte eine Liste moeglicher Header in der Excel-Datei. Gross-/Kleinschreibung und Leerzeichen werden bei der Erkennung ignoriert.",
+
+  "header_aliases": {
+    "category": ["kategorie", "warengruppe", "gruppe", "kategorien", "category", "artikelgruppe", "bereich"],
+    "lfd_nr": ["lfd nr", "lfdno", "lfd", "laufende nummer", "nr", "pos", "position", "lfd nummer"],
+    "best_nr": ["bestnr", "best nr", "bestellnummer", "best-nr", "bestellnr", "bnr", "b-nr", "b nr", "b-nummer", "artikelnummer", "artikel nr", "artnr", "artikelnr", "herstellernummer", "hersteller nr", "typ"],
+    "serial_number": ["sn", "s n", "s/n", "seriennummer", "seriennr", "serien nummer", "serial", "serialnumber", "serial no", "gerätenummer", "geraetenummer"],
+    "customer": ["kunde", "kundenname", "kunde name", "kunden", "client", "customer"],
+    "order_number": ["auftrag", "auftragsnummer", "auftrag nr", "auftragsnr", "kundenauftrag", "kundenauftragsnummer", "order", "ordernumber", "auftrags-nr"],
+    "supplier": ["lieferant", "lieferanten", "hersteller", "supplier", "vendor", "lieferant name"],
+    "name": ["produkt", "produktname", "bezeichnung", "artikel", "artikelbezeichnung", "item", "name", "produkt bezeichnung", "gerät", "geraet", "description"],
+    "delivery_date": ["ausgeliefert", "auslieferdatum", "auslieferung", "lieferdatum", "datum", "delivery date", "delivered"],
+    "notes": ["infos", "info", "bemerkung", "bemerkungen", "notiz", "notizen", "kommentar", "comment", "anmerkung", "anmerkungen", "allgemeine notizen", "notizen 1", "zusatz", "zusatzinfo"]
+  },
+
+  "_comment_categories": "Warengruppe (Excel-Spalte 'kategorie') bzw. Teil des Dateinamens -> ProductCategory-Code. Siehe verp_settings.ProductCategory.",
+  "category_mapping": {
+    "kamera": "KAMERA",
+    "laser": "LASER",
+    "scanningtisch": "SCANNINGTISCH",
+    "filterrad": "FILTERRAD",
+    "piezo": "PIEZO",
+    "shutter": "SHUTTER",
+    "led": "LED",
+    "inkubation": "INKUBATION",
+    "tirf": "TIRF",
+    "frap": "FRAP",
+    "frap-tirf": "FRAP_TIRF",
+    "frap tirf": "FRAP_TIRF",
+    "confocal": "CONFOCAL",
+    "visiview": "VISIVIEW",
+    "dualcam": "DUALCAM_SPLITTER",
+    "splitter": "DUALCAM_SPLITTER",
+    "filter": "FILTER",
+    "mikroskop": "MIKROSKOP",
+    "pc": "PC",
+    "kabel": "KABEL",
+    "software": "SOFTWARE",
+    "lichtleiter": "LICHTLEITER",
+    "mikroskopadapter": "MIKROSKOPADAPTER",
+    "hbo": "HBO_XBO",
+    "xbo": "HBO_XBO",
+    "hbo-xbo": "HBO_XBO",
+    "hbo xbo": "HBO_XBO",
+    "orbital": "ORBITAL",
+    "virtex": "VIRTEX",
+    "vs-lms": "VS_LMS",
+    "vs lms": "VS_LMS",
+    "sonstiges": "SONSTIGES"
+  },
+
+  "_comment_match": "Mindestanzahl erkannter Aliases in der Kopfzeile, damit eine Zeile als Kopfzeile gilt.",
+  "min_header_matches": 3,
+
+  "_comment_sheets": "Arbeitsblaetter, die KEINE Lagerartikel enthalten (Zubehoer-/Stuecklisten-/Testlisten). Sie werden komplett uebersprungen. Eintrag 'Dateiname::Blattname' wirkt nur auf diese eine Datei. Nur_noch: alternativ 'only_sheets' mit einer Liste von Blaettern, die importiert werden sollen (alle anderen werden ignoriert).",
+  "skip_sheets": [
+    "Getestete Optiken",
+    "Kondensor-Sets",
+    "EPI-Kondensor-Set",
+    "Optik 1 - Linos",
+    "Optik 2 - Edmund",
+    "Mechanik FineTec",
+    "Mechanik Csongradi",
+    "Welle HASPA"
+  ],
+  "only_sheets": [],
+
+  "_comment_options": "Optionale Detailfelder; werden nur gesetzt, wenn die Spalte in der Datei vorhanden ist.",
+  "optional_columns": {
+    "quantity": ["menge", "stück", "stueck", "anzahl", "quantity", "qty", "bestand", "lagerbestand"],
+    "unit": ["einheit", "unit"],
+    "firmware_version": ["firmware", "firmware version", "firmwareversion", "fw version"],
+    "firmware_notes": ["firmwarenotizen", "firmware notizen", "firmware notes", "notizen firmware"]
+  }
+}

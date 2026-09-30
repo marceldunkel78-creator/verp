@@ -33,6 +33,13 @@ Umgebungsvariablen konfigurieren (.env Datei):
   # Legacy Procurement-Import
   # Muss im Windows-Produktivsystem auf den Ordner mit bestlist.csv zeigen.
   LEGACY_PROCUREMENT_DATA_DIR=C:/VERP/Datenvorlagen
+
+  # Automatischer Excel-Lagerabgleich (siehe Abschnitt "Lager-Sync aus Excel")
+  # Netzwerkpfad mit den Lagerlisten. UNC zwingend doppel-backslash escaped:
+  INVENTORY_EXCEL_DIR=\\\\fileserver\\Lager\\Warenlager
+  # Die Lagerlisten liegen fast ausschliesslich im ALTEN .xls-Format.
+  # "*.xls*" erfasst .xls, .xlsx und .xlsm. "*.xlsx" wuerde nichts finden!
+  INVENTORY_EXCEL_PATTERN=*.xls*
   
   # Media Base URL - Für Produktion (falls Backend unter anderer URL als Frontend läuft)
   # Beispiel: MEDIA_BASE_URL=http://verp.intern.local
@@ -233,3 +240,274 @@ So ist es sauber:
 Nach Restore einmal fix_sequences.py laufen lassen.
 Danach ist alles wieder stabil.
 Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequences.py automatisch nach dem Restore läuft.
+
+# ============================================================
+# LAGER-SYNC AUS EXCEL (Warenlager automatisch abgleichen)
+# ============================================================
+
+# Zweck:
+# Die Lagerartikel werden weiterhin in Excel-Listen (nach Warengruppe oder
+# Hersteller benannt) gepflegt. Diese Listen werden automatisch abgeglichen
+# und NEUE Artikel direkt im VERP angelegt. Es muss nichts mehr umformatiert,
+# nach CSV konvertiert und manuell importiert werden - und bestehende
+# VERP-Daten werden NIE veraendert.
+#
+# Ablauf je Lauf:
+# 1. Alle passenden Dateien (Standard *.xls*) im eingestellten Verzeichnis
+#    werden gelesen. .xls, .xlsx, .xlsm und .csv sind unterstuetzt.
+# 2. Die Kopfzeile wird automatisch erkannt (Titelfunken, Leerzeilen egal).
+#    Spalten werden ueber Alias-Namen zugeordnet (S/N = Seriennummer = serial).
+#    Die Spaltenreihenfolge ist egal.
+# 3. Jede Zeile wird abgeglichen:
+#      - mit Seriennummer  -> Match auf Seriennummer (Trennzeichen egal)
+#      - ohne Seriennummer -> Match auf Produktname + Lieferant + Best-Nr.
+# 4. Nur was NOCH NICHT existiert, wird neu angelegt.
+# 5. Alles Bekannte bleibt unveraendert.
+#
+# ---------------------------------------------------------------------------
+
+# 1) Quelle einstellen (in C:\VERP\backend\.env)
+#
+#    INVENTORY_EXCEL_DIR=\\\\fileserver\\Lager\\Warenlager
+#    INVENTORY_EXCEL_PATTERN=*.xls*
+#
+#    WICHTIG: Die Lagerlisten liegen aktuell fast ausschliesslich im ALTEN
+#    .xls-Format. "*.xlsx" wuerde fast nichts finden! "*.xls*" erfasst
+#    .xls, .xlsx und .xlsm in einem Durchgang.
+#
+#    Pfad pruefen:
+#    cd C:\VERP\backend
+#    .\venv\Scripts\Activate
+#    python manage.py shell -c "import os; p=os.environ.get('INVENTORY_EXCEL_DIR'); print(repr(p)); print('ok' if p and os.path.isdir(p) else 'FALSCH')"
+#
+#    Zaehlung, was gefunden wird:
+#    python manage.py shell -c "import os,glob; p=os.environ.get('INVENTORY_EXCEL_DIR') or r'..\Datenvorlagen'; f=glob.glob(os.path.join(p,'*.xls*')); print(len(f),'Dateien')"
+
+# 2) Spalten-Mapping anpassen, falls sich Header aendern
+#
+#    Standarddatei: backend\inventory\excel_mapping.json
+#    Je logischem Feld eine Liste moeglicher Header. Wird eine Spalte nicht
+#    erkannt, meldet der Lauf sie als "unbekannte Spalten".
+#
+#    Arbeitsblaetter ausschliessen (keine Lagerartikel):
+#    In excel_mapping.json unter "skip_sheets" eintragen, z.B.
+#        "skip_sheets": ["Getestete Optiken", "Preisliste", "Kondensor-Sets"]
+#    Oder dateibezogen: "Dateiname.xls::Blattname"
+#    Oder die Umkehrung - nur bestimmte Blaetter importieren:
+#        "only_sheets": ["Blatt1", "Blatt2"]
+
+# 3) ZUERST immer als Probelauf (aendert NICHTS)
+#
+#    cd C:\VERP\backend
+#    .\venv\Scripts\Activate
+#    python manage.py sync_inventory_from_excel --dry-run
+#    python manage.py sync_inventory_from_excel --path "\\fileserver\Lager\Warenlager" --dry-run
+#
+#    Nur geaenderte/aktuelle Dateien:
+#    python manage.py sync_inventory_from_excel --since 2026-09-01 --dry-run
+#
+#    Nur die ersten 20 Zeilen einer Datei zum Schnelltest:
+#    python manage.py sync_inventory_from_excel --limit 20 --dry-run
+
+# 4) Echter Abgleich
+#
+#    python manage.py sync_inventory_from_excel
+#
+#    Wiederholen ist unschaedlich: bereits importierte Artikel werden
+#    uebersprungen. Ein zweiter Lauf legt also nichts doppelt an.
+
+# 5) Ergebnisse auswerten
+#
+#    Konsolenausgabe:
+#      Zeilen gelesen / Neu angelegt / Bereits vorhanden / Dublette (echt) /
+#      Mehrdeutig / Uebersprungen (Excel offen) / Blaetter ohne Lagerartikel /
+#      Wiederholte Kopfzeilen / Fehler
+#
+#    Reportdatei: C:\VERP\logs\inventory_sync_JJJJMMTT_HHMMSS.csv
+#      Spalten: source_file, source_sheet, source_row, action,
+#               inventory_number, serial_number, name, message
+#
+#    action-Bedeutung:
+#      create     = neu angelegt
+#      skip       = bereits vorhanden, unveraendert
+#      duplicate  = exakte Dublette in der Quelldatei (nichts angelegt)
+#      ambiguous  = mehrere Lagerartikel passen zum Schluessel, ohne S/N nicht
+#                   entscheidbar -> NICHTS angelegt, bitte manuell zuordnen
+#      locked     = Datei war in Excel geoeffnet -> uebersprungen, kommt beim
+#                   naechsten Lauf automatisch nach
+#      no_header  = Blatt ohne Lagerartikel (Info-/Preistabelle)
+#      error      = Datei nicht lesbar
+#
+#    Auswertung "ambiguous" (wichtig, meist die gr�sste Gruppe):
+#      Eine Excel-Zeile ohne S/N beschreibt einen Mengenartikel, waehrend im
+#      VERP mehrere Einzelstuecke dazu existieren. Beispiel:
+#        "xyz-Tisch" ohne S/N, im VERP I-00030, I-00032, I-00033 ...
+#      Diese Zeilen werden bewusst NICHT importiert, weil sonst grundlos
+#      Artikel entstuenden. Sie brauchen eine manuelle Entscheidung.
+#
+#    Im Admin: Warenlager -> nach "Quelldatei" filtern.
+
+# 6) Automatisch laufen lassen
+#
+#    cd C:\VERP\scripts
+#    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+#    .\sync-inventory.ps1
+#    .\sync-inventory.ps1 -DryRun
+#    .\sync-inventory.ps1 -ExcelPath Z:\Warenlager
+#
+#    Als geplante Aufgabe registrieren (einonceig, als Administrator):
+#    .\register-inventory-sync-task.ps1 -ExcelPath Z:\Warenlager -DailyAt "02:00"
+#
+#    Status:
+#    Get-ScheduledTaskInfo -TaskName "VERP-Inventory-Sync" |
+#        Select-Object LastRunTime, LastTaskResult
+#    LastTaskResult 0 = erfolgreich
+#
+#    NUR sync-inventory.ps1 als Task eintragen. Das Registrierungsskript ist
+#    eine einmalige Hilfe - beide als Task wuerde zwei gleichzeitige Laeufe
+#    erzeugen.
+#
+#    Logs: C:\VERP\logs\sync-inventory_JJJJ-MM-TT.log
+#           C:\VERP\backend\logs\verp.log
+
+# 7) Erste Inbetriebnahme auf dem Produktionsserver
+#
+# Schritt 1 - Deploy:
+#     cd C:\VERP
+#     git pull origin main
+#     cd C:\VERP\backend
+#     .\venv\Scripts\Activate
+#     pip install -r requirements.txt      # installiert openpyxl UND xlrd
+#     python manage.py migrate             # migration inventory.0010
+#
+# Schritt 2 - .env ergaenzen (Backup vorher!):
+#     INVENTORY_EXCEL_DIR=\\\\fileserver\\Lager\\Warenlager
+#     INVENTORY_EXCEL_PATTERN=*.xls*
+#     In UNC-Pfaden MUESSEN die Backslashes verdoppelt werden.
+#
+# Schritt 3 - Netzlaufwerk fuer den Task erreichbar machen:
+#     Der Task laeuft als SYSTEM und sieht UNC-Freigaben nur ueber das
+#     Computerkonto. Deshalb Laufwerk einbinden:
+#         net use Z: \\fileserver\Lager /persistent:yes
+#     und in der .env INVENTORY_EXCEL_DIR=Z:\Warenlager verwenden.
+#     Test als der gleiche Account wie der Task:
+#         dir Z:\Warenlager
+#
+# Schritt 4 - Dry-Run als Benutzer, BEVOR die Aufgabe registriert wird:
+#     python manage.py sync_inventory_from_excel --no-recursive --dry-run
+#     Report pruefen: Spalten erkannt? Dubletten/ambiguous plausibel?
+#
+# Schritt 5 - Erster echter Lauf + sofortiger zweiter Lauf:
+#     python manage.py sync_inventory_from_excel --no-recursive
+#     python manage.py sync_inventory_from_excel --no-recursive
+#     Erwartung beim zweiten Lauf: 0 "Neu angelegt".
+#
+# Schritt 6 - Aufgabe registrieren (Administrator):
+#     cd C:\VERP\scripts
+#     .\register-inventory-sync-task.ps1 -ExcelPath Z:\Warenlager -DailyAt "02:00"
+#
+# Schritt 7 - Testweise starten:
+#     Start-ScheduledTask -TaskName "VERP-Inventory-Sync"
+#     Get-ScheduledTaskInfo -TaskName "VERP-Inventory-Sync" |
+#         Select-Object LastRunTime, LastTaskResult
+
+# 8) Umgang mit gesperrten Excel-Dateien
+#
+# Eine in Excel geoeffnete Datei ist auf dem Share EXKLUSIV gesperrt.
+# Der Abgleich bricht dabei NICHT ab:
+#   - gesperrte Datei wird uebersprungen (action = locked)
+#   - alle anderen Dateien laufen normal durch
+#   - Exit-Code bleibt 0
+#   - beim naechsten Lauf wird sie automatisch nachgeholt
+# Empfehlung: Zeitfenster waehlen, in dem nicht bearbeitet wird (z.B. nachts).
+
+# 9) Referenzmessung (Entwicklungsserver, 35 Lagerlisten)
+#
+#     Zeilen gelesen              : 10.657
+#     Neu angelegt                :  3.878
+#     Bereits vorhanden           :  4.929
+#     Dublette (echt)             :    797
+#     Mehrdeutig (>1 Treffer)     :  1.050
+#     Blaetter ohne Lagerartikel  :     24
+#     Wiederholte Kopfzeilen      :      3
+#     Fehler                      :      0
+#     Dauer                       :  ca. 115 Sekunden
+#
+#     Hinweise zur Datenqualitaet der Listen:
+#     - "Dublette": mehrere Zeilen mit identischer Seriennummer bzw. mehrfach
+#       identische Datensaetze. In manchen Blaettern steht derselbe Bestand
+#       zweimal (z.B. computer zubehor-02.xls: einmal kompakt ab Zeile 1,
+#       einmal ausfuehrlich ab Zeile 37). Beim Bereinigen der Listen hilft
+#       nur ein Blick in die Datei selbst.
+#     - "Mehrdeutig": Zeile ohne Seriennummer, zu der im VERP mehrere Artikel
+#       passen. Braucht eine fachliche Entscheidung.
+#     - Platzhalter wie "..." oder "��" in der S/N-Spalte werden als LEER
+#       gewertet und nie als Seriennummer gespeichert.
+#     - Aus .xls stammende Float-Artefakte ("10056340.0") werden bereinigt.
+
+# 10) Unterordner ausschliessen
+#
+# Standardmaessig wird rekursiv gesucht, also werden auch Dateien in
+# Unterordnern des Quellverzeichnisses gefunden:
+#
+#     Lager\Kamera.xlsx            <- importiert
+#     Lager\Archiv\Laser.xls       <- auch importiert
+#     Lager\2023\Laser.xls         <- auch importiert
+#
+# Ausgeschlossene Ordner (kommasepariert, wirkt auch fuer Zwischenordner):
+#
+#     python manage.py sync_inventory_from_excel --exclude-dirs "Archiv,Alt,Backup"
+#
+#     Lager\Kamera.xlsx            <- importiert
+#     Lager\Archiv\Laser.xls       <- uebersprungen
+#     Lager\2023\Alt\Laser.xls     <- uebersprungen (Zwischenordner)
+#
+# Dauerhaft in der .env (backend\.env):
+#     INVENTORY_EXCEL_EXCLUDE_DIRS=Archiv,Alt,Backup
+#
+# Nur die oberste Ebene, gar keine Unterordner:
+#     python manage.py sync_inventory_from_excel --no-recursive
+#
+# ---------------------------------------------------------------------------
+
+# 11) Spalten mit Zusatz im Namen (z.B. "S/N Controller")
+#
+# In den Lagerlisten lautet die Spalte oft nicht einfach "S/N", sondern
+# "Grade, S/N Controller", "S/N AOTF", "S/N Laser Head", "Lichtleiter S/N"
+# usw. Diese Spalten werden automatisch der Seriennummer zugeordnet.
+#
+# Es gilt: die ERSTE passende S/N-Spalte eines Blattes ist die Seriennummer
+# des Lagerartikels. Weitere S/N-Spalten desselben Blattes (z.B. die
+# Seriennummer des Controllers) sind Zusatzinformation und landen im
+# Beschreibungsfeld - sie sind ja gerade KEINE Lagerartikel.
+#
+# Wirkung auf die Auswertung: dadurch werden deutlich mehr Zeilen ueber die
+# Seriennummer zugeordnet. "Mehrdeutig" ist von 1.050 auf 571 gefallen.
+#
+# ---------------------------------------------------------------------------
+
+# 12) Nicht gemappte Spalten landen im Beschreibungsfeld
+#
+# Spalten, die keinem VERP-Feld entsprechen, werden nicht verworfen.
+# Ihr Inhalt erscheint unter "Basisinformationen -> Beschreibung" als:
+#
+#     Importiert aus Excel-Lagerliste
+#     Kategorie: -
+#     Best-Nr.: B-EXT-1
+#     Auftrag: -
+#
+#     Weitere Angaben aus der Lagerliste:
+#       Board Version: Rev 2.1
+#       Info Generation: ab 2024
+#
+# Betrifft in den aktuellen Listen u.a.: Board Version, Firmware Version,
+# Info Generation, Bestellung, Abrufauftrag, Bauteil, vorh. Menge,
+# Ausfuehrung, MAC Controller, Speicher, Festplatte, Grafikkarte.
+#
+# Der Lauf listet alle betroffenen Spalten je Blatt auf, damit man sie
+# bei Bedarf dem Mapping hinzufuegen kann:
+#     unbekannte Spalten (kommen ins Beschreibungsfeld): Board Version
+#     Zusatzspalten (kommen ins Beschreibungsfeld): Board Version, Info Generation
+#
+# Hinweis: "Firmware" und "Firmware Version" werden auf firmware_version
+# gemappt und stehen damit im Feld "Firmware-Version", nicht im Text.

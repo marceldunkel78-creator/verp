@@ -30,13 +30,13 @@ class IncomingGoodsAdmin(admin.ModelAdmin):
 
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ['inventory_number', 'name', 'item_function', 'item_category', 'quantity', 'delivery_date', 'status', 'stored_at']
-    list_filter = ['status', 'item_function', 'item_category', 'supplier', 'delivery_date', 'stored_at']
+    list_display = ['inventory_number', 'name', 'item_function', 'item_category', 'quantity', 'delivery_date', 'status', 'source_file', 'stored_at']
+    list_filter = ['status', 'item_function', 'item_category', 'supplier', 'delivery_date', 'source_file', 'stored_at']
     search_fields = [
         'inventory_number', 'name', 'article_number', 'visitron_part_number', 
-        'serial_number', 'customer_order_number', 'order_number'
+        'serial_number', 'customer_order_number', 'order_number', 'source_file'
     ]
-    readonly_fields = ['inventory_number', 'stored_at', 'updated_at']
+    readonly_fields = ['inventory_number', 'stored_at', 'updated_at', 'source_file', 'source_row']
     
     fieldsets = (
         ('Inventarinformationen', {
@@ -56,6 +56,9 @@ class InventoryItemAdmin(admin.ModelAdmin):
         }),
         ('Management', {
             'fields': ('management_info',)
+        }),
+        ('Herkunft (Excel-Import)', {
+            'fields': ('source_file', 'source_row')
         }),
         ('Metadaten', {
             'fields': ('stored_at', 'stored_by', 'updated_at')
