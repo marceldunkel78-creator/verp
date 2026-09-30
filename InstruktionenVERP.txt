@@ -495,12 +495,34 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #       C:\VERP\logs\sync-inventory_JJJJ-MM-TT.log
 #       C:\VERP\logs\inventory_sync_JJJJMMTT_HHMMSS.csv  (ca. 2-3 MB)
 #
-#     Echte Haenger erkennen - daran sieht man den Unterschied:
-#       Get-ScheduledTask -TaskName "VERP-Inventory-Sync" |
-#           Select-Object State, LastRunTime
-#       (powershell -c "Get-Process python -ErrorAction SilentlyContinue")
-#     Ein wirklich haengender Task hat laufende python-Prozesse. Laufen
-#     keine, ist der Task beendet und die Anzeige war veraltet.
+#     WIE MAN "LAEUFT" UND "FERTIG" UNTERSCHEIDET (das ist die haeufigste
+#     Verwechslung bei der Aufgabenplanung):
+#
+#       Get-ScheduledTask -TaskName "VERP-Inventory-Sync" | Select-Object State
+#
+#     State-Werte und was sie BEDEUTEN:
+#       Ready    -> Task ist BEENDET und wartet auf den naechsten Trigger.
+#                   Das ist der Normalzustand nach jedem Lauf.
+#       Running  -> Task laeuft GERADE. Nur dieser Wert ist "laeuft".
+#       Disabled -> Task ist deaktiviert, startet nicht.
+#       Queued   -> wartet auf Startslot (z.B. Stromversorgung).
+#
+#     "Ready" wird leicht als "laeuft noch" gelesen. Es heisst genau das
+#     Gegenteil: Der Task ist fertig. Wer sich nach einem Start in der
+#     Aufgabenliste die State-Spalte ansieht, sieht hier Ready und
+#     schliesst auf ein Problem - obwohl alles sauber durchgelaufen ist.
+#
+#     Gegenprobe mit der Zeit: LastRunTime + LastTaskResult
+#       Get-ScheduledTaskInfo -TaskName "VERP-Inventory-Sync" |
+#           Select-Object LastRunTime, LastTaskResult, NextRunTime
+#     - LastTaskResult 0        = der Lauf war erfolgreich
+#     - NextRunTime liegt in der Zukunft = der Task wartet planmaessig
+#
+#     ECHTER Haenger - nur dann ist wirklich etwas falsch. Ein echter
+#     Haenger hat laufende python-Prozesse:
+#       Get-Process python -ErrorAction SilentlyContinue
+#     Laufen welche, obwohl der Report schon geschrieben ist, dann haengt
+#     tatsaechlich etwas. Laeuft keiner, war die Anzeige nur veraltet.
 #
 # Schritt 8 - Wenn der Task nicht endet oder die Report-CSV fehlt:
 #     cd C:\VERP\scripts
