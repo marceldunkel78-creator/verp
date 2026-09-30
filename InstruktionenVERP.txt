@@ -379,6 +379,9 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #      sync-inventory_JJJJ-MM-TT.log(.old)        30 Tage
 #      sync-inventory_out_JJJJMMTT_HHMMSS.log     30 Tage
 #      inventory_sync_JJJJMMTT_HHMMSS.csv        180 Tage
+#    Geraeumt wird in BEIDEN Verzeichnissen:
+#      C:\VERP\logs           (wird vom Skript beschrieben)
+#      C:\VERP\backend\logs   (entsteht bei direktem manage.py-Aufruf)
 #    Geraeumt wird ausschliesslich anhand des Dateisystem-Zeitstempels,
 #    nicht anhand des Datums im Dateinamen. Logs anderer Skripte
 #    (verp.log, backup-verp_*.log) werden nicht angefasst.
@@ -389,9 +392,20 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #    Aufbewahrung anpassen:
 #        .\sync-inventory.ps1 -LogRetentionDays 60 -ReportRetentionDays 365
 #
-#    Achtung bei der Groesse: der Report (CSV) entsteht pro LAUF, nicht pro
-#    Tag. Bei mehreren manuellen Testlaeufen an einem Tag liegen dann mehrere
-#    Reports im Verzeichnis.
+#    WO LANDEN WELCHE DATEIEN? (das war schon einmal Verwirrung):
+#      C:\VERP\logs\sync-inventory_JJJJ-MM-TT.log   <- Laufprotokoll
+#      C:\VERP\logs\inventory_sync_*.csv            <- Report
+#      C:\VERP\logs\sync-inventory_out_*.log(.err)  <- stdout/stderr
+#      C:\VERP\backend\logs\verp.log                <- Django-Log (bleibt hier)
+#      C:\VERP\backend\logs\inventory_sync_*.csv    <- nur bei DIREKTEM
+#          manage.py-Aufruf ohne --report. Das Skript uebergibt --report
+#          und legt seinen Report deshalb in C:\VERP\logs ab.
+#    Kurz: "logs" ist der einzige Ordner, den man pruefen muss.
+#
+#    Groessenordnung Produktion: ein Lauf erzeugt ca. 2,8 MB Report
+#    (20.000 Zeilen). Ein Backup-Skript mit 30 Tagen Rueckstand haette
+#    also rund 84 MB Report-Dateien. Deshalb Report-Frist 180 Tage nur
+#    sinnvoll, wenn die Dateien auch wieder verschwinden - was sie jetzt tun.
 
 # 7) Erste Inbetriebnahme auf dem Produktionsserver
 #

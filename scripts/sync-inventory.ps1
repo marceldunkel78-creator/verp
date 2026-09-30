@@ -55,31 +55,39 @@ if (-not $KeepLogs -and -not $DryRun) {
         @{ Pattern = "inventory_sync_*.csv";      Days = $ReportRetentionDays;  ExcludeOut = $false }
         @{ Pattern = "sync-inventory_out_*.log*"; Days = $LogRetentionDays;     ExcludeOut = $false }
     )
+    # Zusaetzlich zu $LogDir: Reports in backend\logs. Diese entstehen bei
+    # jedem DIREKTAUFRUF von manage.py ohne --report, also bei jedem
+    # manuellen Testlauf ohne das Skript. Niemand raeumt dieses Verzeichnis
+    # auf - ohne die Regel waechse es unbegrenzt (ca. 2,8 MB pro Lauf).
+    $BackendLogDir = Join-Path $VerpRoot "backend\logs"
     $Removed = 0
-    foreach ($Rule in $Cleanup) {
-        Get-ChildItem -Path $LogDir -Filter $Rule.Pattern -File -ErrorAction SilentlyContinue |
-            Where-Object {
-                # "sync-inventory_*.log*" trifft auch die "_out_"-Dateien.
-                # Ohne diesen Ausschluss wuerde jede davon zweimal angefasst.
-                # Der Ausschluss gilt nur fuer diese Regel - fuer die
-                # "_out_"-Regel muss er ausdruecklich abgeschaltet sein,
-                # sonst wuerden die Zwischenkopien NIE geloescht.
-                (-not $Rule.ExcludeOut -or $_.Name -notlike "*_out_*") -and
-                ($_.LastWriteTime -lt (Get-Date).AddDays(-1 * $Rule.Days))
-            } |
-            ForEach-Object {
-                try {
-                    Remove-Item $_.FullName -Force -ErrorAction Stop
-                    $Removed++
-                }
-                catch {
-                    # Kein Abbruch: eine gesperrte Logdatei darf den Import
-                    # niemals verhindern. Wird beim naechsten Lauf versucht.
-                    if (-not $Quiet) {
-                        Write-Host "Hinweis: Logdatei nicht loeschbar ($($_.Exception.Message))"
+    foreach ($Dir in @($LogDir, $BackendLogDir)) {
+        if (-not (Test-Path $Dir)) { continue }
+        foreach ($Rule in $Cleanup) {
+            Get-ChildItem -Path $Dir -Filter $Rule.Pattern -File -ErrorAction SilentlyContinue |
+                Where-Object {
+                    # "sync-inventory_*.log*" trifft auch die "_out_"-Dateien.
+                    # Ohne diesen Ausschluss wuerde jede davon zweimal
+                    # angefasst. Der Ausschluss gilt nur fuer diese Regel -
+                    # fuer die "_out_"-Regel muss er ausdruecklich abgeschaltet
+                    # sein, sonst wuerden die Zwischenkopien NIE geloescht.
+                    (-not $Rule.ExcludeOut -or $_.Name -notlike "*_out_*") -and
+                    ($_.LastWriteTime -lt (Get-Date).AddDays(-1 * $Rule.Days))
+                } |
+                ForEach-Object {
+                    try {
+                        Remove-Item $_.FullName -Force -ErrorAction Stop
+                        $Removed++
+                    }
+                    catch {
+                        # Kein Abbruch: eine gesperrte Logdatei darf den Import
+                        # niemals verhindern. Wird beim naechsten Lauf versucht.
+                        if (-not $Quiet) {
+                            Write-Host "Hinweis: Logdatei nicht loeschbar ($($_.Exception.Message))"
+                        }
                     }
                 }
-            }
+        }
     }
     if ($Removed -gt 0 -and -not $Quiet) {
         Write-Host "Log-Aufraeumen: $Removed Datei(en) entfernt."
