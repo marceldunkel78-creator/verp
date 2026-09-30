@@ -462,6 +462,32 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     Ein erfolgreicher Task mit "Verzeichnis nicht gefunden" im Log ist
 #     der Fehlerfall, den man sonst erst am Folgetag bemerkt.
 #
+#     SOFORT NACH DEM START NICHT PANIK:
+#     Ein Lauf ueber den Netzwerkpfad dauert auf dem Produktionsserver
+#     rund 90 Sekunden (74 Dateien, ca. 20.000 Zeilen). So sieht der
+#     normale Ablauf aus:
+#       - Terminal oeffnet sich
+#       - ca. 1 Minute lang passiert sichtbar NICHTS (Django importiert,
+#         schreibt noch keine Ausgabe)
+#       - dann kommen Logs, Zusammenfassung und Abschlussmeldung
+#       - Terminal schliesst
+#     Die Task-Planung aktualisiert ihren Status erst mit Verzuegerung.
+#     Wer in der Zwischenzeit in der Aufgabenliste nachsieht, sieht
+#     "Wird ausgefuehrt" und haelt den Task fuer haengend. Er ist es nicht.
+#
+#     Die Report-CSV entsteht ERST NACH ABSCHLUSS des Laufs, nicht waehrend.
+#     Ein fehlender Report in den ersten 90 Sekunden ist deshalb kein
+#     Fehler. Beide Dateien, die am Laufende entstehen:
+#       C:\VERP\logs\sync-inventory_JJJJ-MM-TT.log
+#       C:\VERP\logs\inventory_sync_JJJJMMTT_HHMMSS.csv  (ca. 2-3 MB)
+#
+#     Echte Haenger erkennen - daran sieht man den Unterschied:
+#       Get-ScheduledTask -TaskName "VERP-Inventory-Sync" |
+#           Select-Object State, LastRunTime
+#       (powershell -c "Get-Process python -ErrorAction SilentlyContinue")
+#     Ein wirklich haengender Task hat laufende python-Prozesse. Laufen
+#     keine, ist der Task beendet und die Anzeige war veraltet.
+#
 # Schritt 8 - Wenn der Task nicht endet oder die Report-CSV fehlt:
 #     cd C:\VERP\scripts
 #     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
@@ -639,4 +665,46 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     Richtig sind:
 #         Get-ChildItem <pfad> -File -Filter *.xls
 #         Get-ChildItem <pfad> -Recurse -Include *.xls
-#     Der Import selbst ist davon nicht betroffen (Django glob/rglob).
+#     Der Import selbst ist davon nicht betroffen (Django glob/rglob).#
+# ---------------------------------------------------------------------------
+#
+# 14) ERSTE MESSUNG AUF DEM PRODUKTIONSSERVER (Dry-Run, 2026-09-30)
+#
+#     Diese Werte sind NICHT mit Abschnitt 9 vergleichbar - die Produktion
+#     hat deutlich mehr Daten. Sie sind der Ausgangswert fuer spaetere
+#     Laeufe: ein gesunder zweiter Lauf hat "Neu angelegt : 0".
+#
+#         Dateien                        : 74
+#         Zeilen gelesen                 : 20.100
+#         Neu angelegt                   :  2.811   (Dry-Run, nichts gespeichert)
+#         Bereits vorhanden              : 13.753
+#         Dublette (echt)                :  1.624
+#         Mehrdeutig (>1 Treffer)        :  1.908
+#         Uebersprungen (Excel offen)    :      0
+#         Blaetter ohne Lagerartikel     :     48
+#         Wiederholte Kopfzeilen         :      4
+#         Fehler                         :      0
+#         Dauer                          :  86,6 s
+#
+#     Vergleich Entwicklung (Abschnitt 9) / Produktion:
+#         Zeilen            10.657  ->  20.100   (doppelt)
+#         Mehrdeutig           571  ->   1.908   (3,3-fach)
+#         Dublette             797  ->   1.624   (2,0-fach)
+#
+#     "Mehrdeutig" ist der kritische Wert. Diese Zeilen werden NICHT
+#     importiert, weil eine Excel-Zeile ohne S/N dann mehrere bereits
+#     existierende Einzelstuecke beschreibt. Automatisch entscheiden
+#     waere geraten - deshalb bleiben sie liegen.
+#     Mit 1.908 Stueck ist das die groesste offene Aufgabe, und sie ist
+#     fachlich, nicht technisch. Vorgehen:
+#       1) Report nach action=ambiguous filtern
+#       2) Nach name gruppieren - oft betrifft es denselben Artikeltyp
+#          in mehreren Lagerblaettern
+#       3) Pro Artikeltyp entscheiden: Mengenartikel anlegen oder
+#          den Zeilen eine Seriennummer zuordnen
+#       4) Alternativ: die mehrdeutigen Zeilen aus den Excel-Listen
+#          entfernen, damit sie beim naechsten Lauf nicht erneut
+#          auftauchen
+#
+#     "Dublette" ist meist harmlos: dieselbe Zeile steht in einer Liste
+#     mehrfach (z.B. einmal kompakt, einmal ausfuehrlich).
