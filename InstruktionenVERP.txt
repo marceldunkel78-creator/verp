@@ -461,6 +461,22 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     ist das LOG - dort steht, ob der Netzwerkpfad wirklich gefunden wurde.
 #     Ein erfolgreicher Task mit "Verzeichnis nicht gefunden" im Log ist
 #     der Fehlerfall, den man sonst erst am Folgetag bemerkt.
+#
+# Schritt 8 - Wenn der Task nicht endet oder die Report-CSV fehlt:
+#     cd C:\VERP\scripts
+#     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+#     .\diagnose-inventory-sync.ps1
+#
+#     Das Skript aendert NICHTS, es liest nur. Es prueft in einem Durchgang:
+#       A) Task-State, LastTaskResult, und ob ueberhaupt noch ein
+#          sync-inventory-Prozess laeuft (haengender Task ohne Kindprozess?)
+#       B) Wo das venv tatsaechlich liegt
+#       C) Schreibrecht in logs\ und backend\logs\
+#       D) In welchem Verzeichnis die Report-CSVs tatsaechlich landen
+#       E) Die letzten 20 Zeilen des sync-Logs
+#       F) stdout/stderr des letzten Laufs
+#       G) INVENTORY_EXCEL_DIR aus der .env (ueber Django, nicht os.environ)
+#     Ausgabe vollstaendig zurueckschicken.
 
 # 8) Umgang mit gesperrten Excel-Dateien
 #
