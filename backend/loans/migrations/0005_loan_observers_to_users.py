@@ -2,159 +2,160 @@ from django.conf import settings
 from django.db import migrations, models
 
 
-def drop_orphan_observers(apps, schema_editor):
+def remap_employee_ids_to_user_ids(apps, schema_editor):
     """
-    MUSS vor dem AlterField laufen.
+    MUSS vor dem AlterField laufen - hier passiert die eigentliche
+    Umwandlung, nicht erst danach.
 
-    Das AlterField benennt in der Through-Tabelle nur die Spalte um
-    (employee_id -> user_id); die Integer-IDs bleiben unveraendert. Postgres
-    prueft den Fremdschluessel sofort, also bricht die Migration ab,
-    sobald eine ID in der Tabelle steht, die es in users_user nicht gibt
-    (Produktion: 13).
+    Das AlterField benennt nur die Spalte um (employee_id -> user_id); die
+    Zahlen bleiben unveraendert stehen. Postgres prueft den Fremdschluessel
+    dann sofort gegen users_user.id und lehnt ab, sobald eine Zahl dort
+    nicht existiert.
 
-    Zwei verschiedene ID-Raeume muessen sauber getrennt werden:
-      - loans_loan_observers.employee_id verweist auf users_employee.id
-      - loans_loan_observers.user_id    verweist auf users_user.id
+    Genau das ist in der Produktion passiert - und zwar bei einem
+    gueltigen Beobachter:
+      employees-Zeile 13 = Andreas Babaryka, sein User hat aber die ID 24
+      in users_user gibt es keine ID 13 (die Zaehler sind durch geloeschte
+      Konten uebersprungen)
+    Beobachter employee_id=13 wird also zu user_id=13 - und genau daran
+    scheitert der Fremdschluessel. Das ist KEIN Mitarbeiter ohne Login,
+    er hat einen; zwei vorherige Versuche, angebliche "Verwaiste" zu
+    loeschen, konnten es deshalb nicht beheben.
 
-    Nach dem Rename wird employee_id als user_id gelesen. Verwaist ist
-    deshalb eine Mitarbeiter-ID, fuer die es KEINEN aktiven User gibt -
-    nicht eine ID, die es nicht in users_employee gibt (der Mitarbeiter
-    existiert sehr wohl) und nicht eine, die es nicht in users_user.id
-    gibt (User-IDs und Mitarbeiter-IDs sind unabhaengige Zaehler).
+    Die IDs werden hier, solange die Spalte noch employee_id heisst, auf
+    echte User-IDs umgeschrieben. Danach kann das Umbenennen nicht mehr
+    scheitern, weil jede Zahl dann einem realen User entspricht.
 
-    Verwaiste Zeilen sind wertlos: ohne VERP-Login kann niemand
-    benachrichtigt werden, das war ja das Problem hinter der Aenderung.
+    Verworfen wird nur, was ohnehin tot ist: ein Mitarbeiter ohne
+    aktiven Login kann nie benachrichtigt werden.
     """
-    Employee = apps.get_model('users', 'Employee')
     User = apps.get_model(settings.AUTH_USER_MODEL)
+    Employee = apps.get_model('users', 'Employee')
     db_alias = schema_editor.connection.alias
 
-    # Mitarbeiter-IDs, die in der Through-Tabelle referenziert werden
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute('SELECT DISTINCT employee_id FROM loans_loan_observers')
-        referenced = {row[0] for row in cursor.fetchall()}
+        cursor.execute('SELECT id, employee_id FROM loans_loan_observers ORDER BY id')
+        rows = cursor.fetchall()
 
-    if not referenced:
+    if not rows:
         return
 
-    employees = Employee.objects.using(db_alias).filter(id__in=referenced)
-    # Mitarbeiter, fuer die es mindestens einen aktiven Login gibt
-    usable = set(
+    employee_ids = {r[1] for r in rows}
+
+    # Mitarbeiter-ID -> User-IDs (nur aktive Logins)
+    employee_to_users = {}
+    for emp_id, user_id in (
         User.objects.using(db_alias)
-        .filter(employee_id__in=employees, is_active=True)
-        .values_list('employee_id', flat=True)
+        .filter(employee_id__in=employee_ids, is_active=True)
+        .values_list('employee_id', 'id')
+    ):
+        employee_to_users.setdefault(emp_id, []).append(user_id)
+
+    existing = set(
+        Employee.objects.using(db_alias)
+        .filter(id__in=employee_ids)
+        .values_list('id', flat=True)
     )
-    # Mitarbeiter existieren, haben aber keinen aktiven Login
-    existing = set(employees.values_list('id', flat=True))
-    orphans_known = existing - usable
-    orphans_unknown = referenced - existing
+    no_login = existing - set(employee_to_users)
+    unknown = employee_ids - existing
 
-    orphaned = orphans_known | orphans_unknown
-    if not orphaned:
-        return
+    kept = 0
+    dropped = 0
+    updates = []
+    deletes = []
 
-    orphan_ph = ', '.join(['%s'] * len(orphaned))
+    for row_id, emp_id in rows:
+        user_ids = employee_to_users.get(emp_id)
+        if not user_ids:
+            deletes.append(row_id)
+            dropped += 1
+            continue
+        # Ein Mitarbeiter kann 0..n User haben. Als Beobachter wird der
+        # erste genommen - praktisch ist es hoechstens einer.
+        updates.append((user_ids[0], row_id))
+        kept += 1
+
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute(
-            f'DELETE FROM loans_loan_observers WHERE employee_id IN ({orphan_ph})',
-            sorted(orphaned),
-        )
-        deleted = cursor.rowcount
+        if deletes:
+            cursor.execute(
+                f'DELETE FROM loans_loan_observers '
+                f'WHERE id IN ({", ".join(["%s"] * len(deletes))})',
+                deletes,
+            )
+        for user_id, row_id in updates:
+            cursor.execute(
+                'UPDATE loans_loan_observers SET employee_id = %s WHERE id = %s',
+                [user_id, row_id],
+            )
 
     detail = []
-    if orphans_unknown:
-        detail.append(f'{len(orphans_unknown)} unbekannte Mitarbeiter-ID(s)')
-    if orphans_known:
+    if unknown:
+        detail.append(f'{len(unknown)} unbekannte Mitarbeiter-ID(s) {sorted(unknown)}')
+    if no_login:
         names = list(
             Employee.objects.using(db_alias)
-            .filter(id__in=orphans_known)
-            .values_list('id', 'first_name', 'last_name')[:20]
+            .filter(id__in=no_login)
+            .values_list('id', 'first_name', 'last_name')
         )
-        rendered = ', '.join(f'{i} {f} {l}'.strip() for i, f, l in names)
-        detail.append(f'{len(orphans_known)} ohne aktiven Login ({rendered})')
-
-    print(
-        f'loans.0005: {deleted} verwaiste Beobachter-Zeilen entfernt: '
-        + '; '.join(detail)
-        + '. Diese Mitarbeiter koennen nie benachrichtigt werden.'
-    )
+        rendered = ', '.join(f'{i} {f} {l}'.strip() for i, f, l in names[:20])
+        detail.append(f'{len(no_login)} ohne aktiven Login ({rendered})')
+    if detail:
+        print('loans.0005 - verworfen: ' + '; '.join(detail))
+    print(f'loans.0005: {kept} Beobachter auf User-IDs umgeschrieben, '
+          f'{dropped} Zeilen entfernt.')
 
 
 def copy_employee_observers_to_users(apps, schema_editor):
     """
-    Vorher war Loan.observers ein M2M auf users.Employee, jetzt auf auth.User.
+    Nach dem AlterField.
 
-    Laeuft NACH dem AlterField: die Spalte heisst jetzt user_id, enthaelt aber
-    noch die alten Mitarbeiter-IDs. Diese werden hier einmalig auf echte
-    User-IDs umgeschrieben.
-
-    Mitarbeiter ohne aktiven Login werden verworfen: sie koennen per
-    Definition keine Benachrichtigung empfangen.
+    Die Spalte heisst jetzt user_id, die Inhalte sind aber bereits in
+    remap_employee_ids_to_user_ids umgeschrieben worden. Diese Stufe
+    entdoppelt nur noch und stellt sicher, dass keine ungueltigen IDs
+    zurueckbleiben.
     """
-    Loan = apps.get_model('loans', 'Loan')
     User = apps.get_model(settings.AUTH_USER_MODEL)
-    Employee = apps.get_model('users', 'Employee')
+    Loan = apps.get_model('loans', 'Loan')
     db_alias = schema_editor.connection.alias
 
-    kept = 0
-    dropped = 0
-
-    # WICHTIG: die Werte roh per SQL lesen, nicht ueber den ORM.
-    #
-    # EinORM-Zugriff mit prefetch_related('observers') liefert den
-    # Prefetch-Cache zurueck - also nur die Objekte, die es gerade noch
-    # gibt. Nicht aufloesbare IDs fallen dadurch stillschweigend weg,
-    # statt konvertiert zu werden. Genau das hat ein Test aufgedeckt:
-    # Mitarbeiter 13 (User 24) waere dabei einfach verschwunden.
-    loan_ids = list(Loan.objects.using(db_alias).values_list('id', flat=True))
-    if not loan_ids:
-        return
-
-    loan_ph = ', '.join(['%s'] * len(loan_ids))
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(
-            f'SELECT loan_id, user_id FROM loans_loan_observers '
-            f'WHERE loan_id IN ({loan_ph})',
-            loan_ids,
+            'SELECT l.id, o.user_id '
+            'FROM loans_loan_observers o '
+            'JOIN loans_loan l ON l.id = o.loan_id '
+            'WHERE o.user_id IS NOT NULL'
         )
         rows = cursor.fetchall()
 
-    # Mitarbeiter-ID -> User-IDs (nur aktive Logins)
-    employee_to_users = {}
-    if rows:
-        employee_ids = {r[1] for r in rows}
-        emp_ph = ', '.join(['%s'] * len(employee_ids))
-        for user in (User.objects.using(db_alias)
-                     .filter(employee_id__in=employee_ids, is_active=True)
-                     .values_list('employee_id', 'id')):
-            employee_to_users.setdefault(user[0], []).append(user[1])
+    if not rows:
+        return
 
-    # jede Zeile einzeln neu setzen
-    rewritten = []
-    for loan_id, old_id in rows:
-        new_ids = employee_to_users.get(old_id, [])
-        kept += len(new_ids)
-        dropped += 0 if new_ids else 1
-        rewritten.append((loan_id, new_ids))
+    valid_user_ids = set(
+        User.objects.using(db_alias).filter(is_active=True).values_list('id', flat=True)
+    )
 
+    dangling = sorted({r[1] for r in rows} - valid_user_ids)
+    if dangling:
+        # Sollte nach dem Remap nicht mehr vorkommen. Wenn doch, ist es
+        # ein Fehler im Ablauf und wird nicht stillschweigend uebergangen.
+        raise RuntimeError(
+            f'loans.0005: nach dem Umstellen sind weiterhin ungueltige '
+            f'user_id-Werte vorhanden: {dangling}. Abbruch, damit keine '
+            'falschen Beobachter entstehen.'
+        )
+
+    # (loan_id, user_id) doppelte Zeilen entfernen
     with schema_editor.connection.cursor() as cursor:
         cursor.execute(
-            f'DELETE FROM loans_loan_observers WHERE loan_id IN ({loan_ph})',
-            loan_ids,
+            'DELETE FROM loans_loan_observers a '
+            'USING loans_loan_observers b '
+            'WHERE a.loan_id = b.loan_id AND a.user_id = b.user_id '
+            'AND a.id > b.id'
         )
-        for loan_id, new_ids in rewritten:
-            for new_id in new_ids:
-                cursor.execute(
-                    'INSERT INTO loans_loan_observers (loan_id, user_id) '
-                    'VALUES (%s, %s)',
-                    [loan_id, new_id],
-                )
+        removed = cursor.rowcount
 
-    if kept or dropped:
-        print(
-            'Loan-Beobachter umgestellt: '
-            f'{kept} User uebernommen, {dropped} Legacy-Mitarbeiter ohne Login verworfen.'
-        )
+    if removed:
+        print(f'loans.0005: {removed} doppelte Beobachter-Zeilen entfernt.')
 
 
 def clear_observers(apps, schema_editor):
@@ -176,7 +177,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(drop_orphan_observers, migrations.RunPython.noop),
+        migrations.RunPython(remap_employee_ids_to_user_ids, migrations.RunPython.noop),
         migrations.AlterField(
             model_name='loan',
             name='observers',
