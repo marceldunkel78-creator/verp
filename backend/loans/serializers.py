@@ -134,10 +134,11 @@ class LoanReturnSerializer(serializers.ModelSerializer):
         model = LoanReturn
         fields = [
             'id', 'loan', 'return_number', 'return_date', 
-            'shipping_carrier', 'tracking_number', 'pdf_file',
+            'shipping_carrier', 'tracking_number', 'pdf_file', 'pdf_language',
             'notes', 'created_at', 'created_by', 'created_by_display', 'items'
         ]
-        read_only_fields = ['return_number', 'created_at', 'created_by', 'created_by_display', 'pdf_file']
+        read_only_fields = ['return_number', 'created_at', 'created_by',
+                            'created_by_display', 'pdf_file', 'pdf_language']
 
 
 class LoanReturnCreateSerializer(serializers.ModelSerializer):

@@ -51,9 +51,18 @@ function LoanEdit() {
         shipping_carrier: '',
         tracking_number: '',
         notes: '',
+        language: 'DE',
         items: []
     });
     const [updatingReceipt, setUpdatingReceipt] = useState({});
+
+    // Sprache des Rücklieferscheins. 'DE'/'EN' passen zur Schreibweise
+    // der anderen Procurement-Endpunkte; das Backend wandelt sie fuer
+    // den PDF-Generator in 'de'/'en' um.
+    const [returnLanguage, setReturnLanguage] = useState('DE');
+    // Pro Ruecksendung ein eigener Ladezustand, damit bei mehreren
+    // Eintraegen nur der passende Knopf auf "wird erzeugt" steht.
+    const [regeneratingPdf, setRegeneratingPdf] = useState({});
 
     useEffect(() => {
         loadSuppliers();
@@ -340,6 +349,8 @@ function LoanEdit() {
                 shipping_carrier: returnForm.shipping_carrier,
                 tracking_number: returnForm.tracking_number,
                 notes: returnForm.notes,
+                // Sprache des erzeugten Rücklieferscheins
+                language: returnLanguage,
                 items: selectedItems.map(item => ({
                     loan_item_id: item.loan_item_id,
                     quantity_returned: item.quantity_returned,
@@ -359,20 +370,45 @@ function LoanEdit() {
         }
     };
 
-    const handleDownloadPdf = async (returnId) => {
+    const handleDownloadPdf = async (returnId, language) => {
         try {
+            const params = language ? { params: { language } } : {};
             const response = await api.get(`/loans/loan-returns/${returnId}/download_pdf/`, {
-                responseType: 'blob'
+                responseType: 'blob',
+                ...params
             });
             const blob = new Blob([response.data], { type: 'application/pdf' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Ruecklieferschein.pdf`;
+            a.download = (language === 'EN' ? 'ReturnNote' : 'Ruecklieferschein') + '.pdf';
             a.click();
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error('Error downloading PDF:', error);
+        }
+    };
+
+    /**
+     * Erzeugt den Rücklieferschein neu, wahlweise auf Deutsch oder
+     * Englisch. Das Backend ersetzt die gespeicherte Datei und merkt
+     * sich die Sprache am Datensatz - dadurch weiß der Download,
+     * welches Dokument hinterlegt ist.
+     */
+    const handleRegeneratePdf = async (returnId, language) => {
+        setRegeneratingPdf(prev => ({ ...prev, [returnId]: true }));
+        try {
+            await api.post(`/loans/loan-returns/${returnId}/regenerate-pdf/`, {
+                language: language
+            });
+            // Rücksendeliste neu laden, damit pdf_language stimmt
+            const fresh = await api.get(`/loans/loans/${id}/`);
+            setLoan(fresh.data);
+        } catch (error) {
+            console.error('Error regenerating PDF:', error);
+            alert('Fehler beim Erzeugen des Rücklieferscheins');
+        } finally {
+            setRegeneratingPdf(prev => ({ ...prev, [returnId]: false }));
         }
     };
 
@@ -1020,7 +1056,7 @@ function LoanEdit() {
                                     <div className="space-y-3">
                                         {loan.returns.map(ret => (
                                             <div key={ret.id} className="border rounded-lg p-4 bg-gray-50">
-                                                <div className="flex justify-between items-start">
+                                                <div className="flex justify-between items-start gap-4 flex-wrap">
                                                     <div>
                                                         <h4 className="font-medium">{ret.return_number}</h4>
                                                         <p className="text-sm text-gray-500">
@@ -1031,13 +1067,44 @@ function LoanEdit() {
                                                         <p className="text-sm mt-1">
                                                             {ret.items?.length || 0} Position(en)
                                                         </p>
+                                                        {ret.pdf_language && (
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                PDF: {ret.pdf_language === 'EN' ? 'Englisch' : 'Deutsch'}
+                                                            </p>
+                                                        )}
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleDownloadPdf(ret.id)}
-                                                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-                                                    >
-                                                        📄 PDF
-                                                    </button>
+                                                    <div className="flex items-end gap-2 flex-wrap">
+                                                        <div>
+                                                            <label className="block text-xs text-gray-600 mb-1">
+                                                                Sprache
+                                                            </label>
+                                                            <select
+                                                                value={ret.pdf_language || 'DE'}
+                                                                onChange={(e) => handleRegeneratePdf(ret.id, e.target.value)}
+                                                                disabled={regeneratingPdf[ret.id]}
+                                                                className="px-2 py-1 border rounded text-sm disabled:opacity-50"
+                                                            >
+                                                                <option value="DE">Deutsch</option>
+                                                                <option value="EN">English</option>
+                                                            </select>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRegeneratePdf(
+                                                                ret.id, ret.pdf_language || 'DE')}
+                                                            disabled={regeneratingPdf[ret.id]}
+                                                            title="Rücklieferschein neu erstellen"
+                                                            className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                                                        >
+                                                            {regeneratingPdf[ret.id] ? 'Erzeuge…' : 'Neu erstellen'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDownloadPdf(
+                                                                ret.id, ret.pdf_language || 'DE')}
+                                                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                                                        >
+                                                            📄 PDF
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -1157,11 +1224,28 @@ function LoanEdit() {
                                         />
                                     </div>
 
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Sprache des Rücklieferscheins
+                                        </label>
+                                        <select
+                                            value={returnLanguage}
+                                            onChange={(e) => setReturnLanguage(e.target.value)}
+                                            className="px-3 py-2 border rounded-lg"
+                                        >
+                                            <option value="DE">Deutsch</option>
+                                            <option value="EN">English</option>
+                                        </select>
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Die Sprache lässt sich später über "Neu erstellen" ändern.
+                                        </p>
+                                    </div>
+
                                     <button
                                         onClick={handleCreateReturn}
                                         className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg"
                                     >
-                                        ↩️ Rücksendung erstellen & Rücklieferschein generieren
+                                        ↩️ Rücksendung erstellen &amp; Rücklieferschein generieren
                                     </button>
                                 </div>
                             )}

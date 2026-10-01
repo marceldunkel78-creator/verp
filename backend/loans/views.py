@@ -326,10 +326,18 @@ class LoanViewSet(viewsets.ModelViewSet):
                 condition_notes=item_data.get('condition_notes', '')
             )
         
-        # Generate PDF
-        pdf_content = generate_return_note_pdf(loan_return)
+        # Generate PDF. Die Sprache laesst sich waehlen - "DE"/"EN"
+        # ist die Schreibweise der anderen Procurement-Endpunkte.
+        # Unbekanntes wird auf 'de' zurueckgefallen, damit ein Tippfehler
+        # kein leeres Dokument erzeugt.
+        sprache = (request.data.get('language') or 'DE').upper()
+        if sprache not in ('DE', 'EN'):
+            sprache = 'DE'
+        pdf_content = generate_return_note_pdf(loan_return, language=sprache.lower())
         filename = f"Ruecklieferschein_{loan_return.return_number}.pdf"
         loan_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+        loan_return.pdf_language = sprache
+        loan_return.save(update_fields=['pdf_language'])
         
         # Check if all items are returned, then update status
         total_items = loan.items.count()
@@ -372,33 +380,71 @@ class LoanReturnViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def download_pdf(self, request, pk=None):
-        """Download des Rücklieferscheins"""
+        """
+        Download des Rücklieferscheins.
+
+        Mit ?language=EN wird das englische Dokument erzeugt, falls das
+        gespeicherte PDF deutsch ist. Sonst kommt immer das hinterlegte.
+        """
         loan_return = self.get_object()
-        
-        if not loan_return.pdf_file:
-            # Regenerate if missing
-            pdf_content = generate_return_note_pdf(loan_return)
+
+        gewuenscht = (request.query_params.get('language') or '').upper()
+        sprache = loan_return.pdf_language or 'DE'
+        neu_erzeugen = False
+
+        if gewuenscht in ('DE', 'EN'):
+            if not loan_return.pdf_file or gewuenscht != sprache:
+                neu_erzeugen = True
+        elif not loan_return.pdf_file:
+            neu_erzeugen = True
+
+        if neu_erzeugen:
+            pdf_content = generate_return_note_pdf(
+                loan_return, language=(gewuenscht or sprache).lower())
             filename = f"Ruecklieferschein_{loan_return.return_number}.pdf"
-            loan_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
-        
-        response = HttpResponse(loan_return.pdf_file.read(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="Ruecklieferschein_{loan_return.return_number}.pdf"'
+            loan_return.pdf_file.save(filename, ContentFile(pdf_content),
+                                      save=True)
+            if gewuenscht:
+                loan_return.pdf_language = gewuenscht
+                loan_return.save(update_fields=['pdf_language'])
+
+        response = HttpResponse(loan_return.pdf_file.read(),
+                                content_type='application/pdf')
+        # Deutsche Dateinamen sind in Downloads problematisch - deshalb
+        # ein ASCII-Nname fuer die response.
+        download_name = (f"Ruecklieferschein_{loan_return.return_number}.pdf"
+                         if (loan_return.pdf_language or 'DE') == 'DE'
+                         else f"ReturnNote_{loan_return.return_number}.pdf")
+        response['Content-Disposition'] = (
+            f'attachment; filename="{download_name}"')
         return response
-    
-    @action(detail=True, methods=['post'])
+
+    @action(detail=True, methods=['post'], url_path='regenerate-pdf')
     def regenerate_pdf(self, request, pk=None):
-        """Regeneriert den PDF-Rücklieferschein"""
+        """
+        Regeneriert den PDF-Rücklieferschein.
+
+        Optional: language=DE|EN. Ohne Angabe wird die zuletzt
+        verwendete Sprache beibehalten, sonst Deutsch.
+        """
         loan_return = self.get_object()
-        
+
+        gewuenscht = (request.data.get('language') or '').upper()
+        if gewuenscht not in ('DE', 'EN'):
+            gewuenscht = loan_return.pdf_language or 'DE'
+
         # Delete old file if exists
         if loan_return.pdf_file:
             loan_return.pdf_file.delete(save=False)
-        
+
         # Generate new PDF
-        pdf_content = generate_return_note_pdf(loan_return)
+        pdf_content = generate_return_note_pdf(
+            loan_return, language=gewuenscht.lower())
         filename = f"Ruecklieferschein_{loan_return.return_number}.pdf"
         loan_return.pdf_file.save(filename, ContentFile(pdf_content), save=True)
-        
+        loan_return.pdf_language = gewuenscht
+        loan_return.save(update_fields=['pdf_language'])
+
         serializer = LoanReturnSerializer(loan_return)
         return Response(serializer.data)
 

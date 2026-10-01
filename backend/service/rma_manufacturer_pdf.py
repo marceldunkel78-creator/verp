@@ -213,9 +213,15 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
         article_number = item.custom_article_number or (rma_item.article_number if rma_item else '')
         serial_number = item.custom_serial_number or (rma_item.serial_number if rma_item else '')
         unit = item.custom_unit or (rma_item.unit if rma_item else 'Stk')
-        desc = product_name
+
+        # WICHTIG: escape() erst auf die EINZELNEN Textteile anwenden,
+        # danach mit <br/> zusammensetzen. Wuerde man zuerst
+        # zusammenbauen und dann escapen, kaeme "<br/>S/N: ..." als
+        # sichtbarer Text im PDF statt als Zeilenumbruch - genau das
+        # war die Fehlermeldung.
+        desc = escape(product_name)
         if serial_number:
-            desc += f"<br/>S/N: {serial_number}"
+            desc += f"<br/>S/N: {escape(serial_number)}"
 
         condition = item.condition_notes or 'OK'
         if len(condition) > 50:
@@ -224,7 +230,7 @@ def generate_rma_manufacturer_delivery_note_pdf(manufacturer_return, language='d
         rows.append([
             str(idx),
             Paragraph(escape(article_number or '—'), style_small),
-            Paragraph(escape(desc), style_small),
+            Paragraph(desc, style_small),
             f"{item.quantity_returned:g}",
             unit,
             Paragraph(escape(condition), style_small),

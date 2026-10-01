@@ -494,6 +494,18 @@ class LoanReturn(models.Model):
         blank=True,
         verbose_name='Rücklieferschein PDF'
     )
+
+    # Sprache des gespeicherten PDFs. Ohne dieses Feld ist nicht
+    # unterscheidbar, ob die hinterlegte Datei deutsch oder englisch
+    # ist - ein Download mit language=EN wuerde dann nicht merken,
+    # dass es das falsche Dokument ist, und es einfach ausliefern.
+    pdf_language = models.CharField(
+        max_length=2,
+        choices=[('DE', 'Deutsch'), ('EN', 'Englisch')],
+        default='DE',
+        blank=True,
+        verbose_name='Sprache des Rücklieferscheins'
+    )
     
     # Notizen
     notes = models.TextField(
