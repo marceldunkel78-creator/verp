@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% if logo_url %}
+  <p>Soll das folgende Logo endgültig entfernt werden?</p>
+  <p><img src="{{ logo_url }}" alt="Aktuelles Firmenlogo" style="max-height:120px"></p>
+{% else %}
+  <p>Es ist derzeit kein Logo hinterlegt.</p>
+{% endif %}
+
+<p style="color:#ba2121">
+  Dabei wird auch die Datei vom Server gelöscht
+  ({{ object.document_header.name|default:"-" }}).
+  Die Bestelldokumente verwenden danach automatisch wieder das
+  Standard-Logo aus der Vorlage.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="clear_logo">
+  <input type="submit" class="default" value="Ja, Logo endgültig entfernen">
+  <a href="{% url 'admin:company_companysettings_change' object.pk %}"
+     class="button cancel-link">Abbrechen</a>
+</form>
+{% endblock %}
