@@ -77,10 +77,19 @@ def generate_return_note_pdf(loan_return):
     ]
     if loan.supplier_reference:
         doc_box_lines.append((f'Ihre Referenz {loan.supplier_reference}', False))
+    if getattr(loan_return, 'rma_number', None):
+        doc_box_lines.append((f'RMA-Nr. {loan_return.rma_number}', False))
+    
+    # Datum mit dem Kürzel des Dokumenterstellers, wie in Q-373Du
+    # ("17.08.2026 / DuBB").
+    date_text = loan_return.return_date.strftime('%d.%m.%Y')
+    creator = (getattr(getattr(loan_return, 'created_by', None), 'username', '') or '')
+    if creator:
+        date_text += f' / {creator}'
     
     elements.append(build_address_and_doc_row(
         address_lines, build_document_box(doc_box_lines), company,
-        date_text=loan_return.return_date.strftime('%d.%m.%Y'),
+        date_text=date_text,
     ))
     elements.append(Spacer(1, 0.4*cm))
     

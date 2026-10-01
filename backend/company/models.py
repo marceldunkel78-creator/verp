@@ -70,7 +70,12 @@ class CompanySettings(models.Model):
         blank=True,
         null=True,
         verbose_name='Dokument-Header',
-        help_text='Logo/Header für Bestelldokumente (empfohlen: PNG, ca. 800x150px)'
+        help_text=(
+            'Logo für die Bestelldokumente. Optional: leer lassen, '
+            'dann wird das mitgelieferte Standard-Logo verwendet, das '
+            'exakt aus der Vorlage Q-373Du-0826.pdf geschnitten wurde. '
+            'Empfohlenes Format: PNG mit transparentem Hintergrund.'
+        )
     )
     
     # Unterzeile unter dem Logo im Briefkopf.
@@ -79,8 +84,20 @@ class CompanySettings(models.Model):
         max_length=200,
         default='Bildverarbeitung · Mikroskopie',
         blank=True,
-        verbose_name='Briefkopf-Unterzeile',
-        help_text='Kleine Zeile rechts unter dem Logo, z.B. "Bildverarbeitung · Mikroskopie"'
+        verbose_name='Briefkopf-Unterzeile (deutsch)',
+        help_text=(
+            'Kleine Zeile rechts unter dem Logo. Wird automatisch ins '
+            'Englische übersetzt, solange dieser Wert unverändert bleibt. '
+            'Ein eigener Text erscheint in beiden Sprachen.'
+        )
+    )
+
+    tagline_english = models.CharField(
+        max_length=200,
+        default='Imaging · Microscopy',
+        blank=True,
+        verbose_name='Briefkopf-Unterzeile (englisch)',
+        help_text='Gegenstück zur deutschen Unterzeile für englische Dokumente.'
     )
     
     # Geschäftsjahr Einstellungen

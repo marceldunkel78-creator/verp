@@ -78,7 +78,8 @@ class RMAManufacturerDocTemplate(VerpDocTemplate):
     """
     def __init__(self, filename, company=None, manufacturer_return=None, language='de', **kwargs):
         self.manufacturer_return = manufacturer_return
-        self.translations = MANUFACTURER_TRANSLATIONS.get(language, MANUFACTURER_TRANSLATIONS['de'])
+        self.translations = MANUFACTURER_DELIVERY_NOTE_TRANSLATIONS.get(
+            language, MANUFACTURER_DELIVERY_NOTE_TRANSLATIONS['de'])
         VerpDocTemplate.__init__(
             self, filename, company=company,
             **kwargs)

@@ -280,7 +280,7 @@ def generate_quotation_pdf(quotation):
     date_value = quotation.date.strftime('%d.%m.%Y')
     author_suffix = ''
     if quotation.created_by:
-        author_suffix = '/' + (quotation.created_by.username or '')
+        author_suffix = ' / ' + (quotation.created_by.username or '')
     
     elements.append(build_address_and_doc_row(
         recipient_lines, build_document_box(doc_box_lines), company,
