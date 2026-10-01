@@ -163,6 +163,7 @@ class LoanListSerializer(serializers.ModelSerializer):
     """Listenansicht für Leihungen"""
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True, default=None)
     lender_customer_name = serializers.SerializerMethodField()
+    lender_distributor_employee_name = serializers.SerializerMethodField()
     lender_display = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
@@ -174,13 +175,18 @@ class LoanListSerializer(serializers.ModelSerializer):
         model = Loan
         fields = [
             'id', 'loan_number', 'lender_type', 'supplier', 'supplier_name',
-            'lender_customer', 'lender_customer_name', 'lender_display',
+            'lender_customer', 'lender_customer_name',
+            'lender_distributor_employee', 'lender_distributor_employee_name',
+            'lender_display',
             'status', 'status_display', 'request_date', 'return_deadline',
             'items_count', 'created_at', 'responsible_employee', 'responsible_employee_display'
         ]
 
     def get_lender_customer_name(self, obj):
         return obj.lender_name if obj.lender_type == 'customer' else None
+
+    def get_lender_distributor_employee_name(self, obj):
+        return obj.lender_name if obj.lender_type == 'distributor_employee' else None
 
     def get_lender_display(self, obj):
         """Anzeigename der Gegenpartei, unabhaengig vom Typ.
@@ -200,6 +206,7 @@ class LoanDetailSerializer(serializers.ModelSerializer):
     """Detailansicht für Leihungen"""
     supplier_name = serializers.CharField(source='supplier.company_name', read_only=True, default=None)
     lender_customer_name = serializers.SerializerMethodField()
+    lender_distributor_employee_name = serializers.SerializerMethodField()
     lender_display = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items = serializers.SerializerMethodField()
@@ -215,7 +222,9 @@ class LoanDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'loan_number', 'lender_type',
             'supplier', 'supplier_name',
-            'lender_customer', 'lender_customer_name', 'lender_display',
+            'lender_customer', 'lender_customer_name',
+            'lender_distributor_employee', 'lender_distributor_employee_name',
+            'lender_display',
             'status', 'status_display', 'request_date', 'return_deadline',
             'return_address_name', 'return_address_street', 'return_address_house_number',
             'return_address_postal_code', 'return_address_city', 'return_address_country',
@@ -233,6 +242,9 @@ class LoanDetailSerializer(serializers.ModelSerializer):
 
     def get_lender_customer_name(self, obj):
         return obj.lender_name if obj.lender_type == 'customer' else None
+
+    def get_lender_distributor_employee_name(self, obj):
+        return obj.lender_name if obj.lender_type == 'distributor_employee' else None
 
     def get_lender_display(self, obj):
         """Name der Gegenpartei, unabhaengig vom gewaehlten Typ."""
@@ -273,6 +285,7 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
         model = Loan
         fields = [
             'lender_type', 'supplier', 'lender_customer',
+            'lender_distributor_employee',
             'status', 'request_date', 'return_deadline',
             'return_address_name', 'return_address_street', 'return_address_house_number',
             'return_address_postal_code', 'return_address_city', 'return_address_country',
@@ -284,44 +297,43 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
         """
         Genau eine Gegenpartei, passend zum gewaehlten Typ.
 
-        Wird das nicht geprueft, koennte ein Datensatz mit beiden
-        gesetzt entstehen (der Typ waere dann irrefuehrend) oder mit
-        keinem - letzteres fuehrt in __str__ und in den
+        Wird das nicht geprueft, koennte ein Datensatz mit mehreren
+        Gegenparteien entstehen (der Typ waere dann irrefuehrend) oder
+        mit keinem - letzteres fuehrt in __str__ und in den
         PDF-Generatoren zu einem AttributeError.
         """
         lender_type = attrs.get(
             'lender_type',
             getattr(self.instance, 'lender_type', 'supplier'))
 
-        if lender_type == 'customer':
-            kunde = attrs.get(
-                'lender_customer',
-                getattr(self.instance, 'lender_customer', None))
-            if not kunde:
+        # Je Typ das passende Feld und die Bezeichnung. Jedes andere
+        # Feld muss leer sein, sonst waere nicht mehr erkennbar, was
+        # tatsaechlich gespeichert wurde.
+        gegenparteien = {
+            'supplier': ('supplier', 'Lieferant', 'ein Lieferant'),
+            'customer': ('lender_customer', 'Kunde', 'ein Kunde'),
+            'distributor_employee': (
+                'lender_distributor_employee', 'Distributormitarbeiter',
+                'ein Distributormitarbeiter'),
+        }
+        if lender_type not in gegenparteien:
+            raise serializers.ValidationError(
+                {'lender_type': 'Unbekannte Gegenpartei.'})
+
+        feld, label, artikel = gegenparteien[lender_type]
+        wert = attrs.get(feld, getattr(self.instance, feld, None))
+        if not wert:
+            raise serializers.ValidationError(
+                {feld: f'Bei Gegenpartei "{label}" muss {artikel} '
+                       f'gewählt sein.'})
+
+        for feldname, (_, anderes_label, _) in gegenparteien.items():
+            if feldname == feld:
+                continue
+            if attrs.get(feldname, getattr(self.instance, feldname, None)):
                 raise serializers.ValidationError(
-                    {'lender_customer':
-                     'Bei Gegenpartei "Kunde" muss ein Kunde gewählt sein.'})
-            lieferant = attrs.get(
-                'supplier', getattr(self.instance, 'supplier', None))
-            if lieferant:
-                raise serializers.ValidationError(
-                    {'supplier':
-                     'Bei Gegenpartei "Kunde" darf kein Lieferant gesetzt sein.'})
-        else:
-            lieferant = attrs.get(
-                'supplier', getattr(self.instance, 'supplier', None))
-            if not lieferant:
-                raise serializers.ValidationError(
-                    {'supplier':
-                     'Bei Gegenpartei "Lieferant" muss ein Lieferant '
-                     'gewählt sein.'})
-            kunde = attrs.get(
-                'lender_customer',
-                getattr(self.instance, 'lender_customer', None))
-            if kunde:
-                raise serializers.ValidationError(
-                    {'lender_customer':
-                     'Bei Gegenpartei "Lieferant" darf kein Kunde gesetzt sein.'})
+                    {feldname: f'Bei Gegenpartei "{label}" darf kein '
+                               f'{anderes_label} gesetzt sein.'})
         return attrs
     
     def __init__(self, *args, **kwargs):

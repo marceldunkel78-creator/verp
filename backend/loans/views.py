@@ -132,9 +132,9 @@ class LoanViewSet(viewsets.ModelViewSet):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
-        # Filter by lender type (supplier / customer)
+        # Filter by lender type (supplier / customer / distributor_employee)
         lender_type = self.request.query_params.get('lender_type', None)
-        if lender_type in ('supplier', 'customer'):
+        if lender_type in ('supplier', 'customer', 'distributor_employee'):
             queryset = queryset.filter(lender_type=lender_type)
 
         # Filter by counterparty. 'supplier' bleibt der alte Parameter
@@ -148,17 +148,27 @@ class LoanViewSet(viewsets.ModelViewSet):
         if customer_id:
             queryset = queryset.filter(lender_customer_id=customer_id)
 
+        distributor_id = self.request.query_params.get(
+            'lender_distributor_employee', None)
+        if distributor_id:
+            queryset = queryset.filter(
+                lender_distributor_employee_id=distributor_id)
+
         # Search
         search = self.request.query_params.get('search', None)
         if search:
-            # Kundenname mitsuchen - sonst waeren Kunden-Leihungen
-            # ueber die Suche nicht auffindbar. Customer hat kein
-            # Feld 'company_name', nur Titel/Vorname/Nachname.
+            # Kunden- und Distributornamen mitsuchen - sonst waeren
+            # diese Leihungen ueber die Suche nicht auffindbar.
+            # Customer hat kein Feld 'company_name', nur
+            # Titel/Vorname/Nachname.
             queryset = queryset.filter(
                 Q(loan_number__icontains=search) |
                 Q(supplier__company_name__icontains=search) |
                 Q(lender_customer__last_name__icontains=search) |
                 Q(lender_customer__first_name__icontains=search) |
+                Q(lender_distributor_employee__last_name__icontains=search) |
+                Q(lender_distributor_employee__first_name__icontains=search) |
+                Q(lender_distributor_employee__dealer__company_name__icontains=search) |
                 Q(supplier_reference__icontains=search) |
                 Q(items__product_name__icontains=search)
             ).distinct()

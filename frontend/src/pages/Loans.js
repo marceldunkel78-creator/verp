@@ -167,6 +167,11 @@ function Loans() {
                                                 Kunde
                                             </span>
                                         )}
+                                        {loan.lender_type === 'distributor_employee' && (
+                                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">
+                                                Distributor
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         {getStatusBadge(loan.status)}

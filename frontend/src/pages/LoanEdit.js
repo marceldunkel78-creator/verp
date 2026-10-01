@@ -20,6 +20,7 @@ function LoanEdit() {
         lender_type: 'supplier',
         supplier: '',
         lender_customer: '',
+        lender_distributor_employee: '',
         status: 'angefragt',
         request_date: new Date().toISOString().split('T')[0],
         return_deadline: '',
@@ -95,6 +96,11 @@ function LoanEdit() {
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerResults, setCustomerResults] = useState([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+    // Distributormitarbeiter als Gegenpartei. Getrennte Suche wie
+    // bei den Verleihungen, damit sich die Treffer nicht mischen.
+    const [distributorSearch, setDistributorSearch] = useState('');
+    const [distributorResults, setDistributorResults] = useState([]);
+    const [showDistributorDropdown, setShowDistributorDropdown] = useState(false);
 
     useEffect(() => {
         if (customerSearch.length >= 2) {
@@ -115,6 +121,26 @@ function LoanEdit() {
             setShowCustomerDropdown(false);
         }
     }, [customerSearch]);
+
+    useEffect(() => {
+        if (distributorSearch.length >= 2) {
+            const timer = setTimeout(async () => {
+                try {
+                    const response = await api.get(
+                        `/dealers/dealer-employees/?search=${encodeURIComponent(distributorSearch)}&page_size=20`);
+                    const data = response.data && (response.data.results || response.data);
+                    setDistributorResults(Array.isArray(data) ? data : []);
+                    setShowDistributorDropdown(true);
+                } catch (error) {
+                    console.error('Error searching distributor employees:', error);
+                }
+            }, 300);
+            return () => clearTimeout(timer);
+        } else {
+            setDistributorResults([]);
+            setShowDistributorDropdown(false);
+        }
+    }, [distributorSearch]);
 
     const loadEmployees = async () => {
         try {
@@ -157,6 +183,12 @@ function LoanEdit() {
                 setCustomerSearch(response.data.lender_customer_name || '');
             } else {
                 setCustomerSearch('');
+            }
+            if (response.data.lender_type === 'distributor_employee') {
+                setDistributorSearch(
+                    response.data.lender_distributor_employee_name || '');
+            } else {
+                setDistributorSearch('');
             }
             
             // Initialize return form items
@@ -582,19 +614,22 @@ function LoanEdit() {
                                                 // Beim Wechsel die jeweils
                                                 // andere Gegenpartei
                                                 // zuruecksetzen - sonst
-                                                // waeren beide gesetzt und
+                                                // waeren mehrere gesetzt und
                                                 // das Backend lehnt es ab.
                                                 setLoan(prev => ({
                                                     ...prev,
                                                     supplier: t === 'supplier' ? prev.supplier : '',
                                                     lender_customer: t === 'customer' ? prev.lender_customer : '',
+                                                    lender_distributor_employee: t === 'distributor_employee' ? prev.lender_distributor_employee : '',
                                                 }));
                                                 setCustomerSearch('');
+                                                setDistributorSearch('');
                                             }}
                                             className="px-3 py-2 border rounded-lg bg-gray-50"
                                         >
                                             <option value="supplier">Lieferant</option>
                                             <option value="customer">Kunde</option>
+                                            <option value="distributor_employee">Distributor-Mitarbeiter</option>
                                         </select>
 
                                         {lenderType === 'supplier' ? (
@@ -609,7 +644,7 @@ function LoanEdit() {
                                                     <option key={s.id} value={s.id}>{s.company_name}</option>
                                                 ))}
                                             </select>
-                                        ) : (
+                                        ) : lenderType === 'customer' ? (
                                             <div className="relative flex-1">
                                                 <input
                                                     type="text"
@@ -659,11 +694,62 @@ function LoanEdit() {
                                                     </div>
                                                 )}
                                             </div>
+                                        ) : (
+                                            <div className="relative flex-1">
+                                                <input
+                                                    type="text"
+                                                    value={distributorSearch}
+                                                    onChange={(e) => setDistributorSearch(e.target.value)}
+                                                    placeholder="Distributor-Mitarbeiter suchen..."
+                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                {showDistributorDropdown && distributorResults.length > 0 && (
+                                                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                                        {distributorResults.map(e => {
+                                                            // full_name kommt aus dem
+                                                            // Serializer. Die Rueckfall-
+                                                            // Zusammensetzung deckt
+                                                            // aeltere Datenstaende ab.
+                                                            // Eigener Bezeichner, weil
+                                                            // "name" window.name
+                                                            // verdecken wuerde.
+                                                            const mitarbeiterName = e.full_name
+                                                                || `${e.title || ''} ${e.first_name || ''} ${e.last_name || ''}`.trim();
+                                                            return (
+                                                                <button
+                                                                key={e.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setDistributorSearch(mitarbeiterName);
+                                                                    setShowDistributorDropdown(false);
+                                                                    setLoan(prev => ({
+                                                                        ...prev,
+                                                                        lender_distributor_employee: e.id,
+                                                                    }));
+                                                                }}
+                                                                className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                                                            >
+                                                                <div className="font-medium">{mitarbeiterName}</div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {e.dealer_name || e.dealer || e.email || ''}
+                                                                </div>
+                                                            </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                     {lenderType === 'customer' && !loan.lender_customer && (
                                         <p className="mt-1 text-xs text-amber-700">
                                             Bitte einen Kunden auswählen.
+                                        </p>
+                                    )}
+                                    {lenderType === 'distributor_employee'
+                                        && !loan.lender_distributor_employee && (
+                                        <p className="mt-1 text-xs text-amber-700">
+                                            Bitte einen Distributor-Mitarbeiter auswählen.
                                         </p>
                                     )}
                                 </div>

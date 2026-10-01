@@ -55,14 +55,15 @@ class Loan(models.Model):
     LENDER_TYPE_CHOICES = [
         ('supplier', 'Lieferant'),
         ('customer', 'Kunde'),
+        ('distributor_employee', 'Distributormitarbeiter'),
     ]
 
     lender_type = models.CharField(
-        max_length=10,
+        max_length=24,
         choices=LENDER_TYPE_CHOICES,
         default='supplier',
         verbose_name='Gegenpartei',
-        help_text='Von wem wird geliehen? Lieferant oder Kunde'
+        help_text='Von wem wird geliehen? Lieferant, Kunde oder Distributormitarbeiter'
     )
 
     # Lieferant
@@ -87,6 +88,21 @@ class Loan(models.Model):
         blank=True,
         verbose_name='Kunde als Gegenpartei',
         help_text='Nur wenn als Gegenpartei "Kunde" gewählt ist'
+    )
+
+    # Distributormitarbeiter als Gegenpartei. Nur gesetzt, wenn
+    # lender_type='distributor_employee'. Bei den Verleihungen ist
+    # dasselbe Muster ueber dealers.DealerEmployee bereits belegt
+    # (customer_loans.distributor_employee), hier Gegenpartei der
+    # Beschaffung statt Empfaenger der Verleihung.
+    lender_distributor_employee = models.ForeignKey(
+        'dealers.DealerEmployee',
+        on_delete=models.PROTECT,
+        related_name='procurement_loans_as_lender',
+        null=True,
+        blank=True,
+        verbose_name='Distributormitarbeiter als Gegenpartei',
+        help_text='Nur wenn als Gegenpartei "Distributormitarbeiter" gewählt ist'
     )
     
     # Status
@@ -212,7 +228,8 @@ class Loan(models.Model):
     @property
     def lender_name(self):
         """
-        Name der Gegenpartei, egal ob Lieferant oder Kunde.
+        Name der Gegenpartei, egal ob Lieferant, Kunde oder
+        Distributormitarbeiter.
 
         Mehrere Stellen (Listenansicht, PDF-Kopfzeile, Benachrichtigung)
         brauchen diesen Namen. Ohne diese Property wuerde dort
@@ -229,6 +246,10 @@ class Loan(models.Model):
                 self.lender_customer.first_name,
                 self.lender_customer.last_name,
             ])).strip()
+        if self.lender_type == 'distributor_employee':
+            if not self.lender_distributor_employee:
+                return ''
+            return self.lender_distributor_employee.full_name
         return self.supplier.company_name if self.supplier else ''
 
     def clean(self):
@@ -240,25 +261,35 @@ class Loan(models.Model):
         Lieferant noch Kunde gesetzt ist - der fuehrt in __str__ und
         in den PDF-Generatoren zu AttributeError.
         """
+        # Die beiden anderen Gegenparteien duerfen nie gesetzt sein,
+        # egal welcher Typ gewaehlt wurde. Sonst waere beim erneuten
+        # Bearbeiten nicht mehr erkennbar, welche gesetzt war.
+        if self.supplier and self.lender_type != 'supplier':
+            raise ValidationError(
+                'Bei dieser Gegenpartei darf kein Lieferant gesetzt sein.')
+        if self.lender_customer and self.lender_type != 'customer':
+            raise ValidationError(
+                'Bei dieser Gegenpartei darf kein Kunde gesetzt sein.')
+        if (self.lender_distributor_employee
+                and self.lender_type != 'distributor_employee'):
+            raise ValidationError(
+                'Bei dieser Gegenpartei darf kein Distributormitarbeiter '
+                'gesetzt sein.')
+
         if self.lender_type == 'customer':
-            if not self.lender_customer and self.supplier:
-                # Beim Umstellen eines bestehenden Datensatzes den
-                # Lieferanten mitnehmen, sonst ginge die Gegenpartei
-                # verloren.
-                self.lender_customer = None
             if not self.lender_customer:
                 raise ValidationError(
                     'Bei Gegenpartei "Kunde" muss ein Kunde gewählt sein.')
-            if self.supplier:
+        elif self.lender_type == 'distributor_employee':
+            if not self.lender_distributor_employee:
                 raise ValidationError(
-                    'Bei Gegenpartei "Kunde" darf kein Lieferant gesetzt '
-                    'sein. Bitte den Lieferanten leeren.')
+                    'Bei Gegenpartei "Distributormitarbeiter" muss ein '
+                    'Distributormitarbeiter gewählt sein.')
         else:
             if not self.supplier:
                 raise ValidationError(
                     'Bei Gegenpartei "Lieferant" muss ein Lieferant '
                     'gewählt sein.')
-
     def save(self, *args, **kwargs):
         if not self.loan_number:
             self.loan_number = self._generate_loan_number()
@@ -631,8 +662,17 @@ class LoanReturn(models.Model):
     
     def get_filename(self):
         """Generiert Dateinamen für das PDF"""
-        supplier_name = self.loan.supplier.company_name.replace(' ', '_')[:30]
-        return f"Ruecklieferschein_{self.return_number}_{supplier_name}.pdf"
+        # lender_name statt loan.supplier.company_name: bei einer Kunden-
+        # oder Distributor-Leihung ist supplier None, der Zugriff
+        # wuerde mit einem AttributeError abbrechen.
+        lender = (self.loan.lender_name or 'unbekannt')
+        # Nicht-Dateinamen-Zeichen ersetzen, sonst laesst sich der
+        # Ruecklieferschein unter Windows nicht speichern.
+        lender = ''.join(
+            ch if (ch.isalnum() or ch in ' -_.') else '_'
+            for ch in lender
+        ).replace(' ', '_')[:30]
+        return f"Ruecklieferschein_{self.return_number}_{lender}.pdf"
 
 
 class LoanReturnItem(models.Model):

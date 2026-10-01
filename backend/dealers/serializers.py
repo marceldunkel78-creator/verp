@@ -23,12 +23,14 @@ class DealerDocumentSerializer(serializers.ModelSerializer):
 class DealerEmployeeSerializer(serializers.ModelSerializer):
     """Serializer für Händler-Mitarbeiter"""
     full_name = serializers.CharField(read_only=True)
+    dealer_name = serializers.CharField(
+        source='dealer.company_name', read_only=True, default=None)
     language_display = serializers.CharField(source='get_language_display', read_only=True)
     
     class Meta:
         model = DealerEmployee
         fields = [
-            'id', 'dealer', 'salutation', 'title', 'first_name', 'last_name', 'full_name',
+            'id', 'dealer', 'dealer_name', 'salutation', 'title', 'first_name', 'last_name', 'full_name',
             'language', 'language_display',
             'phone', 'mobile', 'fax', 'email',
             'street', 'house_number', 'postal_code', 'city', 'country',
