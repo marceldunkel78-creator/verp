@@ -44,6 +44,10 @@ class CustomerListSerializer(serializers.ModelSerializer):
     responsible_user_name = serializers.CharField(source='responsible_user.get_full_name', read_only=True)
     primary_email = serializers.SerializerMethodField()
     primary_phone = serializers.SerializerMethodField()
+    primary_address_street = serializers.SerializerMethodField()
+    primary_address_house_number = serializers.SerializerMethodField()
+    primary_address_supplement = serializers.SerializerMethodField()
+    primary_address_postal_code = serializers.SerializerMethodField()
     primary_address_city = serializers.SerializerMethodField()
     primary_address_country = serializers.SerializerMethodField()
     primary_address_latitude = serializers.SerializerMethodField()
@@ -61,6 +65,9 @@ class CustomerListSerializer(serializers.ModelSerializer):
             'advertising_status', 'advertising_status_display',
             'is_reference', 'responsible_user', 'responsible_user_name',
             'primary_email', 'primary_phone', 'is_active',
+            'primary_address_street', 'primary_address_house_number',
+            'primary_address_supplement',
+            'primary_address_postal_code',
             'primary_address_city', 'primary_address_country',
             'primary_address_latitude', 'primary_address_longitude',
             'system_count', 'project_count', 'open_ticket_count',
@@ -78,6 +85,29 @@ class CustomerListSerializer(serializers.ModelSerializer):
         primary = obj.phones.filter(is_primary=True).first()
         return primary.phone_number if primary else None
     
+    def get_primary_address_street(self, obj):
+        # Auswahl in den Verleihungen/Leihungen braucht die vollstaendige
+        # Anschrift, nicht nur Stadt und Land. Deshalb hier auch Strasse,
+        # Hausnummer und PLZ. Ohne diese Felder blieb die Ruecksendeadresse
+        # halb leer, obwohl der Kunde eine vollstaendige Adresse hat.
+        primary = obj.addresses.filter(is_active=True).first()
+        return primary.street if primary else None
+
+    def get_primary_address_house_number(self, obj):
+        primary = obj.addresses.filter(is_active=True).first()
+        return primary.house_number if primary else None
+
+    def get_primary_address_postal_code(self, obj):
+        primary = obj.addresses.filter(is_active=True).first()
+        return primary.postal_code if primary else None
+
+    def get_primary_address_supplement(self, obj):
+        # Adressergaenzung (Zustellhinweis, Abteilung, Gebaeude).
+        # Steht haeufig in der Kundenadresse und geht sonst beim
+        # Uebernehmen in die Leihunterlagen verloren.
+        primary = obj.addresses.filter(is_active=True).first()
+        return primary.address_supplement if primary else None
+
     def get_primary_address_city(self, obj):
         # Get first active address (ordered by is_active DESC, address_type)
         primary = obj.addresses.filter(is_active=True).first()

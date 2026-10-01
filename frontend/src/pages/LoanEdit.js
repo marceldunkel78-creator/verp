@@ -625,22 +625,24 @@ function LoanEdit() {
                                                                 key={c.id}
                                                                 type="button"
                                                                 onClick={() => {
-                                                                    setCustomerSearch(
-                                                                        c.full_name
-                                                                        || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim());
+                                                                    const name = c.full_name
+                                                                        || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim();
+                                                                    setCustomerSearch(name);
                                                                     setShowCustomerDropdown(false);
                                                                     setLoan(prev => ({
                                                                         ...prev,
                                                                         lender_customer: c.id,
                                                                         // Ruecksendeadresse vorbelegen,
                                                                         // sonst muss sie von Hand
-                                                                        // abgetippt werden.
-                                                                        return_address_name: c.full_name
-                                                                            || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim(),
+                                                                        // abgetippt werden. Die Felder
+                                                                        // kommen direkt aus dem
+                                                                        // Suchtreffer (primary_address_*).
+                                                                        return_address_name: name,
                                                                         return_address_street: c.primary_address_street || '',
                                                                         return_address_house_number: c.primary_address_house_number || '',
                                                                         return_address_postal_code: c.primary_address_postal_code || '',
                                                                         return_address_city: c.primary_address_city || '',
+                                                                        return_address_country: c.primary_address_country || prev.return_address_country || 'Deutschland',
                                                                     }));
                                                                 }}
                                                                 className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b last:border-b-0"
@@ -649,8 +651,8 @@ function LoanEdit() {
                                                                     {c.full_name || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim()}
                                                                 </div>
                                                                 <div className="text-xs text-gray-500">
-                                                                    {[c.customer_number, c.primary_address_city, c.primary_address_country]
-                                                                        .filter(Boolean).join(', ')}
+                                                                    {[c.customer_number, c.primary_address_street, c.primary_address_house_number, c.primary_address_postal_code, c.primary_address_city]
+                                                                        .filter(Boolean).join(' ')}
                                                                 </div>
                                                             </button>
                                                         ))}

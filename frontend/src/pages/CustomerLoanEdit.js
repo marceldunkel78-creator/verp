@@ -369,36 +369,27 @@ function CustomerLoanEdit() {
         showSuccess(`${newItems.length} Position(en) aus ${selectedLeihung.loan_number} übernommen`);
     };
 
-    const selectCustomer = async (customer) => {
-        setCustomerSearch(customer.full_name || `${customer.title || ''} ${customer.first_name} ${customer.last_name}`.trim());
+    const selectCustomer = (customer) => {
+        setCustomerSearch(customer.full_name || `${customer.title || ''} ${customer.first_name || ''} ${customer.last_name || ''}`.trim());
         setShowCustomerDropdown(false);
+        // Die Anschrift steht bereits im Suchtreffer - seit der
+        // Ergaenzung von primary_address_street usw. in
+        // CustomerListSerializer. Vorher wurde hier ein zweiter
+        // Abruf gemacht, weil der Treffer die Felder nicht lieferte.
+        // Das war langsam und brauchte zusaetzlich Leseberechtigung
+        // auf dem Detail-Endpoint.
         setLoan(prev => ({
             ...prev,
             customer: customer.id,
             supplier_contact: '',
             distributor_employee: '',
-            delivery_address_name: customer.full_name || `${customer.title || ''} ${customer.first_name} ${customer.last_name}`.trim(),
+            delivery_address_name: customer.full_name || `${customer.title || ''} ${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+            delivery_address_street: customer.primary_address_street || '',
+            delivery_address_house_number: customer.primary_address_house_number || '',
+            delivery_address_postal_code: customer.primary_address_postal_code || '',
+            delivery_address_city: customer.primary_address_city || '',
+            delivery_address_country: customer.primary_address_country || 'Deutschland',
         }));
-        // Fetch detail to get address
-        try {
-            const response = await api.get(`/customers/customers/${customer.id}/`);
-            const detail = response.data;
-            const addr = detail.addresses && detail.addresses.length > 0
-                ? detail.addresses.find(a => a.is_active) || detail.addresses[0]
-                : null;
-            if (addr) {
-                setLoan(prev => ({
-                    ...prev,
-                    delivery_address_street: addr.street || '',
-                    delivery_address_house_number: addr.house_number || '',
-                    delivery_address_postal_code: addr.postal_code || '',
-                    delivery_address_city: addr.city || '',
-                    delivery_address_country: addr.country || 'Deutschland',
-                }));
-            }
-        } catch (error) {
-            console.error('Error fetching customer detail:', error);
-        }
     };
 
     const addItemFromInventory = (invItem) => {
@@ -667,7 +658,8 @@ function CustomerLoanEdit() {
                                     >
                                         <div className="font-medium">{c.full_name || `${c.title || ''} ${c.first_name} ${c.last_name}`.trim()}</div>
                                         <div className="text-xs text-gray-500">
-                                            {[c.customer_number, c.primary_address_city, c.primary_address_country].filter(Boolean).join(', ')}
+                                            {[c.customer_number, c.primary_address_street, c.primary_address_house_number, c.primary_address_postal_code, c.primary_address_city, c.primary_address_country]
+                                                .filter(Boolean).join(' ')}
                                         </div>
                                     </button>
                                 ))}
