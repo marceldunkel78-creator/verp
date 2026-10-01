@@ -129,7 +129,10 @@ function CustomerLoanEdit() {
     const [distributorSearch, setDistributorSearch] = useState('');
     const [filteredDealerEmployees, setFilteredDealerEmployees] = useState([]);
     const [showDistributorDropdown, setShowDistributorDropdown] = useState(false);
-    const [recipientType, setRecipientType] = useState('customer');
+    // Startwert leer, nicht 'customer': bei einer neuen Leihung ist
+    // noch keine Gegenpartei gewaehlt, das Feld soll dann auch
+    // "-- Empfaenger auswaehlen --" zeigen.
+    const [recipientType, setRecipientType] = useState('');
     const [inventorySearch, setInventorySearch] = useState('');
     const [inventoryResults, setInventoryResults] = useState([]);
     const [showInventoryDropdown, setShowInventoryDropdown] = useState(false);
@@ -181,9 +184,27 @@ function CustomerLoanEdit() {
         try {
             const response = await api.get(`/customer-loans/customer-loans/${id}/`);
             setLoan(response.data);
-            setRecipientType(response.data.customer ? 'customer' : response.data.supplier_contact ? 'supplier' : 'distributor');
+            // Empfängerart aus den gespeicherten Feldern ableiten.
+            // Die alte Formulierung
+            //   ... : response.data.supplier_contact ? 'supplier' : 'distributor'
+            // hatte kein letztes 'else': bei einer Leihung ganz ohne
+            // Gegenpartei sprang der Dialog auf "Distributormitarbeiter",
+            // obwohl nichts gespeichert war. Genau umgekehrt sollte
+            // beim Laden "-- Empfänger auswählen --" stehen bleiben,
+            // solange keine Gegenpartei existiert.
+            if (response.data.customer) {
+                setRecipientType('customer');
+            } else if (response.data.supplier_contact) {
+                setRecipientType('supplier');
+            } else if (response.data.distributor_employee) {
+                setRecipientType('distributor');
+            } else {
+                setRecipientType('');
+            }
             if (response.data.customer_name) {
                 setCustomerSearch(response.data.customer_name);
+            } else {
+                setCustomerSearch('');
             }
 
             // Nur den tatsaechlich gewaehlten Kontakt/Mitarbeiter
