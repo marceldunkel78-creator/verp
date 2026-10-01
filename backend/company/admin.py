@@ -1,10 +1,11 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import CompanySettings
 
 
 @admin.register(CompanySettings)
 class CompanySettingsAdmin(admin.ModelAdmin):
-    list_display = ['company_name', 'city', 'managing_director']
+    list_display = ['company_name', 'city', 'managing_director', 'logo_status']
     
     fieldsets = (
         ('Firmeninformationen', {
@@ -30,9 +31,56 @@ class CompanySettingsAdmin(admin.ModelAdmin):
             'description': 'Standard-Stundensatz und Verwaltungskostenpauschale, die automatisch in der RMA-Kalkulation übernommen werden.'
         }),
         ('Dokumente', {
-            'fields': ('document_header',)
+            'fields': ('logo_status', 'document_header', 'tagline', 'tagline_english'),
+            'description': (
+                '<p><strong>Firmenlogo:</strong> optional. Wird keines '
+                'hochgeladen, verwendet der PDF-Briefkopf automatisch das '
+                'Standard-Logo, das exakt aus der Vorlage '
+                'Q-373Du-0826.pdf geschnitten wurde.</p>'
+                '<p><strong>Briefkopf-Unterzeile:</strong> die Zeile rechts '
+                'unter dem Logo. Die deutsche Fassung erscheint auf '
+                'deutschen Dokumenten, die englische auf englischen.</p>'
+            )
         }),
     )
+    
+    @admin.display(description='Logo')
+    def logo_status(self, obj):
+        """
+        Zeigt das aktuelle Logo und einen Knopf zum Entfernen.
+
+        Ohne diesen Knopf laesst sich ein einmal hochgeladenes Logo nur
+        ueber die Datenbank wieder loswerden - der Admin bietet fuer
+        Bildfelder keinen Loesch-Link an.
+        """
+        if not obj.document_header:
+            return format_html(
+                '<span style="color:#666">Standard-Logo (aus Vorlage)'
+                '</span>'
+            )
+        return format_html(
+            '{} <a href="?{}" class="button" style="color:#ba2121;'
+            'padding:2px 8px;border:1px solid #ba2121;border-radius:4px;'
+            'text-decoration:none">Logo entfernen</a>',
+            obj.document_header,
+            f'delete_document_header=1&id={obj.pk}',
+        )
+    
+    def response_change(self, request, obj):
+        """
+        Entfernt das Logo, wenn der Knopf geklickt wurde.
+        """
+        if request.GET.get('delete_document_header'):
+            obj.document_header.delete(save=False)
+            obj.save(update_fields=['document_header'])
+            self.message_user(
+                request,
+                'Logo entfernt. Die Bestelldokumente verwenden jetzt '
+                'wieder das Standard-Logo aus der Vorlage.',
+                level='messages.SUCCESS',
+            )
+            return None
+        return super().response_change(request, obj)
     
     def has_add_permission(self, request):
         # Nur eine Instanz erlauben

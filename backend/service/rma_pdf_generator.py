@@ -78,7 +78,7 @@ class RMADeliveryNoteDocTemplate(VerpDocTemplate):
         self.rma_return = rma_return
         self.translations = DELIVERY_NOTE_TRANSLATIONS.get(language, DELIVERY_NOTE_TRANSLATIONS['de'])
         VerpDocTemplate.__init__(
-            self, filename, company=company,
+            self, filename, company=company, language=language,
             continuation_text=f"{self.translations['delivery_note']} {rma_return.return_number}",
             **kwargs)
 

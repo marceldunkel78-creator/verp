@@ -461,6 +461,7 @@ def generate_order_confirmation_pdf(order, language='DE'):
     elements.append(build_address_and_doc_row(
         address_lines, build_document_box(doc_box_lines), company,
         date_text=conf_date.strftime('%d.%m.%Y'),
+        language=language,
     ))
     elements.append(Spacer(1, 0.4*cm))
     
@@ -692,6 +693,7 @@ def generate_delivery_note_pdf(delivery_note, language='DE'):
     elements.append(build_address_and_doc_row(
         address_lines, build_document_box(doc_box_lines), company,
         date_text=dn_date.strftime('%d.%m.%Y') if dn_date else '',
+        language=language,
     ))
     elements.append(Spacer(1, 0.4*cm))
     
@@ -834,6 +836,7 @@ def generate_invoice_pdf(invoice, language='DE'):
     elements.append(build_address_and_doc_row(
         address_lines, build_document_box(doc_box_lines), company,
         date_text=invoice.invoice_date.strftime('%d.%m.%Y') if invoice.invoice_date else '',
+        language=language,
     ))
     elements.append(Spacer(1, 0.4*cm))
     

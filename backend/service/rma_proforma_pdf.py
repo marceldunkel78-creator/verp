@@ -60,7 +60,7 @@ class ProformaInvoiceDocTemplate(VerpDocTemplate):
         self.manufacturer_return = manufacturer_return
         self.translations = None
         VerpDocTemplate.__init__(
-            self, filename, company=company,
+            self, filename, company=company, language=language,
             **kwargs)
 
 

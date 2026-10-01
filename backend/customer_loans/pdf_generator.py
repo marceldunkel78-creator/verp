@@ -35,13 +35,16 @@ class LoanDeliveryNoteDocTemplate(VerpDocTemplate):
     def __init__(self, filename, company=None, customer_loan=None,
                  language='de', **kwargs):
         self.customer_loan = customer_loan
-        self.language = language
 
         label = 'Loan Delivery Note' if language == 'en' else 'Leihlieferschein'
         loan_number = getattr(customer_loan, 'loan_number', None) or '---'
         kwargs.setdefault('title', label)
+        # 'language' MUSS an die Basis durchgereicht werden - sie
+        # steuert die Briefkopf-Unterzeile ("Imaging · Microscopy" statt
+        # "Bildverarbeitung · Mikroskopie"). Wird sie hier nur lokal
+        # gesetzt, bleibt in der Basis die Vorgabe 'de' stehen.
         VerpDocTemplate.__init__(
-            self, filename, company=company,
+            self, filename, company=company, language=language,
             continuation_text=f'{label} {loan_number}',
             **kwargs)
 
@@ -98,6 +101,7 @@ def generate_loan_delivery_note_pdf(customer_loan, language='de'):
     elements.append(build_address_and_doc_row(
         address_lines, build_document_box(doc_box_lines), company,
         date_text=customer_loan.loan_date.strftime('%d.%m.%Y'),
+        language=language,
     ))
     elements.append(Spacer(1, 0.4 * cm))
 

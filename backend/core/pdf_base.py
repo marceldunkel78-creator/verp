@@ -1,4 +1,4 @@
-"""
+﻿"""
 Gemeinsame Basis fuer alle VERP-Geschaeftsdokumente (ReportLab).
 
 Das Layout ist 1:1 aus den beiden Originalvorlagen abgeleitet:
@@ -109,17 +109,41 @@ ADDR_TEXT_INDENT = 7.4
 
 # Absenderzeile ueber der Linie (7 pt)
 ADDR_SENDER_SIZE = 7
-ADDR_SENDER_LEADING = 11.2   # 136,2 -> 147,4
 
 # Empfaengertext (10 pt), Zeilenabstand 11,4 pt
 ADDR_SIZE = 10
 ADDR_LEADING = 11.4
-ADDR_GAP = 15.7              # 145,6 -> 161,2 Luft bis zur ersten Zeile
+# --- Adressblock: vertikale-Rhythmen aus Q-373Du -----------------------
+# Von oben nach unten, alle y-Werte aus der Vorlage:
+#   136,2  "Visitron Systems GmbH"           7 pt
+#   145,6  Trennlinie                         0,1 pt
+#   147,4  "Gutenbergstr. 3, D-82178 Puch."  7 pt
+#   161,2  "Frau ..."                         10 pt
+#
+# Die Linie verlaufen ZWISCHEN DEN BEIDEN ABSENDERZEILEN, also mitten
+# im Absenderabsatz. Ein Absatz aus zwei Zeilen liefert das nicht -
+# die Linie kaeme dann unter dem ganzen Absender zu liegen. Deshalb
+# sind es vier Zeilen: Firmenname, Linie, Absenderadresse, Empfaenger.
+
+# Zeilenhoehe eines einzeiligen 7-pt-Absatzes. Der sichtbare Zeilen-
+# abstand der Vorlage betraegt 147,4 - 136,2 = 11,2 pt; die Differenz
+# von 2,1 pt zur Absatzhoehe traegt ein TOPPADDING der Folgezeile.
+ADDR_SENDER_LEADING = 9
+ADDR_SENDER_PITCH = 0.6
+
+# Hoehe der Trennlinien-Zeile: die Linie sitzt an deren Unterkante und
+# markiert damit exakt den Abstand Absenderzeile -> Linie.
+ADDR_RULE_ROW = 1.6
+
+# Luft zwischen Linie und erster Empfaengerzeile (145,6 -> 161,2 =
+# 15,6 pt sichtbar). Der 10-pt-Absatz setzt seinen Text nochmals
+# rund 7 pt unter die Zellkante, der Wert ist deshalb groesser.
+ADDR_GAP = 5.0
 
 # Der Adressblock beginnt in der Vorlage 13,6 pt unter dem Kontaktblock
 # rechts. Beide stehen in derselben Zeile, sind aber nicht buendig -
 # deshalb ein fester Versatz statt BOTTOM-Ausrichtung.
-ADDR_TOP_OFFSET = 13.6
+ADDR_TOP_OFFSET = 14.9
 
 # --- Dokumentbox -------------------------------------------------------
 # Q-373Du: Rechte Box x=411,5 .. 559,1 pt, y=193,7 .. 267,6 pt.
@@ -135,6 +159,13 @@ DOC_BOX_X1 = 559.1
 DOC_BOX_W = DOC_BOX_X1 - DOC_BOX_X0          # 147,6 pt
 DOC_BOX_Y0 = 193.7
 DOC_BOX_H = 74.0
+# Innenabstand des Textes vom Rahmen. Q-373Du: Oberkante 193,7,
+# erste Textzeile 200,8 -> 7,1 pt; Unterkante 267,7, letzte Zeile
+# endet 261,2 -> 6,5 pt. Mit 6 pt sitzt der Text bei mehreren Zeilen
+# sonst unten auf, weil die Zeilenzahl die Box nicht mitwachsen liess.
+DOC_BOX_PAD = 7
+# Innenabstand des Textes von der Kastenkante seitlich.
+DOC_BOX_SIDE_PAD = 6
 
 DOC_TITLE_SIZE = 12   # "ANGEBOT" ist 12 pt fett
 DOC_NUM_SIZE = 12     # die Folgezeilen in der Box ebenfalls 12 pt
@@ -143,7 +174,11 @@ DOC_NUM_SIZE = 12     # die Folgezeilen in der Box ebenfalls 12 pt
 # 10 pt, ohne Rahmen - nur die Dokumentbox ist gerahmt.
 CONTACT_X = 445.8
 CONTACT_SIZE = 10
-CONTACT_LEADING = 13.4
+# Zeilenabstand des Kontaktblocks. Q-373Du: 122,6 / 136,0 / 148,0 /
+# 160,0 / 172,0 - nach der ersten Zeile also 12,0 pt. Mit 13,4 pt
+# rutscht die letzte Zeile um 5,3 pt zu tief und drueckt die
+# Dokumentbox nach unten.
+CONTACT_LEADING = 12.0
 
 # Datumszeile: "Datum:" 9 pt bei x=412,4, Wert 10 pt ab x=450,8, y=285,7.
 # Das Label ist 0,9 pt gegenueber der Boxkante eingerueckt, der Wert
@@ -272,7 +307,8 @@ def get_company_styles():
     ))
     ss.add(ParagraphStyle(
         name='VerpAddressSender',
-        fontName=FONT_REGULAR, fontSize=ADDR_SENDER_SIZE, leading=9,
+        fontName=FONT_REGULAR, fontSize=ADDR_SENDER_SIZE,
+        leading=ADDR_SENDER_LEADING,
         alignment=TA_CENTER, textColor=colors.black,
     ))
     ss.add(ParagraphStyle(
@@ -411,45 +447,80 @@ def build_address_box(company, address_lines):
     """
     Empfaengerblock wie in Q-373Du: KEIN Rahmen.
 
-    Ueber dem Empfaenger steht die Absenderzeile in 7 pt, darunter eine
-    Trennlinie in der Breite des Adressfeldes, darunter der Empfaenger
-    in 10 pt.
+    Aufbau von oben nach unten (Vorlage Q-373Du):
+        "Visitron Systems GmbH"              7 pt
+        ------------------------------------  Trennlinie
+        "Gutenbergstr. 3, D-82178 Puchheim"   7 pt
+        (Luft)
+        "Frau ..."                            10 pt
 
-    Gegenueber dem alten Aufbau entfallen die Linien links, rechts und
-    unten sowie der Rahmen insgesamt - in der Vorlage gibt es sie nicht.
+    Die Linie verlauft in der Vorlage ZWISCHEN DEN BEIDEN ABSENDERZEILEN,
+    also mitten im Absenderabsatz. Ein Absenderabsatz aus zwei Zeilen
+    liefert das nicht - die Linie kaeme dann unter dem ganzen Absender
+    zu liegen. Deshalb sind es hier vier Zeilen: Firmenname, Linie,
+    Absenderadresse, Empfaenger.
+
+    Wichtig: je EIN Element pro Zeile. Mit einer einzigen Zelle zeichnet
+    LINEBELOW die Linie unter allem - also unter dem Empfaenger statt
+    zwischen den Absenderzeilen. Gegenueber der Vorlage lag sie dadurch
+    rund 70 pt zu tief.
     """
     styles = get_company_styles()
     addr_w = ADDR_BOX_X1 - ADDR_BOX_X0
 
-    sender = []
-    if company:
-        sender.append(company.company_name or 'Visitron Systems GmbH')
-        street = (company.street or '').strip()
-        hnr = (company.house_number or '').strip()
-        if street and hnr:
-            street = f"{street} {hnr}"
-        city = f"D-{company.postal_code or ''} {company.city or ''}".strip()
-        # Q-373Du: "Gutenbergstraße 3, D-82178 Puchheim" in EINER Zeile
-        line = ', '.join(p for p in (street, city) if p)
-        if line:
-            sender.append(line)
+    company_name = company.company_name if company else ''
+    if not company_name:
+        company_name = 'Visitron Systems GmbH' if company is None else ''
 
-    inner = []
-    if sender:
-        inner.append(Paragraph('<br/>'.join(sender),
-                               styles['VerpAddressSender']))
-    inner.append(Spacer(1, ADDR_GAP))
-    inner.append(Paragraph('<br/>'.join(address_lines or ['']),
-                           styles['VerpAddress']))
+    street = (company.street or '').strip() if company else ''
+    hnr = (company.house_number or '').strip() if company else ''
+    if street and hnr:
+        street = f"{street} {hnr}"
+    city = f"D-{company.postal_code or ''} {company.city or ''}".strip() \
+        if company else ''
+    # Q-373Du: "GutenbergstraÃŸe 3, D-82178 Puchheim" in EINER Zeile
+    sender_addr = ', '.join(p for p in (street, city) if p)
 
-    box = Table([[inner]], colWidths=[addr_w])
-    box.setStyle(TableStyle([
-        # Nur die eine Trennlinie zwischen Absender und Empfaenger.
-        ('LINEBELOW', (0, 0), (-1, 0), 0.1, colors.black),
-        ('LEFTPADDING', (0, 0), (-1, -1), ADDR_TEXT_INDENT),
+    name_cell = Paragraph(company_name, styles['VerpAddressSender'])
+    sender_cell = Paragraph(sender_addr, styles['VerpAddressSender'])
+    address_cell = Paragraph('<br/>'.join(address_lines or ['']),
+                             styles['VerpAddress'])
+
+    # Trennlinien-Zeile: die Linie sitzt an der Unterkante, ihre Hoehe
+    # ist damit genau der Abstand Absenderzeile -> Linie.
+    rule_cell = Table([['']], colWidths=[addr_w],
+                      rowHeights=[ADDR_RULE_ROW])
+    rule_cell.setStyle(TableStyle([
+        ('LINEBELOW', (0, 0), (-1, -1), 0.1, colors.black),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ('TOPPADDING', (0, 0), (-1, -1), 0),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    box = Table([[name_cell], [rule_cell], [sender_cell], [address_cell]],
+                colWidths=[addr_w])
+    box.setStyle(TableStyle([
+        # Die Box selbst hat keinen Einzug - die Trennlinie soll laut
+        # Vorlage exakt beim Satzspiegelrand (71,0 pt) beginnen. Der
+        # Einzug sitzt deshalb nur auf den Textzellen, die Linie
+        # laeuft ohne Einzug ueber die volle Feldbreite.
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING', (0, 0), (0, 0), ADDR_TEXT_INDENT),
+        ('LEFTPADDING', (0, 2), (0, 2), ADDR_TEXT_INDENT),
+        ('LEFTPADDING', (0, 3), (0, 3), ADDR_TEXT_INDENT),
+        # Achtung: Die Koordinaten lauten (SPALTE, ZEILE). Die Box hat
+        # EINE Spalte und vier Zeilen - Firmenname (0), Linie (1),
+        # Absenderadresse (2), Empfaenger (3). Ein (2, 0) waere Spalte 2
+        # und liegt ausserhalb der Tabelle; ReportLab verwirft solche
+        # Angaben stillschweigend, der Abstand waere wirkungslos.
+        # Zeilenabstand des Absenders auf 11,2 pt bringen (Vorlage).
+        ('TOPPADDING', (0, 2), (0, 2), ADDR_SENDER_PITCH),
+        # Luft zwischen Linie und erster Empfaengerzeile.
+        ('TOPPADDING', (0, 3), (0, 3), ADDR_GAP),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
     return box
@@ -496,16 +567,54 @@ def build_document_box(lines):
 
     Der Rahmen ist vollstaendig geschlossen (in Q-373Du eine 0,1 pt
     Linie an allen vier Seiten), Titel 12 pt fett, Rest 12 pt.
+
+    Die Hoehe ist NICHT fest: Q-373Du hat zwei Zeilen ("ANGEBOT" /
+    "Q-373Du-08/26") und damit 74 pt. Ein Leihlieferschein bringt es
+    auf vier bis fuenf Zeilen (Verleihdatum, Rueckgabefrist). Mit
+    festen 74 pt ragte die letzte Zeile dann rund 4 pt aus dem Rahmen
+    heraus. Deshalb wird die tatsaechliche Texthoehe gemessen und die
+    Box auf diesen Wert plus Innenabstand gesetzt. Die Oberkante bleibt
+    bei DOC_BOX_Y0, weil die Box dort verankert wird.
     """
     styles = get_company_styles()
+    avail = DOC_BOX_W - 2 * DOC_BOX_SIDE_PAD
+
+    def passend(text, style, fontname, size):
+        """
+        Verkleinert die Schrift, bis der Text in EINER Zeile passt.
+
+        Die Kastenbreite ist mit 147,6 pt fest vorgegeben. Ein langer
+        Dokumenttyp wie "AUFTRAGSBESTAETIGUNG" braucht bei 12 pt Bold
+        aber 154 pt und wuerde sonst mitten im Wort umbrechen
+        ("AUFTRAGSBESTAETIG / UNG"). Das sieht nach einem Fehler aus,
+        deshalb wird die Groesse hier so weit reduziert, dass ein
+        Wortsschwund nicht mehr auftritt. Ab 9 pt wird nicht weiter
+        verkleinert - dann ist eine Silbentrennung vorzuziehen.
+        """
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        breite = stringWidth(text, fontname, size)
+        if breite <= avail or size <= 9:
+            return size
+        return max(9, size * avail / breite)
+
     content = []
     for i, (text, bold) in enumerate(lines):
-        if i == 0:
-            content.append(Paragraph(text, styles['VerpDocTitle']))
-        else:
-            content.append(Paragraph(text, styles['VerpDocInfo']))
+        basis = styles['VerpDocTitle'] if i == 0 else styles['VerpDocInfo']
+        groesse = passend(text, basis,
+                          FONT_BOLD if i == 0 else FONT_REGULAR,
+                          DOC_TITLE_SIZE if i == 0 else DOC_NUM_SIZE)
+        # Wichtig: basis klonen. get_company_styles() baut die Format-
+        # vorlagen bei jedem Aufruf neu auf, aber der Basis-Style selbst
+        # waere sonst ein gemeinsames Objekt - eine Aenderung an
+        # p.style.fontSize wuerde stillschweigend auch die uebrigen
+        # Zeilen treffen.
+        st = ParagraphStyle(
+            name=f'docbox{i}', parent=basis,
+            fontSize=groesse, leading=groesse + 2,
+        )
+        content.append(Paragraph(text, st))
 
-    inner = Table([[content]], colWidths=[DOC_BOX_W - 12])
+    inner = Table([[content]], colWidths=[DOC_BOX_W - 2 * DOC_BOX_SIDE_PAD])
     inner.setStyle(TableStyle([
         ('LEFTPADDING', (0, 0), (-1, -1), 0),
         ('RIGHTPADDING', (0, 0), (-1, -1), 0),
@@ -513,13 +622,19 @@ def build_document_box(lines):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
     ]))
 
-    box = Table([[inner]], colWidths=[DOC_BOX_W], rowHeights=[DOC_BOX_H])
+    # Q-373Du: Rahmenoberkante 193,7, erste Textzeile 200,8 -> 7,1 pt
+    # Innenabstand oben. Unten bleiben 267,7 - 261,2 = 6,5 pt. Beide
+    # Seiten sollen gleich sein, sonst klebt der Text unten an.
+    box_h = max(DOC_BOX_H, inner.wrap(DOC_BOX_W, 0)[1]
+                + 2 * DOC_BOX_PAD)
+
+    box = Table([[inner]], colWidths=[DOC_BOX_W], rowHeights=[box_h])
     box.setStyle(TableStyle([
         ('BOX', (0, 0), (-1, -1), 0.1, colors.black),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), DOC_BOX_SIDE_PAD),
+        ('RIGHTPADDING', (0, 0), (-1, -1), DOC_BOX_SIDE_PAD),
+        ('TOPPADDING', (0, 0), (-1, -1), DOC_BOX_PAD),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), DOC_BOX_PAD),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
     return box
@@ -574,19 +689,25 @@ def build_address_and_doc_row(address_lines, doc_box, company, date_text='',
     # Text beginnt 1,5 pt unter der Zeilenkante. Zwischen letzter Zeile
     # und Box bleiben 21,7 - 13,4 = 8,3 pt.
     right.append(contact_box)
-    right.append(Spacer(1, 8.3 - 3.5))
+    # Q-373Du: letzte Kontaktzeile endet 172,0 + 13,4 = 185,4 (Text
+    # selbst bis ca. 178,6), Boxoberkante 193,7. Zwischen dem letzten
+    # sichtbaren Kontaktzeichen und der Box bleiben knapp 15 pt. Der
+    # Absatz setzt die letzte Zeile nochmals 3,5 pt unter die
+    # Zeilenkante, das kommt hiervon ab.
+    right.append(Spacer(1, 11.8))
     right.append(doc_box)
-    # Boxunterkante y=267,7, Datumstext y=285,6 -> 17,9 pt. Die letzte
-    # Zeile der Box endet 6,0 pt vor der Unterkante, der Spacer muss
-    # 11,9 pt liefern. Der Absatz in der Datumszelle setzt den Text
-    # nochmals 6,8 pt unter die Zellkante, das ist hier schon drin.
-    right.append(Spacer(1, 11.9 + 6.8))
+    # Q-373Du: Boxunterkante 267,7, Datumstext 285,6 -> 17,9 pt Luft.
+    # Der Spacer sitzt direkt unter der Box und ist deshalb unabhaengig
+    # von deren Zeilenzahl - die Box waechst nach oben hin, nicht nach
+    # unten. 0,8 pt der Angabe frisst der Absatz der Datumszelle.
+    right.append(Spacer(1, 18.7))
 
     # Datum: Label und Wert in derselben Groesse, wie in D276.
     # Leerzeichen am Anfang des Werts werden geschuetzt - ohne das
     # kollabiert ReportLab sie im Absatz ("21.01.2026/Marcel").
+    date_label = 'Date:' if language == 'en' else 'Datum:'
     date_cell = Table(
-        [[Paragraph('Datum:', styles['VerpBody']),
+        [[Paragraph(date_label, styles['VerpBody']),
           Paragraph((date_text or '').replace(' ', '&nbsp;'),
                     styles['VerpBody'])]],
         colWidths=[DATE_VALUE_INSET, right_w - DATE_VALUE_INSET],
@@ -659,6 +780,16 @@ def build_positions_table(headers, rows, col_widths=None, align_right=None,
         col_widths = [COL_POS, COL_QTY, COL_DESC, COL_AMOUNT]
     if align_right is None:
         align_right = [len(headers) - 1]
+
+    # Die Tabelle soll in Q-373Du die komplette Satzspiegelbreite
+    # umspannen. Die Generatoren geben ihre Spaltenbreiten in Zentimeter
+    # an und addieren auf 14,0 bis 16,0 cm, der Satzspiegel ist aber
+    # CONTENT_W = 17,2 cm breit. Statt jede Datei einzeln umzubauen,
+    # werden die Breiten hier proportional auf CONTENT_W gestreckt -
+    # das Seitenverhaeltnis der Spalten bleibt erhalten.
+    total_w = sum(col_widths)
+    if abs(total_w - CONTENT_W) > 0.5:
+        col_widths = [w * CONTENT_W / total_w for w in col_widths]
 
     data = [list(headers)]
     for row in rows:

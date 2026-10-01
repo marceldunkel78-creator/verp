@@ -96,7 +96,7 @@ class RMACalculationDocTemplate(VerpDocTemplate):
         rma_number = getattr(rma_case, 'rma_number', None) or '---'
         kwargs.setdefault('title', t['title'])
         VerpDocTemplate.__init__(
-            self, filename, company=company,
+            self, filename, company=company, language=language,
             continuation_text=f"{t['title']} {rma_number}",
             **kwargs)
 

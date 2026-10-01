@@ -78,7 +78,7 @@ class RMARepairReportDocTemplate(VerpDocTemplate):
         self.rma_case = rma_case
         self.translations = REPORT_TRANSLATIONS.get(language, REPORT_TRANSLATIONS['de'])
         VerpDocTemplate.__init__(
-            self, filename, company=company,
+            self, filename, company=company, language=language,
             **kwargs)
 
 

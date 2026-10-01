@@ -81,7 +81,7 @@ class RMAManufacturerDocTemplate(VerpDocTemplate):
         self.translations = MANUFACTURER_DELIVERY_NOTE_TRANSLATIONS.get(
             language, MANUFACTURER_DELIVERY_NOTE_TRANSLATIONS['de'])
         VerpDocTemplate.__init__(
-            self, filename, company=company,
+            self, filename, company=company, language=language,
             **kwargs)
 
 
