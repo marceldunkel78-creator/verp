@@ -671,16 +671,38 @@ function CustomerLoanEdit() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Empfängerart</label>
                             <select
-                                value={loan.customer ? 'customer' : loan.supplier_contact ? 'supplier' : loan.distributor_employee ? 'distributor' : ''}
+                                value={recipientType}
                                 onChange={(e) => {
                                     const type = e.target.value;
+                                    // Der alte Code hat den Wert aus den
+                                    // Datenfeldern abgeleitet:
+                                    //   loan.customer ? 'customer' : ...
+                                    // Damit fiel die Auswahl auf "-- Empfänger
+                                    // auswählen --" zurueck, sobald die
+                                    // Gegenpartei noch nicht gesetzt war. Das
+                                    // Ergebnis: der Dialog sah immer leer aus
+                                    // und Speichern war blockiert, bis man
+                                    // denselben Kontakt ein zweites Mal
+                                    // ausgewaehlt hatte. Der Typ ist jetzt
+                                    // eigenes State und bleibt erhalten.
                                     setRecipientType(type);
                                     setLoan(prev => ({
                                         ...prev,
+                                        // Nur die Felder der jeweils ANDEREN
+                                        // Typen leeren. 'supplier' heisst
+                                        // Lieferantenmitarbeiter, also wird
+                                        // supplier_contact zurueckgesetzt -
+                                        // das war vorher umgekehrt falsch
+                                        // zugeordnet.
                                         customer: type === 'customer' ? prev.customer : '',
                                         supplier_contact: type === 'supplier' ? prev.supplier_contact : '',
                                         distributor_employee: type === 'distributor' ? prev.distributor_employee : '',
                                     }));
+                                    // Suchbegriffe der verlassenen Typen
+                                    // leeren, sonst zeigt die Suche weiter
+                                    // den alten Namen.
+                                    if (type !== 'supplier') setSupplierContactSearch('');
+                                    if (type !== 'distributor') setDistributorSearch('');
                                 }}
                                 className="w-full px-3 py-2 border rounded-lg"
                                 disabled={!canWrite}
