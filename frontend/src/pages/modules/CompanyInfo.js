@@ -18,6 +18,8 @@ const CompanyInfo = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [imagePreview, setImagePreview] = useState(null);
+  const [hasLogo, setHasLogo] = useState(false);
+  const [deletingLogo, setDeletingLogo] = useState(false);
   const [managingDirectors, setManagingDirectors] = useState(['']);
   
   const [formData, setFormData] = useState({
@@ -68,6 +70,10 @@ const CompanyInfo = () => {
         
         if (document_header) {
           setImagePreview(document_header);
+          setHasLogo(true);
+        } else {
+          setImagePreview(null);
+          setHasLogo(false);
         }
         
         // Parse managing_director string to array
@@ -103,13 +109,58 @@ const CompanyInfo = () => {
         ...prevData,
         document_header: file
       }));
-      
+      // Beim Auswaehlen einer neuen Datei ist das bisherige Logo noch
+      // nicht geloescht - es wird erst beim Speichern ersetzt.
+      setHasLogo(false);
+
       // Preview erstellen
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  /**
+   * Firmenlogo entfernen.
+   *
+   * Wichtig: Das Loeschen passiert SOFORT und unabhaengig vom
+   * "Speichern"-Knopf. Wer nur das Feld leeren wuerde, wuerde es
+   * beim naechsten Speichern einer anderen Formularseite wieder
+   * hochladen. Der Server loescht auch die Datei aus dem
+   * Medienordner - ein leeres Formularfeld tut das nicht.
+   */
+  const handleDeleteLogo = async () => {
+    if (!window.confirm(
+      'Firmenlogo wirklich entfernen?\n\n' +
+      'Die Datei wird auch vom Server gelöscht. Die Bestelldokumente ' +
+      'verwenden danach automatisch wieder das Standard-Logo.'
+    )) {
+      return;
+    }
+
+    setDeletingLogo(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const response = await api.post('/company-info/clear-logo/');
+      setImagePreview(null);
+      setHasLogo(false);
+      setFormData(prevData => ({ ...prevData, document_header: null }));
+      setSuccessMessage(
+        response.data?.detail ||
+        'Logo entfernt. Die Bestelldokumente verwenden jetzt wieder das Standard-Logo.'
+      );
+    } catch (err) {
+      console.error('Fehler beim Entfernen des Logos:', err.response);
+      setError(
+        err.response?.data?.detail ||
+        'Fehler beim Entfernen des Logos'
+      );
+    } finally {
+      setDeletingLogo(false);
     }
   };
 
@@ -242,15 +293,43 @@ const CompanyInfo = () => {
           <div className="space-y-4">
             {imagePreview && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Aktuelles Logo:
-                </label>
-                <img 
-                  src={imagePreview} 
-                  alt="Logo Preview" 
-                  className="max-w-md max-h-32 border border-gray-300 rounded p-2 bg-white"
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Aktuelles Logo:
+                  </label>
+                  {!hasLogo && formData.document_header instanceof File && (
+                    <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      Wird beim Speichern ersetzt
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-start gap-4 flex-wrap">
+                  <img
+                    src={imagePreview}
+                    alt="Logo Preview"
+                    className="max-w-md max-h-32 border border-gray-300 rounded p-2 bg-white"
+                  />
+                  {hasLogo && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteLogo}
+                      disabled={deletingLogo}
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md
+                        text-white bg-red-600 hover:bg-red-700
+                        disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deletingLogo ? 'Wird entfernt …' : 'Logo entfernen'}
+                    </button>
+                  )}
+                </div>
               </div>
+            )}
+
+            {!imagePreview && (
+              <p className="mb-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded p-3">
+                Kein eigenes Logo hinterlegt. Die Bestelldokumente verwenden
+                automatisch das Standard-Logo aus der Vorlage.
+              </p>
             )}
             
             <div>

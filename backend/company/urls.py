@@ -11,4 +11,10 @@ urlpatterns = [
         'put': 'update',
         'patch': 'partial_update'
     }), name='company-settings-detail'),
+    # Logo entfernen. Muss hier explizit verdrahtet werden - das ist
+    # kein DefaultRouter, sondern ein manuell gebautes ViewSet. Ein
+    # @action-Dekorator allein erzeugt keine URL.
+    path('clear-logo/', CompanySettingsViewSet.as_view({
+        'post': 'clear_logo'
+    }), name='company-clear-logo'),
 ]
