@@ -1,0 +1,10 @@
+{
+  "_hinweis": "Zuordnung Legacy-Lieferantennamen (bestlist.csv) -> VERP-Lieferant. Schluessel = Name aus der CSV-Spalte 'Lieferant'. Wert = Firmenname ODER Lieferantennummer im VERP, oder {'supplier': ..., 'note': ...}. Leerer Wert heisst 'noch nicht geklaert' - es wird dann der Dummy-Lieferant 'Unbekannt (Legacy-Import)' verwendet. Namen unter 'ignore' werden komplett uebersprungen (keine Bestellung). Diese Vorlage wird nur gelesen, wenn neben bestlist.csv keine eigene legacy_supplier_mapping.json liegt.",
+  "ignore": [
+    "nicht verwendet"
+  ],
+  "supplier_map": {
+    "PCO": {"supplier": "100", "note": "Excelitas-PCO - Nummer 100. Achtung: es gibt auch '100 - Excelitas-PCO', vor dem ersten Import pruefen."},
+    "PI": {"supplier": "", "note": "190 Zeilen - offen. Kandidaten: PI Physik Instrumente (208), RS-PI (215)."}
+  }
+}

@@ -1,5 +1,6 @@
 """Import legacy procurement orders from Datenvorlagen/bestlist.csv."""
 import csv
+import json
 import logging
 import os
 import re
@@ -20,7 +21,13 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 CSV_NAME = 'bestlist.csv'
+MAPPING_NAME = 'legacy_supplier_mapping.json'
 DOCUMENT_RE = re.compile(r'^B(?P<year>\d{2})_(?P<number>[0-9A-Za-z]+)(?P<suffix>[a-z])?\.(?P<extension>pdf|docx)$', re.IGNORECASE)
+
+# Lieferant, der verwendet wird, wenn in der CSV kein zuordenbarer Lieferant steht.
+DUMMY_SUPPLIER_NAME = 'Unbekannt (Legacy-Import)'
+# Vorgabe: Werte in der CSV-Spalte "Lieferant", die keine echte Bestellung sind.
+DEFAULT_IGNORED_SUPPLIER_VALUES = ('nicht verwendet',)
 
 
 def _data_dir():
@@ -36,6 +43,127 @@ def _data_dir():
         if candidate.exists():
             return candidate
     return candidates[0]
+
+
+def _mapping_candidates():
+    """Orte, an denen die Zuordnungsdatei liegen kann - Reihenfolge = Prioritaet.
+
+    Normalfall: neben bestlist.csv (Datenvorlagen ist per .gitignore ausgeschlossen).
+    Fallback: die eingecheckte Vorlage im Backend-Ordner. Die kommt auf dem
+    Server mit, auch wenn niemand die Datei manuell dorthin kopiert hat.
+    """
+    return [
+        _data_dir() / MAPPING_NAME,
+        Path(settings.BASE_DIR) / MAPPING_NAME,
+    ]
+
+
+def _mapping_path():
+    """Pfad zum Schreiben (neben der CSV) bzw. der erste existierende."""
+    for candidate in _mapping_candidates():
+        if candidate.exists():
+            return candidate
+    return _mapping_candidates()[0]
+
+
+def _mapping_source():
+    for candidate in _mapping_candidates():
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_supplier_mapping():
+    """Laedt die editierbare Lieferanten-Zuordnung aus der JSON-Datei.
+
+    Die Datei liegt neben bestlist.csv und wird bei jedem Lauf neu gelesen,
+    damit Aenderungen ohne Neustart des Backends wirksam werden.
+
+    Format:
+        {
+            "ignore": ["nicht verwendet"],
+            "supplier_map": {
+                "DI": "Excelitas-PCO",
+                "Syncron": 153,
+                "PI": {"supplier": "Excelitas-PCO", "note": "Kuerzel"}
+            }
+        }
+    """
+    path = _mapping_source()
+    data = {'ignore': list(DEFAULT_IGNORED_SUPPLIER_VALUES), 'supplier_map': {}}
+    if not path:
+        return data
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning('Lieferanten-Mapping %s nicht lesbar (%s), wird ignoriert', path, exc)
+        return data
+    if not isinstance(raw, dict):
+        return data
+    if isinstance(raw.get('ignore'), list):
+        data['ignore'] = [str(value).strip() for value in raw['ignore'] if str(value).strip()]
+    if isinstance(raw.get('supplier_map'), dict):
+        data['supplier_map'] = {str(k).strip(): v for k, v in raw['supplier_map'].items() if str(k).strip()}
+    return data
+
+
+def _mapped_value(entry):
+    """Liefert (ziel, note) aus einem Mapping-Eintrag."""
+    if isinstance(entry, dict):
+        target = entry.get('supplier', entry.get('company_name', entry.get('supplier_number')))
+        return target, str(entry.get('note', '') or '')
+    return entry, ''
+
+
+def _resolve_mapping(name, suppliers, mapping):
+    """Versucht den CSV-Lieferantennamen ueber die Mapping-Datei aufzuloesen."""
+    key = str(name or '').strip()
+    if not key:
+        return None, 'empty', ''
+    ignore_values = {_normalize(value) for value in mapping.get('ignore', [])}
+    if _normalize(key) in ignore_values:
+        return None, 'ignored', ''
+    entry = None
+    for candidate, value in mapping.get('supplier_map', {}).items():
+        if candidate.casefold() == key.casefold():
+            entry = value
+            break
+    if entry is None:
+        return None, '', ''
+    target, note = _mapped_value(entry)
+    if target is None:
+        return None, 'ignored', note
+    needle = str(target).strip()
+    if not needle:
+        # Leerer Zielwert = noch nicht geklaert. WICHTIG: kein Leerstring-
+        # Vergleich, denn '' ist Teil jedes Firmennamens und wuerde sonst
+        # stillschweigend den ersten Lieferanten treffen.
+        return None, '', note
+    if needle.isdigit():
+        match = next((s for s in suppliers if str(s.supplier_number or '') == needle.zfill(3)), None)
+        if match:
+            return match, 'mapped_number', note
+        return None, 'mapping_missing', needle
+    needle_norm = _normalize(needle)
+    for supplier in suppliers:
+        if _normalize(supplier.company_name) == needle_norm:
+            return supplier, 'mapped_name', note
+    for supplier in suppliers:
+        if needle_norm in _normalize(supplier.company_name):
+            return supplier, 'mapped_name', note
+    return None, 'mapping_missing', needle
+
+
+def get_or_create_dummy_supplier():
+    """Lieferant als Auffangnetz, damit Bestellungen ohne echten Lieferanten
+    trotzdem angelegt werden koennen. Wird nur einmal erzeugt."""
+    supplier, _ = Supplier.objects.get_or_create(
+        company_name=DUMMY_SUPPLIER_NAME,
+        defaults={'notes': 'Automatisch beim Legacy-Procurement-Import erzeugt. '
+                           'Bestellungen mit nicht zuordenbarem Lieferanten aus bestlist.csv.',
+                  'is_active': False},
+    )
+    return supplier
 
 
 def _parse_date(value):
@@ -81,10 +209,14 @@ def _normalize(value):
     return re.sub(r'[^a-z0-9]+', ' ', text).strip()
 
 
-def _supplier_match(name, suppliers):
+def _supplier_match(name, suppliers, mapping=None):
     needle = _normalize(name)
     if not needle:
         return None, 'empty'
+    if mapping is not None:
+        supplier, match_type, _ = _resolve_mapping(name, suppliers, mapping)
+        if match_type:
+            return supplier, match_type
     exact = [s for s in suppliers if _normalize(s.company_name) == needle]
     if len(exact) == 1:
         return exact[0], 'exact'
@@ -194,7 +326,7 @@ def _extract_items(documents):
     return [], None
 
 
-def _row_preview(row, suppliers, documents, extract_items=True, supplier_cache=None):
+def _row_preview(row, suppliers, documents, extract_items=True, supplier_cache=None, mapping=None, dummy_supplier=None):
     legacy_number = _clean_number(row.get('B-Nr.'))
     order_date = _parse_date(row.get('bestellt am'))
     confirmation = _parse_date(row.get('Auftragsbestätigung'))
@@ -204,9 +336,18 @@ def _row_preview(row, suppliers, documents, extract_items=True, supplier_cache=N
     if supplier_cache is not None and cache_key in supplier_cache:
         supplier, match_type = supplier_cache[cache_key]
     else:
-        supplier, match_type = _supplier_match(supplier_name, suppliers)
+        supplier, match_type = _supplier_match(supplier_name, suppliers, mapping)
         if supplier_cache is not None:
             supplier_cache[cache_key] = (supplier, match_type)
+    used_dummy = False
+    if supplier is None and match_type != 'ignored':
+        # Kein zuordenbarer Lieferant: Bestellung wird auf den Dummy-Lieferanten
+        # gehaengt, damit sie trotzdem angelegt wird. Beim Dry-Run existiert das
+        # Objekt noch nicht - die Aktion wird trotzdem schon als 'import_dummy'
+        # gemeldet, damit die Vorschau die vollstaendige Menge zeigt.
+        used_dummy = True
+        if dummy_supplier is not None:
+            supplier = dummy_supplier
     total, currency = _parse_money(row.get('Rechnungspreis'))
     if total is None:
         total, currency = _parse_money(row.get('Summe NETTO'))
@@ -214,22 +355,35 @@ def _row_preview(row, suppliers, documents, extract_items=True, supplier_cache=N
     docs = documents.get(document_key, [])
     items, source = _extract_items(docs) if extract_items else ([], None)
     order_number = f"B-{legacy_number.zfill(3)}-{order_date.month:02d}/{str(order_date.year)[-2:]}" if legacy_number and order_date else ''
+    if not order_number:
+        action = 'skip'
+    elif match_type == 'ignored':
+        action = 'skip'
+    elif Order.objects.filter(order_number=order_number).exists():
+        action = 'exists'
+    elif used_dummy:
+        action = 'import_dummy'
+    elif supplier is None:
+        action = 'skip'
+    else:
+        action = 'import'
     return {
         'legacy_number': legacy_number,
         'order_number': order_number,
         'order_date': order_date.isoformat() if order_date else '',
         'confirmation_date': confirmation.isoformat() if confirmation else '',
         'delivery_date': delivery.isoformat() if delivery else '',
-        'supplier_name': str(row.get('Lieferant') or '').strip(),
+        'supplier_name': supplier_name,
         'supplier_id': supplier.id if supplier else None,
         'supplier_match': match_type,
+        'dummy_supplier': used_dummy,
         'description': str(row.get('Warenbezeichnung f Kunde,Name, Ort, Land oder f Visitron eintragen') or '').strip(),
         'total': str(total) if total is not None else '',
         'currency': currency,
         'document_names': [path.name for path in docs],
         'extracted_document': source,
         'item_count': len(items),
-        'action': 'import' if supplier and order_number else 'skip',
+        'action': action,
     }
 
 
@@ -237,8 +391,10 @@ def preview_legacy_procurement_import():
     suppliers = list(Supplier.objects.all())
     documents = _document_map()
     supplier_cache = {}
+    mapping = load_supplier_mapping()
+    dummy_supplier = Supplier.objects.filter(company_name=DUMMY_SUPPLIER_NAME).first()
     source_rows = _read_csv()
-    rows = [_row_preview(row, suppliers, documents, extract_items=False, supplier_cache=supplier_cache) for row in source_rows]
+    rows = [_row_preview(row, suppliers, documents, extract_items=False, supplier_cache=supplier_cache, mapping=mapping, dummy_supplier=dummy_supplier) for row in source_rows]
     document_indices = [index for index, row in enumerate(rows) if row['document_names']]
     other_indices = [index for index, row in enumerate(rows) if not row['document_names']]
     visible_indices = (document_indices + other_indices[:500])[:500]
@@ -246,8 +402,11 @@ def preview_legacy_procurement_import():
     return {
         'success': True,
         'total': len(rows),
-        'would_import': sum(row['action'] == 'import' for row in rows),
-        'skipped': sum(row['action'] != 'import' for row in rows),
+        'would_import': sum(row['action'] in {'import', 'import_dummy'} for row in rows),
+        'would_import_dummy': sum(row['action'] == 'import_dummy' for row in rows),
+        'would_import_exists': sum(row['action'] == 'exists' for row in rows),
+        'skipped': sum(row['action'] == 'skip' for row in rows),
+        'ignored': sum(row['action'] == 'skip' and row['supplier_match'] == 'ignored' for row in rows),
         'rows': visible_rows,
         'rows_truncated': len(rows) > 500,
     }
@@ -276,16 +435,22 @@ def import_legacy_procurement_orders(created_by_user, dry_run=True):
     suppliers = list(Supplier.objects.all())
     documents = _document_map()
     rows = _read_csv()
-    stats = {'total': len(rows), 'imported': 0, 'exists': 0, 'skipped_supplier': 0, 'skipped_invalid': 0, 'items_created': 0, 'documents_linked': 0, 'unreadable_documents': 0, 'errors': []}
+    mapping = load_supplier_mapping()
+    dummy_supplier = None if dry_run else get_or_create_dummy_supplier()
+    stats = {'total': len(rows), 'imported': 0, 'imported_dummy': 0, 'exists': 0, 'ignored_rows': 0, 'skipped_invalid': 0, 'skipped_supplier': 0, 'items_created': 0, 'documents_linked': 0, 'unreadable_documents': 0, 'errors': []}
     for row in rows:
         try:
-            preview = _row_preview(row, suppliers, documents)
+            preview = _row_preview(row, suppliers, documents, mapping=mapping, dummy_supplier=dummy_supplier)
             if not preview['order_number']:
                 stats['skipped_invalid'] += 1
                 continue
-            supplier, _ = _supplier_match(row.get('Lieferant'), suppliers)
-            if not supplier:
-                stats['skipped_supplier'] += 1
+            if preview['supplier_match'] == 'ignored':
+                stats['ignored_rows'] += 1
+                continue
+            if preview['action'] == 'skip':
+                # Kein Bestellnummer/Datum oder als 'ignore' markiert.
+                if preview['order_number']:
+                    stats['skipped_supplier'] += 1
                 continue
             if Order.objects.filter(order_number=preview['order_number']).exists():
                 stats['exists'] += 1
@@ -296,6 +461,7 @@ def import_legacy_procurement_orders(created_by_user, dry_run=True):
                 continue
             if dry_run:
                 stats['imported'] += 1
+                stats['imported_dummy'] += 1 if preview['dummy_supplier'] else 0
                 stats['items_created'] += max(preview['item_count'], 1)
                 continue
             order_date = _parse_date(row.get('bestellt am'))
@@ -308,10 +474,22 @@ def import_legacy_procurement_orders(created_by_user, dry_run=True):
             comment = str(row.get('zusätzliche Infos') or '').strip()
             confirmation_raw = str(row.get('Auftragsbestätigung') or '').strip()
             related_order = str(row.get('dazugehöriger Auftrag (Order)') or '').strip()
-            notes = '\n'.join(part for part in [f'Legacy Lieferant: {row.get("Lieferant", "")}', f'Legacy Summe: {row.get("Summe NETTO", "")}', f'Kommentar: {description}', f'Zusätzliche Infos: {comment}', f'Zugehöriger Auftrag: {related_order}', f'Bestätigungswert: {confirmation_raw}'] if part and not part.endswith(': '))
+            legacy_supplier_name = str(row.get('Lieferant') or '').strip()
+            notes_parts = [f'Legacy Lieferant: {legacy_supplier_name}' if legacy_supplier_name else '',
+                           f'Legacy Summe: {row.get("Summe NETTO", "")}',
+                           f'Kommentar: {description}',
+                           f'Zusätzliche Infos: {comment}',
+                           f'Zugehöriger Auftrag: {related_order}',
+                           f'Bestätigungswert: {confirmation_raw}']
+            if preview['dummy_supplier']:
+                notes_parts.insert(1, 'Hinweis: Lieferant aus CSV konnte nicht zugeordnet werden. '
+                                      'Der Lieferant in der VERP-Bestellung ist ein Dummy-Eintrag. '
+                                      'Korrektur in legacy_supplier_mapping.json moeglich.')
+            notes = '\n'.join(part for part in notes_parts if part and not part.endswith(': '))
             creator = _find_creator(confirmation_raw, created_by_user)
             document_key = f"{preview['order_date'][2:4]}-{preview['legacy_number'].zfill(3)}".lower()
             parsed_items, _ = _extract_items(documents.get(document_key, []))
+            supplier = dummy_supplier if preview['dummy_supplier'] else _supplier_match(legacy_supplier_name, suppliers, mapping)[0]
             with transaction.atomic():
                 order = Order.objects.create(order_number=preview['order_number'], order_type='online', status='angelegt', supplier=supplier, order_date=order_date, confirmation_date=confirmation_date, delivery_date=delivery_date, notes=notes, created_by=creator, confirmed_total=total)
                 if not parsed_items:
@@ -325,6 +503,7 @@ def import_legacy_procurement_orders(created_by_user, dry_run=True):
                 if doc_paths:
                     stats['documents_linked'] += _relink_order_documents(order, doc_paths)
                 stats['imported'] += 1
+                stats['imported_dummy'] += 1 if preview['dummy_supplier'] else 0
         except Exception as exc:
             logger.exception('Legacy Procurement Order konnte nicht importiert werden')
             stats['errors'].append(f'{row.get("B-Nr.")}: {exc}')

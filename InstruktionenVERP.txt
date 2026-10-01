@@ -147,6 +147,144 @@ Restart-Service VERP-Backend
 # 4) Backend neu starten:
 #    Restart-Service VERP-Backend
 
+# Warum fehlen Bestellungen? (Legacy Procurement, Stand 2026-10-01)
+#
+# GEMESSEN auf der Entwicklungsdatenbank, 14.604 CSV-Zeilen:
+#     Zeilen gelesen                : 14.604
+#     Bestellungen in der DB        : 10.142
+#     Bisher importiert             :    331
+#     Am LIEFERANTEN gescheitert     :  4.008   <-- die eigentliche Ursache
+#     Kein Datum/B-Nr. in der CSV   :    117
+#
+# Es liegt NICHT an den PDF/DOCX-Dateien. Die Dokumente sind optional, eine
+# Bestellung wurde auch ohne lesbares Dokument immer angelegt (mit einer
+# Dummy-Position). Die Schuld lag am Lieferanten:
+#
+# Order.supplier ist ein PROTECT-Fremdschluessel und hat keinen Default.
+# Ohne Lieferant kann keine Bestellung gespeichert werden, also hat der
+# Import sie mit "skipped_supplier" verworfen. In der Spalte "Lieferant"
+# der bestlist.csv stehen aber Kuerzel und ausgeschriebene Firmennamen,
+# die es so nicht im Lieferantenstamm gibt (DI, Syncron, Printus, Farnell,
+# PCO, Yokogawa ...). Der unscharfe Namensabgleich fand sie nicht.
+#
+# 4.008 von 14.604 Zeilen betraf das - rund 27 Prozent.
+#
+# ---------------------------------------------------------------------------
+# LOESUNG 1: Dummy-Lieferant (automatisch, seit 2026-10-01)
+# ---------------------------------------------------------------------------
+# Faellt der Lieferantenabgleich aus, legt der Import die Bestellung trotzdem
+# an - auf einem Dummy-Lieferanten "Unbekannt (Legacy-Import)". Die Position
+# wird dann aus der Warenbezeichnung und Summe der CSV gebaut.
+#
+# Am Bestelltext steht ein sichtbarer Hinweis, woran man die Faelle erkennt:
+#     "Hinweis: Lieferant aus CSV konnte nicht zugeordnet werden. Der
+#      Lieferant in der VERP-Bestellung ist ein Dummy-Eintrag."
+#
+# Im Admin findet man sie ueber:
+#     Lieferanten -> "Unbekannt (Legacy-Import)"
+# Der Lieferant ist bewusst inaktiv gesetzt, damit er in normalen
+# Auswahllisten nicht auftaucht.
+#
+# ---------------------------------------------------------------------------
+# LOESUNG 2: Zuordnungsdatei legacy_supplier_mapping.json (empfohlen)
+# ---------------------------------------------------------------------------
+# Damit die Dummy-Bestellungen spaeter korrigiert werden koennen, gibt es
+# eine editierbare JSON-Datei. Sie liegt DIREKT neben bestlist.csv:
+#
+#     C:\VERP\Datenvorlagen\legacy_supplier_mapping.json
+#
+# Diese Datei ist bewusst NICHT im Git (Datenvorlagen/ steht in .gitignore).
+# Sie wird auf dem Server wie bestlist.csv manuell nachgeliefert.
+#
+# Zusaetzlich liegt eine eingecheckte VORLAGE im Backend:
+#
+#     C:\VERP\backend\legacy_supplier_mapping.json
+#
+# Sie wird nur gelesen, wenn neben bestlist.csv KEINE eigene Datei liegt.
+# Damit ist der Server nicht kaputt, falls die Datei vergessen wurde, und die
+# Vorlage kann ohne Zugriff auf Datenvorlagen mitgepflegt werden.
+#
+# Nach dem Kopieren von Datenvorlagen also diese beiden Dateien pruefen:
+#     Test-Path C:\VERP\Datenvorlagen\legacy_supplier_mapping.json
+#     Test-Path C:\VERP\backend\legacy_supplier_mapping.json
+#
+# Aufbau:
+#
+#   {
+#     "_hinweis": "Erlaeuterung, wird ignoriert",
+#     "ignore": ["nicht verwendet"],
+#     "supplier_map": {
+#       "PCO":     {"supplier": "100", "note": "Excelitas-PCO"},
+#       "DI":      "Excelitas-PCO",
+#       "Syncron": {"supplier": "153", "note": "hier eintragen"},
+#       "Printus": {"supplier": "",     "note": "273 Zeilen - offen"}
+#     }
+#   }
+#
+# Schluessel = Name aus der Spalte "Lieferant" der bestlist.csv.
+# Wert = entweder der FIRMENNAME aus dem VERP oder die LIEFERANTENNUMMER
+#        (dreistellig, z. B. "100").
+#
+# WICHTIGE REGELN:
+#   - Leerer Wert "" heisst "noch nicht geklaert" und wird NICHT geraten.
+#     Trage hier nie "" ein und erwarte eine Automatik. Ohne Eintrag greift
+#     der Dummy-Lieferant.
+#   - "ignore" ganz oben: Namen, die keine Bestellung sind. Diese Zeilen
+#     werden komplett uebersprungen, es entsteht keine Bestellung.
+#   - Komma-Zeilen in der CSV sind einfach nur weitere Zeilen, kein Problem.
+#
+# Die Datei wird bei JEDEM Lauf neu gelesen. Aenderungen wirken also sofort,
+# ein Neustart des Backends ist nicht noetig.
+#
+# Liste neu erzeugen (z. B. nachdem neue Lieferanten angelegt wurden):
+#     cd C:\VERP\backend
+#     .\venv\Scripts\Activate
+#     python tools\build_legacy_supplier_mapping.py
+#
+# Achtung: das UEBERSCHREIBT die Datei. Vorher eine Kopie anlegen, wenn
+# du Eintraege schon gepflegt hast.
+#
+# ---------------------------------------------------------------------------
+# WORKFLOW IN DER PRAXIS
+# ---------------------------------------------------------------------------
+# 1) Bestandsaufnahme
+#     Admin -> Firmeneinstellungen -> Legacy Procurement Import -> Vorschau
+#     Dort siehst du je Zeile: Lieferant, Match-Typ, Aktion.
+#
+# 2) Zuordnen
+#     legacy_supplier_mapping.json im Editor oeffnen und die grossen Brocken
+#     eintragen (Firmenname oder Lieferantennummer). Das bringt die meisten
+#     Zeilen auf einen echten Lieferanten.
+#
+# 3) Importieren
+#     "Importieren" klicken. Ein zweiter Lauf ist unschaedlich: bereits
+#     vorhandene Bestellungen werden uebersprungen und nur noch mit
+#     Dokumenten verknuepft.
+#
+# 4) Dummy-Bestellungen korrigieren
+#     Admin -> Lieferanten -> "Unbekannt (Legacy-Import)" -> Bestellungen
+#     anzeigen. In der Bestellung steht der Originalname der CSV noch in
+#     den Notizen ("Legacy Lieferant: Syncron"). Nach dem Eintrag im JSON
+#     den Lieferanten je Bestellung korrigieren.
+#
+# ---------------------------------------------------------------------------
+# DOKUMENTE
+# ---------------------------------------------------------------------------
+# Die B<YY>_<XXX>.pdf/.docx muessen im SELBEN Ordner wie bestlist.csv liegen.
+# Der Import ordnet sie ueber den Dateinamen zu:
+#     B07_042.pdf  ->  B-Nr. 042 aus dem Jahr 2007
+# Aus dem Dokument werden die Positionen gelesen. Das funktioniert bei
+# .docx (Tabellen) besser als bei .pdf (Layout). Wird nichts gefunden,
+# entsteht trotzdem eine Position aus der CSV - die Bestellung fehlt nie.
+#
+# Sind die Dokumente NICHT da, fehlen sie auch im VERP. Das ist der
+# wahrscheinlichste Grund fuer fehlende Bestelldokumente: die Dateien
+# liegen dann nicht neben der CSV. Pruefen:
+#     Get-ChildItem C:\VERP\Datenvorlagen -Filter "B*_*.pdf"
+#
+# Aktueller Stand im Entwicklungs-Datenvorlagen: 0 Dateien nach dem Muster.
+# Auf dem Server die B<YY>_<XXX>.*-Dateien also noch nachliefern.
+
 bzw. 
 cd C:\VERP
 git pull origin main

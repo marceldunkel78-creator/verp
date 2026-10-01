@@ -59,14 +59,16 @@ const LegacyProcurementImport = () => {
       </div>
 
       {result?.error && <div className="mb-6 rounded-md bg-red-50 border border-red-200 p-4 text-red-800">{result.error}</div>}
-      {result?.stats && <div className="mb-6 rounded-md bg-green-50 border border-green-200 p-4 text-green-800">Import abgeschlossen: {result.stats.imported} importiert, {result.stats.exists} bereits vorhanden, {result.stats.skipped_supplier} ohne passenden Lieferanten, {result.stats.documents_linked} Dokumente verknüpft.</div>}
+      {result?.stats && <div className="mb-6 rounded-md bg-green-50 border border-green-200 p-4 text-green-800">Import abgeschlossen: {result.stats.imported} importiert (davon {result.stats.imported_dummy} mit Dummy-Lieferant), {result.stats.exists} bereits vorhanden, {result.stats.ignored_rows} ignoriert, {result.stats.skipped_invalid} ohne Datum/Nummer, {result.stats.documents_linked} Dokumente verknüpft.</div>}
 
       {!preview && <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">Vorschau laden, um die CSV-Zeilen und Supplier-Matches zu prüfen.</div>}
       {preview && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="p-4 border-b flex justify-between text-sm text-gray-700">
             <span>{preview.total} CSV-Zeilen</span>
-            <span>{preview.would_import} importierbar, {preview.skipped} übersprungen</span>
+            <span>
+              {preview.would_import} importierbar (davon {preview.would_import_dummy} mit Dummy-Lieferant), {preview.would_import_exists} bereits vorhanden, {preview.skipped} übersprungen
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -81,7 +83,7 @@ const LegacyProcurementImport = () => {
                     <td className="px-4 py-3">{row.total ? `${row.total} ${row.currency}` : '-'}</td>
                     <td className="px-4 py-3">{row.document_names.join(', ') || '-'}</td>
                     <td className="px-4 py-3">{row.item_count}</td>
-                    <td className={`px-4 py-3 font-medium ${row.action === 'import' ? 'text-green-700' : 'text-red-700'}`}>{row.action}</td>
+                    <td className={`px-4 py-3 font-medium ${row.action === 'import' ? 'text-green-700' : row.action === 'import_dummy' ? 'text-amber-600' : row.action === 'exists' ? 'text-gray-500' : 'text-red-700'}`}>{row.action}</td>
                   </tr>
                 ))}
               </tbody>
