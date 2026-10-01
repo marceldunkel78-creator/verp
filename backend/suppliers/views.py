@@ -88,8 +88,15 @@ class SupplierContactViewSet(viewsets.ModelViewSet):
     queryset = SupplierContact.objects.all()
     serializer_class = SupplierContactSerializer
     permission_classes = [IsAuthenticated, SupplierPermission]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['supplier', 'contact_type']
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['supplier', 'contact_type', 'is_active']
+    # Ohne search_fields liefert /contacts/?search=... nichts - die
+    # Auswahl in den Verleihungen (Empfängerart "Lieferantenmitarbeiter")
+    # braucht aber genau das, um nicht durch alle Kontakte zu scrollen.
+    search_fields = ['contact_person', 'contact_function', 'email',
+                     'phone', 'mobile', 'city', 'supplier__company_name']
+    ordering_fields = ['contact_person', 'supplier__company_name', 'city']
+    ordering = ['contact_person']
 
 
 class TradingProductViewSet(viewsets.ModelViewSet):

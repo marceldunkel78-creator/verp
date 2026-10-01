@@ -113,9 +113,16 @@ class DealerEmployeeViewSet(viewsets.ModelViewSet):
     """
     queryset = DealerEmployee.objects.all()
     serializer_class = DealerEmployeeSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter,
+                       filters.OrderingFilter]
     filterset_fields = ['dealer', 'is_primary', 'is_active', 'language']
-    search_fields = ['first_name', 'last_name', 'email']
+    search_fields = ['first_name', 'last_name', 'email',
+                     'dealer__company_name']
+    # Ohne OrderingFilter kommen die Treffer in Datenbankreihenfolge -
+    # in der Empfängerauswahl der Verleihungen wuerst das stochastisch
+    # wirken. Nach Nachname sortieren ist da deutlich brauchbarer.
+    ordering_fields = ['last_name', 'first_name', 'dealer__company_name']
+    ordering = ['last_name', 'first_name']
 
 
 class DealerCustomerSystemViewSet(viewsets.ModelViewSet):

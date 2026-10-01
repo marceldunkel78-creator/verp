@@ -54,7 +54,7 @@ def create_loan_notifications(loan, is_new=False, actor=None):
         Notification.objects.create(
             user=user,
             title=f"Leihung {loan.loan_number} {action_text}",
-            message=f"Leihung {loan.loan_number} von {loan.supplier.company_name if loan.supplier else 'Unbekannt'} wurde {action_text}.",
+            message=f"Leihung {loan.loan_number} von {loan.lender_name or 'Unbekannt'} wurde {action_text}.",
             notification_type=notification_type,
             related_url=f"/procurement/loans/{loan.id}"
         )
@@ -79,7 +79,7 @@ def create_loan_reminder(loan):
     Reminder.objects.create(
         user=responsible_user,
         title=f"Leihung {loan.loan_number} zurückgeben",
-        description=f"Die Leihung {loan.loan_number} von {loan.supplier.company_name if loan.supplier else 'Unbekannt'} muss bis {loan.return_deadline.strftime('%d.%m.%Y')} zurückgegeben werden.",
+        description=f"Die Leihung {loan.loan_number} von {loan.lender_name or 'Unbekannt'} muss bis {loan.return_deadline.strftime('%d.%m.%Y')} zurückgegeben werden.",
         due_date=loan.return_deadline,
         related_object_type='loan',
         related_object_id=loan.id,
@@ -126,27 +126,43 @@ class LoanViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = super().get_queryset()
-        
+
         # Filter by status
         status_filter = self.request.query_params.get('status', None)
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-        
-        # Filter by supplier
+
+        # Filter by lender type (supplier / customer)
+        lender_type = self.request.query_params.get('lender_type', None)
+        if lender_type in ('supplier', 'customer'):
+            queryset = queryset.filter(lender_type=lender_type)
+
+        # Filter by counterparty. 'supplier' bleibt der alte Parameter
+        # (Rueckwaertskompatibilitaet), 'lender_customer' kommt neu
+        # dazu. Beide duerfen nicht gleichzeitig gesetzt sein.
         supplier_id = self.request.query_params.get('supplier', None)
         if supplier_id:
             queryset = queryset.filter(supplier_id=supplier_id)
-        
+
+        customer_id = self.request.query_params.get('lender_customer', None)
+        if customer_id:
+            queryset = queryset.filter(lender_customer_id=customer_id)
+
         # Search
         search = self.request.query_params.get('search', None)
         if search:
+            # Kundenname mitsuchen - sonst waeren Kunden-Leihungen
+            # ueber die Suche nicht auffindbar. Customer hat kein
+            # Feld 'company_name', nur Titel/Vorname/Nachname.
             queryset = queryset.filter(
                 Q(loan_number__icontains=search) |
                 Q(supplier__company_name__icontains=search) |
+                Q(lender_customer__last_name__icontains=search) |
+                Q(lender_customer__first_name__icontains=search) |
                 Q(supplier_reference__icontains=search) |
                 Q(items__product_name__icontains=search)
             ).distinct()
-        
+
         return queryset
     
     def perform_create(self, serializer):

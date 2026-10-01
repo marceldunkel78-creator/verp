@@ -17,7 +17,9 @@ function LoanEdit() {
     const [observers, setObservers] = useState([]);
     
     const [loan, setLoan] = useState({
+        lender_type: 'supplier',
         supplier: '',
+        lender_customer: '',
         status: 'angefragt',
         request_date: new Date().toISOString().split('T')[0],
         return_deadline: '',
@@ -85,6 +87,35 @@ function LoanEdit() {
         }
     };
 
+    // Gegenpartei als Lieferant ODER Kunde. Die Listen sind gross
+    // (hunderte Kunden), deshalb wird der Kunde ueber ein Suchfeld
+    // gewaehlt statt ueber ein Dropdown. Beim Bearbeiten wird nur der
+    // gespeicherte Kunde nachgeladen.
+    const [lenderType, setLenderType] = useState('supplier');
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [customerResults, setCustomerResults] = useState([]);
+    const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+    useEffect(() => {
+        if (customerSearch.length >= 2) {
+            const timer = setTimeout(async () => {
+                try {
+                    const response = await api.get(
+                        `/customers/customers/?search=${encodeURIComponent(customerSearch)}&page_size=20`);
+                    const data = response.data && (response.data.results || response.data);
+                    setCustomerResults(Array.isArray(data) ? data : []);
+                    setShowCustomerDropdown(true);
+                } catch (error) {
+                    console.error('Error searching customers:', error);
+                }
+            }, 300);
+            return () => clearTimeout(timer);
+        } else {
+            setCustomerResults([]);
+            setShowCustomerDropdown(false);
+        }
+    }, [customerSearch]);
+
     const loadEmployees = async () => {
         try {
             // lookup statt /employees/: braucht keine HR-Leseberechtigung.
@@ -117,6 +148,16 @@ function LoanEdit() {
         try {
             const response = await api.get(`/loans/loans/${id}/`);
             setLoan(response.data);
+
+            // Typ der Gegenpartei und Anzeigename des Kunden uebernehmen.
+            // Ohne lender_type wuerde die Auswahl im Formular auf
+            // "Lieferant" stehen, obwohl es eine Kunden-Leihung ist.
+            setLenderType(response.data.lender_type || 'supplier');
+            if (response.data.lender_type === 'customer') {
+                setCustomerSearch(response.data.lender_customer_name || '');
+            } else {
+                setCustomerSearch('');
+            }
             
             // Initialize return form items
             if (response.data.items) {
@@ -142,7 +183,7 @@ function LoanEdit() {
         setSaving(true);
         try {
             // prepare payload: ensure numeric quantities and don't send empty date strings
-            const payload = { ...loan };
+            const payload = { ...loan, lender_type: lenderType };
             if (!payload.return_deadline) {
                 // remove empty string so backend treats it as omitted/null
                 delete payload.return_deadline;
@@ -436,7 +477,14 @@ function LoanEdit() {
                     </h1>
                     {!isNew && (
                         <p className="text-gray-500">
-                            {(Array.isArray(suppliers) && suppliers.find(s => s.id === loan.supplier)?.company_name) || 'Lieferant'}
+                            {/* Anzeigename der Gegenpartei - bei einer
+                                Kunden-Leihung gibt es keinen
+                                Lieferanten, dann steht hier der
+                                Kundenname. */}
+                            {loan.lender_display
+                                || (Array.isArray(suppliers)
+                                    && suppliers.find(s => s.id === loan.supplier)?.company_name)
+                                || 'Lieferant'}
                         </p>
                     )}
                 </div>
@@ -520,19 +568,102 @@ function LoanEdit() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Lieferant *
+                                        Gegenpartei *
                                     </label>
-                                    <select
-                                        value={loan.supplier}
-                                        onChange={(e) => handleSupplierChange(e.target.value)}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    >
-                                        <option value="">-- Lieferant wählen --</option>
-                                        {Array.isArray(suppliers) && suppliers.map(s => (
-                                            <option key={s.id} value={s.id}>{s.company_name}</option>
-                                        ))}
-                                    </select>
+                                    {/* Typ zuerst waehlen, dann kommt die
+                                        passende Suche. So vermischen sich
+                                        die Treffer nicht. */}
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={lenderType}
+                                            onChange={(e) => {
+                                                const t = e.target.value;
+                                                setLenderType(t);
+                                                // Beim Wechsel die jeweils
+                                                // andere Gegenpartei
+                                                // zuruecksetzen - sonst
+                                                // waeren beide gesetzt und
+                                                // das Backend lehnt es ab.
+                                                setLoan(prev => ({
+                                                    ...prev,
+                                                    supplier: t === 'supplier' ? prev.supplier : '',
+                                                    lender_customer: t === 'customer' ? prev.lender_customer : '',
+                                                }));
+                                                setCustomerSearch('');
+                                            }}
+                                            className="px-3 py-2 border rounded-lg bg-gray-50"
+                                        >
+                                            <option value="supplier">Lieferant</option>
+                                            <option value="customer">Kunde</option>
+                                        </select>
+
+                                        {lenderType === 'supplier' ? (
+                                            <select
+                                                value={loan.supplier}
+                                                onChange={(e) => handleSupplierChange(e.target.value)}
+                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                required
+                                            >
+                                                <option value="">-- Lieferant wählen --</option>
+                                                {Array.isArray(suppliers) && suppliers.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.company_name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <div className="relative flex-1">
+                                                <input
+                                                    type="text"
+                                                    value={customerSearch}
+                                                    onChange={(e) => setCustomerSearch(e.target.value)}
+                                                    placeholder="Kunde suchen..."
+                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                {showCustomerDropdown && customerResults.length > 0 && (
+                                                    <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                                        {customerResults.map(c => (
+                                                            <button
+                                                                key={c.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setCustomerSearch(
+                                                                        c.full_name
+                                                                        || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim());
+                                                                    setShowCustomerDropdown(false);
+                                                                    setLoan(prev => ({
+                                                                        ...prev,
+                                                                        lender_customer: c.id,
+                                                                        // Ruecksendeadresse vorbelegen,
+                                                                        // sonst muss sie von Hand
+                                                                        // abgetippt werden.
+                                                                        return_address_name: c.full_name
+                                                                            || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim(),
+                                                                        return_address_street: c.primary_address_street || '',
+                                                                        return_address_house_number: c.primary_address_house_number || '',
+                                                                        return_address_postal_code: c.primary_address_postal_code || '',
+                                                                        return_address_city: c.primary_address_city || '',
+                                                                    }));
+                                                                }}
+                                                                className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                                                            >
+                                                                <div className="font-medium">
+                                                                    {c.full_name || `${c.title || ''} ${c.first_name || ''} ${c.last_name || ''}`.trim()}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {[c.customer_number, c.primary_address_city, c.primary_address_country]
+                                                                        .filter(Boolean).join(', ')}
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {lenderType === 'customer' && !loan.lender_customer && (
+                                        <p className="mt-1 text-xs text-amber-700">
+                                            Bitte einen Kunden auswählen.
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">

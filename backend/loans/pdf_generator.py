@@ -149,7 +149,7 @@ def generate_return_note_pdf(loan_return, language='de'):
     elements.append(Paragraph(t['title'], style_title))
     elements.append(Spacer(1, 0.2 * cm))
     elements.append(Paragraph(
-        f"{t['loan_of']} {loan.loan_number} - {loan.supplier.company_name}",
+        f"{t['loan_of']} {loan.loan_number} - {loan.lender_name}",
         style_small))
     elements.append(Spacer(1, 0.5 * cm))
 

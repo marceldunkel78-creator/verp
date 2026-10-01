@@ -25,16 +25,16 @@ def loan_item_photo_path(instance, filename):
 
 class Loan(models.Model):
     """
-    Leihungen von Lieferanten
+    Leihungen von Lieferanten oder Kunden
     Leihnummer im Format L-00001
     """
-    
+
     STATUS_CHOICES = [
         ('angefragt', 'Angefragt'),
         ('entliehen', 'Entliehen'),
         ('abgeschlossen', 'Abgeschlossen'),
     ]
-    
+
     # Leihnummer L-00001
     loan_number = models.CharField(
         max_length=10,
@@ -45,13 +45,48 @@ class Loan(models.Model):
         verbose_name='Leihnummer',
         help_text='Automatisch generiert im Format L-00001'
     )
-    
+
+    # Wer die Leihware herausgegeben hat. Bis jetzt war das
+    # ausschliesslich ein Lieferant; inzwischen kann die Gegenpartei
+    # auch ein Kunde sein (durchgereichte Ware, Leihgerät vom
+    # Kunden). Das Feld 'lender_type' sagt, welches der beiden FK
+    # gesetzt ist - ein Kunde kann auch Lieferant sein, dann ist die
+    # Unterscheidung nicht am Namen erkennbar.
+    LENDER_TYPE_CHOICES = [
+        ('supplier', 'Lieferant'),
+        ('customer', 'Kunde'),
+    ]
+
+    lender_type = models.CharField(
+        max_length=10,
+        choices=LENDER_TYPE_CHOICES,
+        default='supplier',
+        verbose_name='Gegenpartei',
+        help_text='Von wem wird geliehen? Lieferant oder Kunde'
+    )
+
     # Lieferant
     supplier = models.ForeignKey(
         'suppliers.Supplier',
         on_delete=models.PROTECT,
         related_name='loans',
+        null=True,
+        blank=True,
         verbose_name='Lieferant'
+    )
+
+    # Kunde als Gegenpartei. Nur gesetzt, wenn lender_type='customer'.
+    # on_delete=PROTECT wie beim Lieferanten: eine Leihung ist ein
+    # dokumentierter Vorgang, der nicht durch das Loeschen eines
+    # Datensatzes verschwinden darf.
+    lender_customer = models.ForeignKey(
+        'customers.Customer',
+        on_delete=models.PROTECT,
+        related_name='procurement_loans_as_lender',
+        null=True,
+        blank=True,
+        verbose_name='Kunde als Gegenpartei',
+        help_text='Nur wenn als Gegenpartei "Kunde" gewählt ist'
     )
     
     # Status
@@ -168,8 +203,62 @@ class Loan(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.loan_number} - {self.supplier.company_name}"
-    
+        # Anzeige muss auch ohne Lieferant funktionieren - bei einer
+        # Kunden-Leihung ist supplier None, der Zugriff darauf wuerde
+        # sonst in einem AttributeError enden (z. B. in __str__ einer
+        # RelatedManager-Liste, im Admin oder in einem PDF-Kopf).
+        return f"{self.loan_number} - {self.lender_name or 'unbekannt'}"
+
+    @property
+    def lender_name(self):
+        """
+        Name der Gegenpartei, egal ob Lieferant oder Kunde.
+
+        Mehrere Stellen (Listenansicht, PDF-Kopfzeile, Benachrichtigung)
+        brauchen diesen Namen. Ohne diese Property wuerde dort
+        loan.supplier.company_name stehen und bei einer Kunden-Leihung
+        mit einem AttributeError abbrechen, weil supplier leer ist.
+        """
+        if self.lender_type == 'customer':
+            if not self.lender_customer:
+                return ''
+            # Customer hat keine full_name-Modelleigenschaft - die gibt
+            # es nur als Serializer-Methode. Deshalb hier zusammensetzen.
+            return ' '.join(filter(None, [
+                self.lender_customer.title,
+                self.lender_customer.first_name,
+                self.lender_customer.last_name,
+            ])).strip()
+        return self.supplier.company_name if self.supplier else ''
+
+    def clean(self):
+        """
+        Konsistenz der Gegenpartei sichern.
+
+        Es darf immer genau eine Gegenpartei gesetzt sein. Ohne diese
+        Pruefung koennte ein Datensatz entstehen, bei dem weder
+        Lieferant noch Kunde gesetzt ist - der fuehrt in __str__ und
+        in den PDF-Generatoren zu AttributeError.
+        """
+        if self.lender_type == 'customer':
+            if not self.lender_customer and self.supplier:
+                # Beim Umstellen eines bestehenden Datensatzes den
+                # Lieferanten mitnehmen, sonst ginge die Gegenpartei
+                # verloren.
+                self.lender_customer = None
+            if not self.lender_customer:
+                raise ValidationError(
+                    'Bei Gegenpartei "Kunde" muss ein Kunde gewählt sein.')
+            if self.supplier:
+                raise ValidationError(
+                    'Bei Gegenpartei "Kunde" darf kein Lieferant gesetzt '
+                    'sein. Bitte den Lieferanten leeren.')
+        else:
+            if not self.supplier:
+                raise ValidationError(
+                    'Bei Gegenpartei "Lieferant" muss ein Lieferant '
+                    'gewählt sein.')
+
     def save(self, *args, **kwargs):
         if not self.loan_number:
             self.loan_number = self._generate_loan_number()

@@ -1,7 +1,104 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
+
+/**
+ * Suchfeld mit Trefferliste fuer die Empfängerauswahl.
+ *
+ * Als Dropdown war die Auswahl bei vielen Lieferanten- oder
+ * Distributormitarbeitern unbrauchbar - man musste scrollen statt
+ * tippen. Getrennte Suche je Empfängerart (das Feld filtert auf den
+ * gewählten Typ), damit die Treffer nicht vermischt werden.
+ *
+ * Verhalten wie bei der Kundensuche im selben Formular: zwei
+ * Zeichen genuegen, 300 ms Debounce, Escape oder Klick daneben
+ * schliesst die Liste.
+ */
+function RecipientSearch({
+    value,
+    onChange,
+    onSelect,
+    onClear,
+    results,
+    showDropdown,
+    setShowDropdown,
+    placeholder,
+    emptyText,
+    renderItem,
+    disabled
+}) {
+    const ref = useRef(null);
+
+    useEffect(() => {
+        // Klick ausserhalb schliesst die Liste. Ohne diesen Handler
+        // bleibt die Trefferliste offen, wenn man woanders auf der
+        // Seite klickt.
+        const handleClick = (e) => {
+            if (ref.current && !ref.current.contains(e.target)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [setShowDropdown]);
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            setShowDropdown(false);
+        }
+    };
+
+    return (
+        <div className="relative" ref={ref}>
+            <div className="flex gap-2">
+                <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onFocus={() => { if (results.length > 0) setShowDropdown(true); }}
+                    placeholder={placeholder}
+                    disabled={disabled}
+                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                {value && (
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        disabled={disabled}
+                        title="Auswahl aufheben"
+                        className="px-3 py-2 border rounded-lg text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        ✕
+                    </button>
+                )}
+            </div>
+            {showDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {results.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-gray-500">{emptyText}</div>
+                    ) : (
+                        results.map(item => {
+                            const { title, subtitle } = renderItem(item);
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => onSelect(item)}
+                                    className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                                >
+                                    <div className="font-medium">{title}</div>
+                                    {subtitle && <div className="text-xs text-gray-500">{subtitle}</div>}
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 function CustomerLoanEdit() {
     const { id } = useParams();
@@ -21,8 +118,17 @@ function CustomerLoanEdit() {
     const [filteredCustomers, setFilteredCustomers] = useState([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [employees, setEmployees] = useState([]);
-    const [supplierContacts, setSupplierContacts] = useState([]);
-    const [dealerEmployees, setDealerEmployees] = useState([]);
+    // Suchfelder fuer die beiden alternativen Empfaengerarten. Statt
+    // eines Dropdowns mit allen Kontakten - bei vielen Mitarbeitern
+    // waere das nicht bedienbar. supplierContacts/dealerEmployees
+    // werden nicht mehr vorgehalten: fuer die Anzeige reicht der
+    // Name im Suchfeld, die Treffer kommen ohnehin aus der Suche.
+    const [supplierContactSearch, setSupplierContactSearch] = useState('');
+    const [filteredSupplierContacts, setFilteredSupplierContacts] = useState([]);
+    const [showSupplierContactDropdown, setShowSupplierContactDropdown] = useState(false);
+    const [distributorSearch, setDistributorSearch] = useState('');
+    const [filteredDealerEmployees, setFilteredDealerEmployees] = useState([]);
+    const [showDistributorDropdown, setShowDistributorDropdown] = useState(false);
     const [recipientType, setRecipientType] = useState('customer');
     const [inventorySearch, setInventorySearch] = useState('');
     const [inventoryResults, setInventoryResults] = useState([]);
@@ -79,6 +185,39 @@ function CustomerLoanEdit() {
             if (response.data.customer_name) {
                 setCustomerSearch(response.data.customer_name);
             }
+
+            // Nur den tatsaechlich gewaehlten Kontakt/Mitarbeiter
+            // nachladen, nicht alle. Sonst muesste das Formular
+            // beim Oeffnen bis zu 500 Datensaetze ziehen, nur damit
+            // das Suchfeld einen Anzeigenamen hat. Der Name kommt
+            // fuer die Anzeige aus dem Serializer.
+            if (response.data.supplier_contact) {
+                try {
+                    const c = await api.get(
+                        `/suppliers/contacts/${response.data.supplier_contact}/`);
+                    setSupplierContactSearch(
+                        c.data.contact_person
+                        || response.data.supplier_contact_name
+                        || '');
+                } catch (e) {
+                    setSupplierContactSearch(
+                        response.data.supplier_contact_name || '');
+                }
+            }
+            if (response.data.distributor_employee) {
+                try {
+                    const e = await api.get(
+                        `/dealers/dealer-employees/${response.data.distributor_employee}/`);
+                    setDistributorSearch(
+                        e.data.full_name
+                        || `${e.data.first_name || ''} ${e.data.last_name || ''}`.trim()
+                        || response.data.distributor_employee_name
+                        || '');
+                } catch (err) {
+                    setDistributorSearch(
+                        response.data.distributor_employee_name || '');
+                }
+            }
         } catch (error) {
             console.error('Error loading customer loan:', error);
         }
@@ -87,17 +226,15 @@ function CustomerLoanEdit() {
 
     const loadEmployees = async () => {
         try {
-            const [employeeResponse, contactResponse, dealerEmployeeResponse] = await Promise.all([
-                // lookup statt /employees/: braucht keine HR-Leseberechtigung.
-                // users_only=true: nur Mitarbeiter mit aktivem VERP-Login.
-                api.get('/users/employees/lookup/?users_only=true'),
-                api.get('/suppliers/contacts/?is_active=true&page_size=500'),
-                api.get('/dealers/dealer-employees/?is_active=true&page_size=500'),
-            ]);
+            // Nur die Mitarbeiterliste wird vollstaendig geladen - sie
+            // wird fuer die Zuordnung "Zustaendiger Mitarbeiter"
+            // gebraucht. Kontakte und Distributor-Mitarbeiter laufen
+            // ueber ihre eigenen Suchfelder (loadLoan laedt nur den
+            // gespeicherten Eintrag nach).
+            const employeeResponse = await api.get(
+                '/users/employees/lookup/?users_only=true');
             const getData = response => response.data && (response.data.results || response.data);
             setEmployees(Array.isArray(getData(employeeResponse)) ? getData(employeeResponse) : []);
-            setSupplierContacts(Array.isArray(getData(contactResponse)) ? getData(contactResponse) : []);
-            setDealerEmployees(Array.isArray(getData(dealerEmployeeResponse)) ? getData(dealerEmployeeResponse) : []);
         } catch (error) {
             console.error('Error loading employees:', error);
         }
@@ -122,6 +259,48 @@ function CustomerLoanEdit() {
             setShowCustomerDropdown(false);
         }
     }, [customerSearch]);
+
+    // Lieferantenmitarbeiter suchen
+    useEffect(() => {
+        if (supplierContactSearch.length >= 2) {
+            const timer = setTimeout(async () => {
+                try {
+                    const response = await api.get(
+                        `/suppliers/contacts/?search=${encodeURIComponent(supplierContactSearch)}&page_size=20`);
+                    const data = response.data && (response.data.results || response.data);
+                    setFilteredSupplierContacts(Array.isArray(data) ? data : []);
+                    setShowSupplierContactDropdown(true);
+                } catch (error) {
+                    console.error('Error searching supplier contacts:', error);
+                }
+            }, 300);
+            return () => clearTimeout(timer);
+        } else {
+            setFilteredSupplierContacts([]);
+            setShowSupplierContactDropdown(false);
+        }
+    }, [supplierContactSearch]);
+
+    // Distributormitarbeiter suchen
+    useEffect(() => {
+        if (distributorSearch.length >= 2) {
+            const timer = setTimeout(async () => {
+                try {
+                    const response = await api.get(
+                        `/dealers/dealer-employees/?search=${encodeURIComponent(distributorSearch)}&page_size=20`);
+                    const data = response.data && (response.data.results || response.data);
+                    setFilteredDealerEmployees(Array.isArray(data) ? data : []);
+                    setShowDistributorDropdown(true);
+                } catch (error) {
+                    console.error('Error searching dealer employees:', error);
+                }
+            }, 300);
+            return () => clearTimeout(timer);
+        } else {
+            setFilteredDealerEmployees([]);
+            setShowDistributorDropdown(false);
+        }
+    }, [distributorSearch]);
 
     // Inventory search
     useEffect(() => {
@@ -522,20 +701,79 @@ function CustomerLoanEdit() {
                         </div>
                         {recipientType === 'supplier' && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Lieferantenmitarbeiter</label>
-                                <select value={loan.supplier_contact} onChange={(e) => setLoan(prev => ({ ...prev, supplier_contact: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" disabled={!canWrite}>
-                                    <option value="">-- Auswählen --</option>
-                                    {supplierContacts.map(contact => <option key={contact.id} value={contact.id}>{contact.contact_person}</option>)}
-                                </select>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Lieferantenmitarbeiter
+                                </label>
+                                <RecipientSearch
+                                    value={supplierContactSearch}
+                                    onChange={setSupplierContactSearch}
+                                    onSelect={(c) => {
+                                        setSupplierContactSearch(c.contact_person);
+                                        setShowSupplierContactDropdown(false);
+                                        setLoan(prev => ({
+                                            ...prev,
+                                            supplier_contact: c.id,
+                                            // Die Adresse des Kontakts
+                                            // gleich mitnehmen - sonst
+                                            // muesste sie von Hand
+                                            // abgetippt werden.
+                                            delivery_address_name: c.contact_person,
+                                            delivery_address_street: c.street || '',
+                                            delivery_address_house_number: c.house_number || '',
+                                            delivery_address_postal_code: c.postal_code || '',
+                                            delivery_address_city: c.city || '',
+                                            delivery_address_country: c.country || 'Deutschland',
+                                        }));
+                                    }}
+                                    onClear={() => {
+                                        setSupplierContactSearch('');
+                                        setShowSupplierContactDropdown(false);
+                                        setLoan(prev => ({ ...prev, supplier_contact: '' }));
+                                    }}
+                                    results={filteredSupplierContacts}
+                                    showDropdown={showSupplierContactDropdown}
+                                    setShowDropdown={setShowSupplierContactDropdown}
+                                    placeholder="Lieferantenmitarbeiter suchen..."
+                                    emptyText="Kein Lieferantenmitarbeiter gefunden"
+                                    renderItem={(c) => ({
+                                        title: c.contact_person,
+                                        subtitle: [c.supplier_name, c.city, c.contact_function]
+                                            .filter(Boolean).join(' · '),
+                                    })}
+                                />
                             </div>
                         )}
                         {recipientType === 'distributor' && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Distributormitarbeiter</label>
-                                <select value={loan.distributor_employee} onChange={(e) => setLoan(prev => ({ ...prev, distributor_employee: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" disabled={!canWrite}>
-                                    <option value="">-- Auswählen --</option>
-                                    {dealerEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.full_name || `${employee.first_name} ${employee.last_name}`}</option>)}
-                                </select>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Distributormitarbeiter
+                                </label>
+                                <RecipientSearch
+                                    value={distributorSearch}
+                                    onChange={setDistributorSearch}
+                                    onSelect={(e) => {
+                                        const name = e.full_name
+                                            || `${e.first_name || ''} ${e.last_name || ''}`.trim();
+                                        setDistributorSearch(name);
+                                        setShowDistributorDropdown(false);
+                                        setLoan(prev => ({ ...prev, distributor_employee: e.id }));
+                                    }}
+                                    onClear={() => {
+                                        setDistributorSearch('');
+                                        setShowDistributorDropdown(false);
+                                        setLoan(prev => ({ ...prev, distributor_employee: '' }));
+                                    }}
+                                    results={filteredDealerEmployees}
+                                    showDropdown={showDistributorDropdown}
+                                    setShowDropdown={setShowDistributorDropdown}
+                                    placeholder="Distributormitarbeiter suchen..."
+                                    emptyText="Kein Distributormitarbeiter gefunden"
+                                    renderItem={(e) => ({
+                                        title: e.full_name
+                                            || `${e.first_name || ''} ${e.last_name || ''}`.trim(),
+                                        subtitle: [e.dealer_name, e.email].filter(Boolean).join(' · '),
+                                    })}
+                                />
                             </div>
                         )}
                         <div>

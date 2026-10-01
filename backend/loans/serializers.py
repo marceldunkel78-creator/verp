@@ -161,28 +161,46 @@ class LoanReturnCreateSerializer(serializers.ModelSerializer):
 
 class LoanListSerializer(serializers.ModelSerializer):
     """Listenansicht für Leihungen"""
-    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True, default=None)
+    lender_customer_name = serializers.SerializerMethodField()
+    lender_display = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
     responsible_employee_display = serializers.CharField(
         source='responsible_employee.get_full_name', read_only=True, allow_null=True
     )
-    
+
     class Meta:
         model = Loan
         fields = [
-            'id', 'loan_number', 'supplier', 'supplier_name',
+            'id', 'loan_number', 'lender_type', 'supplier', 'supplier_name',
+            'lender_customer', 'lender_customer_name', 'lender_display',
             'status', 'status_display', 'request_date', 'return_deadline',
             'items_count', 'created_at', 'responsible_employee', 'responsible_employee_display'
         ]
-    
+
+    def get_lender_customer_name(self, obj):
+        return obj.lender_name if obj.lender_type == 'customer' else None
+
+    def get_lender_display(self, obj):
+        """Anzeigename der Gegenpartei, unabhaengig vom Typ.
+
+        Die Liste zeigt in der Spalte "Lieferant" bislang den Namen.
+        Bei einer Kunden-Leihung ist supplier leer, dort muss der
+        Kundenname stehen - sonst waere die Zeile leer und nicht
+        zuordenbar.
+        """
+        return obj.lender_name or '—'
+
     def get_items_count(self, obj):
         return obj.items.count()
 
 
 class LoanDetailSerializer(serializers.ModelSerializer):
     """Detailansicht für Leihungen"""
-    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True)
+    supplier_name = serializers.CharField(source='supplier.company_name', read_only=True, default=None)
+    lender_customer_name = serializers.SerializerMethodField()
+    lender_display = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items = serializers.SerializerMethodField()
     receipt = serializers.SerializerMethodField()
@@ -195,7 +213,9 @@ class LoanDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Loan
         fields = [
-            'id', 'loan_number', 'supplier', 'supplier_name',
+            'id', 'loan_number', 'lender_type',
+            'supplier', 'supplier_name',
+            'lender_customer', 'lender_customer_name', 'lender_display',
             'status', 'status_display', 'request_date', 'return_deadline',
             'return_address_name', 'return_address_street', 'return_address_house_number',
             'return_address_postal_code', 'return_address_city', 'return_address_country',
@@ -210,6 +230,13 @@ class LoanDetailSerializer(serializers.ModelSerializer):
             'loan_number', 'created_at', 'updated_at', 
             'created_by', 'created_by_display', 'updated_by', 'updated_by_display'
         ]
+
+    def get_lender_customer_name(self, obj):
+        return obj.lender_name if obj.lender_type == 'customer' else None
+
+    def get_lender_display(self, obj):
+        """Name der Gegenpartei, unabhaengig vom gewaehlten Typ."""
+        return obj.lender_name or '—'
     
     def get_items(self, obj):
         items = obj.items.all()
@@ -245,12 +272,57 @@ class LoanCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Loan
         fields = [
-            'supplier', 'status', 'request_date', 'return_deadline',
+            'lender_type', 'supplier', 'lender_customer',
+            'status', 'request_date', 'return_deadline',
             'return_address_name', 'return_address_street', 'return_address_house_number',
             'return_address_postal_code', 'return_address_city', 'return_address_country',
             'supplier_reference', 'notes', 'items',
             'responsible_employee', 'observers'
         ]
+
+    def validate(self, attrs):
+        """
+        Genau eine Gegenpartei, passend zum gewaehlten Typ.
+
+        Wird das nicht geprueft, koennte ein Datensatz mit beiden
+        gesetzt entstehen (der Typ waere dann irrefuehrend) oder mit
+        keinem - letzteres fuehrt in __str__ und in den
+        PDF-Generatoren zu einem AttributeError.
+        """
+        lender_type = attrs.get(
+            'lender_type',
+            getattr(self.instance, 'lender_type', 'supplier'))
+
+        if lender_type == 'customer':
+            kunde = attrs.get(
+                'lender_customer',
+                getattr(self.instance, 'lender_customer', None))
+            if not kunde:
+                raise serializers.ValidationError(
+                    {'lender_customer':
+                     'Bei Gegenpartei "Kunde" muss ein Kunde gewählt sein.'})
+            lieferant = attrs.get(
+                'supplier', getattr(self.instance, 'supplier', None))
+            if lieferant:
+                raise serializers.ValidationError(
+                    {'supplier':
+                     'Bei Gegenpartei "Kunde" darf kein Lieferant gesetzt sein.'})
+        else:
+            lieferant = attrs.get(
+                'supplier', getattr(self.instance, 'supplier', None))
+            if not lieferant:
+                raise serializers.ValidationError(
+                    {'supplier':
+                     'Bei Gegenpartei "Lieferant" muss ein Lieferant '
+                     'gewählt sein.'})
+            kunde = attrs.get(
+                'lender_customer',
+                getattr(self.instance, 'lender_customer', None))
+            if kunde:
+                raise serializers.ValidationError(
+                    {'lender_customer':
+                     'Bei Gegenpartei "Lieferant" darf kein Kunde gesetzt sein.'})
+        return attrs
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

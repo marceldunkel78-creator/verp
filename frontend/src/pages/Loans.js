@@ -82,7 +82,7 @@ function Loans() {
                     <div className="flex-1 min-w-[200px]">
                         <input
                             type="text"
-                            placeholder="Suchen (Nummer, Lieferant, Artikel...)"
+                            placeholder="Suchen (Nummer, Gegenpartei, Artikel...)"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -112,7 +112,7 @@ function Loans() {
                                 Leihnummer
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Lieferant
+                                Gegenpartei
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Status
@@ -157,7 +157,16 @@ function Loans() {
                                         <span className="font-medium text-blue-600">{loan.loan_number}</span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        {loan.supplier_name}
+                                        {/* lender_display liefert den Namen
+                                            der Gegenpartei - bei einer
+                                            Kunden-Leihung den Kundenname.
+                                            supplier_name waere dort leer. */}
+                                        <span>{loan.lender_display || loan.supplier_name}</span>
+                                        {loan.lender_type === 'customer' && (
+                                            <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+                                                Kunde
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         {getStatusBadge(loan.status)}
