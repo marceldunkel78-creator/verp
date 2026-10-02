@@ -19,7 +19,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-produc
 DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 
 # ALLOWED_HOSTS can be provided via comma-separated env var, default to localhost
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,[::1]', cast=Csv())
 
 # Application definition
 INSTALLED_APPS = [

@@ -93,6 +93,49 @@ class SupplierProductSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class SupplierListSerializer(serializers.ModelSerializer):
+    """
+    Kompakte Lieferantenliste fuer Kachel- und Tabellenansicht.
+
+    Enthaelt bewusst die Verknuepfungszahlen (Lagerartikel/Bestellungen/Kontakte/
+    Warengruppen/Preislisten), weil beim Aufraeumen von Dubletten sofort
+    sichtbar sein muss, welcher Lieferant ueberhaupt Daten hat.
+
+    WICHTIG: Diese Liste liefert KEINE verschachtelten Objekte (`contacts`,
+    `product_groups`, `price_lists`), sondern nur Zaehler. Vorher kam der
+    volle `SupplierSerializer` und schleppte alle Listen mit - das kostete
+    pro Lieferant Dutzende Zeilen und ist im Detail ohnehin nicht noetig
+    (die Detailseite holt sie ueber `/suppliers/{id}/`).
+
+    Die Zaehler kommen per Annotation aus `SupplierViewSet.get_queryset()`,
+    damit keine N+1-Queries entstehen.
+    """
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+
+    # Annotierte Zaehler sind KEINE Modellfelder. Ohne ausdrueckliche
+    # Deklaration sucht DRF sie im Model nach und meldet
+    # "Field name `inventory_items_count` is not valid for model `Supplier`".
+    # IntegerField(read_only=True) liest einfach das Attribut, das
+    # `SupplierViewSet.get_queryset()` per annotate() gesetzt hat.
+    inventory_items_count = serializers.IntegerField(read_only=True)
+    orders_count = serializers.IntegerField(read_only=True)
+    contacts_count = serializers.IntegerField(read_only=True)
+    product_groups_count = serializers.IntegerField(read_only=True)
+    price_lists_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Supplier
+        fields = [
+            'id', 'supplier_number', 'company_name', 'street', 'house_number',
+            'address_supplement', 'postal_code', 'city', 'state', 'country',
+            'email', 'phone', 'website', 'customer_number',
+            'notes', 'is_active', 'created_by_name', 'created_at',
+            'inventory_items_count', 'orders_count',
+            'contacts_count', 'product_groups_count', 'price_lists_count',
+        ]
+        read_only_fields = ['id', 'supplier_number', 'created_at']
+
+
 class SupplierSerializer(serializers.ModelSerializer):
     """Serializer für Lieferanten mit verschachtelten Kontakten"""
     contacts = SupplierContactSerializer(many=True, read_only=True)

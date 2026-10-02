@@ -55,6 +55,8 @@ Umgebungsvariablen konfigurieren (.env Datei):
 Superuser erstellen bei activated venv
 python manage.py createsuperuser
 
+python.exe manage.py changepassword postgres
+
 
 Firmeneinstellungen konfigurieren:
 1. Admin-Interface öffnen: http://localhost:8000/admin
@@ -902,3 +904,114 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #
 #     "Dublette" ist meist harmlos: dieselbe Zeile steht in einer Liste
 #     mehrfach (z.B. einmal kompakt, einmal ausfuehrlich).
+
+# ============================================================
+# LIEFERANTEN AUFRAEUMEN (Dubletten aus dem Lagerimport)
+# ============================================================
+#
+# Stand 2026-10-02. Ausfuehrlich: docs\Lieferanten-Aufraeumen.md
+#
+# Kurzfassung:
+#
+# - Der Lagerimport hat Lieferanten-Dubletten erzeugt (gleiche Firma,
+#   mehrere Eintraege), weil er ueber ~contains suchte und sonst neu anlegte.
+#   Die Importlogik ist inzwischen behoben (4-stufiger Namensabgleich).
+#
+# - Loeschen liegt jetzt auf der Lieferanten-Kachel (Muell-Button),
+#   nur fuer Admins/Superuser sichtbar.
+#   Admin -> Einkauf -> Lieferanten -> Kachel -> Muell-Eimer
+#
+# - Ablauf: Verknuepfungen je Art anzeigen -> fragen, ob auf einen anderen
+#   Lieferanten umgehaengt werden soll -> Ziel waehlen (gefundene Namens-
+#   dubletten sind direkt anklickbar) -> Probelauf -> Bestaetigung tippen.
+#
+# - Die Kachel zeigt jetzt Lagerartikel- und Bestellungszahl je Lieferant.
+#
+# - Im generischen Admin-Loeschmodul steht der Lieferant jetzt mitvollem
+#   Namen in der Vorschau. Achtung: die 'ID' ist der Datenbank-PK,
+#   die Lieferantennummer steht daneben - beide sind Zahlen und nicht das
+#   Selbe. Bei Gleichstand gibt es eine Warnbox.
+#
+# Pruefen:
+#     cd C:\VERP\backend
+#     .\venv\Scripts\Activate
+#     $env:VERP_TEST_PASSWORD = 'mein-testpasswort'   # nur fuer DIESE Skripte
+#     python tools\run_supplier_deletion_tests.py
+#     python tools\check_supplier_delete_flow.py
+#     Remove-Item Env:\VERP_TEST_PASSWORD
+#
+# (19 Logik-Tests + 20 End-to-End-Checks; beide rechnen in einer
+#  zurueckgerollten Transaktion, also NUR auf der Entwicklungsdatenbank)
+
+# ============================================================
+# LANGSAMES LIEFERANTEN-VERZEICHNIS (Ursache + Behebung)
+# ============================================================
+#
+# Stand 2026-10-02. Zwei voneinander unabhaengige Ursachen.
+#
+# 1) Falscher Host im Frontend  (~2100 ms pro API-Aufruf)
+#
+#    .env.development zeigte auf  http://localhost:8000
+#
+#    "localhost" loest Windows zu ::1 (IPv6) auf. Django lauscht aber nur
+#    auf 127.0.0.1 (IPv4). Das ::1-Paket wird dann ueber das Tailscale-
+#    Interface geschickt (dessen MTU ist 1280 statt 1500) und laeuft in
+#    einen Timeout von ca. 2 Sekunden.
+#
+#    Gemessen am 02.10.2026, gleicher Server, gleiche Anfrage:
+#        http://localhost:8000   ~2100 ms
+#        http://127.0.0.1:8000   ~90 ms      -> Faktor 23
+#
+#    Beweis, dass es nicht die Datenbank war: auch /api/notifications/
+#    recent/ (2 Byte Antwort) brauchte 2085 ms, und zwar unabhaengig von
+#    Cookies, Endpunkt und Trefferzahl. Ein reines Datenbankproblem
+#    kann nicht skalieren.
+#
+#    Behebung: REACT_APP_API_URL auf http://127.0.0.1:8000/api
+#    Zusaetzlich '[::1]' in die ALLOWED_HOSTS aufgenommen.
+#
+#    WICHTIG: Nach dieser Aenderung MUSS das Frontend neu gestartet
+#    werden (nur ein Browser-Reload reicht nicht).
+#
+# 2) Kreuzprodukt beim Zaehlen der Verknuepfungen  (~5900 ms)
+#
+#    Die Verknuepfungszahlen auf der Lieferantenkachel wurden mit
+#    Count(rel, distinct=True) in EINEM gemeinsamen LEFT JOIN annotiert.
+#    Bei einem Lieferanten mit 995 Lagerartikeln x 3109 Bestellungen sind
+#    das rund 3,1 Mio. Join-Zeilen, die COUNT(DISTINCT) zurueckzaehlen
+#    muss.
+#
+#    Behebung: fuenf einzelne Subqueries mit Coalesce(..., 0).
+#    Geprueft ueber alle 123 Lieferanten: 0 Abweichungen.
+#
+#    MERKREGEL: In Listen-Annotationen NIE mehrere Count() in einen
+#    gemeinsamen JOIN. Immer Subquery je Verknuepfung.
+#
+# Pruefen:
+#     cd C:\Users\mdunk\Documents\VERP\backend
+#     $env:VERP_TEST_PASSWORD = 'mein-testpasswort'   # nur fuer DIESE Skripte
+#     $env:VERP_BASE        = 'http://127.0.0.1:8000'
+#     C:\Users\mdunk\Documents\VERP\.venv\Scripts\python.exe tools\check_running_server.py
+#     ... tools\measure_running_server.py
+#     ... tools\compare_localhost_vs_ipv4.py
+#     ... tools\verify_supplier_subquery.py
+#     Remove-Item Env:\VERP_TEST_PASSWORD              # danach wegraeumen
+#
+# Wichtig: Diese Skripte setzen das Passwort des Testnutzers KURZZEITIG
+# und stellen es danach wieder her. Sie fragen deshalb bewusst nach
+# VERP_TEST_PASSWORD und haben keinen festen Wert im Code - sonst
+# wuerde das Passwort in die Git-Historie wandern und auf dem Server
+# mit dem echten postgres-Konto kollidieren.
+#
+# Achtung bei eigenen Testskripten mit Login:
+#   - force_login() wirkt bei JWT-Cookie-Auth NICHT; echter Login ueber
+#     /api/auth/login/ noetig.
+#   - Testclient braucht HTTP_HOST=localhost, sonst blockt ALLOWED_HOSTS.
+#   - Skripte aus tools/ muessen backend/ in sys.path aufnehmen,
+#     sonst "No module named 'verp'".
+#   - Beim Setzen eines Testpassworts IMMER den Ausgangszustand sichern
+#     und zuruecksetzen. `from django.contrib.auth import get_user_model`
+#     liefert eine FUNKTION, kein Modell - `.objects` darauf schlaegt fehl.
+#     Ein solcher Fehler hat in einer frueheren Fassung das Superuser-
+#     Passwort dauerhaft gesetzt gelassen.
+

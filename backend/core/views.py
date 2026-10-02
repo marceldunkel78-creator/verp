@@ -23,6 +23,14 @@ import mimetypes
 User = get_user_model()
 
 
+def _safe_int(value):
+    """Wandelt einen Eingabewert in int um oder gibt None zurück."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def global_search(request):
@@ -706,30 +714,48 @@ def admin_delete_preview(request):
     except LookupError:
         return Response({'error': f'Model {model_name} nicht gefunden'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Suche nach ID oder Identifier-Feld
+    # Suche nach ID ODER Identifier-Feld.
+    #
+    # WICHTIG: Bei rein numerischen Eingaben gewinnt die Datenbank-ID. Das ist
+    # historisch gewachsen und wird hier beibehalten - aber der Client zeigt
+    # das gefundene Objekt jetzt mit Namen an, damit der Treffer eindeutig
+    # prüfbar ist. Sonst passiert genau der Fehler, dass die Lieferanten-Nr.
+    # 229 eingegeben wird und unbemerkt ein anderer Lieferant (DB-ID 229)
+    # gelöscht wird.
+    lookup_mode = None
     try:
         # Erst versuchen nach ID
         try:
             item = Model.objects.get(pk=int(item_id))
+            lookup_mode = 'id'
         except (ValueError, Model.DoesNotExist):
             # Falls keine numerische ID, nach Identifier-Feld suchen
             filter_kwargs = {identifier_field: item_id}
             item = Model.objects.get(**filter_kwargs)
+            lookup_mode = 'identifier'
     except Model.DoesNotExist:
         return Response({'error': f'{display_name} mit ID/Nummer {item_id} nicht gefunden'}, status=status.HTTP_404_NOT_FOUND)
     
+    item_info['lookup_mode'] = lookup_mode
+
     # Sammle Informationen über den Eintrag
     item_info = {
         'id': item.pk,
         'type': model_type,
         'type_display': display_name,
+        'lookup_mode': lookup_mode,
+        # Eindeutige Bezeichnung MITFÜHREN - ohne sie kann man nicht erkennen,
+        # welcher Eintrag gemeint ist. Bei numerischen Feldern wie der
+        # Lieferantennummer kollidiert die Suche mit der Datenbank-ID:
+        # die ID 229 UND die Lieferantennummer 229 sind verschiedene Dinge.
+        'label': str(item),
     }
     
     # Identifier-Feld hinzufügen
     if hasattr(item, identifier_field):
         item_info['identifier'] = getattr(item, identifier_field)
         item_info['identifier_field'] = identifier_field
-    
+
     # Namen/Titel hinzufügen
     name_fields = ['name', 'title', 'system_name', 'first_name', 'last_name', 'description']
     for field in name_fields:
@@ -783,6 +809,7 @@ def admin_delete_execute(request):
     model_type = request.data.get('type')
     item_id = request.data.get('id')
     confirm = request.data.get('confirm', False)
+    reassign_to = request.data.get('reassign_to')
     
     if not model_type or not item_id:
         return Response({'error': 'type und id Parameter erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
@@ -794,6 +821,50 @@ def admin_delete_execute(request):
         return Response({'error': f'Unbekannter Typ: {model_type}'}, status=status.HTTP_400_BAD_REQUEST)
     
     app_label, model_name, identifier_field, display_name = DELETABLE_MODELS[model_type]
+
+    # Sonderfall Lieferant: das Umhängen der Verknüpfungen ist so speziell
+    # (PROTECT-Felder, unique_together, visitron_part_number), dass es in
+    # suppliers/deletion.py liegt. Der Lieferant war der Hauptgrund für das
+    # Aufräumen nach dem Excel-Lagerimport.
+    if model_type == 'supplier':
+        from suppliers.deletion import delete_supplier
+        supplier = Supplier.objects.filter(pk=_safe_int(item_id)).first()
+        if supplier is None:
+            supplier = Supplier.objects.filter(
+                **{identifier_field: item_id}
+            ).first()
+        if supplier is None:
+            return Response(
+                {'error': f'{display_name} mit ID/Nummer {item_id} nicht gefunden'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        target = None
+        if reassign_to not in (None, '', 'null'):
+            target = Supplier.objects.filter(pk=_safe_int(reassign_to)).first()
+            if target is None:
+                return Response(
+                    {'error': f'Ziellieferant {reassign_to} nicht gefunden'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        result = delete_supplier(
+            supplier,
+            reassign_to=target,
+            renumber=bool(request.data.get('renumber', False)),
+            confirm=True,
+        )
+        if not result.get('ok'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'success': True,
+            'message': (
+                f'{display_name} "{supplier.company_name}" '
+                f'(Nr. {supplier.supplier_number or "-"}, ID: {supplier.id}) wurde gelöscht.'
+                + (f' Verknüpfungen auf "{target.company_name}" umgehängt.' if target else '')
+            ),
+            'deleted_id': supplier.id,
+            'deleted_identifier': supplier.supplier_number,
+            'warnings': result.get('warnings', []),
+        })
     
     try:
         Model = apps.get_model(app_label, model_name)

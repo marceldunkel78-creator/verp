@@ -834,6 +834,40 @@ class RMACase(models.Model):
         default='EUR',
         verbose_name='Währung'
     )
+    # =====================
+    # Reparatur beim Hersteller in Auftrag gegeben
+    # =====================
+    # Wann die Reparatur beim Hersteller beauftragt wurde.
+    manufacturer_order_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Datum der Beauftragung'
+    )
+    # Verknüpfung mit einer Einkaufsbestellung (Procurement/Order).
+    # Bewusst SET_NULL: eine spaeter geloeschte Bestellung darf den
+    # Herstellerauftrag nicht mitreiessen - der Freitext bleibt erhalten.
+    manufacturer_order = models.ForeignKey(
+        'orders.Order',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rma_manufacturer_cases',
+        verbose_name='Bestellung an den Hersteller'
+    )
+    # Freitext-Feld fuer die Visitron-Bestellnummer, wenn die Bestellung noch
+    # nicht im VERP steht. Wird nur gefuellt, wenn KEINE Bestellung verknuepft ist.
+    manufacturer_order_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Bestellnummer Visitron (Freitext)',
+        help_text='Die Visitron-Bestellnummer für diese Reparatur. '
+                  'Nur nötig, wenn keine Bestellung ausgewählt wurde.'
+    )
+    manufacturer_order_comment = models.TextField(
+        blank=True,
+        verbose_name='Kommentar zur Beauftragung',
+        help_text='Zum Beispiel vereinbarter Preis, Rücksendebedingungen, Ansprechpartner.'
+    )
     # Separate Versandadresse für Herstellerreparaturen. Die address_*-Felder
     # bleiben ausschließlich die Empfängeradresse des Warenausgangs.
     manufacturer_address_name = models.CharField(max_length=200, blank=True, verbose_name='Hersteller Empfänger')

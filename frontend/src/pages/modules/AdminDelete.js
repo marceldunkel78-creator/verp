@@ -19,6 +19,10 @@ const AdminDelete = () => {
   const [success, setSuccess] = useState(null);
   const [confirmText, setConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  // Verknüpfungen vor dem Löschen auf einen anderen Lieferanten legen
+  const [reassignChecked, setReassignChecked] = useState(false);
+  const [reassignTarget, setReassignTarget] = useState('');
+  const [renumberArticles, setRenumberArticles] = useState(false);
 
   useEffect(() => {
     fetchTypes();
@@ -45,6 +49,9 @@ const AdminDelete = () => {
     setSuccess(null);
     setPreview(null);
     setConfirmText('');
+    setReassignChecked(false);
+    setReassignTarget('');
+    setRenumberArticles(false);
 
     try {
       const response = await api.get('/core/admin-delete/preview/', {
@@ -74,12 +81,17 @@ const AdminDelete = () => {
       const response = await api.post('/core/admin-delete/execute/', {
         type: preview.type,
         id: preview.id,
-        confirm: true
+        confirm: true,
+        reassign_to: reassignChecked && reassignTarget.trim() ? reassignTarget.trim() : null,
+        renumber: reassignChecked ? renumberArticles : false,
       });
-      setSuccess(response.data.message);
+      const extraWarnings = response.data.warnings || [];
+      setSuccess(response.data.message + (extraWarnings.length ? ' ' + extraWarnings.join(' ') : ''));
       setPreview(null);
       setSearchId('');
       setConfirmText('');
+      setReassignChecked(false);
+      setReassignTarget('');
     } catch (err) {
       setError(err.response?.data?.error || 'Fehler beim Löschen');
       if (err.response?.data?.detail) {
@@ -140,6 +152,9 @@ const AdminDelete = () => {
                   setPreview(null);
                   setError(null);
                   setSuccess(null);
+                  setReassignChecked(false);
+                  setReassignTarget('');
+                  setRenumberArticles(false);
                 }}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
               >
@@ -220,7 +235,7 @@ const AdminDelete = () => {
                 <dd className="text-lg font-semibold text-gray-900">{preview.type_display}</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-gray-500">ID</dt>
+                <dt className="text-sm font-medium text-gray-500">ID (Datenbank)</dt>
                 <dd className="text-lg font-mono text-gray-900">{preview.id}</dd>
               </div>
               {preview.identifier && (
@@ -229,7 +244,30 @@ const AdminDelete = () => {
                   <dd className="text-lg font-mono text-blue-600">{preview.identifier}</dd>
                 </div>
               )}
-              {preview.display_name && (
+              {preview.label && (
+                <div className="md:col-span-2">
+                  <dt className="text-sm font-medium text-gray-500">Eintrag (genau dieser)</dt>
+                  <dd className="text-lg font-semibold text-gray-900 break-words">
+                    {preview.label}
+                  </dd>
+                </div>
+              )}
+              {preview.lookup_mode === 'id' && preview.identifier &&
+                String(preview.identifier) !== String(preview.id) && (
+                <div className="md:col-span-2 bg-amber-50 border border-amber-300 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <ExclamationTriangleIcon className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-amber-800 text-sm">
+                      Achtung: die Eingabe wurde als <strong>Datenbank-ID {preview.id}</strong> interpretiert,
+                      nicht als {preview.identifier_field} <strong>{preview.identifier}</strong>.
+                      Diese beiden Nummern gehören zu verschiedenen Einträgen.
+                      Wenn Sie den Eintrag mit der {preview.identifier_field} meinen, geben Sie die
+                      Nummer bitte zuerst auf der Lieferanten-Seite aus.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {preview.display_name && preview.display_name !== preview.label && (
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Name/Bezeichnung</dt>
                   <dd className="text-lg text-gray-900">{preview.display_name}</dd>
@@ -264,6 +302,62 @@ const AdminDelete = () => {
             </div>
           )}
 
+          {/* Verknüpfungen-Umleitung für Lieferanten */}
+          {preview.type === 'supplier' && (preview.has_related_objects || reassignChecked) && (
+            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+              <label className="flex items-start gap-2 cursor-pointer mb-3">
+                <input
+                  type="checkbox"
+                  checked={reassignChecked}
+                  onChange={(e) => setReassignChecked(e.target.checked)}
+                  className="mt-1"
+                />
+                <span className="text-sm text-blue-900">
+                  <span className="font-medium">
+                    Verknüpfungen vor dem Löschen auf einen anderen Lieferanten legen
+                  </span>
+                  <span className="block text-xs text-blue-700 mt-1">
+                    Sinnvoll beim Aufräumen von Dubletten: alle Lagerartikel, Bestellungen
+                    usw. wandern auf den Ziel-Lieferanten, erst danach wird gelöscht.
+                  </span>
+                </span>
+              </label>
+
+              {reassignChecked && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Ziellieferant (Firmenname oder Lieferantennr.)
+                  </label>
+                  <input
+                    type="text"
+                    value={reassignTarget}
+                    onChange={(e) => setReassignTarget(e.target.value)}
+                    placeholder="z.B. 100 oder Excelitas-PCO"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  {reassignTarget && (
+                    <p className="text-xs text-blue-700">
+                      Wird als <strong>Datenbank-ID oder Lieferantennummer</strong> aufgelöst.
+                      Prüfen Sie das Ergebnis nach dem Klick auf „Endgültig löschen“.
+                    </p>
+                  )}
+                  <label className="flex items-start gap-2 cursor-pointer mt-2">
+                    <input
+                      type="checkbox"
+                      checked={renumberArticles}
+                      onChange={(e) => setRenumberArticles(e.target.checked)}
+                      className="mt-1"
+                    />
+                    <span className="text-xs text-blue-800">
+                      VS-Artikelnummern der umgehängten Waren neu vergeben
+                      (bisherige Nummern bleiben sonst auf den alten Lieferanten bezogen)
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Delete Confirmation */}
           <div className="border-t pt-6">
             <h3 className="text-lg font-medium text-red-600 mb-4">
@@ -272,7 +366,8 @@ const AdminDelete = () => {
             </h3>
             
             <p className="text-sm text-gray-600 mb-4">
-              Um den Eintrag zu löschen, geben Sie bitte folgenden Text ein:
+              Um den Eintrag <strong className="text-gray-900">{preview.label}</strong> zu löschen,
+              geben Sie bitte folgenden Text ein:
               <br />
               <code className="bg-gray-100 px-2 py-1 rounded font-mono text-red-600">
                 LÖSCHEN {preview.identifier || preview.id}

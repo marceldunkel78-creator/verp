@@ -639,6 +639,7 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
     cost_totals = serializers.SerializerMethodField()
     manufacturer_returns = RMAManufacturerReturnSerializer(many=True, read_only=True)
     manufacturer_quotation_url = serializers.SerializerMethodField()
+    manufacturer_order_display = serializers.SerializerMethodField()
     
     class Meta:
         model = RMACase
@@ -675,6 +676,9 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
             'manufacturer', 'manufacturer_rma_number', 'manufacturer_ship_date',
             'manufacturer_quotation', 'manufacturer_quotation_url',
             'manufacturer_quotation_amount', 'manufacturer_quotation_currency',
+            'manufacturer_order_date', 'manufacturer_order',
+            'manufacturer_order_display', 'manufacturer_order_number',
+            'manufacturer_order_comment',
             'manufacturer_address_name', 'manufacturer_address_street',
             'manufacturer_address_house_number', 'manufacturer_address_postal_code',
             'manufacturer_address_city', 'manufacturer_address_country',
@@ -696,6 +700,16 @@ class RMACaseDetailSerializer(serializers.ModelSerializer):
         if obj.manufacturer_quotation:
             return obj.manufacturer_quotation.url
         return None
+    
+    def get_manufacturer_order_display(self, obj):
+        """Lesbare Bezeichnung der verknuepften Einkaufsbestellung."""
+        if not obj.manufacturer_order:
+            return None
+        order = obj.manufacturer_order
+        parts = [order.order_number]
+        if order.supplier_id:
+            parts.append(order.supplier.company_name)
+        return ' - '.join(str(p) for p in parts if p)
     
     def get_report_pdf_url(self, obj):
         if obj.report_pdf:
@@ -762,8 +776,8 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
             # Tab 5 - Herstellerreparatur
             'manufacturer', 'manufacturer_rma_number', 'manufacturer_ship_date',
             'manufacturer_quotation', 'manufacturer_quotation_amount', 'manufacturer_quotation_currency',
-            'manufacturer_address_name', 'manufacturer_address_street', 'manufacturer_address_house_number',
-            'manufacturer_address_postal_code', 'manufacturer_address_city', 'manufacturer_address_country',
+            'manufacturer_order_date', 'manufacturer_order',
+            'manufacturer_order_number', 'manufacturer_order_comment',
             'manufacturer_address_name', 'manufacturer_address_street', 'manufacturer_address_house_number',
             'manufacturer_address_postal_code', 'manufacturer_address_city', 'manufacturer_address_country',
 
@@ -775,7 +789,8 @@ class RMACaseCreateUpdateSerializer(serializers.ModelSerializer):
     def to_internal_value(self, data):
         """Leere Datums-Strings in None umwandeln, damit optionale Datumsfelder leer bleiben können"""
         nullable_date_fields = [
-            'product_purchase_date', 'received_date', 'shipped_date', 'repair_date', 'manufacturer_ship_date'
+            'product_purchase_date', 'received_date', 'shipped_date', 'repair_date',
+            'manufacturer_ship_date', 'manufacturer_order_date',
         ]
         if isinstance(data, dict):
             data = data.copy()

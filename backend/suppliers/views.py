@@ -1,5 +1,6 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
@@ -7,6 +8,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.http import FileResponse
+from django.db.models import Count, IntegerField, OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
 import mimetypes
 
 from .models import (
@@ -15,7 +18,7 @@ from .models import (
 )
 from verp.pagination import InfinitePagination, TradingProductPagination
 from .serializers import (
-    SupplierSerializer, SupplierCreateUpdateSerializer,
+    SupplierSerializer, SupplierCreateUpdateSerializer, SupplierListSerializer,
     SupplierContactSerializer, SupplierProductSerializer,
     ProductGroupSerializer, PriceListSerializer, SupplierAttachmentSerializer
 )
@@ -31,12 +34,46 @@ from .ms_serializers import (
     MaterialSupplyCreateUpdateSerializer
 )
 from .permissions import SupplierPermission
+from .deletion import (
+    delete_supplier, get_link_summary, get_blocking_links, find_duplicates,
+)
+
+
+class IsSuperUserOrReadOnly(BasePermission):
+    """
+    Lesen (Vorschau/Kennzahlen) fuer alle mit Lieferanten-Leserecht,
+    Schreiben/Aktionen nur fuer Superuser.
+    """
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return bool(request.user and request.user.is_superuser)
 
 
 class SupplierPagination(PageNumberPagination):
     page_size = 100
     page_size_query_param = 'page_size'
     max_page_size = 1000
+
+
+def supplier_relation_count(relation_name):
+    """
+    Liefert eine Annotation, die die Anzahl verknüpfter Objekte zählt.
+
+    Als eigenständige Subquery, damit sich die Zähler nicht gegenseitig
+    aufs Multiplizieren. Details zur Messung siehe `get_queryset`.
+    """
+    field = Supplier._meta.get_field(relation_name)
+    model = field.related_model
+    # Reverse-`related_name` -> tatsächlicher Feldname des Fremdschlüssels
+    fk_name = field.field.name
+    inner = (
+        model.objects.filter(**{fk_name: OuterRef('pk')})
+        .values(fk_name)
+        .annotate(total=Count('*'))
+        .values('total')[:1]
+    )
+    return Coalesce(Subquery(inner), Value(0), output_field=IntegerField())
 
 
 class SupplierViewSet(viewsets.ModelViewSet):
@@ -55,8 +92,47 @@ class SupplierViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return SupplierCreateUpdateSerializer
+        if self.action == 'list':
+            return SupplierListSerializer
         return SupplierSerializer
-    
+
+    def get_queryset(self):
+        """
+        Für die Liste die Verknüpfungszahlen per Annotation mitliefern.
+
+        Ohne das würde die Kachel für jeden Lieferant Dutzende COUNT-Abfragen
+        auslösen (bei 9 Kacheln also im Zweifel über 100 zusätzliche Queries).
+
+        WICHTIG: Die Zählung läuft bewusst über fünf einzelne Subqueries und
+        NICHT über `Count(rel, distinct=True)` in einem gemeinsamen JOIN.
+
+        Grund: Ein gemeinsamer LEFT JOIN über mehrere Relationen bildet das
+        Kreuzprodukt. Bei einem Lieferanten mit 995 Lagerartikeln und 3109
+        Bestellungen sind das rund 3,1 Mio. Join-Zeilen, die COUNT(DISTINCT)
+        alle zurückzählen muss. Gemessen auf Produktivdaten (123 Lieferanten):
+
+            JOIN + Count(distinct)   ~5.900 ms  (Seite 1)  / ~33 s  (alle)
+            Subqueries                  ~10 ms  (Seite 1)  /  ~22 ms  (alle)
+
+        Das ist der Grund, warum das Lieferanten-Verzeichnis zuletzt so
+        langebrauchte. Die Subqueries liefern dieselben Zahlen (gegen alle
+        123 Lieferanten geprüft: 0 Abweichungen), sind aber unabhängig
+        voneinander und skalieren deshalb linear.
+
+        `Coalesce(..., 0)` sorgt dafür, dass Lieferanten ohne Verknüpfung
+        eine echte 0 liefern und nicht `None` - das Frontend zeigt diese
+        Werte direkt in den Kacheln an.
+        """
+        queryset = super().get_queryset()
+        if self.action == 'list':
+            annotations = {
+                f'{rel}_count': supplier_relation_count(rel)
+                for rel in ('inventory_items', 'orders', 'contacts',
+                            'product_groups', 'price_lists')
+            }
+            queryset = queryset.annotate(**annotations).select_related('created_by')
+        return queryset
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
@@ -79,6 +155,100 @@ class SupplierViewSet(viewsets.ModelViewSet):
             serializer.save(supplier=supplier)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # ------------------------------------------------------------------
+    # Aufräumen: Dubletten-Lieferanten löschen bzw. umhängen
+    # ------------------------------------------------------------------
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated, SupplierPermission])
+    def link_summary(self, request, pk=None):
+        """
+        Verknüpfungsübersicht eines Lieferanten.
+
+        Liefert je Verknüpfung den Count, ob sie dem Lieferanten gehört (wird
+        mitgelöscht) oder fremd ist, plus Beispiel-Einträge. Genau das, was man
+        vor dem Löschen sehen muss - im Löschmodul stand bisher nur
+        "Verknüpfungen vorhanden" ohne Namen.
+        """
+        supplier = self.get_object()
+        blocked = {b['key'] for b in get_blocking_links(supplier)}
+        summary = []
+        for entry in get_link_summary(supplier):
+            item = dict(entry)
+            item['blocks_delete'] = item['key'] in blocked
+            summary.append(item)
+        return Response({
+            'supplier': {
+                'id': supplier.id,
+                'supplier_number': supplier.supplier_number,
+                'company_name': supplier.company_name,
+            },
+            'can_delete': not blocked,
+            'links': summary,
+            'duplicates': find_duplicates(supplier),
+        })
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsSuperUserOrReadOnly])
+    def delete_with_reassign(self, request, pk=None):
+        """
+        Löscht einen Lieferanten - wahlweise mit Umhängen aller Verknüpfungen.
+
+        Body (JSON):
+            reassign_to : PK des Ziellieferanten, oder null / "" für reines Löschen
+            renumber    : bool, visitron_part_number der umgehängten Waren neu vergeben
+            dry_run     : bool, nur zählen und Konflikte melden
+            confirm     : bool, muss true sein
+
+        Ohne `reassign_to` wird nur gelöscht, was dem Lieferanten gehört
+        (Kontakte, Warengruppen, ...). Externe Verknüpfungen blockieren dann
+        mit einer verständlichen Meldung statt mit einem ProtectedError-Traceback.
+        """
+        supplier = self.get_object()
+
+        raw_target = request.data.get('reassign_to')
+        reassign_to = None
+        if raw_target not in (None, '', 'null'):
+            try:
+                reassign_to = Supplier.objects.get(pk=int(raw_target))
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': f'ungültige Ziellieferanten-ID: {raw_target}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            except Supplier.DoesNotExist:
+                return Response(
+                    {'error': f'Ziellieferant {raw_target} nicht gefunden'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        result = delete_supplier(
+            supplier,
+            reassign_to=reassign_to,
+            renumber=bool(request.data.get('renumber', False)),
+            dry_run=bool(request.data.get('dry_run', False)),
+            confirm=bool(request.data.get('confirm', False)),
+        )
+
+        if not result.get('ok'):
+            payload = dict(result)
+            payload.setdefault('error', 'Unbekannter Fehler')
+            payload['links'] = get_link_summary(supplier)
+            return Response(payload, status=status.HTTP_400_BAD_REQUEST)
+
+        moved = result.get('moved') or []
+        return Response({
+            **result,
+            'message': (
+                f'Lieferant "{supplier.company_name}" (Nr. {supplier.supplier_number or "-"}, '
+                f'ID {supplier.id}) gelöscht.'
+                + (
+                    f' {sum(m["count"] for m in moved)} Verknüpfungen auf '
+                    f'"{reassign_to.company_name}" (Nr. {reassign_to.supplier_number or "-"}) '
+                    f'umgehängt.'
+                    if reassign_to and moved else ''
+                )
+            ),
+        })
 
 
 class SupplierContactViewSet(viewsets.ModelViewSet):

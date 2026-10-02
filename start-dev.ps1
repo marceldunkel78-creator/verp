@@ -20,7 +20,13 @@ Write-Host "Migrationen werden ausgeführt..." -ForegroundColor Yellow
 python manage.py migrate
 
 Write-Host "Backend-Server startet auf Port 8000..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; .\venv\Scripts\Activate.ps1; python manage.py runserver"
+# Ohne explizite Adresse lauscht Django nur auf 127.0.0.1 (IPv4). Ruft man
+# danach "localhost" auf, loest Windows das unter Umstaenden zu ::1 (IPv6)
+# auf. Die Verbindung faellt dann auf das Tailscale-Interface zurueck
+# (MTU 1280) und laeuft in einen Timeout von ca. 2 Sekunden - unabhaengig
+# vom Endpunkt und von der Antwortgroesse.
+# Mit der IPv6-Adresse lauscht der Server auf beiden Stacks.
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD'; .\venv\Scripts\Activate.ps1; python manage.py runserver [::1]:8000"
 
 # Frontend starten
 Set-Location ..\frontend

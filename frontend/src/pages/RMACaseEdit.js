@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import FileUpload from '../components/FileUpload';
+import ProcurementOrderSearch from '../components/ProcurementOrderSearch';
 import {
   ArrowLeftIcon,
   InformationCircleIcon,
@@ -18,6 +19,7 @@ import {
   EyeIcon,
   DocumentArrowDownIcon,
   WrenchScrewdriverIcon,
+  ShoppingCartIcon,
   BuildingOfficeIcon,
   PaperClipIcon
 } from '@heroicons/react/24/outline';
@@ -314,12 +316,11 @@ const RMACaseEdit = () => {
           manufacturer_ship_date: data.manufacturer_ship_date || '',
           manufacturer_quotation_amount: data.manufacturer_quotation_amount || '',
           manufacturer_quotation_currency: data.manufacturer_quotation_currency || 'EUR',
-          manufacturer_address_name: data.manufacturer_address_name || '',
-          manufacturer_address_street: data.manufacturer_address_street || '',
-          manufacturer_address_house_number: data.manufacturer_address_house_number || '',
-          manufacturer_address_postal_code: data.manufacturer_address_postal_code || '',
-          manufacturer_address_city: data.manufacturer_address_city || '',
-          manufacturer_address_country: data.manufacturer_address_country || 'Deutschland'
+          manufacturer_order_date: data.manufacturer_order_date || '',
+          manufacturer_order: data.manufacturer_order || '',
+          manufacturer_order_number: data.manufacturer_order_number || '',
+          manufacturer_order_comment: data.manufacturer_order_comment || '',
+          // manufacturer_address_* stehen weiter oben beim Adressblock
         });
         
         // Positionen für das Warenausgangs-Formular initialisieren
@@ -816,6 +817,15 @@ const RMACaseEdit = () => {
     try {
       const payload = { ...formData };
 
+      // Leere Fremdschluessel als echtes null schicken. Das Formular
+      // haelt '' fuer "nicht gesetzt", der Serializer akzeptiert beides,
+      // aber null ist eindeutig und verhindert, dass '' spaeter als
+      // Bestellung "0" interpretiert wird.
+      if (!payload.manufacturer_order) payload.manufacturer_order = null;
+      if (!payload.manufacturer_order_date) payload.manufacturer_order_date = null;
+      // Freitext nur behalten, wenn wirklich keine Bestellung verknuepft ist
+      if (payload.manufacturer_order) payload.manufacturer_order_number = '';
+
       // Gesamtkosten und Endpreis aus der Kalkulation automatisch berechnen
       // Versandkosten werden erst NACH der Marge aufgerechnet
       const subtotalWithoutShipping = calcTotals.material + calcTotals.labor + (parseFloat(payload.admin_fee) || 0);
@@ -1229,10 +1239,9 @@ const RMACaseEdit = () => {
           rma_item_id: item.id,
           product_name: item.product_name,
           quantity_available: item.quantity,
-          ...(previousById[String(item.id)] || {}),
-          rma_item_id: item.id,
-          product_name: item.product_name,
-          quantity_available: item.quantity
+          // Auswahl- und Proforma-Daten der vorherigen Position gewinnen;
+          // deshalb steht der Spread bewusst ZULETZT.
+          ...(previousById[String(item.id)] || {})
         }));
         setManufacturerReturnForm(prev => ({ ...prev, items: manufacturerItems }));
       }
@@ -3109,6 +3118,111 @@ const RMACaseEdit = () => {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Reparatur beim Hersteller in Auftrag gegeben */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 border-b pb-2 mb-3">
+                  Reparatur beim Hersteller in Auftrag gegeben
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Datum der Beauftragung
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.manufacturer_order_date || ''}
+                      onChange={(e) => handleInputChange('manufacturer_order_date', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Bestellung an den Hersteller
+                    </label>
+                    <ProcurementOrderSearch
+                      value={formData.manufacturer_order || null}
+                      supplierId={selectedManufacturer?.id || null}
+                      onChange={(orderId) => {
+                        handleInputChange('manufacturer_order', orderId || '');
+                        if (orderId) {
+                          // Freitext ist überflüssig, sobald eine echte
+                          // Bestellung verknüpft ist
+                          handleInputChange('manufacturer_order_number', '');
+                        }
+                      }}
+                      placeholder="Bestellnummer suchen..."
+                    />
+                    {selectedManufacturer && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Es wird nur nach Bestellungen an „{selectedManufacturer.company_name}" gesucht.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Freitext, wenn die Bestellung noch nicht im VERP ist */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Bestellnummer Visitron (Freitext)
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      nur wenn die Bestellung noch nicht im VERP importiert ist
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.manufacturer_order_number || ''}
+                    onChange={(e) => handleInputChange('manufacturer_order_number', e.target.value)}
+                    placeholder="z.B. 26-004312"
+                    disabled={!!formData.manufacturer_order}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  />
+                  {formData.manufacturer_order ? (
+                    <p className="text-xs text-green-700 mt-1">
+                      Eine Bestellung ist verknüpft – der Freitext ist gesperrt.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Die Visitron-Bestellnummer für diese Reparatur.
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Kommentar
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      z.B. vereinbarter Preis, Rücksendebedingungen, Ansprechpartner
+                    </span>
+                  </label>
+                  <textarea
+                    value={formData.manufacturer_order_comment || ''}
+                    onChange={(e) => handleInputChange('manufacturer_order_comment', e.target.value)}
+                    rows={3}
+                    placeholder="Bemerkungen zur Beauftragung beim Hersteller..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                {/* Anzeige der verknüpften Bestellung */}
+                {rmaCase?.manufacturer_order_display && (
+                  <div className="mt-4 flex items-center gap-2 text-sm bg-orange-50 border border-orange-200 rounded-lg p-3">
+                    <ShoppingCartIcon className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                    <span>
+                      Verknüpft mit Bestellung{' '}
+                      <span className="font-medium">{rmaCase.manufacturer_order_display}</span>
+                    </span>
+                    <a
+                      href={`/procurement/orders/${rmaCase.manufacturer_order}`}
+                      className="ml-auto text-orange-700 hover:underline flex-shrink-0"
+                    >
+                      Bestellung öffnen
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Bisherige Herstellerreparaturen */}

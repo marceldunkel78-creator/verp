@@ -54,6 +54,13 @@ FUZZY_THRESHOLD = 0.86
 # Anzahl Items, die fuer den unscharfen Vergleich gescannt werden
 FUZZY_SCAN_LIMIT = 400
 
+# Schwellwert fuer den unscharfen LIEFERANTEN-Namensvergleich.
+# Bewusst deutlich hoeher als FUZZY_THRESHOLD: Ein Lieferant wird fuer JEDE
+# Lagerzeile neu gesucht, ein Produkt nur einmal. Ein Fehlmatch erzeugt hier
+# sofort einen neuen Lieferanten und damit genau die Dubletten, die wir
+# vermeiden wollen ("PCO" passt unscharf auf "Excelitas-PCO").
+SUPPLIER_FUZZY_THRESHOLD = 0.92
+
 # Standardname des Lieferanten fuer Zeilen ohne Lieferantenangabe
 DEFAULT_SUPPLIER_NAME = 'Unbekannt'
 
@@ -410,15 +417,33 @@ class Command(BaseCommand):
     # =====================
 
     def _get_or_create_supplier(self, name, cache, admin_user):
+        """
+        Lieferanten nach Namen suchen - und nur im absoluten Notfall anlegen.
+
+        Hintergrund (2026-10-02): Die Lagerlisten schreiben denselben Lieferant
+        unterschiedlich ("Excelitas-PCO", "100 - Excelitas-PCO", "PCO",
+        "Excelitas PCO"). Beim Import entstanden dadurch Dutzende Dubletten
+        (u.a. Nr. 227-230), die spaeter per Hand aufgeraeumt werden mussten.
+
+        Deshalb wird vor dem Anlegen MEHRFACH geprueft:
+          1. exakter Name (cache-trellenfrei, mit gross/klein-Unterschied)
+          2. normalisierter Name (Schreibweise, Trennzeichen, Zusatz-Praefix
+             wie "100 - " aus der Lieferantennummer, Firmierungszusätze)
+          3. der bestehende Lieferant, der den Namen ENTHAELT bzw. der im
+             Namen des Listeneintrags enthalten ist (aber nur wenn genau
+             EIN Treffer existiert - sonst waere es geraten)
+          4. unscharfer Vergleich, aber nur oberhalb einer hohen Schwelle
+             UND ebenfalls nur bei eindeutigem Treffer
+
+        Erst wenn das alles nichts findet, wird ein Lieferant angelegt.
+        """
         key = (name or '').strip().lower()
         if not key:
             return self._default_supplier(admin_user)
         if key in cache:
             return cache[key]
 
-        supplier = Supplier.objects.filter(company_name__iexact=name).first()
-        if not supplier:
-            supplier = Supplier.objects.filter(company_name__icontains=name).first()
+        supplier = self._find_supplier_by_name(name)
         if not supplier:
             supplier = Supplier.objects.create(
                 company_name=name.strip()[:200],
@@ -428,8 +453,115 @@ class Command(BaseCommand):
             self.stdout.write(self._safe(
                 f'  + Lieferant angelegt: {supplier.supplier_number} {supplier.company_name}'
             ))
+            self.stdout.write(self._safe(
+                f'    ! Neuer Lieferant. Bitte pruefen, ob nicht doch schon einer '
+                f'existiert - Dubletten sind schwer wieder aufzuräumen.'
+            ))
         cache[key] = supplier
         return supplier
+
+    def _find_supplier_by_name(self, name):
+        """Sucht einen bestehenden Lieferanten zum Namen aus der Lagerliste."""
+        raw = (name or '').strip()
+        if not raw:
+            return None
+
+        # 1) Exakt (cache-unabhaengig, wird zusaetzlich gecacht)
+        supplier = Supplier.objects.filter(company_name__iexact=raw).first()
+        if supplier:
+            return supplier
+
+        # 2) Normalisiert (Schreibweise/Praefix egal)
+        target = self._normalize_supplier_key(raw)
+        candidates = {}
+        for existing in Supplier.objects.only(
+            'id', 'supplier_number', 'company_name', 'is_active'
+        ):
+            if self._normalize_supplier_key(existing.company_name) == target:
+                candidates[existing.pk] = existing
+
+        if len(candidates) == 1:
+            found = next(iter(candidates.values()))
+            self.stdout.write(self._safe(
+                f'  = Lieferant gefunden (Schreibweise): "{raw}" -> '
+                f'{found.supplier_number} {found.company_name}'
+            ))
+            return found
+
+        # 3) Enthaelt / enthalten - NUR bei eindeutigem Treffer
+        contains = [
+            existing for existing in Supplier.objects.only(
+                'id', 'supplier_number', 'company_name', 'is_active'
+            )
+            if target and (
+                target in self._normalize_supplier_key(existing.company_name)
+                or self._normalize_supplier_key(existing.company_name) in target
+            )
+        ]
+        if len(contains) == 1:
+            found = contains[0]
+            self.stdout.write(self._safe(
+                f'  = Lieferant gefunden (Teilname): "{raw}" -> '
+                f'{found.supplier_number} {found.company_name}'
+            ))
+            return found
+        if len(contains) > 1:
+            self.stdout.write(self._safe(
+                f'  ? "{raw}" passt auf {len(contains)} Lieferanten, wenn man Teile des '
+                f'Namens vergleicht ({", ".join(c.supplier_number or "?" for c in contains)}) '
+                f'- nicht zugeordnet, es entsteht ein neuer Lieferant.'
+            ))
+
+        # 4) Unscharfer Vergleich, hohe Schwelle + eindeutig.
+        #    Ein unscharfer Treffer zaehlt nur, wenn es GENAU EINEN gibt -
+        #    sonst waere die Zuordnung geraten.
+        normalized = self._normalize_supplier_key(raw)
+        scored = []
+        for existing in Supplier.objects.only('id', 'supplier_number', 'company_name', 'is_active'):
+            other = self._normalize_supplier_key(existing.company_name)
+            if not normalized or not other:
+                continue
+            ratio = difflib.SequenceMatcher(None, normalized, other).ratio()
+            if ratio >= SUPPLIER_FUZZY_THRESHOLD:
+                scored.append((ratio, existing))
+
+        if len(scored) == 1:
+            ratio, found = scored[0]
+            self.stdout.write(self._safe(
+                f'  = Lieferant gefunden (unscharf {int(ratio * 100)}%): "{raw}" -> '
+                f'{found.supplier_number} {found.company_name}'
+            ))
+            return found
+        if len(scored) > 1:
+            self.stdout.write(self._safe(
+                f'  ? "{raw}" passt unscharf auf {len(scored)} Lieferanten '
+                f'({", ".join(s[1].supplier_number or "?" for s in scored)}) - '
+                f'nicht automatisch zugeordnet, es entsteht ein neuer Lieferant.'
+            ))
+        return None
+
+    @staticmethod
+    def _normalize_supplier_key(value):
+        """
+        Lieferantennamen vergleichbar machen.
+
+        Entfernt alles, was nur Schreibweise ist:
+          * die Lieferantennummer als Praefix ("100 - Excelitas-PCO")
+          * Firmierungszusätze und Betreffsformen
+          * Trennzeichen, Gross-/Kleinschreibung, Doppelabstaende
+        """
+        text = (value or '').lower()
+        # Praefix "100 - " / "100-" (Lieferantennummer aus der Liste)
+        text = re.sub(r'^\s*\d{1,4}\s*[-–—]\s*', '', text)
+        for suffix in (' gmbh co kg', ' gmbh & co. kg', ' corporation', ' gmbh', ' ag', ' kg',
+                       ' gbrh', ' bv', ' inc', ' ltd', ' limited', ' plc', ' corp',
+                       ' company', ' co', ' se', ' spa', ' ab', ' as'):
+            if text.endswith(suffix):
+                text = text[: -len(suffix)]
+                break
+        # Nur Buchstaben und Ziffern, ohne Trennzeichen
+        text = re.sub(r'[^a-z0-9]+', '', text)
+        return text
 
     def _default_supplier(self, admin_user):
         if '__default__' not in _DEFAULT_SUPPLIER_CACHE:
@@ -806,11 +938,8 @@ class Command(BaseCommand):
         supplier = None
         if record['supplier']:
             # Im Dry-Run nur nachschauen, aber nicht anlegen.
-            supplier = Supplier.objects.filter(
-                company_name__iexact=record['supplier']
-            ).first() or Supplier.objects.filter(
-                company_name__icontains=record['supplier']
-            ).first()
+            # Dieselbe Suchlogik wie beim Anlegen - nur ohne den create-Teil.
+            supplier = self._find_supplier_by_name(record['supplier'])
         customer = self._find_customer(record['customer'], customer_cache)
         status = self._determine_status(record['customer'], record['delivery_date'])
 

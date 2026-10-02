@@ -9,8 +9,10 @@ import {
   PlusIcon, EyeIcon, PencilIcon,
   BuildingOfficeIcon, EnvelopeIcon, PhoneIcon,
   UserGroupIcon, RectangleStackIcon, ChevronLeftIcon, ChevronRightIcon,
-  Squares2X2Icon, ListBulletIcon
+  Squares2X2Icon, ListBulletIcon, TrashIcon,
+  CubeIcon, ShoppingCartIcon
 } from '@heroicons/react/24/outline';
+import SupplierDeleteDialog from '../components/SupplierDeleteDialog';
 
 const Suppliers = () => {
   const navigate = useNavigate();
@@ -39,18 +41,20 @@ const Suppliers = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const loadSearchState = () => {
+    // Holt die zuletzt benutzten Filter fuer das Formular zurueck.
+    //
+    // WICHTIG: hier wird bewusst NICHTS geladen und nichts in die URL
+    // geschrieben. Sonst wuerde der Aufruf der Seite sofort eine Abfrage
+    // ausloesen - das Verzeichnis soll erst nach einem Klick auf "Suchen"
+    // geladen werden (so war es auch vorher).
     try {
       const st = storage.get(SESSION_KEY);
-      if (!st) return false;
-      if (st.filters) setFilters(st.filters);
-      const page = st.currentPage || 1;
-      if (st.currentPage) setCurrentPage(st.currentPage);
-      if (st.suppliers) setSuppliers(st.suppliers);
-      if (st.totalPages) setTotalPages(st.totalPages);
-      if (st.hasSearched) setHasSearched(true);
-
-      // Do NOT call fetch here (fetchSuppliers may not be declared yet); return object
-      return { page, filters: st.filters || null };
+      if (!st || !st.filters) return false;
+      setFilters({
+        search: st.filters.search || '',
+        is_active: st.filters.is_active || ''
+      });
+      return true;
     } catch (e) {
       console.warn('Failed to load suppliers search state', e);
       return false;
@@ -58,9 +62,11 @@ const Suppliers = () => {
   };
 
   const saveSearchState = () => {
+    // Speichert nur die Filter, NICHT die Trefferliste. Eine Liste im
+    // sessionStorage wuerde beim naechsten Aufruf wieder das sofortige
+    // Anzeigen gespeicherter Lieferanten ausloesen.
     try {
-      const st = { filters, currentPage, suppliers, totalPages, hasSearched };
-      storage.set(SESSION_KEY, st);
+      storage.set(SESSION_KEY, { filters });
     } catch (e) {
       console.warn('Failed to save suppliers search state', e);
     }
@@ -73,6 +79,12 @@ const Suppliers = () => {
   
   // Prüfe ob der Benutzer Schreibrechte hat
   const canWrite = user?.is_staff || user?.is_superuser || user?.can_write_suppliers;
+  // Löschen ist ausschliesslich Admins/Superusern vorbehalten
+  const canDelete = user?.is_superuser === true;
+
+  // Lieferant, der gerade im Lösch-Dialog steht
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [formData, setFormData] = useState({
     company_name: '',
     street: '',
@@ -114,38 +126,41 @@ const Suppliers = () => {
   }, []);
 
   useEffect(() => {
-    // On mount prefer URL params; otherwise restore from localStorage and populate URL
+    // Aufruf der Seite: nur die zuletzt benutzten Filter ins Formular
+    // uebernehmen. Bewusst KEIN Abruf - das Verzeichnis bleibt leer, bis
+    // auf "Suchen" geklickt wird (so war es auch vorher).
+    //
+    // Ausnahme: die Seite wurde per Direktlink mit Parametern aufgerufen
+    // (z.B. aus einem anderen Modul). Dann wird die Suche ausgefuehrt,
+    // weil der Aufrufer ein Ergebnis erwartet.
     const urlParams = Object.fromEntries([...searchParams]);
     if (Object.keys(urlParams).length > 0) {
-      // let the searchParams effect handle fetching
       return;
     }
-
-    const restored = loadSearchState();
-    if (restored && restored.page) {
-      const params = {};
-      if (restored.filters) {
-        if (restored.filters.search) params.search = restored.filters.search;
-        if (restored.filters.is_active) params.is_active = restored.filters.is_active;
-      }
-      params.page = String(restored.page);
-      setSearchParams(params);
-    } else if (!restored && hasSearched) {
-      fetchSuppliers();
-    }
+    loadSearchState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Seitenwechsel - laeuft nur, wenn bereits eine Suche stattgefunden hat.
   useEffect(() => {
     if (hasSearched) {
       fetchSuppliers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
+
+  // Nach dem Löschen eines Lieferanten die Liste frisch laden
+  useEffect(() => {
+    if (reloadToken > 0) {
+      fetchSuppliers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadToken]);
 
   useEffect(() => {
     // persist when relevant changes occur
     saveSearchState();
-  }, [filters, currentPage, suppliers, totalPages, hasSearched]);
+  }, [filters]);
 
   // React to URL query param changes (back/forward navigation)
   useEffect(() => {
@@ -158,7 +173,9 @@ const Suppliers = () => {
       };
       setFilters(newFilters);
       const page = params.page ? parseInt(params.page, 10) : 1;
-      setCurrentPage(page);
+      // Nur setzen, wenn sich die Seite aendert. Sonst feuert der
+      // currentPage-Effekt zusaetzlich und wir laden dieselbe Seite doppelt.
+      setCurrentPage(prev => (prev === page ? prev : page));
       setHasSearched(true);
       // fetch to restore the list immediately when navigating back/forward
       fetchSuppliers(page, newFilters);
@@ -228,6 +245,21 @@ const Suppliers = () => {
     setHasSearched(true);
   };
 
+  // Setzt Filter, Liste und gespeicherten Zustand zurueck. Die URL wird
+  // bewusst geleert (setSearchParams({})), damit der searchParams-Effekt
+  // keine Abfrage ausloest - zuruecksetzen heisst "nichts anzeigen", nicht
+  // "alles anzeigen".
+  const handleResetFilters = () => {
+    setFilters({ search: '', is_active: '' });
+    setSuppliers([]);
+    setTotalPages(1);
+    setHasSearched(false);
+    setCurrentPage(1);
+    setDeleteTarget(null);
+    storage.remove(SESSION_KEY);
+    setSearchParams({});
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -269,27 +301,42 @@ const Suppliers = () => {
     setEditingSupplier(null);
   };
 
-  const openEditModal = (supplier) => {
-    setEditingSupplier(supplier);
+  const openEditModal = async (supplier) => {
+    // WICHTIG: Die Listen-Antwort enthaelt KEINE `contacts` mehr, nur den
+    // Zaehler `contacts_count`. Das Bearbeiten-Formular sendet aber `contacts`
+    // zurueck - und der Serializer LOESCHT alle Kontakte, die nicht mitgegeben
+    // werden. Aus der Liste zu speichern wuerde die Kontakte also loeschen.
+    // Deshalb den vollstaendigen Lieferanten nachladen.
+    let full = supplier;
+    if (!supplier.contacts) {
+      try {
+        const res = await api.get(`/suppliers/suppliers/${supplier.id}/`);
+        full = res.data;
+      } catch (e) {
+        console.error('Lieferant konnte nicht nachgeladen werden:', e);
+        return;
+      }
+    }
+    setEditingSupplier(full);
     setFormData({
-      company_name: supplier.company_name,
-      street: supplier.street || '',
-      house_number: supplier.house_number || '',
-      address_supplement: supplier.address_supplement || '',
-      postal_code: supplier.postal_code || '',
-      city: supplier.city || '',
-      state: supplier.state || '',
-      country: supplier.country || 'DE',
-      address: supplier.address || '',
-      email: supplier.email,
-      phone: supplier.phone,
-      notes: supplier.notes,
-      is_active: supplier.is_active,
-      customer_number: supplier.customer_number || '',
-      payment_term: supplier.payment_term || null,
-      delivery_term: supplier.delivery_term || null,
-      delivery_instruction: supplier.delivery_instruction || null,
-      contacts: supplier.contacts || [],
+      company_name: full.company_name,
+      street: full.street || '',
+      house_number: full.house_number || '',
+      address_supplement: full.address_supplement || '',
+      postal_code: full.postal_code || '',
+      city: full.city || '',
+      state: full.state || '',
+      country: full.country || 'DE',
+      address: full.address || '',
+      email: full.email,
+      phone: full.phone,
+      notes: full.notes,
+      is_active: full.is_active,
+      customer_number: full.customer_number || '',
+      payment_term: full.payment_term || null,
+      delivery_term: full.delivery_term || null,
+      delivery_instruction: full.delivery_instruction || null,
+      contacts: full.contacts || [],
     });
     setShowModal(true);
   };
@@ -551,7 +598,7 @@ const Suppliers = () => {
             Suchen
           </button>
           <button
-            onClick={() => { setFilters({ search: '', is_active: '' }); setSuppliers([]); setHasSearched(false); setCurrentPage(1); storage.remove(SESSION_KEY); setSearchParams({}); }}
+            onClick={handleResetFilters}
             className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             Filter zurücksetzen
@@ -611,6 +658,15 @@ const Suppliers = () => {
                       >
                         {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
                       </span>
+                      {canDelete && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(supplier); }}
+                          className="p-1.5 text-red-600 hover:text-red-900 hover:bg-red-50 rounded"
+                          title="Lieferant löschen (Admin)"
+                        >
+                          <TrashIcon className="h-5 w-5" />
+                        </button>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/procurement/suppliers/${supplier.id}/edit`); }}
                         className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
@@ -624,6 +680,7 @@ const Suppliers = () => {
                   {/* Supplier Number */}
                   <div className="text-xs text-gray-500 font-mono mb-3">
                     Nr. {supplier.supplier_number || '-'}
+                    <span className="text-gray-400 ml-2">ID {supplier.id}</span>
                   </div>
 
                   {/* Contact Info */}
@@ -644,6 +701,24 @@ const Suppliers = () => {
 
                   {/* Stats */}
                   <div className="border-t pt-3 mb-4 space-y-2">
+                    <div className="flex justify-between text-sm p-2">
+                      <span className="text-gray-600 flex items-center">
+                        <CubeIcon className="h-4 w-4 mr-2" />
+                        Lagerartikel:
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {supplier.inventory_items_count ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm p-2">
+                      <span className="text-gray-600 flex items-center">
+                        <ShoppingCartIcon className="h-4 w-4 mr-2" />
+                        Bestellungen:
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {supplier.orders_count ?? 0}
+                      </span>
+                    </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); openGroupModal(supplier); }}
                       className="w-full flex justify-between text-sm hover:bg-gray-50 p-2 rounded"
@@ -653,7 +728,7 @@ const Suppliers = () => {
                         Warengruppen:
                       </span>
                       <span className="font-medium text-orange-600">
-                        {supplier.product_groups?.length || 0}
+                        {supplier.product_groups_count ?? 0}
                       </span>
                     </button>
                     <button
@@ -665,13 +740,13 @@ const Suppliers = () => {
                         Preislisten:
                       </span>
                       <span className="font-medium text-blue-600">
-                        {supplier.price_lists?.length || 0}
+                        {supplier.price_lists_count ?? 0}
                       </span>
                     </button>
                     <div className="flex justify-between text-sm p-2">
                       <span className="text-gray-600">Kontakte:</span>
                       <span className="font-medium text-gray-900">
-                        {supplier.contacts?.length || 0}
+                        {supplier.contacts_count ?? 0}
                       </span>
                     </div>
                   </div>
@@ -683,28 +758,35 @@ const Suppliers = () => {
           {/* List View */}
           {viewMode === 'list' && (
             <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              {/* Kleine Bildschirme: waagerecht scrollbar. `flex-col-reverse`
+                  legt die Bildlaufleiste nach oben, sonst waere sie unter
+                  den Zeilen versteckt. */}
+              <div className="flex flex-col-reverse overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Lieferant
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Lieferanten-Nr.
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Kontakt
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lagerartikel
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Bestellungen
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Warengruppen
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Preislisten
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Aktionen
                     </th>
                   </tr>
@@ -716,7 +798,7 @@ const Suppliers = () => {
                       className="hover:bg-gray-50 cursor-pointer"
                       onClick={() => navigate(`/procurement/suppliers/${supplier.id}`)}
                     >
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <BuildingOfficeIcon className="h-5 w-5 text-green-600 mr-3" />
                           <div className="text-sm font-medium text-gray-900">
@@ -724,35 +806,39 @@ const Suppliers = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-500 font-mono">
                           {supplier.supplier_number || '-'}
                         </div>
+                        <div className="text-xs text-gray-400 font-mono">ID {supplier.id}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
-                          {supplier.email && <div>{supplier.email}</div>}
-                          {supplier.phone && <div>{supplier.phone}</div>}
-                          {!supplier.email && !supplier.phone && '-'}
-                        </div>
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`text-sm ${supplier.inventory_items_count > 0 ? 'font-medium text-gray-900' : 'text-gray-400'}`}>
+                          {supplier.inventory_items_count ?? 0}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <span className={`text-sm ${supplier.orders_count > 0 ? 'font-medium text-gray-900' : 'text-gray-400'}`}>
+                          {supplier.orders_count ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <button
                           onClick={(e) => { e.stopPropagation(); openGroupModal(supplier); }}
                           className="text-sm text-orange-600 hover:text-orange-800"
                         >
-                          {supplier.product_groups?.length || 0}
+                          {supplier.product_groups_count ?? 0}
                         </button>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <button
                           onClick={(e) => { e.stopPropagation(); openPriceListModal(supplier); }}
                           className="text-sm text-blue-600 hover:text-blue-800"
                         >
-                          {supplier.price_lists?.length || 0}
+                          {supplier.price_lists_count ?? 0}
                         </button>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-4 whitespace-nowrap">
                         <span
                           className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             supplier.is_active
@@ -763,19 +849,31 @@ const Suppliers = () => {
                           {supplier.is_active ? 'Aktiv' : 'Inaktiv'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); navigate(`/procurement/suppliers/${supplier.id}/edit`); }}
-                          className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
-                          title="Bearbeiten"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
+                      <td className="px-4 py-4 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {canDelete && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteTarget(supplier); }}
+                              className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded"
+                              title="Lieferant löschen (Admin)"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate(`/procurement/suppliers/${supplier.id}/edit`); }}
+                            className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded"
+                            title="Bearbeiten"
+                          >
+                            <PencilIcon className="h-5 w-5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
@@ -1503,6 +1601,19 @@ const Suppliers = () => {
           </div>
         </div>
       )}
+
+      {/* Lösch-Dialog (nur für Admins/Superuser erreichbar) */}
+      <SupplierDeleteDialog
+        supplier={deleteTarget}
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={() => {
+          // Liste aktualisieren, aber den Dialog NICHT schließen - der Dialog
+          // zeigt die Erfolgsmeldung und die Zusammenfassung der verschobenen
+          // Verknüpfungen. Erst "Schließen" beendet ihn.
+          setReloadToken((t) => t + 1);
+        }}
+      />
     </div>
   );
 };
