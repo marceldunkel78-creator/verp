@@ -33,6 +33,7 @@ from inventory.excel_sync import (
     _normalize_header,
     build_serial_key,
     extract_record,
+    is_customer_placeholder,
     load_mapping,
     read_source_file,
 )
@@ -999,8 +1000,13 @@ class Command(BaseCommand):
         # JEDEM Lauf erneut als eigene Lagerartikel angelegt - nachts ueber den
         # Task-Scheduler kamen so tausende leerer Datensaetze zusammen.
         # Kriterium identisch zum cleanup_empty_inventory_items-Kommando.
-        if (not record['serial_key'] and not record['customer']
-                and not record['order_number'] and not record['best_nr']):
+        # Ergaenzung 2026-10-06: Platzhalter ('-', 'k.a.') und Status-Texte in
+        # der Kundenspalte ('im Haus', 'verliehen', 'defekt', ...) zaehlen als
+        # KEIN Kunde - sonst entstehen weiterhin Artikel mit customer_name
+        # 'im Haus' etc., die das Leerkriterium blockieren.
+        if (not record['serial_key'] and not record['order_number']
+                and not record['best_nr']
+                and is_customer_placeholder(record['customer'])):
             stats['empty'] += 1
             report_rows.append(self._report_row(
                 record['source_file'], record['source_sheet'], record['source_row'],

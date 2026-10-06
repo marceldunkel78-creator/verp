@@ -94,6 +94,8 @@ def build_test_file(tmp):
                'Testartikel B'])
     # Zeile 5: Seriennummer + BEKANNTER Lieferant (89North gibt es in der Dev-DB)
     ws.append(['TestKat', '3', '', 'TSTSN999', '', '', '89North', 'Testartikel C'])
+    # Zeile 6: Status-Text in der Kundenspalte statt echtem Kunden -> kein Kunde
+    ws.append(['TestKat', '', '', '', 'im Haus', '', '', 'Testartikel D'])
     wb.save(tmp / 'test_lager.xlsx')
 
 
@@ -114,8 +116,10 @@ def main():
         if err1:
             print(f'   Hinweis: CommandError -> {err1}')
 
-        check('leere Zeile wird als skip_empty gezaehlt', s1.get('empty') == 1,
+        check('leere Zeile wird als skip_empty gezaehlt', s1.get('empty') == 2,
               f"empty={s1.get('empty')}")
+        check('Status-Text-Zeile (Kunde=im Haus) ebenfalls skip_empty',
+              s1.get('empty') >= 2, f"empty={s1.get('empty')}")
         check('Muellzeile ohne alles bleibt is_empty/skip', s1.get('skip', 0) >= 1,
               f"skip={s1.get('skip')}")
         check('3 echte Artikel angelegt', s1.get('create') == 3,
@@ -142,7 +146,7 @@ def main():
         check('zweiter Lauf: alle 4 bekannten Zeilen uebersprungen',
               s2.get('skip') == 4, f"skip={s2.get('skip')}")
         check('zweiter Lauf: leere Zeile weiterhin uebersprungen',
-              s2.get('empty') == 1, f"empty={s2.get('empty')}")
+              s2.get('empty') == 2, f"empty={s2.get('empty')}")
         check('keine Vermehrung der Items',
               InventoryItem.objects.count() == items_before + 3,
               f"{InventoryItem.objects.count()}")
@@ -164,6 +168,32 @@ def main():
         check('Artikel MIT Seriennummer bleibt verschont',
               not is_empty_item(control), 'control faelschlich leer?')
 
+        # Platzhalter und Status-Texte zaehlen als KEIN Kunde (2026-10-06),
+        # echte Kundentexte schuetzen weiterhin.
+        dash_item = InventoryItem.objects.create(
+            name='Test-Muell (Platzhalter-Kunde)', supplier=placeholder,
+            article_number='TST-EMPTY-2', item_function='TRADING_GOOD',
+            purchase_price=0, customer_name='-',
+            management_info={'import_source': 'excel_sync', 'external_ref': '-',
+                             'order_number_raw': '-'},
+        )
+        status_item = InventoryItem.objects.create(
+            name='Test-Muell (Status-Kunde)', supplier=placeholder,
+            article_number='TST-EMPTY-3', item_function='TRADING_GOOD',
+            purchase_price=0, customer_name='zur Reparatur in USA',
+        )
+        real_customer_item = InventoryItem.objects.create(
+            name='Test-Kontrolle (Kundentext)', supplier=placeholder,
+            article_number='TST-CONTROL-2', item_function='TRADING_GOOD',
+            purchase_price=0, customer_name='Gelman, Basel',
+        )
+        check('Platzhalter-Kunde ("-", "-") wird als leer erkannt',
+              is_empty_item(dash_item), 'dash nicht leer?')
+        check('Status-Kunde (zur Reparatur) wird als leer erkannt',
+              is_empty_item(status_item), 'status nicht leer?')
+        check('ECHTER Kundentext (Gelman, Basel) schuetzt den Artikel',
+              not is_empty_item(real_customer_item), 'Kundentext faelschlich leer?')
+
         print('\n4) cleanup_empty_inventory_items --live (in Transaktion):')
         outc = io.StringIO()
         CleanupCommand(stdout=outc, stderr=outc).handle(
@@ -172,8 +202,14 @@ def main():
         )
         check('leerer Artikel wurde geloescht',
               not InventoryItem.objects.filter(pk=garbage.pk).exists(), '')
+        check('Platzhalter-Kunde wurde geloescht',
+              not InventoryItem.objects.filter(pk=dash_item.pk).exists(), '')
+        check('Status-Kunde wurde geloescht',
+              not InventoryItem.objects.filter(pk=status_item.pk).exists(), '')
         check('Kontrollartikel ueberlebt',
               InventoryItem.objects.filter(pk=control.pk).exists(), '')
+        check('Artikel mit echtem Kundentext ueberlebt',
+              InventoryItem.objects.filter(pk=real_customer_item.pk).exists(), '')
 
         print('\n5) Dry-Run des Cleanup (aendert nichts):')
         before = InventoryItem.objects.count()

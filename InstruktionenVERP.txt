@@ -942,6 +942,12 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #    Kriterium: keine Seriennummer UND kein Kunde UND keine Bestellnummer
 #    (weder Best.-Nr. noch Auftrag). Solche Zeilen erscheinen im Report als
 #    action=skip_empty und erzeugen KEINEN Lagerartikel.
+#    ERGAENZUNG 2026-10-06: Platzhalter ('-', 'k.a.', ...) und Status-Texte
+#    in der Kundenspalte ('im Haus', 'verliehen', 'defekt', 'zur Reparatur',
+#    'S/N fehlt', 'STORNO', ...) zaehlen als KEIN Kunde. Diese Texte standen
+#    sonst als customer_name im Artikel und erzeugten weiterhin Muell bzw.
+#    schuetzten ihn vor dem Cleanup. Echte Kundentexte (z.B. 'Gelman, Basel')
+#    gelten weiter als Kundenangabe.
 #
 # 2) KEINE NEUEN LIEFERANTEN MEHR
 #    Ist der Lieferant aus der Liste im Stamm nicht auffindbar (exakt,
@@ -958,7 +964,13 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #    Listet alle Artikel OHNE Seriennummer, OHNE Kunde und OHNE Bestellnummer
 #    auf - gruppiert nach Quelldatei und Eingelagert-Monat. IMMER zuerst
 #    den Dry-Run und den Report pruefen: ein Artikel ohne S/N kann ein
-#    legitimer Mengenartikel sein! Eingrenzen z.B. mit:
+#    legitimer Mengenartikel sein!
+#    ERGAENZUNG 2026-10-06: Platzhalter ('-', 'k.a.') und Status-Texte in der
+#    Kundenspalte ('im Haus', 'verliehen', 'defekt', ...) zaehlen als KEIN
+#    Kunde und blockieren das Loeschen NICHT mehr - vorher war genau das der
+#    Grund, warum solche Artikel vom Cleanup verschont blieben. Echte
+#    Kundentexte (z.B. 'Gelman, Basel') schuetzen den Artikel weiterhin.
+#    Eingrenzen z.B. mit:
 #        python manage.py cleanup_empty_inventory_items --supplier-number 226
 #        python manage.py cleanup_empty_inventory_items --stored-since 2026-10-01
 #    Wirklich loeschen erst mit --live:

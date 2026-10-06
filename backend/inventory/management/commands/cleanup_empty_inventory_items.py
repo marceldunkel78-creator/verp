@@ -44,7 +44,11 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 
 from inventory.models import InventoryItem
-from inventory.excel_sync import clean_serial_number, is_placeholder
+from inventory.excel_sync import (
+    clean_serial_number,
+    is_customer_placeholder,
+    is_placeholder,
+)
 
 REPORT_FIELDS = [
     'action', 'inventory_number', 'name', 'supplier_number', 'supplier_name',
@@ -54,22 +58,30 @@ REPORT_FIELDS = [
 
 
 def is_empty_item(item):
-    """True, wenn der Artikel dem Leerkriterium entspricht (siehe Moduldoc)."""
+    """True, wenn der Artikel dem Leerkriterium entspricht (siehe Moduldoc).
+
+    Ergaenzung 2026-10-06 (nachgemeldet): Platzhalter wie '-' und Status-
+    texte in der Kundenspalte ('im Haus', 'verliehen', 'defekt', 'zur
+    Reparatur', 'S/N fehlt' ...) zaehlen als KEIN Kunde. Solche Werte standen
+    als "Kunde" in den Lagerlisten und hatten genau die Alt-Muellartikel vor
+    dem Loeschen geschuetzt. Echte Kundentexte (z.B. 'Gelman, Basel') gelten
+    weiter als Kundenangabe und schuetzen den Artikel.
+    """
     serial = clean_serial_number(item.serial_number)
     if serial and not is_placeholder(serial):
         return False
     if item.customer_id is not None:
         return False
-    if (item.customer_name or '').strip():
+    if not is_customer_placeholder(item.customer_name):
         return False
-    if (item.order_number or '').strip():
+    if not is_placeholder(item.order_number):
         return False
-    if (item.customer_order_number or '').strip():
+    if not is_placeholder(item.customer_order_number):
         return False
     info = item.management_info or {}
-    if (str(info.get('external_ref') or '')).strip():
+    if not is_placeholder(str(info.get('external_ref') or '')):
         return False
-    if (str(info.get('order_number_raw') or '')).strip():
+    if not is_placeholder(str(info.get('order_number_raw') or '')):
         return False
     return True
 

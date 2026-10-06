@@ -230,6 +230,49 @@ def is_placeholder(value):
     return not any(ch.isalnum() for ch in raw)
 
 
+# Texte, die in der SPALTE "Kunde" der Lagerlisten stehen, aber KEIN Kunde
+# sind - sondern Status-/Ortsangaben aus Listenzeilen ohne Produktnamen.
+# Gemessen 2026-10-06 ueber alle Listen: 'im Haus' (240x), 'verliehen'
+# (227x), 'defekt' (136x), 'zur Reparatur' (114x), 'S/N fehlt' (94x) ...
+# Solche Werte duerfen das Leerkriterium des Lager-Abgleichs und des
+# cleanup_empty_inventory_items NICHT blockieren - sonst ueberleben genau
+# die Alt-Muellartikel, die bereinigt werden sollen. Echte Kundentexte
+# (z.B. 'Gelman, Basel') bleiben unangetastet und schuetzen den Artikel.
+CUSTOMER_STATUS_VALUES = {
+    'im haus', 'in usa', 'in deutschland', 'verliehen', 'ausgeliehen',
+    'verliehen / ausgeliehen', 'defekt', 'beschädigt', 'beschadiigt',
+    'zur reparatur', 'zur reperatur', 'zur reparatur in usa',
+    'zur reperatur in usa', 'reparatur', 's/n fehlt', 'sn fehlt',
+    'seriennummer fehlt', 'bestellt', 'beim lieferanten bestellt',
+    'bestellung wurde storniert', 'storno', 'storniert',
+    'auf w1 abruf gewechselt', 'abruf', 'demo', 'demo gerät', 'demo geraet',
+    'vs-demo lms', 'vs-entwicklung', 'entwicklung', 'tech.instr. demo',
+    'technical inst./demo', 'inventur', 'dust protection installed',
+    'unbekannt', 'ohne kundenangabe',
+}
+
+# Zusatz-Tokens fuer Schreibvarianten (z.B. 'zur Reperatur in USA').
+CUSTOMER_STATUS_TOKENS = (
+    'reparatur', 'reperatur', 'verleih', 'defekt', 'storno', 'im haus',
+    'fehlt', 'bestellt', 'abruf',
+)
+
+
+def is_customer_placeholder(value):
+    """True, wenn der "Kunde"-Wert gar kein Kunde ist.
+
+    Deckt ab: leer, Platzhalter ('-', 'k.a.', ...) und Status-/Ortstexte,
+    mit denen die Lagerlisten die Kundenspalte fuellen.
+    """
+    raw = normalize_cell(value)
+    if not raw or is_placeholder(raw):
+        return True
+    key = raw.strip().lower()
+    if key in CUSTOMER_STATUS_VALUES:
+        return True
+    return any(token in key for token in CUSTOMER_STATUS_TOKENS)
+
+
 def clean_serial_number(value):
     """Seriennummer bereinigen.
 
@@ -593,7 +636,12 @@ def extract_record(sheet, row, file_label, row_number):
         index = columns.get(field)
         if index is None or index >= len(row):
             return ''
-        return normalize_cell(row[index])
+        value = normalize_cell(row[index])
+        # Platzhalter ('-', 'k.a.', ...) zaehlen als LEER - nicht nur bei der
+        # Seriennummer (2026-10-06). Sonst wandern '-'-Werte als echte Inhalte
+        # in customer_name/external_ref und blockieren spaeter das Leerkriterium
+        # des cleanup_empty_inventory_items.
+        return '' if is_placeholder(value) else value
 
     record = {
         'source_file': file_label,
