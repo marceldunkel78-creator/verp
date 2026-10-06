@@ -46,6 +46,22 @@ Umgebungsvariablen konfigurieren (.env Datei):
   # Falls nicht gesetzt, wird die URL automatisch aus dem Request generiert
   # MEDIA_BASE_URL=
 
+  # Cookie-/Sicherheits-Flags fuer Produktion ueber PLAIN HTTP (Intranet!)
+  # WICHTIG - ohne diese drei Zeilen ist die Anmeldung auf http://... kaputt:
+  #   Login klingt erfolgreich, danach 401 "Anmeldedaten fehlen." und
+  #   400 refresh "Dieses Feld ist erforderlich."
+  # Ursache: bei DJANGO_DEBUG=False defaultet SESSION_COOKIE_SECURE auf True.
+  # Der Browser wirft solche Cookies auf http:// weg (Secure-Flag).
+  # Details: Abschnitt "ANMELDUNG 401 / REFRESH 400" am Ende dieser Datei.
+  SECURE_SSL_REDIRECT=False
+  SESSION_COOKIE_SECURE=False
+  CSRF_COOKIE_SECURE=False
+
+  # Optional (Standard: automatisch). Die JWT-Cookies sind seit 2026-10-06
+  # automatisch nur bei echtem HTTPS als "secure" markiert. Erzwingen kann
+  # man das Flag nur noch hinter TLS-terminierenden Proxys:
+  # JWT_COOKIE_SECURE=True
+
 - Generiere einen sicheren SECRET_KEY:
   cd backend
   python tools/generate_secret_key.py
@@ -451,7 +467,12 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #    Nur geaenderte/aktuelle Dateien:
 #    python manage.py sync_inventory_from_excel --since 2026-09-01 --dry-run
 #
-#    Nur die ersten 20 Zeilen einer Datei zum Schnelltest:
+#    Schnelltest - nur die ersten N DATEIEN (empfohlen, sonst dauert es lange):
+#    python manage.py sync_inventory_from_excel --max-files 5 --dry-run
+#    ACHTUNG: ein begrenzter LIVE-Lauf importiert auch nur diesen Teil!
+#    Der Rest wird beim naechsten vollstaendigen Lauf nachgeholt.
+#
+#    Nur die ersten 20 Datenzeilen GESAMT (ueber alle Dateien):
 #    python manage.py sync_inventory_from_excel --limit 20 --dry-run
 
 # 4) Echter Abgleich
@@ -906,6 +927,76 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     mehrfach (z.B. einmal kompakt, einmal ausfuehrlich).
 
 # ============================================================
+# LAGER-SYNC: VERHALTEN AB 2026-10-06 (WICHTIG)
+# ============================================================
+#
+# Ursache der leeren Warenlager-Eintraege: der naechtliche Sync hat Zeilen
+# OHNE Seriennummer, OHNE Kunde und OHNE Bestellnummer als eigene Artikel
+# importiert. Solche Zeilen haben keinen Schluessel (keine S/N, kein Name-
+# Treffer) und wurden bei JEDEM Lauf erneut angelegt - so entstanden tausende
+# Artikel mit Lieferant "Unbekannt" (Nr. 226) und ohne Inhalt.
+#
+# Ab 2026-10-06 gilt:
+#
+# 1) LEERE ZEILEN WERDEN NICHT MEHR IMPORTIERT
+#    Kriterium: keine Seriennummer UND kein Kunde UND keine Bestellnummer
+#    (weder Best.-Nr. noch Auftrag). Solche Zeilen erscheinen im Report als
+#    action=skip_empty und erzeugen KEINEN Lagerartikel.
+#
+# 2) KEINE NEUEN LIEFERANTEN MEHR
+#    Ist der Lieferant aus der Liste im Stamm nicht auffindbar (exakt,
+#    normalisiert, enthalten, unscharf), wird KEIN neuer Lieferant angelegt.
+#    Der Artikel faellt auf den Platzhalter "Unbekannt" (226) zurueck; der
+#    urspruengliche Name steht als Warnung in der Ausgabe und im Report.
+#    Die Lieferanten-Stammdaten werden nur noch manuell gepflegt.
+#
+# 3) AUERAEUMEN DER ALTEN MUELL-ARTIKEL
+#    Neues Management-Command (Standard: Dry-Run, aendert nichts):
+#        cd backend
+#        .\venv\Scripts\Activate
+#        python manage.py cleanup_empty_inventory_items
+#    Listet alle Artikel OHNE Seriennummer, OHNE Kunde und OHNE Bestellnummer
+#    auf - gruppiert nach Quelldatei und Eingelagert-Monat. IMMER zuerst
+#    den Dry-Run und den Report pruefen: ein Artikel ohne S/N kann ein
+#    legitimer Mengenartikel sein! Eingrenzen z.B. mit:
+#        python manage.py cleanup_empty_inventory_items --supplier-number 226
+#        python manage.py cleanup_empty_inventory_items --stored-since 2026-10-01
+#    Wirklich loeschen erst mit --live:
+#        python manage.py cleanup_empty_inventory_items --live
+#    Es wird immer ein CSV-Report nach backend/logs/ geschrieben.
+#
+# 4) SYNC LAEUFT JETZT MANUELL (kein Task-Scheduler mehr)
+#    Neues Modul: Einstellungen -> "Lager-Abgleich (Excel)" (nur Super User)
+#    mit "Probelauf (Dry-Run)" und "Jetzt importieren". Ein VOLLSTAENDIGER
+#    Lauf ueber alle Listen dauert mehrere Minuten (74 Listen ca. 5 Min.) -
+#    die Seite laedt solange, nicht abbrechen. Fuer einen Schnelltest gibt es
+#    das Feld "nur die ersten N Dateien" (z.B. 5 - dann nur wenige Sekunden).
+#    Ein begrenzter IMPORT legt auch nur diesen Teil an; der Rest kommt beim
+#    naechsten vollstaendigen Lauf nach. Im Command-Line-Aequivalent:
+#        python manage.py sync_inventory_from_excel --max-files 5 --dry-run
+#    Der naechtliche Task muss deaktiviert werden (Administrator):
+#        Disable-ScheduledTask -TaskName "VERP-Inventory-Sync"
+#    Kontrolle:
+#        Get-ScheduledTask -TaskName "VERP-Inventory-Sync" | Select-Object State
+#    (Disabled = faehrt nicht mehr; Ready/Running wuerde noch laufen.)
+#
+#    TESTEN IN DER ENTWICKLUNG - Pfad NICHT zwingend noetig:
+#    Ohne INVENTORY_EXCEL_DIR greift der Fallback-Ordner Datenvorlagen/
+#    (neben backend/), gesucht wird REKURSIV inkl. Unterordner. Wichtig ist
+#    nur das Pattern: ohne INVENTORY_EXCEL_PATTERN greift das Default
+#    '*.xlsx' - alte .xls-Listen oder .csv-Dateien wuerden dann NICHT
+#    gefunden (0 Dateien, "kein Ergebnis"). Fuer Testlisten also z.B.:
+#        INVENTORY_EXCEL_DIR=C:/Users/<name>/Documents/VERP/Datenvorlagen
+#        INVENTORY_EXCEL_PATTERN=*.xls*
+#    Die UI zeigt den tatsaechlich geprueften Pfad und das Pattern direkt
+#    in der Auswertung an.
+#
+# Testen (nur Entwicklung; alles laeuft in einer Rollback-Transaktion,
+# es bleibt also nichts in der Datenbank haengen):
+#     cd backend
+#     ..\.venv\Scripts\python.exe tools\test_inventory_sync_fixes.py
+
+# ============================================================
 # LIEFERANTEN AUFRAEUMEN (Dubletten aus dem Lagerimport)
 # ============================================================
 #
@@ -1015,3 +1106,79 @@ Wenn du willst, kann ich das Update/Restore-Script so anpassen, dass fix_sequenc
 #     Ein solcher Fehler hat in einer frueheren Fassung das Superuser-
 #     Passwort dauerhaft gesetzt gelassen.
 
+# ============================================================
+# ANMELDUNG 401 / REFRESH 400 ("Anmeldedaten fehlen.")
+# ============================================================
+#
+# Stand 2026-10-06. Symptom in den Browser-DevTools (Network):
+#   POST /api/auth/login/          -> klingt erfolgreich
+#   GET  /api/users/me/ u.a.       -> 401 "Anmeldedaten fehlen."
+#   POST /api/auth/refresh/        -> 400 "Dieses Feld ist erforderlich."
+# Die Zugangsdaten sind korrekt - das Passwort ist NICHT das Problem.
+# Ursache ist, dass die JWT-Cookies (access_token/refresh_token) im Browser
+# nicht ankommen bzw. nicht mitgesendet werden. Beide Meldungen sind nur
+# Folgen desselben Mangels:
+#   401 "Anmeldedaten fehlen."          = access_token-Cookie fehlt am Request
+#   400 "Dieses Feld ist erforderlich." = refresh_token-Cookie fehlt komplett
+#
+# Es gibt ZWEI unabhaengige Ursachen. Beide kamen mit dem Update 2026-10-02
+# (Commit 312e687) in die Produktion:
+#
+# 1) PRODUKTION (http://verp.intern.local): Secure-Cookies auf plain HTTP
+#
+#    Bei DJANGO_DEBUG=False markiert Django die JWT-Cookies als "secure".
+#    Auf http:// wirft der Browser solche Cookies sofort wieder weg - der
+#    Login sieht erfolgreich aus, danach ist alles 401.
+#
+#    FIX (backend/verp/jwt_cookie_views.py, seit 2026-10-06): das "secure"-
+#    Flag wird jetzt aus request.is_secure() abgeleitet - es wird nur bei
+#    echtem HTTPS gesetzt. Damit heilt das Problem ohne Konfiguration.
+#    In der .env des Produktionsservers zusaetzlich setzen:
+#        SECURE_SSL_REDIRECT=False
+#        SESSION_COOKIE_SECURE=False
+#        CSRF_COOKIE_SECURE=False
+#    Danach Backend neu starten: Restart-Service VERP-Backend
+#
+# 2) ENTWICKLUNG (localhost:3000 -> 127.0.0.1:8000): Cross-Site-Cookies
+#
+#    Bis 312e687 zeigte REACT_APP_API_URL auf http://localhost:8000/api -
+#    same-site zu localhost:3000, die Cookies liefen mit. Die Performance-
+#    Umstellung auf http://127.0.0.1:8000/api (wegen des ::1-Timeouts, siehe
+#    "LANGSAMES LIEFERANTEN-VERZEICHNIS") hat die API aber CROSS-SITE
+#    gemacht (localhost != 127.0.0.1):
+#      - SameSite=Lax-Cookies werden bei XHR nicht mitgesendet
+#      - moderne Browser lehnen Cookies aus Drittkontexten komplett ab
+#    Symptom identisch zu 1) - weder Admin- noch User-Account kamen rein.
+#
+#    FIX (seit 2026-10-06): REACT_APP_API_URL=/api in .env.development und
+#    "proxy": "http://127.0.0.1:8000" in package.json. Die Aufrufe bleiben
+#    same-origin ueber den Dev-Server, der Proxy-Zaehler ist weiterhin der
+#    schnelle IPv4-Host (der ::1-Timeout bleibt ebenfalls behoben).
+#    WICHTIG: npm start NEU starten - nur ein Browser-Reload reicht nicht,
+#    weil die Env-Werte beim Start in das Bundle eingebacken werden.
+#
+# SCHNELLTEST NACH DEM FIX (Entwicklung):
+#   1) Backend:  cd backend; .\venv\Scripts\Activate; python manage.py runserver
+#   2) Frontend: cd frontend; npm start
+#   3) Browser DevTools -> Network oeffnen, anmelden.
+#      Der POST muss an http://localhost:3000/api/auth/login/ gehen (NICHT
+#      an 127.0.0.1:8000). In der Response steht Set-Cookie: access_token=...;
+#      HttpOnly. Danach muss GET /api/users/me/ mit 200 antworten.
+#
+# SCHNELLTEST SERVERSEITIG (setzt Testpasswort nur temporaer):
+#     cd backend
+#     $env:VERP_TEST_PASSWORD = 'mein-testpasswort'
+#     $env:VERP_BASE        = 'http://localhost:8000'
+#     ..\.venv\Scripts\python.exe tools\check_running_server.py
+#     Remove-Item Env:\VERP_TEST_PASSWORD
+#
+# HINWEIS ZUM ZWEITEN FEHLER AUS DEMSELBEN UPDATE:
+#   GET /api/suppliers/suppliers/{id}/link_summary/ -> 404 heisst: der
+#   laufende Backend-Dienst hat noch den ALTEN Code (der Endpunkt existiert
+#   erst seit 312e687). Das Update wiederholen inkl. Backend-Dienst-Neustart
+#   (update-verp.ps1 bzw. Restart-Service VERP-Backend), dann stimmen
+#   Frontend- und Backendstand wieder ueberein.
+
+cd backend; .\venv\Scripts\Activate
+python manage.py cleanup_empty_inventory_items               # zeigt alles (gruppiert nach Quelldatei + Monat)
+python manage.py cleanup_empty_inventory_items --live        # löscht

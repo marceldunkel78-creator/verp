@@ -190,7 +190,14 @@ class Command(BaseCommand):
             '--limit',
             type=int,
             default=None,
-            help='Maximale Anzahl Datenzeilen je Datei (zum Testen)',
+            help='Maximale Anzahl Datenzeilen GESAMT (ueber alle Dateien, zum Testen)',
+        )
+        parser.add_argument(
+            '--max-files',
+            type=int,
+            default=None,
+            help='Nur die ersten N Dateien verarbeiten (zum Schnelltest - ein '
+                 'begrenzter LIVE-Lauf importiert auch nur diesen Teil!)',
         )
         parser.add_argument(
             '--no-recursive',
@@ -418,7 +425,7 @@ class Command(BaseCommand):
 
     def _get_or_create_supplier(self, name, cache, admin_user):
         """
-        Lieferanten nach Namen suchen - und nur im absoluten Notfall anlegen.
+        Lieferanten nach Namen suchen - NEUANLAGEN sind seit 2026-10-06 tabu.
 
         Hintergrund (2026-10-02): Die Lagerlisten schreiben denselben Lieferant
         unterschiedlich ("Excelitas-PCO", "100 - Excelitas-PCO", "PCO",
@@ -435,30 +442,34 @@ class Command(BaseCommand):
           4. unscharfer Vergleich, aber nur oberhalb einer hohen Schwelle
              UND ebenfalls nur bei eindeutigem Treffer
 
-        Erst wenn das alles nichts findet, wird ein Lieferant angelegt.
+        Wird nichts gefunden, wird KEIN neuer Lieferant mehr angelegt (seit
+        2026-10-06). Stattdessen faellt der Artikel auf den Platzhalter
+        "Unbekannt" zurueck - der Name aus der Liste steht im Report. Die
+        Lieferanten-Stammdaten werden also NIE automatisch erzeugt.
+
+        Returns: (supplier, unmatched_name) - unmatched_name ist der Name aus
+        der Liste, der nicht zugeordnet werden konnte (sonst '').
         """
         key = (name or '').strip().lower()
         if not key:
-            return self._default_supplier(admin_user)
+            return self._default_supplier(admin_user), ''
         if key in cache:
             return cache[key]
 
         supplier = self._find_supplier_by_name(name)
-        if not supplier:
-            supplier = Supplier.objects.create(
-                company_name=name.strip()[:200],
-                is_active=True,
-                created_by=admin_user,
-            )
+        if supplier:
+            result = (supplier, '')
+        else:
+            fallback = self._default_supplier(admin_user)
+            result = (fallback, name.strip()[:120])
             self.stdout.write(self._safe(
-                f'  + Lieferant angelegt: {supplier.supplier_number} {supplier.company_name}'
-            ))
-            self.stdout.write(self._safe(
-                f'    ! Neuer Lieferant. Bitte pruefen, ob nicht doch schon einer '
+                f'    ! Lieferant "{name.strip()[:60]}" nicht im Stamm - KEIN '
+                f'neuer Eintrag. Artikel faellt auf den Platzhalter '
+                f'"{fallback.company_name}" zurueck. Bitte pruefen, ob nicht doch schon einer '
                 f'existiert - Dubletten sind schwer wieder aufzuräumen.'
             ))
-        cache[key] = supplier
-        return supplier
+        cache[key] = result
+        return result
 
     def _find_supplier_by_name(self, name):
         """Sucht einen bestehenden Lieferanten zum Namen aus der Lagerliste."""
@@ -682,6 +693,10 @@ class Command(BaseCommand):
             base_path, pattern, options.get('since'),
             recursive=recursive, exclude_dirs=exclude_dirs,
         )
+        files_total = len(files)
+        max_files = options.get('max_files')
+        if max_files and max_files > 0 and len(files) > max_files:
+            files = files[:max_files]
 
         self.stdout.write(self.style.MIGRATE_HEADING(
             f'Excel-Lagerabgleich  ({"DRY-RUN" if dry_run else "LIVE"})'
@@ -691,10 +706,28 @@ class Command(BaseCommand):
         self.stdout.write(f'Unterordner : {"ja" if recursive else "nein (--no-recursive)"}')
         if exclude_dirs:
             self.stdout.write(f'Ausgeschlossen: {exclude_dirs}')
-        self.stdout.write(f'Dateien     : {len(files)}')
+        if files_total != len(files):
+            self.stdout.write(self.style.WARNING(
+                f'Dateien     : {len(files)} von {files_total} '
+                f'(begrenzt durch --max-files)'
+            ))
+        else:
+            self.stdout.write(f'Dateien     : {len(files)}')
         if not files:
             self.stdout.write(self.style.WARNING('Keine Dateien gefunden - nichts zu tun.'))
-            return
+            summary = {
+                'dry_run': dry_run,
+                'base_path': str(base_path),
+                'pattern': pattern,
+                'files': 0,
+                'files_total': files_total,
+                'report_path': str(report_path),
+                'duration_seconds': 0.0,
+                'stats': {},
+            }
+            self.last_run = summary
+            self.last_report_rows = []
+            return summary
 
         admin_user = self._get_admin_user()
         supplier_cache = {}
@@ -809,6 +842,29 @@ class Command(BaseCommand):
         self._write_report(report_path, report_rows)
 
         duration = (datetime.now() - started).total_seconds()
+        # Strukturiertes Ergebnis fuer den programmatischen Aufruf
+        # (Settings-Modul "Lager-Abgleich") und fuer Tests. Das Command-
+        # Framework ignoriert Rueckgabewerte von handle() - schadet also nichts.
+        summary = {
+            'dry_run': dry_run,
+            'base_path': str(base_path),
+            'pattern': pattern,
+            'files': len(files),
+            'files_total': files_total,
+            'report_path': str(report_path),
+            'duration_seconds': round(duration, 1),
+            # Stabile Schluessel (auch wenn 0) - sonst stehen in der API/UI
+            # fehlende Zaehler statt Nullen.
+            'stats': {
+                key: int(stats.get(key, 0))
+                for key in (
+                    'rows', 'create', 'skip', 'empty', 'duplicate', 'ambiguous',
+                    'locked', 'sheets_skipped', 'no_header', 'header_rows', 'error',
+                )
+            },
+        }
+        self.last_run = summary
+        self.last_report_rows = report_rows
         self.stdout.write('')
         self.stdout.write(self.style.MIGRATE_HEADING('Zusammenfassung'))
         self.stdout.write(f'  Dateien              : {len(files)}')
@@ -820,18 +876,20 @@ class Command(BaseCommand):
         self.stdout.write(f'  Uebersprungen (Excel offen): {stats["locked"]}')
         self.stdout.write(f'  Blaetter ohne Lagerartikel: {stats["sheets_skipped"] + stats["no_header"]}')
         self.stdout.write(f'  Wiederholte Kopfzeilen: {stats["header_rows"]}')
+        self.stdout.write(f'  Leere Zeilen (uebersprungen): {stats["empty"]}')
         self.stdout.write(f'  Fehler               : {stats["error"]}')
         self.stdout.write(f'  Report               : {report_path}')
         self.stdout.write(f'  Dauer                : {duration:.1f}s')
         logger.info(
             'inventory_sync fertig: rows=%s create=%s skip=%s duplicate=%s ambiguous=%s '
-            'locked=%s no_header=%s error=%s report=%s',
+            'empty=%s locked=%s no_header=%s error=%s report=%s',
             stats['rows'], stats['create'], stats['skip'], stats['duplicate'],
-            stats['ambiguous'], stats['locked'], stats['no_header'],
+            stats['ambiguous'], stats['empty'], stats['locked'], stats['no_header'],
             stats['error'], report_path,
         )
         if stats['error']:
             raise CommandError(f"{stats['error']} Datei(en)/Blatt(er) konnten nicht verarbeitet werden.")
+        return summary
 
     # =====================
     # Dubletten innerhalb eines Laufs
@@ -935,7 +993,24 @@ class Command(BaseCommand):
             stats['header_rows'] += 1
             return
 
+        # Leere Zeilen NICHT importieren (2026-10-06): ohne Seriennummer,
+        # ohne Kunde und ohne Bestellnummer fehlt jeder Identifikator. Solche
+        # Zeilen waren beim naechsten Lauf nie wiedererkennbar und wurden bei
+        # JEDEM Lauf erneut als eigene Lagerartikel angelegt - nachts ueber den
+        # Task-Scheduler kamen so tausende leerer Datensaetze zusammen.
+        # Kriterium identisch zum cleanup_empty_inventory_items-Kommando.
+        if (not record['serial_key'] and not record['customer']
+                and not record['order_number'] and not record['best_nr']):
+            stats['empty'] += 1
+            report_rows.append(self._report_row(
+                record['source_file'], record['source_sheet'], record['source_row'],
+                'skip_empty', '', record['serial_number'], record['name'],
+                'uebersprungen: ohne Seriennummer, Kunde und Bestellnummer',
+            ))
+            return
+
         supplier = None
+        supplier_unmatched = ''
         if record['supplier']:
             # Im Dry-Run nur nachschauen, aber nicht anlegen.
             # Dieselbe Suchlogik wie beim Anlegen - nur ohne den create-Teil.
@@ -1001,9 +1076,21 @@ class Command(BaseCommand):
             record['category'], record['source_file'], category_cache
         )
         if not dry_run:
-            supplier = self._get_or_create_supplier(
+            supplier, supplier_unmatched = self._get_or_create_supplier(
                 record['supplier'], supplier_cache, admin_user
             )
+        elif record['supplier'] and not supplier:
+            supplier_unmatched = record['supplier'].strip()[:120]
+
+        fallback_supplier = self._default_supplier(admin_user)
+        if supplier_unmatched:
+            supplier_label = (
+                f'Unbekannt (Platzhalter - "{supplier_unmatched}" nicht im Stamm)'
+            )
+        elif supplier:
+            supplier_label = supplier.company_name
+        else:
+            supplier_label = f'{fallback_supplier.company_name} (Platzhalter)'
 
         article_number = self._article_number(record, used_article_numbers)
         item_function = 'ASSET' if record['serial_number'] else 'TRADING_GOOD'
@@ -1039,7 +1126,7 @@ class Command(BaseCommand):
                 record['source_file'], record['source_sheet'], record['source_row'],
                 'create', '', record['serial_number'], record['name'],
                 f'wuerde angelegt werden (Status: {status}, Lieferant: '
-                f'{supplier.company_name if supplier else "-"}, Kunde: '
+                f'{supplier_label}, Kunde: '
                 f'{customer or "nicht zugeordnet"})',
             ))
             stats['create'] += 1
@@ -1078,7 +1165,7 @@ class Command(BaseCommand):
         report_rows.append(self._report_row(
             record['source_file'], record['source_sheet'], record['source_row'],
             'create', item.inventory_number, record['serial_number'], record['name'],
-            f'angelegt (Status: {status}, Lieferant: {item.supplier.company_name}, '
+            f'angelegt (Status: {status}, Lieferant: {supplier_label}, '
             f'Kunde: {customer or "nicht zugeordnet"})',
         ))
         stats['create'] += 1

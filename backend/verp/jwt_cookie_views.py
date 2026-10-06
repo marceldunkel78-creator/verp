@@ -1,12 +1,26 @@
 from datetime import timedelta
 from django.conf import settings
 from django.http import JsonResponse
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
-def _cookie_params():
+def _cookie_params(request=None):
     # Cookie options - align with deployment settings (allow HTTP when configured)
-    secure = getattr(settings, 'SESSION_COOKIE_SECURE', not settings.DEBUG)
+    #
+    # `secure` wird standardmaessig aus dem Request abgeleitet (nur bei echtem
+    # HTTPS als "secure" markieren). Hintergrund (2026-10-06): bei DEBUG=False
+    # defaultet SESSION_COOKIE_SECURE auf True. Auf einem PLAIN-HTTP-Intranet
+    # (http://verp.intern.local) hat der Browser diese Cookies verworfen - der
+    # Login sah erfolgreich aus, danach 401 "Anmeldedaten fehlen." und Refresh
+    # 400 "Dieses Feld ist erforderlich." (fehlendes refresh_token-Cookie).
+    # Abgeleitete Logik heilt beides: HTTP -> ohne Secure-Flag (funktioniert),
+    # HTTPS -> mit Secure. Erzwingen per settings.JWT_COOKIE_SECURE (True/False).
+    override = getattr(settings, 'JWT_COOKIE_SECURE', None)
+    if override is None:
+        secure = bool(request.is_secure()) if request is not None else (not settings.DEBUG)
+    else:
+        secure = bool(override)
     max_age_access = int(settings.SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME', timedelta(hours=8)).total_seconds())
     max_age_refresh = int(settings.SIMPLE_JWT.get('REFRESH_TOKEN_LIFETIME', timedelta(days=7)).total_seconds())
     return {
@@ -27,7 +41,7 @@ class CookieTokenObtainPairView(TokenObtainPairView):
         json_resp = JsonResponse(data, status=status)
 
         if status == 200:
-            cookies = _cookie_params()
+            cookies = _cookie_params(request)
             access = data.get('access')
             refresh = data.get('refresh')
             if access:
@@ -54,9 +68,27 @@ class CookieTokenRefreshView(TokenRefreshView):
         if 'refresh' not in data and 'refresh_token' in request.COOKIES:
             data['refresh'] = request.COOKIES.get('refresh_token')
 
+        # Klarer Fehler statt simplejwt-400 "Dieses Feld ist erforderlich.",
+        # wenn gar kein Refresh-Token gesendet wurde (Cookie fehlt/abgelaufen).
+        if not data.get('refresh'):
+            return JsonResponse(
+                {'error': 'Nicht angemeldet: kein refresh_token gesendet (weder im Body noch als Cookie).'},
+                status=401,
+            )
+
         # Use serializer from parent class to validate
         serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError:
+            # simplejwt wirft bei abgelaufenem/verstoessem Token eine
+            # TokenError aus dem Serializer-Konstruktor - unbefangen waere das
+            # ein HTTP 500. Als 401 antworten, damit der Frontend-Interceptor
+            # sauber zur Login-Seite zurueckkehrt.
+            return JsonResponse(
+                {'error': 'Ungueltiger refresh_token - bitte neu anmelden.'},
+                status=401,
+            )
         validated_data = serializer.validated_data
 
         response_data = {'access': validated_data.get('access')}
@@ -67,7 +99,7 @@ class CookieTokenRefreshView(TokenRefreshView):
         json_resp = JsonResponse(response_data, status=status)
 
         # Set cookies if tokens present
-        cookies = _cookie_params()
+        cookies = _cookie_params(request)
         access = response_data.get('access')
         refresh = response_data.get('refresh')
         if access:

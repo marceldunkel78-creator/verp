@@ -201,6 +201,20 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+# JWT-Cookies (login/refresh setzen HttpOnly-Cookies):
+#   None       = automatisch: "secure"-Flag nur, wenn der Request tatsaechlich
+#                per HTTPS reinkommt (request.is_secure()). Damit funktioniert
+#                die Anmeldung auch auf PLAIN-HTTP-Intraneten wie
+#                http://verp.intern.local (2026-10-06, s. InstruktionenVERP).
+#   True/False = Flag erzwingen, z.B. hinter TLS-terminierendem Proxy ohne
+#                SECURE_PROXY_SSL_HEADER auf True setzen.
+# In der .env: JWT_COOKIE_SECURE=True bzw. JWT_COOKIE_SECURE=False
+_jwt_cookie_secure = config('JWT_COOKIE_SECURE', default='', cast=str).strip().lower()
+JWT_COOKIE_SECURE = {
+    'true': True, '1': True, 'yes': True,
+    'false': False, '0': False, 'no': False,
+}.get(_jwt_cookie_secure, None)
+
 # CORS Settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
