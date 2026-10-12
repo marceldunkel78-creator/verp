@@ -30,6 +30,7 @@ from core.pdf_base import (
 from django.conf import settings
 from .notizen_utils import sanitize_for_pdf, html_to_plain_text, html_to_pdf_blocks
 import os
+from xml.sax.saxutils import escape
 
 
 TRANSLATIONS = {
@@ -37,6 +38,7 @@ TRANSLATIONS = {
         'subject_prefix': 'Betreff',
         'service_report_order': 'Servicebericht zu Auftrag',
         'service_report': 'Servicebericht',
+        'travel_report': 'Reisebericht',
         'system': 'System',
         'executing_employee': 'Ausführender Mitarbeiter',
         'description_heading': 'Beschreibung / Durchgeführte Arbeiten:',
@@ -53,6 +55,7 @@ TRANSLATIONS = {
         'subject_prefix': 'Subject',
         'service_report_order': 'Service Report for Order',
         'service_report': 'Service Report',
+        'travel_report': 'Travel Report',
         'system': 'System',
         'executing_employee': 'Executing employee',
         'description_heading': 'Description / Work Performed:',
@@ -80,6 +83,7 @@ def generate_service_report_pdf(report, language='de'):
         BytesIO object containing the PDF
     """
     t = TRANSLATIONS.get(language, TRANSLATIONS['de'])
+    report_title = t['service_report'] if report.report_type == 'service' else t['travel_report']
     buffer = BytesIO()
     
     # Get company info
@@ -90,11 +94,11 @@ def generate_service_report_pdf(report, language='de'):
         buffer,
         pagesize=A4,
         company=company,
-        title=t['service_report'],
+        title=report_title,
         continuation_text=(
-            f"{t['service_report']} {report.report_number}"
+            f"{report_title} {report.report_number}"
             if getattr(report, 'report_number', None)
-            else t['service_report']),
+            else report_title),
     )
     
     # Setup styles
@@ -194,14 +198,17 @@ def generate_service_report_pdf(report, language='de'):
     # === DOKUMENTBOX (rechts) wie in der Vorlage ===
     date_text = report.date.strftime('%d.%m.%Y') if report.date else ''
     order_number = report.linked_order.order_number if report.linked_order else ''
-    subject = f"{t['service_report_order']} {order_number}" if order_number else t['service_report']
+    if report.report_type == 'service':
+        subject = f"{t['service_report_order']} {order_number}" if order_number else report_title
+    else:
+        subject = report_title
     
     doc_box_lines = [
-        (t['service_report'], True),
+        (report_title, True),
     ]
     if getattr(report, 'report_number', None):
         doc_box_lines.append((report.report_number, False))
-    if order_number:
+    if order_number and report.report_type == 'service':
         doc_box_lines.append((f"{t['service_report_order']} {order_number}", False))
     if report.location:
         doc_box_lines.append((report.location, False))
@@ -360,11 +367,13 @@ def generate_service_report_pdf(report, language='de'):
                 if os.path.exists(photo_path):
                     img = Image(photo_path, width=7*cm, height=5*cm)
                     
-                    # Create a cell with image and optional caption
-                    cell_content = [img]
+                    # Place the photo comment directly above its image.
+                    cell_content = []
                     if photo.caption:
+                        safe_caption = escape(photo.caption).replace('\n', '<br/>')
+                        cell_content.append(Paragraph(safe_caption, small_style))
                         cell_content.append(Spacer(1, 0.2*cm))
-                        cell_content.append(Paragraph(photo.caption, small_style))
+                    cell_content.append(img)
                     
                     current_pair.append(cell_content)
                     

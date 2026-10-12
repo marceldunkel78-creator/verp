@@ -183,10 +183,9 @@ class TravelReportPhoto(models.Model):
         upload_to='travel_reports/photos/%Y/%m/',
         verbose_name='Foto'
     )
-    caption = models.CharField(
-        max_length=255,
+    caption = models.TextField(
         blank=True,
-        verbose_name='Bildunterschrift'
+        verbose_name='Bildkommentar'
     )
     
     # Metadaten

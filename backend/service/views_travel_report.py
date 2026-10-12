@@ -77,13 +77,14 @@ class TravelReportViewSet(viewsets.ModelViewSet):
             )
 
         caption = request.data.get('caption', '')
+        captions = request.data.getlist('captions')
 
         created_photos = []
-        for photo_file in unique_files:
+        for index, photo_file in enumerate(unique_files):
             photo = TravelReportPhoto.objects.create(
                 travel_report=travel_report,
                 photo=photo_file,
-                caption=caption
+                caption=captions[index] if index < len(captions) else caption
             )
             created_photos.append(photo)
 
@@ -95,6 +96,36 @@ class TravelReportViewSet(viewsets.ModelViewSet):
             'photos': serializer.data,
         }, status=status.HTTP_201_CREATED)
     
+    @action(detail=True, methods=['patch'])
+    def update_photo(self, request, pk=None):
+        """Update the comment associated with a report photo."""
+        travel_report = self.get_object()
+        photo_id = request.data.get('photo_id')
+        if not photo_id:
+            return Response(
+                {'error': 'photo_id erforderlich'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            photo = travel_report.photos.get(id=photo_id)
+        except TravelReportPhoto.DoesNotExist:
+            return Response(
+                {'error': 'Foto nicht gefunden'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if 'caption' not in request.data:
+            return Response(
+                {'error': 'caption erforderlich'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        serializer = TravelReportPhotoSerializer(
+            photo, data={'caption': request.data['caption']}, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
     @action(detail=True, methods=['get'])
     def photos(self, request, pk=None):
         """Alle Fotos eines Reiseberichts abrufen"""
@@ -195,15 +226,8 @@ class TravelReportViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def generate_pdf(self, request, pk=None):
-        """PDF für Servicebericht generieren und im Medienordner speichern"""
+        """PDF für Reise- oder Servicebericht generieren und im Medienordner speichern"""
         travel_report = self.get_object()
-        
-        # Only for service reports
-        if travel_report.report_type != 'service':
-            return Response(
-                {'error': 'PDF-Generierung ist nur für Serviceberichte verfügbar'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         
         language = request.query_params.get('language', 'de')
         if language not in ('de', 'en'):
@@ -217,7 +241,8 @@ class TravelReportViewSet(viewsets.ModelViewSet):
             if travel_report.linked_order:
                 order_number = travel_report.linked_order.order_number
             lang_suffix = '_EN' if language == 'en' else ''
-            filename = f"Servicebericht_{order_number or travel_report.id}{lang_suffix}.pdf"
+            report_title = 'Servicebericht' if travel_report.report_type == 'service' else 'Reisebericht'
+            filename = f"{report_title}_{order_number or travel_report.id}{lang_suffix}.pdf"
             
             # Delete old PDF file from storage before saving new one
             if travel_report.pdf_file:

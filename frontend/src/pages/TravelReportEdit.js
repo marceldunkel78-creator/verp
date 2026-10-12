@@ -388,6 +388,21 @@ const TravelReportEdit = () => {
     }
   };
 
+  const updatePhotoCaption = async (photoId, caption) => {
+    try {
+      await api.patch(`/service/travel-reports/${id}/update_photo/`, {
+        photo_id: photoId,
+        caption,
+      });
+      setPhotos(current => current.map(photo =>
+        photo.id === photoId ? { ...photo, caption } : photo
+      ));
+    } catch (error) {
+      console.error('Fehler beim Speichern des Bildkommentars:', error);
+      alert('Fehler beim Speichern des Bildkommentars');
+    }
+  };
+
   const deletePhoto = async (photoId) => {
     if (!window.confirm('Foto löschen?')) return;
     try {
@@ -498,11 +513,16 @@ const TravelReportEdit = () => {
 
   // PDF generation - speichert vorher ungespeicherte Aenderungen,
   // damit das PDF den aktuellen Editor-Inhalt enthaelt.
+  const savePhotoComments = async () => {
+    await Promise.all(photos.map(photo =>
+      api.patch(`/service/travel-reports/${id}/update_photo/`, {
+        photo_id: photo.id,
+        caption: photo.caption || '',
+      })
+    ));
+  };
+
   const generatePDF = async (language = 'de') => {
-    if (formData.report_type !== 'service') {
-      alert('PDF-Generierung ist nur fuer Serviceberichte verfuegbar.');
-      return;
-    }
     if (id === 'new') {
       alert('Bitte speichern Sie den Bericht zuerst.');
       return;
@@ -514,7 +534,8 @@ const TravelReportEdit = () => {
         alert('PDF-Generierung abgebrochen: Bericht konnte nicht gespeichert werden.');
         return;
       }
-      // 2) Danach das PDF laden.
+      // 2) Foto-Kommentare speichern, dann das PDF laden.
+      await savePhotoComments();
       const response = await api.get(`/service/travel-reports/${id}/generate_pdf/?language=${language}`, {
         responseType: 'blob'
       });
@@ -523,7 +544,8 @@ const TravelReportEdit = () => {
       link.href = url;
       const orderNum = selectedOrder?.order_number || id;
       const langSuffix = language === 'en' ? '_EN' : '';
-      link.setAttribute('download', `Servicebericht_${orderNum}${langSuffix}.pdf`);
+      const reportTitle = formData.report_type === 'service' ? 'Servicebericht' : 'Reisebericht';
+      link.setAttribute('download', `${reportTitle}_${orderNum}${langSuffix}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -571,7 +593,7 @@ const TravelReportEdit = () => {
           <h1 className="text-2xl font-semibold text-gray-900">
             {id === 'new' ? 'Neuer Bericht' : 'Bericht bearbeiten'}
           </h1>
-          {id !== 'new' && formData.report_type === 'service' && (
+          {id !== 'new' && (
             <div className="mt-4 sm:mt-0 flex gap-2">
               {report?.has_pdf && (
                 <button
@@ -998,6 +1020,20 @@ const TravelReportEdit = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {photos.map((photo) => (
                   <div key={photo.id} className="relative group">
+                    <textarea
+                      aria-label="Kommentar zum Foto"
+                      value={photo.caption || ''}
+                      onChange={(event) => {
+                        const caption = event.target.value;
+                        setPhotos(current => current.map(item =>
+                          item.id === photo.id ? { ...item, caption } : item
+                        ));
+                      }}
+                      onBlur={(event) => updatePhotoCaption(photo.id, event.target.value)}
+                      placeholder="Kommentar zum Foto"
+                      rows={2}
+                      className="mb-2 w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+                    />
                     <img
                       src={photo.photo_url || photo.photo}
                       alt={photo.caption || 'Foto'}
