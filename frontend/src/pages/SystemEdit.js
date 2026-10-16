@@ -156,8 +156,6 @@ const SystemEdit = () => {
   // Customer inventory for component modal
   const [customerInventory, setCustomerInventory] = useState([]);
   
-  // Product categories for component modal
-  const [productCategories, setProductCategories] = useState([]);
 
   // Star name search
   const [starNameSearch, setStarNameSearch] = useState('');
@@ -671,15 +669,6 @@ const SystemEdit = () => {
     }
   };
   
-  const fetchProductCategories = async () => {
-    try {
-      const response = await api.get('/settings/product-categories/');
-      setProductCategories(response.data.results || response.data);
-    } catch (error) {
-      console.error('Error fetching product categories:', error);
-    }
-  };
-
   const fetchInventoryItems = async () => {
     try {
       const response = await api.get('/inventory/inventory-items/?status=available&page_size=100');
@@ -855,7 +844,7 @@ const SystemEdit = () => {
       manufacturer: '',
       serial_number: '',
       version: '',
-      category: 'microscope',
+      category: 'other',
       is_legacy: false
     });
     setShowComponentModal(true);
@@ -865,10 +854,6 @@ const SystemEdit = () => {
     // Fetch customer-specific inventory
     if (customerInventory.length === 0) {
       fetchCustomerInventory();
-    }
-    // Fetch product categories
-    if (productCategories.length === 0) {
-      fetchProductCategories();
     }
   };
 
@@ -2512,7 +2497,26 @@ const SystemEdit = () => {
                             description: item?.description || prev.description,
                             manufacturer: item?.manufacturer || prev.manufacturer,
                             serial_number: item?.serial_number || prev.serial_number,
-                            category: item?.product_category || prev.category
+                            category: {
+                              MIKROSKOP: 'microscope',
+                              KAMERA: 'camera',
+                              FILTER: 'filter',
+                              FILTERRAD: 'filter',
+                              SCANNINGTISCH: 'stage',
+                              LASER: 'illumination',
+                              LED: 'illumination',
+                              SOFTWARE: 'software',
+                              VISIVIEW: 'software',
+                              CONFOCAL: 'controller',
+                              FRAP: 'controller',
+                              TIRF: 'controller',
+                              FRAP_TIRF: 'controller',
+                              ORBITAL: 'controller',
+                              VIRTEX: 'controller',
+                              PC: 'accessory',
+                              KABEL: 'accessory',
+                              INKUBATION: 'accessory'
+                            }[item?.product_category] || 'other'
                           }));
                         }}
                         className="w-full px-3 py-2 border rounded-lg"
@@ -2539,33 +2543,16 @@ const SystemEdit = () => {
                     onChange={(e) => setEditingComponent(prev => ({ ...prev, category: e.target.value }))}
                     className="w-full px-3 py-2 border rounded-lg"
                   >
-                    {productCategories.length > 0 ? (
-                      productCategories.map(cat => (
-                        <option key={cat.id} value={cat.code}>
-                          {cat.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="MIKROSKOP">Mikroskop</option>
-                        <option value="KAMERA">Kamera</option>
-                        <option value="LASER">Laser</option>
-                        <option value="FILTER">Filter</option>
-                        <option value="FILTERRAD">Filterrad</option>
-                        <option value="OBJECTIVE">Objektiv</option>
-                        <option value="SCANNINGTISCH">Scanningtisch</option>
-                        <option value="INKUBATION">Inkubation</option>
-                        <option value="LED">LED</option>
-                        <option value="CONFOCAL">Confocal</option>
-                        <option value="VIRTEX">ViRTEx</option>
-                        <option value="FRAP">FRAP</option>
-                        <option value="ORBITAL">Orbital</option>
-                        <option value="VISIVIEW">VisiView</option>
-                        <option value="PC">PC</option>
-                        <option value="SOFTWARE">Software</option>
-                        <option value="SONSTIGES">Sonstiges</option>
-                      </>
-                    )}
+                    <option value="microscope">Mikroskop</option>
+                    <option value="camera">Kamera</option>
+                    <option value="objective">Objektiv</option>
+                    <option value="stage">Tisch/Stage</option>
+                    <option value="illumination">Beleuchtung</option>
+                    <option value="filter">Filter</option>
+                    <option value="controller">Controller</option>
+                    <option value="software">Software</option>
+                    <option value="accessory">Zubehör</option>
+                    <option value="other">Sonstiges</option>
                   </select>
                 </div>
 
