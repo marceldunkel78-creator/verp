@@ -479,6 +479,38 @@ class SyncCommandTests(TestCase):
             InventoryItem.objects.filter(name='Standard Kabel 5m').count(), 1
         )
 
+    def test_duplicate_serial_cleanup_dry_run_keeps_lowest_number_without_deleting(self):
+        first = InventoryItem.objects.create(
+            inventory_number='I-00008', name='First', article_number='A-1',
+            serial_number='AB-123', supplier=self.supplier, item_function='ASSET',
+        )
+        second = InventoryItem.objects.create(
+            inventory_number='I-00012', name='Duplicate', article_number='A-2',
+            serial_number='ab 123', supplier=self.supplier, item_function='ASSET',
+        )
+        out = StringIO()
+        call_command('cleanup_duplicate_inventory_serials', stdout=out)
+
+        self.assertEqual(InventoryItem.objects.count(), 2)
+        self.assertIn('1 loeschbare Duplikate', out.getvalue())
+        self.assertIn(first.inventory_number, out.getvalue())
+        self.assertNotEqual(first.pk, second.pk)
+
+    def test_duplicate_serial_cleanup_live_deletes_normalized_duplicates(self):
+        keep = InventoryItem.objects.create(
+            inventory_number='I-00008', name='Keep', article_number='A-1',
+            serial_number='AB-123', supplier=self.supplier, item_function='ASSET',
+        )
+        duplicate = InventoryItem.objects.create(
+            inventory_number='I-00012', name='Duplicate', article_number='A-2',
+            serial_number='ab 123', supplier=self.supplier, item_function='ASSET',
+        )
+        call_command('cleanup_duplicate_inventory_serials', '--live', stdout=StringIO())
+
+        self.assertTrue(InventoryItem.objects.filter(pk=keep.pk).exists())
+        self.assertFalse(InventoryItem.objects.filter(pk=duplicate.pk).exists())
+        self.assertEqual(InventoryItem.objects.filter(serial_number__icontains='AB').count(), 1)
+
     def test_missing_directory_raises_command_error(self):
         out = StringIO()
         with self.assertRaises(CommandError):
