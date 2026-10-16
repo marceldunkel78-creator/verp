@@ -409,6 +409,23 @@ class SyncCommandTests(TestCase):
     def _write_list(self, lines, filename='Kamera.csv'):
         return write_csv(self.path, filename, [HEADER] + lines)
 
+    def test_no_serial_row_matches_existing_excel_import_by_source_row(self):
+        existing = InventoryItem.objects.create(
+            name='Imported without serial', article_number='A-1',
+            serial_number='', supplier=self.supplier, item_function='TRADING_GOOD',
+            source_file='Kamera.csv', source_row=2,
+            management_info={'import_source': 'excel_sync', 'external_ref': 'B-4711'},
+            status='FREI',
+        )
+        self._write_list(['1;B-4711;;Customer X;;Macrotron;Changed name;01.02.2026;'])
+
+        output = self._run()
+
+        self.assertEqual(InventoryItem.objects.count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.name, 'Imported without serial')
+        self.assertIn('bereits vorhanden - nicht veraendert', output)
+
     def test_creates_new_item_with_provenance(self):
         self._write_list(['1;B-4711;SN-NEW-1;frei;;Macrotron;Neues Geraet;01.02.2026;'])
         self._run()
@@ -471,6 +488,100 @@ class SyncCommandTests(TestCase):
         self.assertEqual(item.article_number, 'MANUELL')
         self.assertEqual(item.notes, 'Existing notes')
         self.assertIn('bereits vorhanden - nicht veraendert', output)
+
+    def test_import_skips_no_serial_no_order_rows_even_when_other_fields_are_filled(self):
+        self._write_list([
+            '1;;;Customer X;;Macrotron;Lagerartikel (kein Produktname);01.02.2026;'
+        ])
+
+        output = self._run()
+
+        self.assertEqual(InventoryItem.objects.count(), 0)
+        self.assertIn('ohne Seriennummer und Bestellnummer', output)
+
+    def test_no_serial_items_with_same_best_number_are_not_duplicated_in_one_run(self):
+        self._write_list([
+            '1;B-4711;;Customer X;;Macrotron;Geraet A;01.02.2026;',
+            '2;B-4711;;Customer Y;;Macrotron;Geraet B;02.02.2026;',
+        ])
+
+        output = self._run()
+
+        self.assertEqual(InventoryItem.objects.filter(
+            management_info__external_ref='B-4711'
+        ).count(), 1)
+        self.assertIn('Dublette', output)
+
+    def test_no_serial_import_matches_existing_row_by_provenance_after_order_data_changes(self):
+        existing = InventoryItem.objects.create(
+            name='Imported no serial', article_number='A-1',
+            serial_number='', supplier=self.supplier, item_function='TRADING_GOOD',
+            source_file='Kamera.csv', source_row=2,
+            management_info={'import_source': 'excel_sync', 'external_ref': 'B-4711'},
+            status='FREI',
+        )
+        self._write_list(['1;B-4711;;Customer X;;Macrotron;Changed;02.02.2026;'])
+
+        output = self._run()
+
+        self.assertEqual(InventoryItem.objects.count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.name, 'Imported no serial')
+        self.assertIn('bereits vorhanden - nicht veraendert', output)
+
+    def test_no_serial_item_with_customer_order_is_not_reimported(self):
+        self._write_list([
+            '1;;;Customer X;CO-123;Macrotron;Geraet A;01.02.2026;',
+        ])
+        self._run()
+        self._write_list([
+            '1;;;Customer X;CO-123;Macrotron;Geraet A;02.02.2026;',
+        ])
+
+        self._run()
+
+        self.assertEqual(InventoryItem.objects.filter(
+            customer_order_number='CO-123'
+        ).count(), 1)
+
+    def test_no_serial_item_with_order_reference_is_not_reimported(self):
+        self._write_list([
+            '1;B-4711;;Customer X;;Macrotron;Geraet A;01.02.2026;',
+        ])
+        self._run()
+        self._write_list([
+            '1;B-4711;;Customer X;;Macrotron;Geraet A;02.02.2026;',
+        ])
+
+        self._run()
+
+        self.assertEqual(InventoryItem.objects.filter(
+            management_info__external_ref='B-4711'
+        ).count(), 1)
+
+    def test_cleanup_removes_items_without_serial_or_order_even_with_customer(self):
+        item = InventoryItem.objects.create(
+            name='Lagerartikel (kein Produktname)',
+            article_number='EXCEL-NO-KEY',
+            supplier=self.supplier,
+            item_function='TRADING_GOOD',
+            customer_name='Customer X',
+        )
+        keep = InventoryItem.objects.create(
+            name='Has order',
+            article_number='ORDER-1',
+            serial_number='',
+            customer_order_number='CO-123',
+            supplier=self.supplier,
+            item_function='TRADING_GOOD',
+        )
+
+        out = StringIO()
+        call_command('cleanup_empty_inventory_items', '--live', stdout=out)
+
+        self.assertFalse(InventoryItem.objects.filter(pk=item.pk).exists())
+        self.assertTrue(InventoryItem.objects.filter(pk=keep.pk).exists())
+        self.assertIn('Geloescht', out.getvalue())
 
     def test_dry_run_changes_nothing(self):
         self._write_list(['1;B-4711;SN-NEW-1;frei;;Macrotron;Neues Geraet;01.02.2026;'])

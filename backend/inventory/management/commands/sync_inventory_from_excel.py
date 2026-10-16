@@ -34,7 +34,6 @@ from inventory.excel_sync import (
     build_serial_key,
     clean_serial_number,
     extract_record,
-    is_customer_placeholder,
     is_placeholder,
     load_mapping,
     read_source_file,
@@ -378,43 +377,51 @@ class Command(BaseCommand):
             self._serial_index = self._build_serial_index()
         return self._serial_index.get(serial_key, [])
 
-    def _find_without_serial(self, name, supplier, best_nr, use_fuzzy):
-        """Match ohne Seriennummer: exakte external_ref, sonst Produkt+Lieferant.
+    def _find_without_serial(
+        self, name, supplier, best_nr, order_number, source_file, source_row,
+        use_fuzzy,
+    ):
+        """Match serial-less rows by their references and import provenance."""
+        if source_file and source_row:
+            by_source_row = list(InventoryItem.objects.filter(
+                source_file=source_file,
+                source_row=source_row,
+                management_info__import_source='excel_sync',
+            )[:10])
+            if by_source_row:
+                return by_source_row
 
-        WICHTIG: Hier wird bewusst KEIN unscharfer Vergleich verwendet, wenn
-        bereits mehrere Kandidaten existieren. Eine Excel-Zeile ohne S/N
-        beschreibt typischerweise einen Mengenartikel, waehrend im VERP
-        mehrere Einzelstuecke dazu existieren. Der unscharfe Vergleich wuerde
-        dort grundlos zusaetzliche Artikel erzeugen.
-        """
-        if not name:
-            return []
-
-        # 1) Exakte external_ref (Best-Nr. + Lieferant)
         if best_nr:
-            items = InventoryItem.objects.filter(management_info__external_ref=best_nr)
+            exact = list(InventoryItem.objects.filter(
+                management_info__external_ref__iexact=best_nr
+            )[:10])
+            if exact:
+                return exact
+
+            items = InventoryItem.objects.filter(article_number__iexact=best_nr)
+            if supplier:
+                items = items.filter(supplier=supplier)
+            if name:
+                items = items.filter(name__iexact=name)
+            exact = list(items[:10])
+            if exact:
+                return exact
+
+        if order_number:
+            order_match = (
+                Q(customer_order_number__iexact=order_number)
+                | Q(order_number__iexact=order_number)
+                | Q(management_info__order_number_raw__iexact=order_number)
+            )
+            items = InventoryItem.objects.filter(order_match)
+            if name:
+                items = items.filter(name__iexact=name)
             if supplier:
                 items = items.filter(supplier=supplier)
             exact = list(items[:10])
             if exact:
                 return exact
 
-        # 2) Produktname + Lieferant exakt
-        qs = InventoryItem.objects.filter(name__iexact=name)
-        if supplier:
-            qs = qs.filter(supplier=supplier)
-        exact = list(qs[:10])
-        if exact:
-            return exact
-
-        # 3) Unscharfer Namensvergleich (nur wenn angefordert)
-        if use_fuzzy:
-            qs = InventoryItem.objects.all()
-            if supplier:
-                qs = qs.filter(supplier=supplier)
-            best, ratio = self._fuzzy_best(name, qs)
-            if best and ratio >= FUZZY_THRESHOLD:
-                return [best]
         return []
 
     def _fuzzy_best(self, name, queryset):
@@ -911,14 +918,15 @@ class Command(BaseCommand):
         """Schluessel fuer die Dublettenerkennung innerhalb eines Laufs."""
         if record['serial_key']:
             return ('sn', record['serial_key'])
-        parts = [
-            (record['name'] or '').strip().lower(),
-            (record['supplier'] or '').strip().lower(),
-            (record['best_nr'] or '').strip().lower(),
-        ]
-        if not any(parts):
-            return None
-        return ('nsn', tuple(parts))
+        best_nr = (record['best_nr'] or '').strip().casefold()
+        order_number = (record['order_number'] or '').strip().casefold()
+        name = (record['name'] or '').strip().casefold()
+        supplier = (record['supplier'] or '').strip().casefold()
+        if best_nr:
+            return ('best_nr', best_nr, supplier)
+        if order_number and name:
+            return ('order', order_number, name, supplier)
+        return None
 
     def _seen_this_run(self, record, seen_keys):
         """Prueft, ob dieser Schluessel in diesem Lauf schon verarbeitet wurde.
@@ -1005,24 +1013,16 @@ class Command(BaseCommand):
             stats['header_rows'] += 1
             return
 
-        # Leere Zeilen NICHT importieren (2026-10-06): ohne Seriennummer,
-        # ohne Kunde und ohne Bestellnummer fehlt jeder Identifikator. Solche
-        # Zeilen waren beim naechsten Lauf nie wiedererkennbar und wurden bei
-        # JEDEM Lauf erneut als eigene Lagerartikel angelegt - nachts ueber den
-        # Task-Scheduler kamen so tausende leerer Datensaetze zusammen.
-        # Kriterium identisch zum cleanup_empty_inventory_items-Kommando.
-        # Ergaenzung 2026-10-06: Platzhalter ('-', 'k.a.') und Status-Texte in
-        # der Kundenspalte ('im Haus', 'verliehen', 'defekt', ...) zaehlen als
-        # KEIN Kunde - sonst entstehen weiterhin Artikel mit customer_name
-        # 'im Haus' etc., die das Leerkriterium blockieren.
+        # Ohne Seriennummer und ohne irgendeine Bestellnummer gibt es keinen
+        # stabilen Schluessel fuer Import oder Wiedererkennung. Nicht importieren,
+        # auch wenn Name, Kunde, Lieferdatum oder Status ausgefuellt sind.
         if (not record['serial_key'] and not record['order_number']
-                and not record['best_nr']
-                and is_customer_placeholder(record['customer'])):
+                and not record['best_nr']):
             stats['empty'] += 1
             report_rows.append(self._report_row(
                 record['source_file'], record['source_sheet'], record['source_row'],
                 'skip_empty', '', record['serial_number'], record['name'],
-                'uebersprungen: ohne Seriennummer, Kunde und Bestellnummer',
+                'uebersprungen: ohne Seriennummer und Bestellnummer',
             ))
             return
 
@@ -1040,15 +1040,15 @@ class Command(BaseCommand):
             matches = self._find_by_serial(record['serial_key'])
         else:
             matches = self._find_without_serial(
-                record['name'], supplier, record['best_nr'], use_fuzzy
+                record['name'], supplier, record['best_nr'],
+                record['order_number'], record['source_file'],
+                record['source_row'], use_fuzzy,
             )
 
         # ---- Dubletten innerhalb desselben Laufs/Dateiblatts ----
-        # Zwei Zeilen mit identischem Seriennummer bzw. identischem
-        # (Produkt+Lieferant+Best-Nr.)-Schluessel deuten auf einen
-        # Kopierfehler in der Excel-Liste hin. Beim Live-Run waere die
-        # zweite Zeile sonst ein False-Positive gegen das gerade angelegte
-        # Objekt und wuerde faelschlich als 'bereits vorhanden' verschluckt.
+        # Zwei Zeilen mit identischer Seriennummer oder denselben
+        # Bestellreferenzen/Artikelnamen sind innerhalb eines Laufs ein Treffer.
+        # Referenz-identische oder gleichnamige Zeilen werden pro Lauf nicht erneut importiert.
         duplicate_of = self._seen_this_run(record, seen_keys)
         if duplicate_of and duplicate_of[1] == 'create':
             seen_row, _, seen_inventory = duplicate_of

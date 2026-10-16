@@ -116,10 +116,8 @@ def main():
         if err1:
             print(f'   Hinweis: CommandError -> {err1}')
 
-        check('leere Zeile wird als skip_empty gezaehlt', s1.get('empty') == 2,
+        check('Zeilen ohne SN und Bestellnummer werden uebersprungen', s1.get('empty') == 2,
               f"empty={s1.get('empty')}")
-        check('Status-Text-Zeile (Kunde=im Haus) ebenfalls skip_empty',
-              s1.get('empty') >= 2, f"empty={s1.get('empty')}")
         check('Muellzeile ohne alles bleibt is_empty/skip', s1.get('skip', 0) >= 1,
               f"skip={s1.get('skip')}")
         check('3 echte Artikel angelegt', s1.get('create') == 3,
@@ -142,11 +140,11 @@ def main():
         print(f'   stats: {dict(s2)}')
         check('zweiter Lauf: 0 neu angelegt', s2.get('create') == 0,
               f"create={s2.get('create')}")
-        # skip = 3 wiedererkannte Artikel + 1 klassische Muellzeile (is_empty)
-        check('zweiter Lauf: alle 4 bekannten Zeilen uebersprungen',
-              s2.get('skip') == 4, f"skip={s2.get('skip')}")
-        check('zweiter Lauf: leere Zeile weiterhin uebersprungen',
-              s2.get('empty') == 2, f"empty={s2.get('empty')}")
+        # Drei importierte Artikel wiedererkannt; vier Zeilen ohne beide Schluessel uebersprungen.
+        check('zweiter Lauf: 3 importierte Artikel wiedererkannt',
+              s2.get('skip') == 3, f"skip={s2.get('skip')}")
+        check('zweiter Lauf: vier nicht identifizierbare Zeilen uebersprungen',
+              s2.get('empty') == 4, f"empty={s2.get('empty')}")
         check('keine Vermehrung der Items',
               InventoryItem.objects.count() == items_before + 3,
               f"{InventoryItem.objects.count()}")
@@ -191,8 +189,15 @@ def main():
               is_empty_item(dash_item), 'dash nicht leer?')
         check('Status-Kunde (zur Reparatur) wird als leer erkannt',
               is_empty_item(status_item), 'status nicht leer?')
-        check('ECHTER Kundentext (Gelman, Basel) schuetzt den Artikel',
-              not is_empty_item(real_customer_item), 'Kundentext faelschlich leer?')
+        check('Kundentext schuetzt Artikel ohne S/N und Bestellreferenz nicht',
+              is_empty_item(real_customer_item), 'Kundentext faelschlich geschuetzt?')
+        order_item = InventoryItem.objects.create(
+            name='Test-Kontrolle (Bestellreferenz)', supplier=placeholder,
+            article_number='TST-ORDER-1', item_function='TRADING_GOOD',
+            purchase_price=0, customer_order_number='CO-KEEP',
+        )
+        check('Bestellreferenz schuetzt den Artikel',
+              not is_empty_item(order_item), 'Bestellreferenz faelschlich geloescht?')
 
         print('\n4) cleanup_empty_inventory_items --live (in Transaktion):')
         outc = io.StringIO()
@@ -208,8 +213,10 @@ def main():
               not InventoryItem.objects.filter(pk=status_item.pk).exists(), '')
         check('Kontrollartikel ueberlebt',
               InventoryItem.objects.filter(pk=control.pk).exists(), '')
-        check('Artikel mit echtem Kundentext ueberlebt',
-              InventoryItem.objects.filter(pk=real_customer_item.pk).exists(), '')
+        check('Artikel ohne S/N/Bestellreferenz und mit Kundentext geloescht',
+              not InventoryItem.objects.filter(pk=real_customer_item.pk).exists(), '')
+        check('Artikel mit Bestellreferenz ueberlebt',
+              InventoryItem.objects.filter(pk=order_item.pk).exists(), '')
 
         print('\n5) Dry-Run des Cleanup (aendert nichts):')
         before = InventoryItem.objects.count()

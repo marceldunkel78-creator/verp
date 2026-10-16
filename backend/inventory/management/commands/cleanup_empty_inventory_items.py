@@ -1,38 +1,17 @@
 """
-Loescht "leere" Lagerartikel.
+Loescht Lagerartikel ohne Seriennummer und ohne Bestellreferenz.
 
-Hintergrund (2026-10-06): der Excel-Lagerabgleich (sync_inventory_from_excel)
-hat bis dahin Zeilen OHNE Seriennummer, OHNE Kunde und OHNE Bestellnummer als
-eigene Lagerartikel importiert. Solche Zeilen haben keinen Schluessel, mit dem
-sie beim naechsten Lauf wiedererkannt werden koennten - sie wurden deshalb bei
-JEDEM Lauf erneut angelegt. Im Warenlager sind so sehr viele Datensaetze mit
-Lieferant "Unbekannt" (Nr. 226) und ohne jeden Inhalt entstanden.
+Artikel mit Seriennummer oder Bestellreferenz bleiben erhalten. Als
+Bestellreferenz gelten Best-Nr. (management_info.external_ref), Auftrag
+(customer_order_number / management_info.order_number_raw), order_number sowie
+eine verknuepfte Bestellung oder ein verknuepfter Kundenauftrag. Kunden-,
+Namens- oder Statusangaben allein schuetzen einen Artikel nicht.
 
-Dieses Kommando raeumt genau diese Artikel auf. Das Kriterium ist identisch
-zum Import-Filter seit 2026-10-06:
+Standard ist ein Dry-Run. Erst --live loescht tatsaechlich; immer wird ein
+CSV-Report geschrieben. Vor dem Live-Lauf unbedingt den Report pruefen.
 
-    - keine Seriennummer (Platzhalter wie '...' zaehlen als leer)
-    - kein Kunde (customer NULL UND customer_name leer)
-    - keine Bestellnummer (order_number, customer_order_number und
-      management_info.external_ref / order_number_raw leer)
-
-Standard ist IMMER ein Dry-Run - es wird nichts geloescht. Erst --live
-loescht tatsaechlich. Es wird immer ein CSV-Report geschrieben.
-
-    python manage.py cleanup_empty_inventory_items              # Dry-Run
-    python manage.py cleanup_empty_inventory_items --live       # loescht
-
-Optionen:
-    --supplier-number 226        nur Artikel dieses Lieferanten
-    --stored-since 2026-10-01    nur Artikel ab diesem Eingelagert-Datum
-    --limit 100                  hoechstens so viele Artikel betrachten
-    --report <pfad>              CSV-Report
-                                 (Default: logs/cleanup_empty_inventory_<zeit>.csv)
-
-Achtung: Artikel OHNE Seriennummer koennen legitime Mengenartikel sein (z.B.
-Zubehoer ohne S/N). Vor dem --live-Lauf deshalb IMMER den Dry-Run und den
-Report pruefen - die Ausgabe gruppiert nach Quelldatei und Eingelagert-Datum,
-damit erkennbar ist, aus welchem Import die Artikel stammen.
+    python manage.py cleanup_empty_inventory_items
+    python manage.py cleanup_empty_inventory_items --live
 """
 
 import csv
@@ -46,33 +25,23 @@ from django.conf import settings
 from inventory.models import InventoryItem
 from inventory.excel_sync import (
     clean_serial_number,
-    is_customer_placeholder,
     is_placeholder,
 )
 
 REPORT_FIELDS = [
-    'action', 'inventory_number', 'name', 'supplier_number', 'supplier_name',
-    'serial_number', 'customer_name', 'order_number', 'customer_order_number',
-    'visitron_part_number', 'stored_at', 'source_file', 'source_row',
+    'action', 'inventory_number', 'name', 'article_number',
+    'supplier_number', 'supplier_name', 'serial_number', 'customer_name',
+    'order_number', 'customer_order_number', 'visitron_part_number',
+    'stored_at', 'source_file', 'source_row',
 ]
 
 
 def is_empty_item(item):
-    """True, wenn der Artikel dem Leerkriterium entspricht (siehe Moduldoc).
-
-    Ergaenzung 2026-10-06 (nachgemeldet): Platzhalter wie '-' und Status-
-    texte in der Kundenspalte ('im Haus', 'verliehen', 'defekt', 'zur
-    Reparatur', 'S/N fehlt' ...) zaehlen als KEIN Kunde. Solche Werte standen
-    als "Kunde" in den Lagerlisten und hatten genau die Alt-Muellartikel vor
-    dem Loeschen geschuetzt. Echte Kundentexte (z.B. 'Gelman, Basel') gelten
-    weiter als Kundenangabe und schuetzen den Artikel.
-    """
+    """True, wenn Seriennummer und alle Bestellreferenzen fehlen."""
     serial = clean_serial_number(item.serial_number)
     if serial and not is_placeholder(serial):
         return False
-    if item.customer_id is not None:
-        return False
-    if not is_customer_placeholder(item.customer_name):
+    if item.order_id is not None or item.customer_order_id is not None:
         return False
     if not is_placeholder(item.order_number):
         return False
@@ -88,8 +57,8 @@ def is_empty_item(item):
 
 class Command(BaseCommand):
     help = (
-        'Loescht leere Lagerartikel (ohne Seriennummer, ohne Kunde, ohne '
-        'Bestellnummer). Standard: Dry-Run. Mit --live wird geloescht.'
+        'Loescht Lagerartikel ohne Seriennummer und Bestellreferenz. '
+        'Standard: Dry-Run. Mit --live wird geloescht.'
     )
 
     def add_arguments(self, parser):
@@ -139,6 +108,7 @@ class Command(BaseCommand):
             'action': action,
             'inventory_number': item.inventory_number,
             'name': item.name,
+            'article_number': item.article_number,
             'supplier_number': item.supplier.supplier_number if item.supplier_id else '',
             'supplier_name': item.supplier.company_name if item.supplier_id else '',
             'serial_number': item.serial_number,
@@ -165,7 +135,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING(
             f'Bereinigung leerer Lagerartikel  ({"LIVE" if live else "DRY-RUN"})'
         ))
-        self.stdout.write('Kriterium: keine Seriennummer, kein Kunde, keine Bestellnummer')
+        self.stdout.write(
+            'Kriterium: keine Seriennummer und keine Bestellreferenz '
+            '(Best-Nr., Auftrag, order_number, Kundenauftrag)'
+        )
 
         qs = InventoryItem.objects.select_related('supplier').order_by('stored_at')
         if options.get('supplier_number'):
@@ -189,7 +162,7 @@ class Command(BaseCommand):
                 break
 
         self.stdout.write('')
-        self.stdout.write(f'Gefundene leere Artikel: {len(candidates)}')
+        self.stdout.write(f'Gefundene Artikel ohne Seriennummer/Bestellreferenz: {len(candidates)}')
         if not candidates:
             self.stdout.write(self.style.SUCCESS('Nichts zu tun - Lager ist sauber.'))
             return
@@ -245,7 +218,7 @@ class Command(BaseCommand):
 
         self.stdout.write('')
         self.stdout.write(self.style.MIGRATE_HEADING('Zusammenfassung'))
-        self.stdout.write(f'  Leere Artikel gefunden : {len(candidates)}')
+        self.stdout.write(f'  Artikel gefunden       : {len(candidates)}')
         if live:
             self.stdout.write(f'  Geloescht              : {deleted}')
             self.stdout.write(f'  Fehler                 : {errors}')
