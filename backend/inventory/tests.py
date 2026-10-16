@@ -449,6 +449,29 @@ class SyncCommandTests(TestCase):
         self.assertEqual(item.notes, 'Von Hand gepflegt')
         self.assertEqual(item.source_file, '')
 
+    def test_existing_serial_with_different_separators_is_not_imported_again(self):
+        item = InventoryItem.objects.create(
+            name='Already imported',
+            article_number='MANUELL',
+            serial_number='AB-C-DEFG',
+            supplier=self.supplier,
+            item_function='ASSET',
+            status='FREI',
+            notes='Existing notes',
+        )
+        self._write_list(['1;B-4711;ABCDEFG;Customer X;;Macrotron;Changed name;01.02.2026;'])
+
+        output = self._run()
+
+        self.assertEqual(
+            InventoryItem.objects.filter(serial_number__in=['AB-C-DEFG', 'ABCDEFG']).count(),
+            1,
+        )
+        item.refresh_from_db()
+        self.assertEqual(item.article_number, 'MANUELL')
+        self.assertEqual(item.notes, 'Existing notes')
+        self.assertIn('bereits vorhanden - nicht veraendert', output)
+
     def test_dry_run_changes_nothing(self):
         self._write_list(['1;B-4711;SN-NEW-1;frei;;Macrotron;Neues Geraet;01.02.2026;'])
         self._run('--dry-run')

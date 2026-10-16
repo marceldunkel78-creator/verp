@@ -32,8 +32,10 @@ from inventory.excel_sync import (
     SourceFileUnreadable,
     _normalize_header,
     build_serial_key,
+    clean_serial_number,
     extract_record,
     is_customer_placeholder,
+    is_placeholder,
     load_mapping,
     read_source_file,
 )
@@ -348,24 +350,33 @@ class Command(BaseCommand):
     # Matching
     # =====================
 
-    def _find_by_serial(self, serial_key):
-        """Exakter Treffer auf die normalisierte Seriennummer.
+    def _build_serial_index(self):
+        """Indexiert bestehende Seriennummern anhand desselben Schluessels wie der Import."""
+        serial_index = defaultdict(list)
+        items = InventoryItem.objects.exclude(serial_number__isnull=True).exclude(
+            serial_number=''
+        ).only('id', 'inventory_number', 'serial_number', 'name').iterator()
+        for item in items:
+            serial = clean_serial_number(item.serial_number)
+            if is_placeholder(serial):
+                continue
+            key = build_serial_key(serial)
+            if key:
+                serial_index[key].append(item)
+        return serial_index
 
-        Die DB-Suche ist case-insensitiv, kann aber keine Sonderzeichen
-        normalisieren. Deshalb wird eine Kandidatenmenge geladen und in
-        Python gegen den normalisierten Schluessel geprueft.
+    def _find_by_serial(self, serial_key):
+        """Suche vollstaendig nach normalisierter Seriennummer.
+
+        SQL-Substring-Suchen koennen abweichende Trennzeichen innerhalb der
+        Seriennummer uebersehen. Deshalb wird einmal pro Lauf ein Index aus
+        allen bestehenden Lagerartikeln aufgebaut und pro Zeile exakt geprueft.
         """
         if not serial_key:
             return []
-        # Ein Pruefzeichen-Fragment verkleinert die Kandidatenmenge stark.
-        fragment = serial_key[:6] if len(serial_key) > 6 else serial_key
-        candidates = InventoryItem.objects.exclude(serial_number='').filter(
-            serial_number__icontains=fragment
-        ).only('id', 'inventory_number', 'serial_number', 'name')
-        return [
-            item for item in candidates
-            if build_serial_key(item.serial_number) == serial_key
-        ]
+        if not hasattr(self, '_serial_index'):
+            self._serial_index = self._build_serial_index()
+        return self._serial_index.get(serial_key, [])
 
     def _find_without_serial(self, name, supplier, best_nr, use_fuzzy):
         """Match ohne Seriennummer: exakte external_ref, sonst Produkt+Lieferant.
