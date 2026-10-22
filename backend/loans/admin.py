@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Loan, LoanItem, LoanReceipt, LoanItemReceipt,
+    Loan, LoanItem, LoanReceipt, LoanReceiptDocument, LoanItemReceipt,
     LoanItemPhoto, LoanReturn, LoanReturnItem
 )
 
@@ -72,10 +72,16 @@ class LoanItemReceiptInline(admin.TabularInline):
     extra = 0
 
 
+class LoanReceiptDocumentInline(admin.TabularInline):
+    model = LoanReceiptDocument
+    extra = 0
+
+
 @admin.register(LoanReceipt)
 class LoanReceiptAdmin(admin.ModelAdmin):
     list_display = ['loan', 'receipt_date', 'received_by']
     list_filter = ['receipt_date', 'received_by']
+    inlines = [LoanReceiptDocumentInline]
 
 
 class LoanReturnItemInline(admin.TabularInline):

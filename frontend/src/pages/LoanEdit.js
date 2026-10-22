@@ -375,35 +375,36 @@ function LoanEdit() {
         }
     };
 
-    const handleUploadPhoto = async (itemId, file) => {
+    const handleUploadPhoto = async (itemId, files) => {
         try {
             const formData = new FormData();
             formData.append('item_id', itemId);
-            formData.append('photo', file);
+            Array.from(files).forEach(file => formData.append('photos', file));
             formData.append('description', '');
-            
+
             await api.post(`/loans/loans/${id}/upload_photo/`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             loadLoan();
         } catch (error) {
-            console.error('Error uploading photo:', error);
+            console.error('Error uploading photos:', error);
+            alert('Fehler beim Hochladen der Fotos');
         }
     };
 
-    const handleUploadReceiptDocument = async (documentType, file) => {
+    const handleUploadReceiptDocument = async (documentType, files) => {
         try {
             const formData = new FormData();
             formData.append('document_type', documentType);
-            formData.append('file', file);
-            
+            Array.from(files).forEach(file => formData.append('files', file));
+
             await api.post(`/loans/loans/${id}/upload_receipt_document/`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             loadLoan();
         } catch (error) {
-            console.error('Error uploading document:', error);
-            alert('Fehler beim Hochladen des Dokuments');
+            console.error('Error uploading documents:', error);
+            alert('Fehler beim Hochladen der Dokumente');
         }
     };
 
@@ -597,15 +598,15 @@ function LoanEdit() {
                     {activeTab === 'basic' && (
                         <div className="space-y-6">
                             {/* Supplier & Dates */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
+                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-4">
+                                <div className="min-w-0">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Gegenpartei *
                                     </label>
                                     {/* Typ zuerst waehlen, dann kommt die
                                         passende Suche. So vermischen sich
                                         die Treffer nicht. */}
-                                    <div className="flex gap-2">
+                                    <div className="flex min-w-0 gap-2">
                                         <select
                                             value={lenderType}
                                             onChange={(e) => {
@@ -1084,45 +1085,34 @@ function LoanEdit() {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     Lieferschein
                                                 </label>
-                                                {loan.receipt?.delivery_note_url ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <a 
-                                                            href={loan.receipt.delivery_note_url} 
-                                                            target="_blank" 
+                                                <div className="space-y-2">
+                                                    {loan.receipt?.documents?.filter(doc => doc.document_type === 'delivery_note').map(doc => (
+                                                        <a
+                                                            key={doc.id}
+                                                            href={doc.file_url || doc.file}
+                                                            target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-blue-600 hover:underline flex items-center gap-1"
+                                                            className="block text-blue-600 hover:underline"
                                                         >
-                                                            📄 Lieferschein anzeigen
+                                                            📄 {doc.file?.split('/').pop() || 'Lieferschein anzeigen'}
                                                         </a>
-                                                        <label className="text-sm text-gray-500 hover:text-blue-600 cursor-pointer">
-                                                            (ersetzen)
-                                                            <input
-                                                                type="file"
-                                                                accept=".pdf,image/*"
-                                                                className="hidden"
-                                                                onChange={(e) => {
-                                                                    if (e.target.files[0]) {
-                                                                        handleUploadReceiptDocument('delivery_note', e.target.files[0]);
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </label>
-                                                    </div>
-                                                ) : (
+                                                    ))}
                                                     <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50">
                                                         <input
                                                             type="file"
                                                             accept=".pdf,image/*"
+                                                            multiple
                                                             className="hidden"
                                                             onChange={(e) => {
-                                                                if (e.target.files[0]) {
-                                                                    handleUploadReceiptDocument('delivery_note', e.target.files[0]);
+                                                                if (e.target.files.length) {
+                                                                    handleUploadReceiptDocument('delivery_note', e.target.files);
+                                                                    e.target.value = '';
                                                                 }
                                                             }}
                                                         />
-                                                        <span className="text-gray-500">📤 Lieferschein hochladen</span>
+                                                        <span className="text-gray-500">📤 Lieferschein(e) hochladen</span>
                                                     </label>
-                                                )}
+                                                </div>
                                             </div>
 
                                             {/* Leihvereinbarung */}
@@ -1130,45 +1120,34 @@ function LoanEdit() {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                                     Leihvereinbarung
                                                 </label>
-                                                {loan.receipt?.loan_agreement_url ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <a 
-                                                            href={loan.receipt.loan_agreement_url} 
-                                                            target="_blank" 
+                                                <div className="space-y-2">
+                                                    {loan.receipt?.documents?.filter(doc => doc.document_type === 'loan_agreement').map(doc => (
+                                                        <a
+                                                            key={doc.id}
+                                                            href={doc.file_url || doc.file}
+                                                            target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-blue-600 hover:underline flex items-center gap-1"
+                                                            className="block text-blue-600 hover:underline"
                                                         >
-                                                            📄 Leihvereinbarung anzeigen
+                                                            📄 {doc.file?.split('/').pop() || 'Leihvereinbarung anzeigen'}
                                                         </a>
-                                                        <label className="text-sm text-gray-500 hover:text-blue-600 cursor-pointer">
-                                                            (ersetzen)
-                                                            <input
-                                                                type="file"
-                                                                accept=".pdf,image/*"
-                                                                className="hidden"
-                                                                onChange={(e) => {
-                                                                    if (e.target.files[0]) {
-                                                                        handleUploadReceiptDocument('loan_agreement', e.target.files[0]);
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </label>
-                                                    </div>
-                                                ) : (
+                                                    ))}
                                                     <label className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-50">
                                                         <input
                                                             type="file"
                                                             accept=".pdf,image/*"
+                                                            multiple
                                                             className="hidden"
                                                             onChange={(e) => {
-                                                                if (e.target.files[0]) {
-                                                                    handleUploadReceiptDocument('loan_agreement', e.target.files[0]);
+                                                                if (e.target.files.length) {
+                                                                    handleUploadReceiptDocument('loan_agreement', e.target.files);
+                                                                    e.target.value = '';
                                                                 }
                                                             }}
                                                         />
-                                                        <span className="text-gray-500">📤 Leihvereinbarung hochladen</span>
+                                                        <span className="text-gray-500">📤 Leihvereinbarung(en) hochladen</span>
                                                     </label>
-                                                )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1246,10 +1225,12 @@ function LoanEdit() {
                                                             <input
                                                                 type="file"
                                                                 accept="image/*"
+                                                                multiple
                                                                 className="hidden"
                                                                 onChange={(e) => {
-                                                                    if (e.target.files[0]) {
-                                                                        handleUploadPhoto(item.id, e.target.files[0]);
+                                                                    if (e.target.files.length) {
+                                                                        handleUploadPhoto(item.id, e.target.files);
+                                                                        e.target.value = '';
                                                                     }
                                                                 }}
                                                             />

@@ -13,6 +13,8 @@ Faelle, die beim Aufraeumen der Dubletten aus dem Excel-Lagerimport auftreten:
 
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
+from django.urls import reverse
 
 from .deletion import (
     delete_supplier, get_link_counts, get_headline_counts,
@@ -21,6 +23,27 @@ from .deletion import (
 from .models import Supplier, ProductGroup, SupplierContact
 
 User = get_user_model()
+
+
+class SupplierCreateResponseTests(TestCase):
+    def test_create_response_contains_supplier_id_for_edit_navigation(self):
+        user = User.objects.create_user(
+            username='supplier_creator', password='x', is_superuser=True, is_staff=True,
+        )
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            reverse('supplier-list'),
+            {'company_name': 'New Supplier', 'contacts': []},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIn('id', response.data)
+        self.assertIn('supplier_number', response.data)
+        self.assertEqual(response.data['company_name'], 'New Supplier')
+        self.assertTrue(Supplier.objects.filter(pk=response.data['id']).exists())
 
 
 class SupplierDeletionTestBase(TestCase):

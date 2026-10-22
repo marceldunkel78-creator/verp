@@ -423,8 +423,31 @@ class LoanItem(models.Model):
 
 def loan_receipt_document_path(instance, filename):
     """Upload path für Wareneingangs-Dokumente (Lieferschein, Leihvereinbarung)"""
-    loan_number = instance.loan.loan_number
+    loan_number = instance.loan.loan_number if hasattr(instance, 'loan') else instance.receipt.loan.loan_number
     return f'Procurement/Loans/{loan_number}/documents/{filename}'
+
+
+class LoanReceiptDocument(models.Model):
+    """Einzelnes Dokument des Wareneingangs, z. B. Lieferschein oder Vereinbarung."""
+    DOCUMENT_TYPE_CHOICES = [
+        ('delivery_note', 'Lieferschein'),
+        ('loan_agreement', 'Leihvereinbarung'),
+    ]
+
+    receipt = models.ForeignKey(
+        'LoanReceipt',
+        on_delete=models.CASCADE,
+        related_name='documents',
+        verbose_name='Wareneingang',
+    )
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPE_CHOICES)
+    file = models.FileField(upload_to=loan_receipt_document_path, verbose_name='Dokument')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at', 'id']
+        verbose_name = 'Wareneingangsdokument'
+        verbose_name_plural = 'Wareneingangsdokumente'
 
 
 class LoanReceipt(models.Model):
@@ -451,24 +474,6 @@ class LoanReceipt(models.Model):
         blank=True,
         related_name='loan_receipts_received',
         verbose_name='Entgegengenommen von'
-    )
-    
-    # Lieferschein des Lieferanten
-    delivery_note = models.FileField(
-        upload_to=loan_receipt_document_path,
-        blank=True,
-        null=True,
-        verbose_name='Lieferschein',
-        help_text='Lieferschein des Lieferanten als PDF/Bild'
-    )
-    
-    # Leihvereinbarung
-    loan_agreement = models.FileField(
-        upload_to=loan_receipt_document_path,
-        blank=True,
-        null=True,
-        verbose_name='Leihvereinbarung',
-        help_text='Unterschriebene Leihvereinbarung als PDF/Bild'
     )
     
     # Allgemeine Notizen zum Wareneingang

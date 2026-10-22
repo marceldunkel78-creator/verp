@@ -262,8 +262,14 @@ def generate_service_report_pdf(report, language='de'):
                         style = h2_style
                     elif block_tag == 'h3':
                         style = h3_style
-                    elif block_tag in ('li-bullet', 'li-number'):
-                        style = list_style
+                    elif block_tag.startswith(('li-bullet', 'li-number')):
+                        depth = int(block_tag.rsplit('-', 1)[-1])
+                        style = ParagraphStyle(
+                            f'NotesListItem{depth}',
+                            parent=list_style,
+                            leftIndent=14 + depth * 14,
+                            bulletIndent=2 + depth * 14,
+                        )
                     elements.append(Paragraph(block_html, style))
             elif blocks:
                 # Fallback: alle Bloecke in normal_style
@@ -428,12 +434,76 @@ def generate_service_report_pdf(report, language='de'):
 
 import re as _re
 
-_PDF_BLOCK_RE = _re.compile(
-    r'<(p|h[1-3]|ul|ol)(\s[^>]*)?>(.*?)</\1>',
-    _re.IGNORECASE | _re.DOTALL,
-)
-_PDF_LI_RE = _re.compile(r'<li(\s[^>]*)?>(.*?)</li>', _re.IGNORECASE | _re.DOTALL)
+_PDF_BLOCK_OPEN_RE = _re.compile(r'<(p|h[1-3]|ul|ol)(?:\s[^>]*)?>', _re.IGNORECASE)
 _PDF_TAG_RE = _re.compile(r'<[^>]+>')
+
+
+def _find_matching_pdf_element(text, tag, opening_end):
+    """Find the closing tag for an element while accounting for nesting."""
+    depth = 1
+    for match in _re.finditer(rf'<(/?){tag}(?:\s[^>]*)?>', text[opening_end:], _re.IGNORECASE):
+        if match.group(1):
+            depth -= 1
+            if depth == 0:
+                return opening_end + match.start(), opening_end + match.end()
+        else:
+            depth += 1
+    return None
+
+
+def _iter_pdf_blocks(text):
+    """Yield complete paragraph, heading, and list blocks, including nested lists."""
+    position = 0
+    while True:
+        match = _PDF_BLOCK_OPEN_RE.search(text, position)
+        if not match:
+            return
+        tag = match.group(1).lower()
+        closing = _find_matching_pdf_element(text, tag, match.end())
+        if not closing:
+            position = match.end()
+            continue
+        close_start, close_end = closing
+        yield match.start(), close_end, tag, text[match.end():close_start]
+        position = close_end
+
+
+def _iter_pdf_list_items(text):
+    """Yield list items at this level, skipping nested list items."""
+    position = 0
+    while True:
+        match = _re.search(r'<li(?:\s[^>]*)?>', text[position:], _re.IGNORECASE)
+        if not match:
+            return
+        start = position + match.start()
+        content_start = position + match.end()
+        closing = _find_matching_pdf_element(text, 'li', content_start)
+        if not closing:
+            return
+        close_start, close_end = closing
+        yield start, close_end, text[content_start:close_start]
+        position = close_end
+
+
+def _append_pdf_list_items(inner, ordered, depth, result):
+    for index, (_, _, li_inner) in enumerate(_iter_pdf_list_items(inner), start=1):
+        nested_lists = list(_iter_pdf_blocks(li_inner))
+        text_parts = []
+        nested_items = []
+        last_end = 0
+        for start, end, tag, nested_inner in nested_lists:
+            if tag in ('ul', 'ol'):
+                text_parts.append(li_inner[last_end:start])
+                _append_pdf_list_items(nested_inner, tag == 'ol', depth + 1, nested_items)
+                last_end = end
+        text_parts.append(li_inner[last_end:])
+        item_html = ''.join(text_parts)
+        item_html = _re.sub(r'</?p(?:\s[^>]*)?>', '', item_html, flags=_re.IGNORECASE)
+        item_html = _convert_inline_styles_to_rl(item_html.strip())
+        if item_html:
+            prefix = f'{index}.&nbsp; ' if ordered else '&bull;&nbsp; '
+            result.append((f'{prefix}{item_html}', f'li-{"number" if ordered else "bullet"}-{depth}'))
+        result.extend(nested_items)
 
 
 def _split_blocks_with_style(raw_html):
@@ -454,36 +524,25 @@ def _split_blocks_with_style(raw_html):
     last_end = 0
     text = safe
 
-    for match in _PDF_BLOCK_RE.finditer(text):
-        prefix = text[last_end:match.start()].strip()
+    for start, end, tag, inner in _iter_pdf_blocks(text):
+        prefix = text[last_end:start].strip()
         if prefix:
             plain = _PDF_TAG_RE.sub('', prefix).strip()
             if plain:
                 result.append((_re.sub(r'<br\s*/?>', '<br/>', plain), 'p'))
 
-        tag = match.group(1).lower()
-        inner = match.group(3)
-
         if tag in ('h1', 'h2', 'h3'):
             inner_clean = _convert_inline_styles_to_rl(_strip_outer_p(inner).strip())
             if inner_clean:
                 result.append((inner_clean, tag))
-        elif tag == 'ul':
-            for li in _PDF_LI_RE.finditer(inner):
-                li_inner = _convert_inline_styles_to_rl(_strip_outer_p(li.group(2)).strip())
-                if li_inner:
-                    result.append((f'&bull;&nbsp; {li_inner}', 'li-bullet'))
-        elif tag == 'ol':
-            for idx, li in enumerate(_PDF_LI_RE.finditer(inner), start=1):
-                li_inner = _convert_inline_styles_to_rl(_strip_outer_p(li.group(2)).strip())
-                if li_inner:
-                    result.append((f'{idx}.&nbsp; {li_inner}', 'li-number'))
+        elif tag in ('ul', 'ol'):
+            _append_pdf_list_items(inner, tag == 'ol', 0, result)
         else:  # p
             inner_clean = _convert_inline_styles_to_rl(_strip_outer_p(inner).strip())
             if inner_clean:
                 result.append((inner_clean, 'p'))
 
-        last_end = match.end()
+        last_end = end
 
     suffix = text[last_end:].strip()
     if suffix:

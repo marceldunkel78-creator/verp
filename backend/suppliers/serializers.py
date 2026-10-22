@@ -173,12 +173,13 @@ class SupplierCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
         fields = [
-            'company_name', 'street', 'house_number', 'address_supplement',
+            'id', 'supplier_number', 'company_name', 'street', 'house_number', 'address_supplement',
             'postal_code', 'city', 'state', 'country', 'address',
             'email', 'phone', 'website', 'customer_number',
             'payment_term', 'delivery_term', 'delivery_instruction',
             'contacts', 'notes', 'is_active'
         ]
+        read_only_fields = ['id', 'supplier_number']
     
     def validate_website(self, value):
         """Website-Feld: Leere Werte erlauben, automatisch Schema hinzufügen"""

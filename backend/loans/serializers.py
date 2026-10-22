@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Loan, LoanItem, LoanReceipt, LoanItemReceipt, 
+    Loan, LoanItem, LoanReceipt, LoanReceiptDocument, LoanItemReceipt,
     LoanItemPhoto, LoanReturn, LoanReturnItem
 )
 from suppliers.models import Supplier
@@ -90,30 +90,30 @@ class LoanItemNestedSerializer(serializers.ModelSerializer):
         ]
 
 
+class LoanReceiptDocumentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LoanReceiptDocument
+        fields = ['id', 'receipt', 'document_type', 'file', 'file_url', 'uploaded_at']
+        read_only_fields = ['uploaded_at', 'file_url']
+
+    def get_file_url(self, obj):
+        return obj.file.url if obj.file else None
+
+
 class LoanReceiptSerializer(serializers.ModelSerializer):
     """Serializer für Wareneingang"""
     received_by_display = serializers.CharField(source='received_by.get_full_name', read_only=True)
-    delivery_note_url = serializers.SerializerMethodField()
-    loan_agreement_url = serializers.SerializerMethodField()
-    
+    documents = LoanReceiptDocumentSerializer(many=True, read_only=True)
+
     class Meta:
         model = LoanReceipt
         fields = [
-            'id', 'loan', 'receipt_date', 'received_by', 'received_by_display', 
-            'delivery_note', 'delivery_note_url', 'loan_agreement', 'loan_agreement_url',
-            'notes'
+            'id', 'loan', 'receipt_date', 'received_by', 'received_by_display',
+            'documents', 'notes'
         ]
-        read_only_fields = ['received_by', 'received_by_display', 'delivery_note_url', 'loan_agreement_url']
-    
-    def get_delivery_note_url(self, obj):
-        if obj.delivery_note:
-            return obj.delivery_note.url
-        return None
-    
-    def get_loan_agreement_url(self, obj):
-        if obj.loan_agreement:
-            return obj.loan_agreement.url
-        return None
+        read_only_fields = ['received_by', 'received_by_display', 'documents']
 
 
 class LoanReturnItemSerializer(serializers.ModelSerializer):

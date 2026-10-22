@@ -9,7 +9,7 @@ from django.db.models import Q
 import os
 
 from .models import (
-    Loan, LoanItem, LoanReceipt, LoanItemReceipt,
+    Loan, LoanItem, LoanReceipt, LoanReceiptDocument, LoanItemReceipt,
     LoanItemPhoto, LoanReturn, LoanReturnItem
 )
 from .serializers import (
@@ -269,27 +269,27 @@ class LoanViewSet(viewsets.ModelViewSet):
         
         receipt = loan.receipt
         document_type = request.data.get('document_type')  # 'delivery_note' or 'loan_agreement'
-        file = request.FILES.get('file')
-        
-        if not file:
+        files = request.FILES.getlist('files') or request.FILES.getlist('file')
+
+        if document_type not in ('delivery_note', 'loan_agreement'):
             return Response(
-                {'error': 'Keine Datei hochgeladen'}, 
+                {'error': 'Ungültiger Dokumenttyp'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        if document_type == 'delivery_note':
-            receipt.delivery_note = file
-        elif document_type == 'loan_agreement':
-            receipt.loan_agreement = file
-        else:
+        if not files:
             return Response(
-                {'error': 'Ungültiger Dokumenttyp'}, 
+                {'error': 'Keine Datei hochgeladen'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        receipt.save()
+
+        for file in files:
+            LoanReceiptDocument.objects.create(
+                receipt=receipt,
+                document_type=document_type,
+                file=file,
+            )
         serializer = LoanReceiptSerializer(receipt)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['post'])
     def upload_photo(self, request, pk=None):
@@ -299,14 +299,24 @@ class LoanViewSet(viewsets.ModelViewSet):
         
         item = get_object_or_404(LoanItem, id=item_id, loan=loan)
         
-        photo = LoanItemPhoto.objects.create(
-            loan_item=item,
-            photo=request.FILES.get('photo'),
-            description=request.data.get('description', ''),
-            uploaded_by=request.user
-        )
-        
-        serializer = LoanItemPhotoSerializer(photo)
+        files = request.FILES.getlist('photos') or request.FILES.getlist('photo')
+        if not files:
+            return Response(
+                {'error': 'Keine Fotos hochgeladen'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        photos = [
+            LoanItemPhoto.objects.create(
+                loan_item=item,
+                photo=file,
+                description=request.data.get('description', ''),
+                uploaded_by=request.user,
+            )
+            for file in files
+        ]
+
+        serializer = LoanItemPhotoSerializer(photos, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['post'])
