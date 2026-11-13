@@ -140,6 +140,7 @@ class DevelopmentTicket(models.Model):
     CATEGORY_CHOICES = [
         ('optics', 'Optik'),
         ('electronics', 'Elektronik'),
+        ('mechanics', 'Mechanik'),
     ]
     PRIORITY_CHOICES = [
         ('low', 'Niedrig'),

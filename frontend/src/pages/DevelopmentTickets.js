@@ -6,7 +6,7 @@ import { ArrowPathIcon, PlusIcon, TicketIcon } from '@heroicons/react/24/outline
 
 const STATUS = { new: 'Neu', in_progress: 'Bearbeitung', closed: 'Geschlossen' };
 const PRIORITY = { low: 'Niedrig', normal: 'Normal', high: 'Hoch', urgent: 'Dringend' };
-const CATEGORY = { optics: 'Optik', electronics: 'Elektronik' };
+const CATEGORY = { optics: 'Optik', electronics: 'Elektronik', mechanics: 'Mechanik' };
 
 export default function DevelopmentTickets() {
   const navigate = useNavigate();

@@ -43,6 +43,10 @@ class DevelopmentTicketTests(TestCase):
         with self.assertRaises(ValidationError):
             entry.save()
 
+    def test_mechanics_category_is_available(self):
+        ticket = DevelopmentTicket.objects.create(title='Mechanics category', category='mechanics')
+        self.assertEqual(ticket.get_category_display(), 'Mechanik')
+
     def test_start_and_end_dates_transition_status(self):
         ticket = DevelopmentTicket.objects.create(title='Date transition test')
         ticket.start_date = date(2026, 11, 13)

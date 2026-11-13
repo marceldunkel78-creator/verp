@@ -32,11 +32,16 @@ from .views import RMACaseViewSet
 
 class RMACaseSearchTests(SimpleTestCase):
     def test_search_fields_resolve_to_actual_rma_model_fields(self):
-        field_names = {field.name for field in RMACase._meta.get_fields()}
         for search_field in RMACaseViewSet.search_fields:
-            model_field = search_field.split('__')[-1]
-            self.assertIn(model_field, field_names, search_field)
+            model = RMACase
+            for field_name in search_field.split('__'):
+                field = model._meta.get_field(field_name)
+                if field.is_relation:
+                    model = field.related_model
         self.assertIn('product_serial', RMACaseViewSet.search_fields)
+        self.assertIn('customer__first_name', RMACaseViewSet.search_fields)
+        self.assertIn('customer__last_name', RMACaseViewSet.search_fields)
+        self.assertIn('customer__customer_number', RMACaseViewSet.search_fields)
         self.assertNotIn('serial_number', RMACaseViewSet.search_fields)
 
     def test_rma_list_filters_submitted_search_by_serial(self):
