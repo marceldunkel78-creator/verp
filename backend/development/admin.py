@@ -1,15 +1,9 @@
 from django.contrib import admin
 from .models import (
-    DevelopmentProject, DevelopmentProjectTodo, DevelopmentProjectComment,
+    DevelopmentProject, DevelopmentTicket, DevelopmentTicketComment, DevelopmentProjectComment,
     DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
-    DevelopmentProjectAttachment, DevelopmentProjectTimeEntry
+    DevelopmentProjectAttachment, DevelopmentTicketAttachment, DevelopmentProjectTimeEntry
 )
-
-
-class DevelopmentProjectTodoInline(admin.TabularInline):
-    model = DevelopmentProjectTodo
-    extra = 0
-    fields = ['text', 'is_completed', 'position']
 
 
 class DevelopmentProjectCommentInline(admin.TabularInline):
@@ -45,7 +39,6 @@ class DevelopmentProjectAdmin(admin.ModelAdmin):
     readonly_fields = ['project_number', 'created_at', 'updated_at', 'created_by']
     autocomplete_fields = ['assigned_to']
     inlines = [
-        DevelopmentProjectTodoInline,
         DevelopmentProjectCommentInline,
         DevelopmentProjectMaterialItemInline,
         DevelopmentProjectAttachmentInline,
@@ -56,6 +49,28 @@ class DevelopmentProjectAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+class DevelopmentTicketCommentInline(admin.TabularInline):
+    model = DevelopmentTicketComment
+    extra = 0
+    readonly_fields = ['created_at', 'updated_at']
+
+
+class DevelopmentTicketAttachmentInline(admin.TabularInline):
+    model = DevelopmentTicketAttachment
+    extra = 0
+    readonly_fields = ['file_size', 'content_type', 'uploaded_by', 'uploaded_at']
+
+
+@admin.register(DevelopmentTicket)
+class DevelopmentTicketAdmin(admin.ModelAdmin):
+    list_display = ['ticket_number', 'title', 'category', 'status', 'priority', 'project', 'assigned_to']
+    list_filter = ['category', 'status', 'priority']
+    search_fields = ['ticket_number', 'title', 'description', 'project__name']
+    autocomplete_fields = ['project', 'assigned_to']
+    readonly_fields = ['ticket_number', 'created_at', 'updated_at', 'created_by']
+    inlines = [DevelopmentTicketCommentInline, DevelopmentTicketAttachmentInline]
 
 
 @admin.register(DevelopmentProjectCostCalculation)

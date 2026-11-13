@@ -127,3 +127,13 @@ class DevelopmentProjectPermission(ModulePermission):
         view.main_read_permission = 'can_read_development'
         view.main_write_permission = 'can_write_development'
         return super().has_permission(request, view)
+
+
+class DevelopmentTicketPermission(ModulePermission):
+    """Berechtigungen für Entwicklungstickets"""
+    def has_permission(self, request, view):
+        view.read_permission = 'can_read_development_tickets'
+        view.write_permission = 'can_write_development_tickets'
+        view.main_read_permission = 'can_read_development'
+        view.main_write_permission = 'can_write_development'
+        return super().has_permission(request, view)

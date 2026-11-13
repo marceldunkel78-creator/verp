@@ -1,8 +1,10 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.db import transaction
+from django.core.exceptions import ValidationError
 from decimal import Decimal
-from core.upload_paths import development_project_attachment_path
+from core.upload_paths import development_project_attachment_path, development_ticket_attachment_path
 
 User = get_user_model()
 
@@ -128,44 +130,94 @@ class DevelopmentProject(models.Model):
         return f'DEV-{next_number:05d}'
 
 
-class DevelopmentProjectTodo(models.Model):
-    """
-    ToDo-Einträge für Entwicklungsprojekte
-    """
-    project = models.ForeignKey(
-        DevelopmentProject,
-        on_delete=models.CASCADE,
-        related_name='todos',
-        verbose_name='Projekt'
-    )
-    text = models.TextField(verbose_name='Aufgabe')
-    is_completed = models.BooleanField(default=False, verbose_name='Erledigt')
-    position = models.PositiveIntegerField(default=0, verbose_name='Position')
-    assigned_to = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='assigned_dev_todos',
-        verbose_name='Zugewiesen an'
-    )
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='created_dev_todos',
-        verbose_name='Erstellt von'
-    )
+class DevelopmentTicket(models.Model):
+    """Internal development tickets, optionally linked to a development project."""
+    STATUS_CHOICES = [
+        ('new', 'Neu'),
+        ('in_progress', 'Bearbeitung'),
+        ('closed', 'Geschlossen'),
+    ]
+    CATEGORY_CHOICES = [
+        ('optics', 'Optik'),
+        ('electronics', 'Elektronik'),
+    ]
+    PRIORITY_CHOICES = [
+        ('low', 'Niedrig'),
+        ('normal', 'Normal'),
+        ('high', 'Hoch'),
+        ('urgent', 'Dringend'),
+    ]
+
+    ticket_number = models.CharField(max_length=15, unique=True, editable=False, null=True, blank=True, verbose_name='Ticketnummer')
+    title = models.CharField(max_length=200, verbose_name='Titel')
+    description = models.TextField(blank=True, verbose_name='Beschreibung')
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, blank=True, verbose_name='Kategorie')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new', verbose_name='Status')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='normal', verbose_name='Priorität')
+    start_date = models.DateField(null=True, blank=True, verbose_name='Bearbeitungsbeginn')
+    end_date = models.DateField(null=True, blank=True, verbose_name='Abgabe')
+    project = models.ForeignKey(DevelopmentProject, on_delete=models.SET_NULL, null=True, blank=True, related_name='tickets', verbose_name='Entwicklungsprojekt')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_development_tickets', verbose_name='Zuständig')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_development_tickets', verbose_name='Erstellt von')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
-    
+
     class Meta:
-        verbose_name = 'ToDo'
-        verbose_name_plural = 'ToDos'
-        ordering = ['position', 'created_at']
-    
+        verbose_name = 'Entwicklungsticket'
+        verbose_name_plural = 'Entwicklungstickets'
+        ordering = ['-updated_at']
+
     def __str__(self):
-        return f"ToDo: {self.text[:50]}..."
+        return f"{self.ticket_number} - {self.title}" if self.ticket_number else self.title
+
+    def save(self, *args, **kwargs):
+        previous = None
+        if self.pk:
+            previous = DevelopmentTicket.objects.filter(pk=self.pk).only('start_date', 'end_date').first()
+        if not self.ticket_number:
+            with transaction.atomic():
+                numbers = DevelopmentTicket.objects.exclude(ticket_number__isnull=True).values_list('ticket_number', flat=True)
+                existing = [int(number.split('-')[-1]) for number in numbers if number.startswith('DT-') and number.split('-')[-1].isdigit()]
+                self.ticket_number = f"DT-{max(existing, default=0) + 1:05d}"
+        if self.end_date and (previous is None or previous.end_date is None):
+            self.status = 'closed'
+        elif self.start_date and (previous is None or previous.start_date is None) and self.status == 'new':
+            self.status = 'in_progress'
+        super().save(*args, **kwargs)
+
+
+class DevelopmentTicketComment(models.Model):
+    ticket = models.ForeignKey(DevelopmentTicket, on_delete=models.CASCADE, related_name='comments', verbose_name='Entwicklungsticket')
+    comment = models.TextField(verbose_name='Kommentar')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='development_ticket_comments', verbose_name='Erstellt von')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    class Meta:
+        verbose_name = 'Ticket-Kommentar'
+        verbose_name_plural = 'Ticket-Kommentare'
+        ordering = ['-created_at']
+
+
+class DevelopmentTicketAttachment(models.Model):
+    ticket = models.ForeignKey(DevelopmentTicket, on_delete=models.CASCADE, related_name='attachments', verbose_name='Entwicklungsticket')
+    file = models.FileField(upload_to=development_ticket_attachment_path, verbose_name='Datei')
+    filename = models.CharField(max_length=255, verbose_name='Dateiname')
+    file_size = models.IntegerField(null=True, blank=True, verbose_name='Dateigröße (Bytes)')
+    content_type = models.CharField(max_length=100, blank=True, verbose_name='Content-Type')
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='development_ticket_uploads', verbose_name='Hochgeladen von')
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name='Hochgeladen am')
+
+    class Meta:
+        verbose_name = 'Ticket-Anhang'
+        verbose_name_plural = 'Ticket-Anhänge'
+        ordering = ['-uploaded_at']
+
+    @property
+    def is_image(self):
+        if self.content_type:
+            return self.content_type.startswith('image/')
+        return self.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'))
 
 
 class DevelopmentProjectComment(models.Model):
@@ -411,13 +463,23 @@ class DevelopmentProjectAttachment(models.Model):
 
 class DevelopmentProjectTimeEntry(models.Model):
     """
-    Zeiterfassung für Entwicklungsprojekte
+    Gemeinsame Zeiterfassung für Entwicklungsprojekte und Entwicklungstickets.
     """
     project = models.ForeignKey(
         DevelopmentProject,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='time_entries',
         verbose_name='Projekt'
+    )
+    ticket = models.ForeignKey(
+        DevelopmentTicket,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='time_entries',
+        verbose_name='Entwicklungsticket'
     )
     date = models.DateField(
         verbose_name='Datum',
@@ -458,9 +520,22 @@ class DevelopmentProjectTimeEntry(models.Model):
         verbose_name = 'Zeiteintrag'
         verbose_name_plural = 'Zeiteinträge'
         ordering = ['-date', '-time']
-    
+
+    def clean(self):
+        if not self.project_id and not self.ticket_id:
+            raise ValidationError('Ein Zeiteintrag muss einem Entwicklungsprojekt oder Ticket zugeordnet sein.')
+        if self.ticket_id and self.project_id and self.ticket.project_id != self.project_id:
+            raise ValidationError('Ticket und Projekt des Zeiteintrags müssen zusammengehören.')
+
+    def save(self, *args, **kwargs):
+        if self.ticket_id and not self.project_id:
+            self.project_id = self.ticket.project_id
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.date} {self.time} - {self.hours_spent}h ({self.project.project_number})"
+        project_number = self.project.project_number if self.project_id else 'ohne Projekt'
+        return f"{self.date} {self.time} - {self.hours_spent}h ({project_number})"
 
 
 class DevelopmentProjectSource(models.Model):

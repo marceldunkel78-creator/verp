@@ -84,6 +84,7 @@ const MODULE_HIERARCHY = [
     label: 'Entwicklung',
     submodules: [
       { key: 'development_projects', label: 'Entwicklungsprojekte' },
+      { key: 'development_tickets', label: 'Entwicklungstickets' },
     ]
   },
   {

@@ -266,7 +266,7 @@ function CustomerLoanEdit() {
         if (customerSearch.length >= 2) {
             const timer = setTimeout(async () => {
                 try {
-                    const response = await api.get(`/customers/customers/?search=${encodeURIComponent(customerSearch)}&page_size=20`);
+                    const response = await api.get(`/customers/customers/?search=${encodeURIComponent(customerSearch)}&is_active=true&page_size=20`);
                     const data = response.data && (response.data.results || response.data);
                     setFilteredCustomers(Array.isArray(data) ? data : []);
                     setShowCustomerDropdown(true);

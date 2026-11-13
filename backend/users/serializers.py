@@ -39,7 +39,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_read_service_vs_service', 'can_read_service_tickets', 'can_read_service_rma', 'can_read_service_troubleshooting',
             'can_read_hr_employees', 'can_read_inventory_warehouse', 'can_read_inventory_customer_loans',
             'can_read_inventory_demo_systems',
-            'can_read_development_projects',
+            'can_read_development_projects', 'can_read_development_tickets',
             # Hauptmodule - Schreiben
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
             'can_write_customers', 'can_write_manufacturing', 'can_write_service',
@@ -59,7 +59,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse', 'can_write_inventory_customer_loans',
             'can_write_inventory_demo_systems',
-            'can_write_development_projects',
+            'can_write_development_projects', 'can_write_development_tickets',
             # MyVERP Tab-Einstellungen
             'myverp_visible_tabs',
             'is_active', 'is_staff', 'is_superuser', 'date_joined', 'last_login'
@@ -103,7 +103,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_read_service_vs_service', 'can_read_service_tickets', 'can_read_service_rma', 'can_read_service_troubleshooting',
             'can_read_hr_employees', 'can_read_inventory_warehouse', 'can_read_inventory_customer_loans',
             'can_read_inventory_demo_systems',
-            'can_read_development_projects',
+            'can_read_development_projects', 'can_read_development_tickets',
             # Hauptmodule - Schreiben
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
             'can_write_customers', 'can_write_manufacturing', 'can_write_service',
@@ -123,7 +123,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse', 'can_write_inventory_customer_loans',
             'can_write_inventory_demo_systems',
-            'can_write_development_projects',
+            'can_write_development_projects', 'can_write_development_tickets',
             # MyVERP Tab-Einstellungen
             'myverp_visible_tabs',
         ]
@@ -167,7 +167,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_read_service_vs_service', 'can_read_service_tickets', 'can_read_service_rma', 'can_read_service_troubleshooting',
             'can_read_hr_employees', 'can_read_inventory_warehouse', 'can_read_inventory_customer_loans',
             'can_read_inventory_demo_systems',
-            'can_read_development_projects',
+            'can_read_development_projects', 'can_read_development_tickets',
             # Hauptmodule - Schreiben
             'can_write_accounting', 'can_write_hr', 'can_write_suppliers',
             'can_write_customers', 'can_write_manufacturing', 'can_write_service',
@@ -187,7 +187,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'can_write_service_vs_service', 'can_write_service_tickets', 'can_write_service_rma', 'can_write_service_troubleshooting',
             'can_write_hr_employees', 'can_write_inventory_warehouse', 'can_write_inventory_customer_loans',
             'can_write_inventory_demo_systems',
-            'can_write_development_projects',
+            'can_write_development_projects', 'can_write_development_tickets',
             'password', 'password_confirm',
             # MyVERP Tab-Einstellungen
             'myverp_visible_tabs',

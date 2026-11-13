@@ -44,6 +44,7 @@ const RMACases = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [submittedSearchTerm, setSubmittedSearchTerm] = useState('');
 
   const fetchRMACases = useCallback(async () => {
     setLoading(true);
@@ -51,7 +52,7 @@ const RMACases = () => {
       const params = new URLSearchParams();
       params.append('page', currentPage);
       params.append('page_size', '10');
-      if (searchTerm) params.append('search', searchTerm);
+      if (submittedSearchTerm) params.append('search', submittedSearchTerm);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (warrantyFilter !== 'all') params.append('warranty_status', warrantyFilter);
       if (sortBy) params.append('ordering', sortBy);
@@ -67,7 +68,7 @@ const RMACases = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, statusFilter, warrantyFilter, sortBy]);
+  }, [currentPage, submittedSearchTerm, statusFilter, warrantyFilter, sortBy]);
 
   useEffect(() => {
     fetchRMACases();
@@ -76,7 +77,7 @@ const RMACases = () => {
   const handleSearch = (e) => {
     e.preventDefault();
     setCurrentPage(1);
-    fetchRMACases();
+    setSubmittedSearchTerm(searchTerm.trim());
   };
 
   const formatDate = (dateStr) => {

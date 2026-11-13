@@ -16,7 +16,7 @@ import {
 
 const TABS = [
   { id: 'details', label: 'Basisdaten' },
-  { id: 'todos', label: 'ToDo-Liste' },
+  { id: 'tickets', label: 'Tickets' },
   { id: 'comments', label: 'Kommentare' },
   { id: 'materials', label: 'Material & Kalkulation' },
   { id: 'files', label: 'Dokumente' },
@@ -59,7 +59,7 @@ const DevelopmentProjectEdit = () => {
     assigned_to: '',
     project_start: '',
     planned_end: '',
-    todos: [],
+    tickets: [],
     comments: [],
     material_items: [],
     cost_calculations: [],
@@ -69,8 +69,6 @@ const DevelopmentProjectEdit = () => {
   });
 
   // Form states for adding new items
-  const [newTodo, setNewTodo] = useState('');
-  const [newTodoAssignee, setNewTodoAssignee] = useState('');
   const [newComment, setNewComment] = useState('');
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
@@ -104,7 +102,6 @@ const DevelopmentProjectEdit = () => {
   const originalCostCalcRef = useRef(null);
 
   // Loading states
-  const [addingTodo, setAddingTodo] = useState(false);
   const [addingComment, setAddingComment] = useState(false);
   const [addingMaterial, setAddingMaterial] = useState(false);
   const [addingTimeEntry, setAddingTimeEntry] = useState(false);
@@ -172,7 +169,7 @@ const DevelopmentProjectEdit = () => {
           assigned_to: '',
           project_start: '',
           planned_end: '',
-          todos: [],
+          tickets: [],
           comments: [],
           material_items: [],
           cost_calculations: [],
@@ -297,62 +294,9 @@ const DevelopmentProjectEdit = () => {
     }
   };
 
-  // TODO Actions
-  const handleAddTodo = async () => {
+  const handleCreateProjectTicket = () => {
     if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
-    if (!newTodo.trim()) return;
-    setAddingTodo(true);
-    try {
-      const payload = { text: newTodo };
-      if (newTodoAssignee) payload.assigned_to = newTodoAssignee;
-      const response = await api.post(`/development/projects/${id}/add_todo/`, payload);
-      setProject(prev => ({ ...prev, todos: [...prev.todos, response.data] }));
-      setNewTodo('');
-      setNewTodoAssignee('');
-    } catch (error) {
-      alert('Fehler beim Hinzufügen: ' + error.message);
-    } finally {
-      setAddingTodo(false);
-    }
-  };
-
-  const handleToggleTodo = async (todoId, isCompleted) => {
-    if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
-    try {
-      await api.patch(`/development/projects/${id}/update_todo/${todoId}/`, { is_completed: !isCompleted });
-      setProject(prev => ({
-        ...prev,
-        todos: prev.todos.map(t => t.id === todoId ? { ...t, is_completed: !isCompleted } : t)
-      }));
-    } catch (error) {
-      alert('Fehler beim Aktualisieren: ' + error.message);
-    }
-  };
-
-  const handleDeleteTodo = async (todoId) => {
-    if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
-    if (!window.confirm('ToDo wirklich löschen?')) return;
-    try {
-      await api.delete(`/development/projects/${id}/delete_todo/${todoId}/`);
-      setProject(prev => ({ ...prev, todos: prev.todos.filter(t => t.id !== todoId) }));
-    } catch (error) {
-      alert('Fehler beim Löschen: ' + error.message);
-    }
-  };
-
-  const handleUpdateTodoAssignment = async (todoId, userId) => {
-    if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
-    try {
-      const response = await api.patch(`/development/projects/${id}/update_todo/${todoId}/`, {
-        assigned_to: userId || null
-      });
-      setProject(prev => ({
-        ...prev,
-        todos: prev.todos.map(t => t.id === todoId ? { ...t, ...response.data } : t)
-      }));
-    } catch (error) {
-      alert('Fehler beim Zuweisen: ' + error.message);
-    }
+    navigate(`/development/tickets/new?project=${id}`);
   };
 
   // Comment Actions
@@ -688,9 +632,9 @@ const DevelopmentProjectEdit = () => {
                   }`}
               >
                 {tab.label}
-                {tab.id === 'todos' && project.todos?.length > 0 && (
+                {tab.id === 'tickets' && project.tickets?.length > 0 && (
                   <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
-                    {project.todos.filter(t => !t.is_completed).length}/{project.todos.length}
+                    {project.tickets.length}
                   </span>
                 )}
                 {tab.id === 'time' && totalTimeSpent > 0 && (
@@ -811,87 +755,25 @@ const DevelopmentProjectEdit = () => {
           </div>
         )}
 
-        {/* ToDo Tab */}
-        {activeTab === 'todos' && !isNew && (
+        {/* Development Tickets Tab */}
+        {activeTab === 'tickets' && !isNew && (
           <div className="p-6">
-            {/* Add new ToDo */}
-            <div className="mb-6 flex gap-2">
-              <input
-                type="text"
-                value={newTodo}
-                onChange={(e) => setNewTodo(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddTodo()}
-                className="flex-1 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500"
-                placeholder="Neue Aufgabe hinzufügen..."
-              />
-              <select
-                value={newTodoAssignee}
-                onChange={(e) => setNewTodoAssignee(e.target.value)}
-                className="w-48 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
-              >
-                <option value="">-- Zuweisen --</option>
-                {users.map(user => (
-                  <option key={user.id} value={user.id}>
-                    {user.first_name} {user.last_name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleAddTodo}
-                disabled={addingTodo || !newTodo.trim()}
-                className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
-              >
-                {addingTodo ? <ArrowPathIcon className="h-5 w-5 animate-spin" /> : <PlusIcon className="h-5 w-5" />}
+            <div className="mb-6 flex justify-end">
+              <button onClick={handleCreateProjectTicket} className="inline-flex items-center rounded-md bg-purple-600 px-4 py-2 text-white hover:bg-purple-700">
+                <PlusIcon className="mr-2 h-5 w-5" />Neues Ticket
               </button>
             </div>
-
-            {/* ToDo List */}
-            <div className="space-y-2">
-              {project.todos?.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">Keine Aufgaben vorhanden</p>
-              ) : (
-                project.todos?.map(todo => (
-                  <div
-                    key={todo.id}
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${
-                      todo.is_completed ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
-                    }`}
-                  >
-                    <button
-                      onClick={() => handleToggleTodo(todo.id, todo.is_completed)}
-                      className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                        todo.is_completed
-                          ? 'bg-green-500 border-green-500 text-white'
-                          : 'border-gray-300 hover:border-purple-500'
-                      }`}
-                    >
-                      {todo.is_completed && <CheckIcon className="h-4 w-4" />}
-                    </button>
-                    <span className={`flex-1 ${todo.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                      {todo.text}
-                    </span>
-                    <select
-                      value={todo.assigned_to || ''}
-                      onChange={(e) => handleUpdateTodoAssignment(todo.id, e.target.value)}
-                      className="w-40 rounded-md border-gray-300 shadow-sm focus:ring-purple-500 focus:border-purple-500 text-xs"
-                      title={todo.assigned_to_name ? `Zugewiesen an: ${todo.assigned_to_name}` : 'Nicht zugewiesen'}
-                    >
-                      <option value="">-- Zuweisen --</option>
-                      {users.map(user => (
-                        <option key={user.id} value={user.id}>
-                          {user.first_name} {user.last_name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => handleDeleteTodo(todo.id)}
-                      className="text-red-400 hover:text-red-600"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  </div>
-                ))
-              )}
+            <div className="overflow-hidden rounded-lg border border-gray-200">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50"><tr>{['Ticket-Nr.', 'Titel', 'Kategorie', 'Status', 'Priorität', 'Zuständig'].map(label => <th key={label} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{label}</th>)}</tr></thead>
+                <tbody className="divide-y divide-gray-200">
+                  {project.tickets?.length ? project.tickets.map(ticket => (
+                    <tr key={ticket.id} onClick={() => navigate(`/development/tickets/${ticket.id}`)} className="cursor-pointer hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-purple-700">{ticket.ticket_number}</td><td className="px-4 py-3 text-sm text-gray-900">{ticket.title}</td><td className="px-4 py-3 text-sm text-gray-600">{ticket.category_display || '-'}</td><td className="px-4 py-3 text-sm text-gray-600">{ticket.status_display}</td><td className="px-4 py-3 text-sm text-gray-600">{ticket.priority_display}</td><td className="px-4 py-3 text-sm text-gray-600">{ticket.assigned_to_name || '-'}</td>
+                    </tr>
+                  )) : <tr><td colSpan="6" className="py-8 text-center text-sm text-gray-500">Keine Tickets für dieses Projekt</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1418,6 +1300,7 @@ const DevelopmentProjectEdit = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uhrzeit</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mitarbeiter</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stunden</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beschreibung</th>
                     <th className="px-4 py-3"></th>
@@ -1426,7 +1309,7 @@ const DevelopmentProjectEdit = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {project.time_entries?.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                      <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
                         Keine Zeiteinträge vorhanden
                       </td>
                     </tr>
@@ -1438,6 +1321,9 @@ const DevelopmentProjectEdit = () => {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">{entry.time?.substring(0, 5)}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{entry.employee_name}</td>
+                        <td className="px-4 py-3 text-sm text-purple-700">
+                        {entry.ticket ? <button type="button" onClick={() => navigate(`/development/tickets/${entry.ticket}`)} className="hover:underline">{entry.ticket_number} – {entry.ticket_title}</button> : 'Projekt direkt'}
+                        </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">
                           {parseFloat(entry.hours_spent).toFixed(2)}h
                         </td>

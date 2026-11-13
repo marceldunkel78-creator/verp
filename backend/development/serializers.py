@@ -1,37 +1,132 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    DevelopmentProject, DevelopmentProjectTodo, DevelopmentProjectComment,
+    DevelopmentProject, DevelopmentTicket, DevelopmentProjectComment, DevelopmentTicketComment,
     DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
-    DevelopmentProjectAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
+    DevelopmentProjectAttachment, DevelopmentTicketAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
 )
 
 User = get_user_model()
 
 
-class DevelopmentProjectTodoSerializer(serializers.ModelSerializer):
-    """Serializer für ToDo-Einträge"""
+class DevelopmentTicketCommentSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
-    assigned_to_name = serializers.SerializerMethodField()
-    
+
     class Meta:
-        model = DevelopmentProjectTodo
-        fields = [
-            'id', 'project', 'text', 'is_completed', 'position',
-            'assigned_to', 'assigned_to_name',
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['created_at', 'updated_at', 'created_by']
-    
+        model = DevelopmentTicketComment
+        fields = ['id', 'ticket', 'comment', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+        read_only_fields = ['ticket', 'created_by', 'created_at', 'updated_at']
+
     def get_created_by_name(self, obj):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
-    
+
+
+class DevelopmentTicketAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DevelopmentTicketAttachment
+        fields = ['id', 'ticket', 'file', 'filename', 'file_size', 'content_type', 'is_image', 'file_url', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
+        read_only_fields = ['ticket', 'uploaded_at', 'uploaded_by', 'is_image']
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip() or obj.uploaded_by.username
+        return None
+
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+        return None
+
+
+class DevelopmentProjectTimeEntrySerializer(serializers.ModelSerializer):
+    """Serializer for project and ticket time entries."""
+    employee_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    ticket_number = serializers.CharField(source='ticket.ticket_number', read_only=True, allow_null=True)
+    ticket_title = serializers.CharField(source='ticket.title', read_only=True, allow_null=True)
+
+    class Meta:
+        model = DevelopmentProjectTimeEntry
+        fields = ['id', 'project', 'ticket', 'ticket_number', 'ticket_title', 'date', 'time', 'employee', 'employee_name', 'hours_spent', 'description', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'created_by', 'ticket']
+
+    def get_employee_name(self, obj):
+        if obj.employee:
+            return f"{obj.employee.first_name} {obj.employee.last_name}".strip() or obj.employee.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+
+class DevelopmentTicketListSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    project_number = serializers.CharField(source='project.project_number', read_only=True, allow_null=True)
+    project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
+    assigned_to_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DevelopmentTicket
+        fields = ['id', 'ticket_number', 'title', 'category', 'category_display', 'status', 'status_display', 'priority', 'priority_display', 'project', 'project_number', 'project_name', 'assigned_to', 'assigned_to_name', 'start_date', 'end_date', 'updated_at']
+
     def get_assigned_to_name(self, obj):
         if obj.assigned_to:
             return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
         return None
+
+
+class DevelopmentTicketSerializer(serializers.ModelSerializer):
+    """Serializer for development tickets."""
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    project_number = serializers.CharField(source='project.project_number', read_only=True, allow_null=True)
+    project_name = serializers.CharField(source='project.name', read_only=True, allow_null=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    comments = serializers.SerializerMethodField()
+    attachments = serializers.SerializerMethodField()
+    time_entries = serializers.SerializerMethodField()
+    total_hours_spent = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DevelopmentTicket
+        fields = ['id', 'ticket_number', 'title', 'description', 'category', 'category_display', 'status', 'status_display', 'priority', 'priority_display', 'start_date', 'end_date', 'project', 'project_number', 'project_name', 'assigned_to', 'assigned_to_name', 'comments', 'attachments', 'time_entries', 'total_hours_spent', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+        read_only_fields = ['ticket_number', 'created_by', 'created_at', 'updated_at']
+
+    def get_assigned_to_name(self, obj):
+        if obj.assigned_to:
+            return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+    def get_comments(self, obj):
+        return DevelopmentTicketCommentSerializer(obj.comments.all(), many=True).data
+
+    def get_attachments(self, obj):
+        return DevelopmentTicketAttachmentSerializer(obj.attachments.all(), many=True, context=self.context).data
+
+    def get_time_entries(self, obj):
+        return DevelopmentProjectTimeEntrySerializer(obj.time_entries.all(), many=True).data
+
+    def get_total_hours_spent(self, obj):
+        from django.db.models import Sum
+        total = obj.time_entries.aggregate(Sum('hours_spent'))['hours_spent__sum']
+        return float(total) if total else 0.0
 
 
 class DevelopmentProjectCommentSerializer(serializers.ModelSerializer):
@@ -127,31 +222,6 @@ class DevelopmentProjectAttachmentSerializer(serializers.ModelSerializer):
         return None
 
 
-class DevelopmentProjectTimeEntrySerializer(serializers.ModelSerializer):
-    """Serializer für Zeiteinträge"""
-    employee_name = serializers.SerializerMethodField()
-    created_by_name = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = DevelopmentProjectTimeEntry
-        fields = [
-            'id', 'project', 'date', 'time', 'employee', 'employee_name',
-            'hours_spent', 'description',
-            'created_by', 'created_by_name', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['created_at', 'updated_at', 'created_by']
-    
-    def get_employee_name(self, obj):
-        if obj.employee:
-            return f"{obj.employee.first_name} {obj.employee.last_name}".strip() or obj.employee.username
-        return None
-    
-    def get_created_by_name(self, obj):
-        if obj.created_by:
-            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
-        return None
-
-
 class DevelopmentProjectSourceSerializer(serializers.ModelSerializer):
     """Serializer für Quellen/Links"""
     created_by_name = serializers.SerializerMethodField()
@@ -195,7 +265,7 @@ class DevelopmentProjectListSerializer(serializers.ModelSerializer):
         if obj.assigned_to:
             return f"{obj.assigned_to.first_name} {obj.assigned_to.last_name}".strip() or obj.assigned_to.username
         return None
-    
+
     def get_total_hours_spent(self, obj):
         from django.db.models import Sum
         total = obj.time_entries.aggregate(Sum('hours_spent'))['hours_spent__sum']
@@ -211,7 +281,7 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
     is_open = serializers.BooleanField(read_only=True)
     
     # Related data
-    todos = DevelopmentProjectTodoSerializer(many=True, read_only=True)
+    tickets = DevelopmentTicketSerializer(many=True, read_only=True)
     comments = DevelopmentProjectCommentSerializer(many=True, read_only=True)
     material_items = DevelopmentProjectMaterialItemSerializer(many=True, read_only=True)
     cost_calculations = DevelopmentProjectCostCalculationSerializer(many=True, read_only=True)
@@ -230,14 +300,14 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'priority', 'priority_display',
             'assigned_to', 'assigned_to_name',
             'project_start', 'planned_end', 'is_open',
-            'todos', 'comments', 'material_items', 'cost_calculations',
+            'tickets', 'comments', 'material_items', 'cost_calculations',
             'attachments', 'time_entries', 'sources',
             'total_hours_spent', 'total_material_cost',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'project_number', 'created_at', 'updated_at',
-            'todos', 'comments', 'material_items', 'cost_calculations',
+            'tickets', 'comments', 'material_items', 'cost_calculations',
             'attachments', 'time_entries', 'sources'
         ]
     

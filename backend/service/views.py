@@ -9,6 +9,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Q
 
 from .models import (VSService, VSServicePrice, ServiceTicket, RMACase, TicketComment, 
                      TicketChangeLog, TroubleshootingTicket, TroubleshootingComment,
@@ -510,7 +511,7 @@ class RMACaseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'customer', 'warranty_status', 'assigned_to', 'linked_system', 'customer_order', 'service_ticket']
-    search_fields = ['rma_number', 'title', 'description', 'serial_number', 'product_name']
+    search_fields = ['rma_number', 'title', 'description', 'product_serial', 'product_name', 'customer_name']
     ordering_fields = ['rma_number', 'created_at', 'status', 'warranty_status', 'title', 'customer__last_name', 'product_serial', 'received_date']
     ordering = ['-created_at']
     

@@ -4,27 +4,124 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q, Sum, Max
+from django.db.models import Q, Sum
 from django.db import models
 from django.utils import timezone
 from django.http import Http404, FileResponse
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 
-from core.permissions import DevelopmentProjectPermission
+from core.permissions import DevelopmentProjectPermission, DevelopmentTicketPermission
 
 from .models import (
-    DevelopmentProject, DevelopmentProjectTodo, DevelopmentProjectComment,
-    DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
+    DevelopmentProject, DevelopmentTicket, DevelopmentProjectComment, DevelopmentTicketComment,
+    DevelopmentTicketAttachment, DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
     DevelopmentProjectAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
 )
 from .serializers import (
     DevelopmentProjectListSerializer, DevelopmentProjectDetailSerializer,
-    DevelopmentProjectCreateUpdateSerializer, DevelopmentProjectTodoSerializer,
+    DevelopmentProjectCreateUpdateSerializer, DevelopmentTicketSerializer, DevelopmentTicketListSerializer,
+    DevelopmentTicketCommentSerializer, DevelopmentTicketAttachmentSerializer,
     DevelopmentProjectCommentSerializer, DevelopmentProjectMaterialItemSerializer,
     DevelopmentProjectCostCalculationSerializer, DevelopmentProjectAttachmentSerializer,
     DevelopmentProjectTimeEntrySerializer, DevelopmentProjectSourceSerializer
 )
+
+
+class DevelopmentTicketViewSet(viewsets.ModelViewSet):
+    queryset = DevelopmentTicket.objects.select_related('project', 'assigned_to', 'created_by').prefetch_related('comments', 'attachments', 'time_entries')
+    serializer_class = DevelopmentTicketSerializer
+    permission_classes = [IsAuthenticated, DevelopmentTicketPermission]
+
+    def get_serializer_class(self):
+        return DevelopmentTicketListSerializer if self.action == 'list' else DevelopmentTicketSerializer
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'category', 'priority', 'project', 'assigned_to']
+    search_fields = ['ticket_number', 'title', 'description', 'project__name', 'project__project_number']
+    ordering_fields = ['ticket_number', 'title', 'category', 'status', 'priority', 'project__project_number', 'assigned_to__last_name', 'start_date', 'end_date', 'updated_at']
+    ordering = ['-updated_at']
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def add_comment(self, request, pk=None):
+        ticket = self.get_object()
+        text = request.data.get('comment', '').strip()
+        if not text:
+            return Response({'error': 'Kommentar darf nicht leer sein'}, status=status.HTTP_400_BAD_REQUEST)
+        comment = DevelopmentTicketComment.objects.create(ticket=ticket, comment=text, created_by=request.user)
+        return Response(DevelopmentTicketCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_attachment(self, request, pk=None):
+        ticket = self.get_object()
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'Keine Datei hochgeladen'}, status=status.HTTP_400_BAD_REQUEST)
+        attachment = DevelopmentTicketAttachment.objects.create(
+            ticket=ticket,
+            file=file_obj,
+            filename=file_obj.name,
+            file_size=file_obj.size,
+            content_type=file_obj.content_type or '',
+            uploaded_by=request.user,
+        )
+        return Response(DevelopmentTicketAttachmentSerializer(attachment, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='delete_attachment/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        ticket = self.get_object()
+        try:
+            attachment = DevelopmentTicketAttachment.objects.get(pk=attachment_id, ticket=ticket)
+        except DevelopmentTicketAttachment.DoesNotExist:
+            raise Http404('Anhang nicht gefunden')
+        attachment.file.delete(save=False)
+        attachment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        ticket = self.get_object()
+        try:
+            attachment = DevelopmentTicketAttachment.objects.get(pk=attachment_id, ticket=ticket)
+        except DevelopmentTicketAttachment.DoesNotExist:
+            raise Http404('Anhang nicht gefunden')
+        response = FileResponse(attachment.file.open('rb'), as_attachment=True)
+        response['Content-Disposition'] = f'attachment; filename="{attachment.filename}"'
+        return response
+
+    @action(detail=True, methods=['post'])
+    def add_time_entry(self, request, pk=None):
+        ticket = self.get_object()
+        if not ticket.project_id:
+            return Response({'error': 'Für die Zeiterfassung muss das Ticket einem Entwicklungsprojekt zugeordnet sein.'}, status=status.HTTP_400_BAD_REQUEST)
+        hours_spent = request.data.get('hours_spent')
+        description = request.data.get('description', '').strip()
+        if not hours_spent or not description:
+            return Response({'error': 'Stunden und Beschreibung sind erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+        entry = DevelopmentProjectTimeEntry.objects.create(
+            project=ticket.project,
+            ticket=ticket,
+            date=request.data.get('date') or date.today().isoformat(),
+            time=request.data.get('time') or datetime.now().strftime('%H:%M:%S'),
+            employee_id=request.data.get('employee') or ticket.assigned_to_id or request.user.id,
+            hours_spent=hours_spent,
+            description=description,
+            created_by=request.user,
+        )
+        return Response(DevelopmentProjectTimeEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='delete_time_entry/(?P<entry_id>[^/.]+)')
+    def delete_time_entry(self, request, pk=None, entry_id=None):
+        ticket = self.get_object()
+        try:
+            entry = DevelopmentProjectTimeEntry.objects.get(pk=entry_id, ticket=ticket)
+        except DevelopmentProjectTimeEntry.DoesNotExist:
+            raise Http404('Zeiteintrag nicht gefunden')
+        entry.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class DevelopmentProjectViewSet(viewsets.ModelViewSet):
@@ -125,113 +222,6 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
         except Exception as e:
             # Fehler bei Notification sollte nicht den Hauptvorgang stoppen
             print(f"Fehler bei Notification-Erstellung: {e}")
-    
-    def _create_todo_assignment_notification(self, project, todo, assigning_user):
-        """Erstellt Benachrichtigung und Erinnerung bei ToDo-Zuweisung"""
-        try:
-            from users.models import Notification, Reminder
-            
-            assigner_name = f"{assigning_user.first_name} {assigning_user.last_name}".strip() or assigning_user.username
-            
-            # Notification erstellen
-            Notification.objects.create(
-                user=todo.assigned_to,
-                title=f"ToDo zugewiesen: {project.project_number}",
-                message=f"{assigner_name} hat Ihnen eine Aufgabe im Projekt '{project.name}' zugewiesen: {todo.text[:100]}",
-                notification_type='info',
-                related_url=f'/development/projects/{project.id}'
-            )
-            
-            # Reminder mit Fälligkeit nach einem Tag erstellen
-            Reminder.objects.create(
-                user=todo.assigned_to,
-                title=f"ToDo: {todo.text[:80]}",
-                description=f"Aufgabe im Entwicklungsprojekt {project.project_number} - '{project.name}'.",
-                due_date=timezone.now().date() + timedelta(days=1),
-                related_object_type='development_project',
-                related_object_id=project.id,
-                related_url=f"/development/projects/{project.id}"
-            )
-        except Exception as e:
-            print(f"Fehler bei ToDo-Notification-Erstellung: {e}")
-    
-    # ============================================
-    # TODO ACTIONS
-    # ============================================
-    
-    @action(detail=True, methods=['post'])
-    def add_todo(self, request, pk=None):
-        """Fügt einen ToDo-Eintrag hinzu"""
-        project = self.get_object()
-        text = request.data.get('text', '').strip()
-        
-        if not text:
-            return Response(
-                {'error': 'ToDo-Text darf nicht leer sein'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Position ermitteln
-        max_position = project.todos.aggregate(max_pos=Max('position'))['max_pos'] or 0
-        
-        assigned_to_id = request.data.get('assigned_to', None)
-        
-        todo = DevelopmentProjectTodo.objects.create(
-            project=project,
-            text=text,
-            position=max_position + 1,
-            assigned_to_id=assigned_to_id if assigned_to_id else None,
-            created_by=request.user
-        )
-        
-        # Notification & Reminder bei Zuweisung
-        if todo.assigned_to and todo.assigned_to != request.user:
-            self._create_todo_assignment_notification(project, todo, request.user)
-        
-        serializer = DevelopmentProjectTodoSerializer(todo)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
-    @action(detail=True, methods=['patch'], url_path='update_todo/(?P<todo_id>[^/.]+)')
-    def update_todo(self, request, pk=None, todo_id=None):
-        """Aktualisiert einen ToDo-Eintrag"""
-        project = self.get_object()
-        try:
-            todo = DevelopmentProjectTodo.objects.get(id=todo_id, project=project)
-        except DevelopmentProjectTodo.DoesNotExist:
-            raise Http404("ToDo nicht gefunden")
-        
-        old_assigned_to = todo.assigned_to
-        
-        if 'text' in request.data:
-            todo.text = request.data['text']
-        if 'is_completed' in request.data:
-            todo.is_completed = request.data['is_completed']
-        if 'position' in request.data:
-            todo.position = request.data['position']
-        if 'assigned_to' in request.data:
-            assigned_to_val = request.data['assigned_to']
-            todo.assigned_to_id = assigned_to_val if assigned_to_val else None
-        
-        todo.save()
-        
-        # Notification & Reminder bei neuer Zuweisung
-        if todo.assigned_to and todo.assigned_to != old_assigned_to:
-            if todo.assigned_to != request.user:
-                self._create_todo_assignment_notification(project, todo, request.user)
-        
-        serializer = DevelopmentProjectTodoSerializer(todo)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['delete'], url_path='delete_todo/(?P<todo_id>[^/.]+)')
-    def delete_todo(self, request, pk=None, todo_id=None):
-        """Löscht einen ToDo-Eintrag"""
-        project = self.get_object()
-        try:
-            todo = DevelopmentProjectTodo.objects.get(id=todo_id, project=project)
-            todo.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except DevelopmentProjectTodo.DoesNotExist:
-            raise Http404("ToDo nicht gefunden")
     
     # ============================================
     # COMMENT ACTIONS

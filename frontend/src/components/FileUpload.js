@@ -25,8 +25,8 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
       visiview: 'visiview/tickets',
       'sales-ticket': 'sales/sales-tickets',
       marketing: 'sales/marketing-items',
-      development: 'development/projects'
-      ,rma: 'service/rma'
+      development: 'development/tickets',
+      rma: 'service/rma'
     };
     return typeMap[ticketType] || 'service/tickets';
   };

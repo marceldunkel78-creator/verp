@@ -89,6 +89,8 @@ import ChecklistSettings from './pages/ChecklistSettings';
 import VisiViewLicenseImport from './pages/VisiViewLicenseImport';
 import DevelopmentProjects from './pages/DevelopmentProjects';
 import DevelopmentProjectEdit from './pages/DevelopmentProjectEdit';
+import DevelopmentTickets from './pages/DevelopmentTickets';
+import DevelopmentTicketEdit from './pages/DevelopmentTicketEdit';
 import VisiViewMaintenanceTime from './pages/VisiViewMaintenanceTime';
 import VisiViewDashboard from './pages/VisiView';
 import MondayMeeting from './pages/MondayMeeting';
@@ -189,6 +191,9 @@ function App() {
             <Route path="development/projects" element={<DevelopmentProjects />} />
             <Route path="development/projects/new" element={<DevelopmentProjectEdit />} />
             <Route path="development/projects/:id" element={<DevelopmentProjectEdit />} />
+            <Route path="development/tickets" element={<DevelopmentTickets />} />
+            <Route path="development/tickets/new" element={<DevelopmentTicketEdit />} />
+            <Route path="development/tickets/:id" element={<DevelopmentTicketEdit />} />
             
             {/* Meetings Module */}
             <Route path="meetings" element={<Meetings />} />

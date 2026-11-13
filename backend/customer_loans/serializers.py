@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from customers.models import Customer
 from .models import CustomerLoan, CustomerLoanItem
 from users.models import Employee
 from users.serializers import EmployeeSerializer
@@ -128,6 +129,9 @@ class CustomerLoanDetailSerializer(serializers.ModelSerializer):
 
 class CustomerLoanCreateUpdateSerializer(serializers.ModelSerializer):
     items = CustomerLoanItemNestedSerializer(many=True, required=False)
+    customer = serializers.PrimaryKeyRelatedField(
+        queryset=Customer.objects.all(), required=False, allow_null=True
+    )
     return_deadline = serializers.DateField(required=False, allow_null=True)
     # Zuständiger Mitarbeiter: nur Mitarbeiter mit aktivem VERP-Login sind wählbar.
     # Legacy-Mitarbeiter ohne Zugang würden nie benachrichtigt und sind hier nutzlos.
@@ -149,7 +153,11 @@ class CustomerLoanCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        selected = sum(bool(attrs.get(field)) for field in ('customer', 'supplier_contact', 'distributor_employee'))
+        customer = attrs.get('customer', self.instance.customer if self.instance else None)
+        if customer and not customer.is_active and (not self.instance or self.instance.customer_id != customer.pk):
+            raise serializers.ValidationError({'customer': 'Für neue Verleihungen können nur aktive Kunden ausgewählt werden.'})
+
+        selected = sum(bool(attrs.get(field, getattr(self.instance, field, None) if self.instance else None)) for field in ('customer', 'supplier_contact', 'distributor_employee'))
         if selected != 1:
             raise serializers.ValidationError(
                 'Bitte genau einen Empfänger (Kunde, Lieferantenmitarbeiter oder Distributormitarbeiter) auswählen.'

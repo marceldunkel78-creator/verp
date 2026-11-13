@@ -362,14 +362,20 @@ def marketing_upload_path(instance, filename):
 
 
 def development_project_attachment_path(instance, filename):
-    """
-    Upload-Pfad für Entwicklungsprojekt-Anhänge: /Entwicklung/Projektnummer/filename
-    """
+    """Upload path for development-project files."""
     safe_filename = _sanitize_path_component(filename)
-    # instance is DevelopmentProjectAttachment with .project
     project = getattr(instance, 'project', None) or instance
     project_number = _sanitize_path_component(getattr(project, 'project_number', '') or '')
-    
     if project_number:
         return f"Entwicklung/{project_number}/{safe_filename}"
     return f"Entwicklung/unknown/{safe_filename}"
+
+
+def development_ticket_attachment_path(instance, filename):
+    """Upload path for development-ticket files."""
+    safe_filename = _sanitize_path_component(filename)
+    ticket = getattr(instance, 'ticket', None)
+    ticket_number = _sanitize_path_component(getattr(ticket, 'ticket_number', '') or '')
+    if ticket_number:
+        return f"Entwicklung/Tickets/{ticket_number}/{safe_filename}"
+    return f"Entwicklung/Tickets/unknown/{safe_filename}"

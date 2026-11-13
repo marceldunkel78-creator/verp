@@ -100,6 +100,7 @@ class User(AbstractUser):
     # Development Modul
     can_read_development = models.BooleanField(default=False, verbose_name='Entwicklung - Lesen')
     can_read_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Lesen')
+    can_read_development_tickets = models.BooleanField(default=False, verbose_name='Entwicklungstickets - Lesen')
     # VisiView Maintenance
     can_read_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Lesen')
     # VisiView Supported Hardware
@@ -163,6 +164,7 @@ class User(AbstractUser):
     # Development Modul
     can_write_development = models.BooleanField(default=False, verbose_name='Entwicklung - Schreiben')
     can_write_development_projects = models.BooleanField(default=False, verbose_name='Entwicklungsprojekte - Schreiben')
+    can_write_development_tickets = models.BooleanField(default=False, verbose_name='Entwicklungstickets - Schreiben')
     # VisiView Maintenance
     can_write_visiview_maintenance_time = models.BooleanField(default=True, verbose_name='VisiView Maintenance Zeiterfassung - Schreiben')
     # VisiView Supported Hardware

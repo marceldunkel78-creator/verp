@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
   BeakerIcon,
+  TicketIcon,
   ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
 
@@ -25,6 +26,15 @@ const Development = () => {
       title: 'Entwicklungsprojekte',
       description: 'Projekte verwalten und nachverfolgen',
       permission: 'can_read_development_projects',
+    },
+    {
+      to: '/development/tickets',
+      icon: TicketIcon,
+      iconBg: 'bg-indigo-100',
+      iconColor: 'text-indigo-600',
+      title: 'Entwicklungstickets',
+      description: 'Entwicklungsaufgaben und Bearbeitung verwalten',
+      permission: 'can_read_development_tickets',
     },
   ];
   

@@ -983,7 +983,8 @@ class VerpDocTemplate(BaseDocTemplate):
         # Spalte 1: Firmenadresse
         x = FOOTER_COL1_X
         line(x, FOOTER_Y0, company.company_name or 'Visitron Systems GmbH')
-        line(x, FOOTER_Y0 + FOOTER_LEADING, company.street or '')
+        company_street = ' '.join(part.strip() for part in (company.street, company.house_number) if part and part.strip())
+        line(x, FOOTER_Y0 + FOOTER_LEADING, company_street)
         line(x, FOOTER_Y0 + 2 * FOOTER_LEADING,
              f"D-{company.postal_code or ''} {company.city or ''}".strip())
 

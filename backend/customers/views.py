@@ -16,6 +16,10 @@ from .serializers import (
 )
 
 
+def format_salutation_title(customer):
+    return ' '.join(value.strip() for value in (customer.salutation, customer.title) if value and value.strip())
+
+
 class CustomerPagination(PageNumberPagination):
     page_size = 9
     page_size_query_param = 'page_size'
@@ -253,7 +257,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
         else:
             # Standard-Felder
             export_fields = [
-                'customer_number', 'salutation', 'title', 'first_name', 'last_name',
+                'customer_number', 'salutation', 'title', 'combined_salutation_title', 'first_name', 'last_name',
                 'language', 'advertising_status', 'is_reference', 'is_active',
                 'primary_email', 'primary_phone',
                 'primary_address_street', 'primary_address_postal_code', 
@@ -275,6 +279,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             'customer_number': 'Kundennummer',
             'salutation': 'Anrede',
             'title': 'Titel',
+            'combined_salutation_title': 'Anrede / Titel',
             'first_name': 'Vorname',
             'last_name': 'Nachname',
             'language': 'Sprache',
@@ -309,6 +314,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
                     row.append(customer.salutation or '')
                 elif field == 'title':
                     row.append(customer.title or '')
+                elif field == 'combined_salutation_title':
+                    row.append(format_salutation_title(customer))
                 elif field == 'first_name':
                     row.append(customer.first_name or '')
                 elif field == 'last_name':
