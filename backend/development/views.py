@@ -15,7 +15,7 @@ from core.permissions import DevelopmentProjectPermission, DevelopmentTicketPerm
 
 from .models import (
     DevelopmentProject, DevelopmentTicket, DevelopmentProjectComment, DevelopmentTicketComment,
-    DevelopmentTicketAttachment, DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
+    DevelopmentTicketAttachment, DevelopmentProjectMaterialItem, DevelopmentProjectInvestment, DevelopmentProjectCostCalculation,
     DevelopmentProjectAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
 )
 from .serializers import (
@@ -23,7 +23,7 @@ from .serializers import (
     DevelopmentProjectCreateUpdateSerializer, DevelopmentTicketSerializer, DevelopmentTicketListSerializer,
     DevelopmentTicketCommentSerializer, DevelopmentTicketAttachmentSerializer,
     DevelopmentProjectCommentSerializer, DevelopmentProjectMaterialItemSerializer,
-    DevelopmentProjectCostCalculationSerializer, DevelopmentProjectAttachmentSerializer,
+    DevelopmentProjectInvestmentSerializer, DevelopmentProjectCostCalculationSerializer, DevelopmentProjectAttachmentSerializer,
     DevelopmentProjectTimeEntrySerializer, DevelopmentProjectSourceSerializer
 )
 
@@ -347,6 +347,43 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
             raise Http404("Material-Position nicht gefunden")
     
     # ============================================
+    # INVESTMENT ACTIONS
+    # ============================================
+
+    @action(detail=True, methods=['post'])
+    def add_investment(self, request, pk=None):
+        project = self.get_object()
+        serializer = DevelopmentProjectInvestmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        investment = serializer.save(project=project)
+        return Response(DevelopmentProjectInvestmentSerializer(investment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch'], url_path='update_investment/(?P<investment_id>[^/.]+)')
+    def update_investment(self, request, pk=None, investment_id=None):
+        project = self.get_object()
+        try:
+            investment = project.investments.get(pk=investment_id)
+        except DevelopmentProjectInvestment.DoesNotExist:
+            raise Http404('Investition nicht gefunden')
+        serializer = DevelopmentProjectInvestmentSerializer(investment, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['delete'], url_path='delete_investment/(?P<investment_id>[^/.]+)')
+    def delete_investment(self, request, pk=None, investment_id=None):
+        project = self.get_object()
+        try:
+            investment = project.investments.get(pk=investment_id)
+        except DevelopmentProjectInvestment.DoesNotExist:
+            raise Http404('Investition nicht gefunden')
+        for attachment in investment.attachments.all():
+            if attachment.file:
+                attachment.file.delete(save=False)
+        investment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ============================================
     # COST CALCULATION ACTIONS
     # ============================================
     
@@ -466,8 +503,22 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        investment_id = request.data.get('investment')
+        investment = None
+        if investment_id:
+            try:
+                investment = project.investments.get(pk=investment_id)
+            except DevelopmentProjectInvestment.DoesNotExist:
+                return Response({'error': 'Investition nicht gefunden'}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_investment_receipt = request.data.get('is_investment_receipt') == 'true'
+        if is_investment_receipt and not investment:
+            return Response({'error': 'Investition für den Beleg erforderlich'}, status=status.HTTP_400_BAD_REQUEST)
+
         attachment = DevelopmentProjectAttachment.objects.create(
             project=project,
+            investment=investment,
+            is_investment_receipt=is_investment_receipt,
             file=file_obj,
             filename=file_obj.name,
             file_size=file_obj.size,
@@ -484,7 +535,6 @@ class DevelopmentProjectViewSet(viewsets.ModelViewSet):
         project = self.get_object()
         try:
             attachment = DevelopmentProjectAttachment.objects.get(id=attachment_id, project=project)
-            # Datei vom Dateisystem löschen
             if attachment.file:
                 attachment.file.delete(save=False)
             attachment.delete()

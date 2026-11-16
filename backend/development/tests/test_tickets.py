@@ -5,7 +5,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase, TransactionTestCase
 
-from development.models import DevelopmentProject, DevelopmentProjectTimeEntry, DevelopmentTicket
+from development.models import DevelopmentProject, DevelopmentProjectInvestment, DevelopmentProjectTimeEntry, DevelopmentTicket
+from orders.models import Order
+from suppliers.models import Supplier
 
 
 class DevelopmentTicketTests(TestCase):
@@ -58,6 +60,23 @@ class DevelopmentTicketTests(TestCase):
         ticket.save()
         ticket.refresh_from_db()
         self.assertEqual(ticket.status, 'closed')
+
+
+class DevelopmentProjectInvestmentTests(TestCase):
+    def test_investment_can_link_to_a_procurement_order(self):
+        project = DevelopmentProject.objects.create(name='Investment test project')
+        supplier = Supplier.objects.create(company_name='Investment supplier')
+        order = Order.objects.create(supplier=supplier, status='angelegt')
+        investment = DevelopmentProjectInvestment.objects.create(
+            project=project,
+            description='Lab equipment',
+            procurement_order=order,
+            date=date(2026, 11, 16),
+            net_amount=Decimal('249.95'),
+        )
+
+        self.assertEqual(project.investments.get(pk=investment.pk).net_amount, Decimal('249.95'))
+        self.assertEqual(investment.procurement_order, order)
 
 
 class DevelopmentTicketMigrationTests(TransactionTestCase):

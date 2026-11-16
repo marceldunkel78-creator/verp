@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
     DevelopmentProject, DevelopmentTicket, DevelopmentProjectComment, DevelopmentTicketComment,
-    DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
+    DevelopmentProjectMaterialItem, DevelopmentProjectInvestment, DevelopmentProjectCostCalculation,
     DevelopmentProjectAttachment, DevelopmentTicketAttachment, DevelopmentProjectTimeEntry, DevelopmentProjectSource
 )
 
@@ -174,6 +174,21 @@ class DevelopmentProjectMaterialItemSerializer(serializers.ModelSerializer):
         return 0
 
 
+class DevelopmentProjectInvestmentSerializer(serializers.ModelSerializer):
+    """Serializer für Sachkosten und Investitionen."""
+    net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    procurement_order_number = serializers.CharField(source='procurement_order.order_number', read_only=True, allow_null=True)
+    procurement_supplier_name = serializers.CharField(source='procurement_order.supplier.company_name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = DevelopmentProjectInvestment
+        fields = [
+            'id', 'project', 'description', 'order_number', 'procurement_order', 'procurement_order_number',
+            'procurement_supplier_name', 'date', 'net_amount', 'created_at'
+        ]
+        read_only_fields = ['project', 'created_at']
+
+
 class DevelopmentProjectCostCalculationSerializer(serializers.ModelSerializer):
     """Serializer für Kostenkalkulationen"""
     created_by_name = serializers.SerializerMethodField()
@@ -206,7 +221,7 @@ class DevelopmentProjectAttachmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DevelopmentProjectAttachment
         fields = [
-            'id', 'project', 'file', 'filename', 'file_size', 'content_type',
+            'id', 'project', 'investment', 'is_investment_receipt', 'file', 'filename', 'file_size', 'content_type',
             'is_image', 'file_url', 'uploaded_by', 'uploaded_by_name', 'uploaded_at'
         ]
         read_only_fields = ['uploaded_at', 'uploaded_by', 'is_image']
@@ -284,6 +299,7 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
     tickets = DevelopmentTicketSerializer(many=True, read_only=True)
     comments = DevelopmentProjectCommentSerializer(many=True, read_only=True)
     material_items = DevelopmentProjectMaterialItemSerializer(many=True, read_only=True)
+    investments = DevelopmentProjectInvestmentSerializer(many=True, read_only=True)
     cost_calculations = DevelopmentProjectCostCalculationSerializer(many=True, read_only=True)
     attachments = DevelopmentProjectAttachmentSerializer(many=True, read_only=True)
     time_entries = DevelopmentProjectTimeEntrySerializer(many=True, read_only=True)
@@ -300,14 +316,14 @@ class DevelopmentProjectDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'priority', 'priority_display',
             'assigned_to', 'assigned_to_name',
             'project_start', 'planned_end', 'is_open',
-            'tickets', 'comments', 'material_items', 'cost_calculations',
+            'tickets', 'comments', 'material_items', 'investments', 'cost_calculations',
             'attachments', 'time_entries', 'sources',
             'total_hours_spent', 'total_material_cost',
             'created_by', 'created_by_name', 'created_at', 'updated_at'
         ]
         read_only_fields = [
             'project_number', 'created_at', 'updated_at',
-            'tickets', 'comments', 'material_items', 'cost_calculations',
+            'tickets', 'comments', 'material_items', 'investments', 'cost_calculations',
             'attachments', 'time_entries', 'sources'
         ]
     

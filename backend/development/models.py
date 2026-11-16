@@ -295,6 +295,37 @@ class DevelopmentProjectMaterialItem(models.Model):
         return Decimal('0')
 
 
+class DevelopmentProjectInvestment(models.Model):
+    """Sachkosten und Investitionen eines Entwicklungsprojekts."""
+    project = models.ForeignKey(
+        DevelopmentProject,
+        on_delete=models.CASCADE,
+        related_name='investments',
+        verbose_name='Entwicklungsprojekt'
+    )
+    description = models.CharField(max_length=255, verbose_name='Beschreibung')
+    order_number = models.CharField(max_length=100, blank=True, verbose_name='Legacy-Bestellnummer')
+    procurement_order = models.ForeignKey(
+        'orders.Order',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='development_investments',
+        verbose_name='Bestellung'
+    )
+    date = models.DateField(verbose_name='Datum')
+    net_amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Netto-Summe')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        verbose_name = 'Projektinvestition'
+        verbose_name_plural = 'Projektinvestitionen'
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return f"{self.description} ({self.procurement_order.order_number if self.procurement_order else 'ohne Bestellung'})"
+
+
 class DevelopmentProjectCostCalculation(models.Model):
     """
     Kostenkalkulation für ein Entwicklungsprojekt
@@ -416,6 +447,15 @@ class DevelopmentProjectAttachment(models.Model):
         related_name='attachments',
         verbose_name='Projekt'
     )
+    investment = models.ForeignKey(
+        'DevelopmentProjectInvestment',
+        on_delete=models.CASCADE,
+        related_name='attachments',
+        null=True,
+        blank=True,
+        verbose_name='Investition'
+    )
+    is_investment_receipt = models.BooleanField(default=False, verbose_name='Investitionsbeleg')
     file = models.FileField(
         upload_to=development_project_attachment_path,
         verbose_name='Datei'

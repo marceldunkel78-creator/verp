@@ -20,7 +20,8 @@ const ProcurementOrderSearch = ({
   value = null,
   onChange,
   supplierId = null,
-  placeholder = 'Bestellnummer suchen (min. 2 Zeichen)...',
+  minSearchLength = 2,
+  placeholder = `Bestellnummer suchen (min. ${minSearchLength} Zeichen)...`,
   className = ''
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,7 +89,7 @@ const ProcurementOrderSearch = ({
   };
 
   useEffect(() => {
-    if (searchTerm.length < 2) {
+    if (searchTerm.trim().length < minSearchLength) {
       setResults([]);
       setIsOpen(false);
       return;
@@ -117,7 +118,7 @@ const ProcurementOrderSearch = ({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchTerm, supplierId]);
+  }, [searchTerm, supplierId, minSearchLength]);
 
   const handleSelect = (order) => {
     setSelected(order);
@@ -200,7 +201,7 @@ const ProcurementOrderSearch = ({
           ))}
         </div>
       )}
-      {isOpen && !isLoading && searchTerm.length >= 2 && results.length === 0 && (
+      {isOpen && !isLoading && searchTerm.trim().length >= minSearchLength && results.length === 0 && (
         <div className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm text-gray-500">
           Keine Bestellung gefunden.
         </div>

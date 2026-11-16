@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     DevelopmentProject, DevelopmentTicket, DevelopmentTicketComment, DevelopmentProjectComment,
-    DevelopmentProjectMaterialItem, DevelopmentProjectCostCalculation,
+    DevelopmentProjectMaterialItem, DevelopmentProjectInvestment, DevelopmentProjectCostCalculation,
     DevelopmentProjectAttachment, DevelopmentTicketAttachment, DevelopmentProjectTimeEntry
 )
 
@@ -17,6 +17,11 @@ class DevelopmentProjectMaterialItemInline(admin.TabularInline):
     model = DevelopmentProjectMaterialItem
     extra = 0
     autocomplete_fields = ['material_supply']
+
+
+class DevelopmentProjectInvestmentInline(admin.TabularInline):
+    model = DevelopmentProjectInvestment
+    extra = 0
 
 
 class DevelopmentProjectAttachmentInline(admin.TabularInline):
@@ -41,6 +46,7 @@ class DevelopmentProjectAdmin(admin.ModelAdmin):
     inlines = [
         DevelopmentProjectCommentInline,
         DevelopmentProjectMaterialItemInline,
+        DevelopmentProjectInvestmentInline,
         DevelopmentProjectAttachmentInline,
         DevelopmentProjectTimeEntryInline
     ]

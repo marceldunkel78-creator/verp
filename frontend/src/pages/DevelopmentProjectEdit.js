@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import FileUpload from '../components/FileUpload';
+import ProcurementOrderSearch from '../components/ProcurementOrderSearch';
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -19,6 +20,7 @@ const TABS = [
   { id: 'tickets', label: 'Tickets' },
   { id: 'comments', label: 'Kommentare' },
   { id: 'materials', label: 'Material & Kalkulation' },
+  { id: 'investments', label: 'Investitionskosten' },
   { id: 'files', label: 'Dokumente' },
   { id: 'sources', label: 'Quellen' },
   { id: 'time', label: 'Zeiterfassung' }
@@ -62,6 +64,7 @@ const DevelopmentProjectEdit = () => {
     tickets: [],
     comments: [],
     material_items: [],
+    investments: [],
     cost_calculations: [],
     attachments: [],
     sources: [],
@@ -73,6 +76,9 @@ const DevelopmentProjectEdit = () => {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [newMaterial, setNewMaterial] = useState({ material_supply: '', quantity: 1, notes: '' });
+  const [newInvestment, setNewInvestment] = useState({ description: '', procurement_order: null, date: '', net_amount: '' });
+  const [editingInvestmentId, setEditingInvestmentId] = useState(null);
+  const [investmentDraft, setInvestmentDraft] = useState({});
   const [materialSearch, setMaterialSearch] = useState('');
   const [materialSearchResults, setMaterialSearchResults] = useState([]);
   const [showMaterialDropdown, setShowMaterialDropdown] = useState(false);
@@ -172,6 +178,7 @@ const DevelopmentProjectEdit = () => {
           tickets: [],
           comments: [],
           material_items: [],
+          investments: [],
           cost_calculations: [],
           attachments: [],
           sources: [],
@@ -373,6 +380,48 @@ const DevelopmentProjectEdit = () => {
     }
   };
 
+  const handleAddInvestment = async (event) => {
+    event.preventDefault();
+    if (!newInvestment.description.trim() || !newInvestment.date || newInvestment.net_amount === '') return;
+    try {
+      const response = await api.post(`/development/projects/${id}/add_investment/`, {
+        ...newInvestment,
+        net_amount: Number(newInvestment.net_amount)
+      });
+      setProject(prev => ({ ...prev, investments: [...(prev.investments || []), response.data] }));
+      setNewInvestment({ description: '', procurement_order: null, date: '', net_amount: '' });
+    } catch (error) {
+      alert('Fehler beim Hinzufügen der Investition: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleSaveInvestment = async (investmentId) => {
+    try {
+      const response = await api.patch(`/development/projects/${id}/update_investment/${investmentId}/`, {
+        ...investmentDraft,
+        net_amount: Number(investmentDraft.net_amount)
+      });
+      setProject(prev => ({
+        ...prev,
+        investments: prev.investments.map(investment => investment.id === investmentId ? response.data : investment)
+      }));
+      setEditingInvestmentId(null);
+      setInvestmentDraft({});
+    } catch (error) {
+      alert('Fehler beim Aktualisieren der Investition: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const handleDeleteInvestment = async (investmentId) => {
+    if (!window.confirm('Investition und zugehörigen Beleg wirklich löschen?')) return;
+    try {
+      await api.delete(`/development/projects/${id}/delete_investment/${investmentId}/`);
+      setProject(prev => ({ ...prev, investments: prev.investments.filter(investment => investment.id !== investmentId) }));
+    } catch (error) {
+      alert('Fehler beim Löschen der Investition: ' + error.message);
+    }
+  };
+
   const handleUpdateMaterialQuantity = async (itemId, quantity) => {
     if (!id || id === 'new') { alert('Bitte speichern Sie das Projekt zuerst'); return; }
     try {
@@ -519,6 +568,7 @@ const DevelopmentProjectEdit = () => {
 
   // Calculate totals
   const totalMaterialCost = project.material_items?.reduce((sum, item) => sum + (item.item_cost || 0), 0) || 0;
+  const totalInvestmentCost = project.investments?.reduce((sum, investment) => sum + Number(investment.net_amount || 0), 0) || 0;
   const totalTimeSpent = project.time_entries?.reduce((sum, entry) => sum + parseFloat(entry.hours_spent || 0), 0) || 0;
 
   // Determine if project base fields have changed
@@ -1115,6 +1165,115 @@ const DevelopmentProjectEdit = () => {
                   VS-Hardware erstellen
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Investment Costs Tab */}
+        {activeTab === 'investments' && !isNew && (
+          <div className="p-6 space-y-6">
+            <form onSubmit={handleAddInvestment} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung *</label>
+                <input required value={newInvestment.description} onChange={e => setNewInvestment(prev => ({ ...prev, description: e.target.value }))} className="w-full rounded-md border-gray-300 shadow-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bestellung</label>
+                <ProcurementOrderSearch
+                  value={newInvestment.procurement_order}
+                  minSearchLength={3}
+                  onChange={procurementOrder => setNewInvestment(prev => ({ ...prev, procurement_order: procurementOrder }))}
+                  placeholder="Ab 3 Zeichen Bestellnummer suchen..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Datum *</label>
+                <input required type="date" value={newInvestment.date} onChange={e => setNewInvestment(prev => ({ ...prev, date: e.target.value }))} className="w-full rounded-md border-gray-300 shadow-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Netto-Summe (€) *</label>
+                <input required type="number" min="0" step="0.01" value={newInvestment.net_amount} onChange={e => setNewInvestment(prev => ({ ...prev, net_amount: e.target.value }))} className="w-full rounded-md border-gray-300 shadow-sm" />
+              </div>
+              <button type="submit" className="inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                <PlusIcon className="h-5 w-5 mr-1" /> Hinzufügen
+              </button>
+            </form>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beschreibung</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bestellnummer</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Datum</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Netto-Summe</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Beleg</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {project.investments?.map(investment => (
+                    <React.Fragment key={investment.id}>
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {editingInvestmentId === investment.id ? <input value={investmentDraft.description || ''} onChange={e => setInvestmentDraft(prev => ({ ...prev, description: e.target.value }))} className="w-full rounded border-gray-300 text-sm" /> : investment.description}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {editingInvestmentId === investment.id ? (
+                            <ProcurementOrderSearch
+                              value={investmentDraft.procurement_order || null}
+                              minSearchLength={3}
+                              onChange={procurementOrder => setInvestmentDraft(prev => ({ ...prev, procurement_order: procurementOrder }))}
+                              placeholder="Ab 3 Zeichen suchen..."
+                            />
+                          ) : investment.procurement_order_number ? (
+                            <a href={`/procurement/orders/${investment.procurement_order}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                              {investment.procurement_order_number}{investment.procurement_supplier_name ? ` — ${investment.procurement_supplier_name}` : ''}
+                            </a>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-700">
+                          {editingInvestmentId === investment.id ? <input type="date" value={investmentDraft.date || ''} onChange={e => setInvestmentDraft(prev => ({ ...prev, date: e.target.value }))} className="rounded border-gray-300 text-sm" /> : new Date(`${investment.date}T00:00:00`).toLocaleDateString('de-DE')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-gray-900">
+                          {editingInvestmentId === investment.id ? <input type="number" min="0" step="0.01" value={investmentDraft.net_amount || ''} onChange={e => setInvestmentDraft(prev => ({ ...prev, net_amount: e.target.value }))} className="w-32 rounded border-gray-300 text-sm text-right" /> : `${Number(investment.net_amount).toFixed(2)} €`}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <FileUpload
+                            attachments={(project.attachments || []).filter(attachment => attachment.investment === investment.id && attachment.is_investment_receipt)}
+                            ticketId={id}
+                            ticketType="development-project"
+                            extraUploadData={{ investment: investment.id, is_investment_receipt: 'true' }}
+                            onUploadSuccess={newAttachment => setProject(prev => ({ ...prev, attachments: [...(prev.attachments || []), newAttachment] }))}
+                            onDeleteSuccess={deletedId => setProject(prev => ({ ...prev, attachments: (prev.attachments || []).filter(attachment => attachment.id !== deletedId) }))}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          {editingInvestmentId === investment.id ? (
+                            <>
+                              <button type="button" onClick={() => handleSaveInvestment(investment.id)} className="text-purple-600 hover:text-purple-800 mr-3" title="Speichern"><CheckIcon className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => setEditingInvestmentId(null)} className="text-gray-500 hover:text-gray-700" title="Abbrechen">×</button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" onClick={() => { setEditingInvestmentId(investment.id); setInvestmentDraft({ ...investment }); }} className="text-purple-600 hover:text-purple-800 mr-3" title="Bearbeiten"><PencilIcon className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => handleDeleteInvestment(investment.id)} className="text-red-500 hover:text-red-700" title="Löschen"><TrashIcon className="h-4 w-4" /></button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                  {project.investments?.length > 0 && (
+                    <tr className="bg-gray-50 font-medium">
+                      <td colSpan="3" className="px-4 py-3 text-sm text-right">Summe Investitionskosten:</td>
+                      <td className="px-4 py-3 text-sm text-right">{totalInvestmentCost.toFixed(2)} €</td>
+                      <td colSpan="2"></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              {project.investments?.length === 0 && <p className="text-gray-500 text-center py-8">Keine Investitionskosten erfasst</p>}
             </div>
           </div>
         )}

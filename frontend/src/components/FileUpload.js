@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Upload, File, X, Download, Eye, Image as ImageIcon } from 'lucide-react';
 import api from '../services/api';
 
@@ -12,7 +12,8 @@ import api from '../services/api';
  * - onUploadSuccess: Callback when file is uploaded
  * - onDeleteSuccess: Callback when file is deleted
  */
-const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, onDeleteSuccess, allowPrimary = false, onSetPrimary }) => {
+const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, onDeleteSuccess, allowPrimary = false, onSetPrimary, extraUploadData = {} }) => {
+  const inputId = useId();
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
@@ -26,6 +27,7 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
       'sales-ticket': 'sales/sales-tickets',
       marketing: 'sales/marketing-items',
       development: 'development/tickets',
+      'development-project': 'development/projects',
       rma: 'service/rma'
     };
     return typeMap[ticketType] || 'service/tickets';
@@ -76,6 +78,9 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
     try {
       const formData = new FormData();
       formData.append('file', file);
+      Object.entries(extraUploadData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) formData.append(key, value);
+      });
 
       const endpoint = getEndpoint();
       const response = await api.post(`/${endpoint}/${ticketId}/upload_attachment/`, formData, {
@@ -301,13 +306,13 @@ const FileUpload = ({ attachments = [], ticketId, ticketType, onUploadSuccess, o
       >
         <input
           type="file"
-          id="file-upload"
+          id={inputId}
           className="hidden"
           onChange={handleFileSelect}
           disabled={uploading || !ticketId}
         />
         <label
-          htmlFor="file-upload"
+          htmlFor={inputId}
           className={`cursor-pointer ${!ticketId || uploading ? 'cursor-not-allowed' : ''}`}
         >
           <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
