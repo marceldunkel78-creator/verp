@@ -16,6 +16,7 @@ from inventory.models import InventoryItem
 from customer_orders.models import CustomerOrder
 from manufacturing.models import VSHardware
 from service.models import VSService
+from orders.models import Order
 import os
 from pathlib import Path
 import mimetypes
@@ -103,6 +104,31 @@ def global_search(request):
             'subtitle': ' · '.join(filter(None, [system.system_number, system.location_city])),
             'url': f'/sales/systems/{system.pk}',
         })
+
+    user = request.user
+    can_read_procurement_orders = (
+        user.is_staff or user.is_superuser or
+        getattr(user, 'can_read_procurement_orders', False) or
+        getattr(user, 'can_write_procurement_orders', False)
+    )
+    if can_read_procurement_orders:
+        procurement_orders = Order.objects.filter(
+            Q(order_number__icontains=query) |
+            Q(notes__icontains=query) |
+            Q(supplier__company_name__icontains=query) |
+            Q(items__article_number__icontains=query) |
+            Q(items__name__icontains=query) |
+            Q(items__trading_product__name__icontains=query) |
+            Q(items__material_supply__name__icontains=query)
+        ).select_related('supplier').distinct()[:10]
+        for order in procurement_orders:
+            results.append({
+                'module': 'Beschaffung',
+                'type': 'procurement-order',
+                'title': order.order_number or f'Bestellung #{order.pk}',
+                'subtitle': ' · '.join(filter(None, [order.supplier.company_name, order.get_status_display()])),
+                'url': f'/procurement/orders/{order.pk}',
+            })
 
     licenses = VisiViewLicense.objects.filter(
         Q(serial_number__icontains=query) |
