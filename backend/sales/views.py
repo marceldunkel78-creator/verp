@@ -460,13 +460,20 @@ class MarketingItemViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'], url_path='download_attachment/(?P<attachment_id>[^/.]+)')
     def download_attachment(self, request, pk=None, attachment_id=None):
+        return self._download_marketing_attachment(request, attachment_id)
+
+    @action(detail=True, methods=['get'], url_path='download-attachment/(?P<attachment_id>[^/.]+)')
+    def download_attachment_hyphen(self, request, pk=None, attachment_id=None):
+        return self._download_marketing_attachment(request, attachment_id)
+
+    def _download_marketing_attachment(self, request, attachment_id):
         """Lädt einen Dateianhang herunter"""
         marketing_item = self.get_object()
         try:
             attachment = MarketingItemFile.objects.get(id=attachment_id, marketing_item=marketing_item)
-            return FileResponse(attachment.file.open('rb'), 
-                              as_attachment=True, 
-                              filename=attachment.filename)
+            return FileResponse(attachment.file.open('rb'),
+                                as_attachment=True,
+                                filename=attachment.filename)
         except MarketingItemFile.DoesNotExist:
             raise Http404("Anhang nicht gefunden")
 

@@ -1284,7 +1284,7 @@ const DevelopmentProjectEdit = () => {
             <FileUpload
               attachments={project.attachments || []}
               ticketId={id}
-              ticketType="development"
+              ticketType="development-project"
               onUploadSuccess={(newAttachment) => {
                 setProject(prev => ({
                   ...prev,
