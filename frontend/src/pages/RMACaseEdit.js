@@ -4344,10 +4344,11 @@ const RMACaseEdit = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Name / Firma</label>
-                      <input
-                        type="text"
+                      <textarea
+                        rows={2}
                         value={formData.address_name}
                         onChange={(e) => handleInputChange('address_name', e.target.value)}
+                        placeholder="Name und Firma (mit Enter trennen)"
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-orange-500"
                       />
                     </div>

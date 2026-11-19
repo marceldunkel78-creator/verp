@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   UsersIcon, CurrencyDollarIcon, CogIcon, BuildingOfficeIcon,
   BanknotesIcon, CircleStackIcon, BellIcon, TrashIcon, ArrowsRightLeftIcon,
-  ArchiveBoxIcon, TicketIcon, ClipboardDocumentCheckIcon, ArrowUpTrayIcon,
-  ArrowPathIcon
+  ArchiveBoxIcon, TicketIcon, ClipboardDocumentCheckIcon, ArrowUpTrayIcon
 } from '@heroicons/react/24/outline';
 
 const Settings = () => {
@@ -71,14 +70,6 @@ const Settings = () => {
       icon: ArchiveBoxIcon,
       path: '/settings/legacy-procurement-import',
       color: 'cyan',
-      superUserOnly: true
-    },
-    {
-      name: 'Lager-Abgleich (Excel)',
-      description: 'Warenlager manuell aus den Excel-Lagerlisten abgleichen',
-      icon: ArrowPathIcon,
-      path: '/settings/inventory-sync',
-      color: 'emerald',
       superUserOnly: true
     },
     {
